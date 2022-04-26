@@ -48,6 +48,7 @@ typedef struct {
 
 void crypton_chacha_init_core(crypton_chacha_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
 void crypton_chacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_xchacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds, const uint8_t *key, const uint8_t *iv);
 void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *st, const uint8_t *src, uint32_t bytes);
 void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *st, uint32_t bytes);
 
