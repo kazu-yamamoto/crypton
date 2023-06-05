@@ -1,12 +1,9 @@
-cryptonite
+crypton
 ==========
 
-[![Join the chat at https://gitter.im/vincenthz/cryptonite](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/vincenthz/cryptonite?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://travis-ci.org/haskell-crypto/cryptonite.png?branch=master)](https://travis-ci.org/haskell-crypto/cryptonite)
-[![BSD](http://b.repl.ca/v1/license-BSD-blue.png)](http://en.wikipedia.org/wiki/BSD_licenses)
-[![Haskell](http://b.repl.ca/v1/language-haskell-lightgrey.png)](http://haskell.org)
+Crypton is a fork from cryptonite with the original authoer's permission.
 
-Cryptonite is a haskell repository of cryptographic primitives. Each crypto
+Crypton is a haskell repository of cryptographic primitives. Each crypto
 algorithm has specificities that are hard to wrap in common APIs and types,
 so instead of trying to provide a common ground for algorithms, this package
 provides a non-consistent low-level API.
@@ -14,12 +11,12 @@ provides a non-consistent low-level API.
 If you have no idea what you're doing, please do not use this directly.
 Instead, rely on higher level protocols or implementations.
 
-Documentation: [cryptonite on hackage](http://hackage.haskell.org/package/cryptonite)
+Documentation: [crypton on hackage](http://hackage.haskell.org/package/crypton)
 
 Stability
 ---------
 
-Cryptonite APIs are stable, and we only strive to add, not change or remove.
+Crypton APIs are stable, and we only strive to add, not change or remove.
 Note that because the API exposed is wide and also expose internals things (for
 power users and flexibility), certains APIs can be revised in extreme cases
 where we can't just add.
@@ -30,7 +27,7 @@ Versioning
 Next version of `0.x` is `0.(x+1)`. There's no exceptions, or API related meaning
 behind the numbers.
 
-Each versions of stackage (going back 3 stable LTS) has a cryptonite version
+Each versions of stackage (going back 3 stable LTS) has a crypton version
 that we maintain with security fixes when necessary and are versioned with the
 following `0.x.y` scheme.
 
@@ -62,7 +59,7 @@ Disabling AESNI
 It may be useful to disable AESNI for building, testing or runtime purposes.
 This is achieved with the *support_aesni* flag.
 
-As part of configure of cryptonite:
+As part of configure of crypton:
 
 ```
   cabal configure --flag='-support_aesni'
@@ -71,7 +68,7 @@ As part of configure of cryptonite:
 or as part of an installation:
 
 ```
-  cabal install --constraint="cryptonite -support_aesni"
+  cabal install --constraint="crypton -support_aesni"
 ```
 
 For help with cabal flags, see: [stackoverflow : is there a way to define flags for cabal](http://stackoverflow.com/questions/23523869/is-there-any-way-to-define-flags-for-cabal-dependencies)
