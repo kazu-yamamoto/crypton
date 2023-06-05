@@ -1,4 +1,4 @@
-Name:                cryptonite
+Name:                crypton
 version:             0.30
 Synopsis:            Cryptography Primitives sink
 Description:
@@ -33,8 +33,8 @@ Maintainer:          vincent@snarc.org
 Category:            Cryptography
 Stability:           experimental
 Build-Type:          Simple
-Homepage:            https://github.com/haskell-crypto/cryptonite
-Bug-reports:         https://github.com/haskell-crypto/cryptonite/issues
+Homepage:            https://github.com/kazu-yamamoto/crypton
+Bug-reports:         https://github.com/kazu-yamamoto/crypton/issues
 Cabal-Version:       1.18
 tested-with:         GHC==9.2.2, GHC==9.0.2, GHC==8.10.7, GHC==8.8.4
 extra-doc-files:     README.md CHANGELOG.md
@@ -62,7 +62,7 @@ extra-source-files:  cbits/*.h
 
 source-repository head
   type: git
-  location: https://github.com/haskell-crypto/cryptonite
+  location: https://github.com/kazu-yamamoto/crypton
 
 Flag support_aesni
   Description:       allow compilation with AESNI on system and architecture that supports it
@@ -400,7 +400,7 @@ Library
   if flag(use_target_attributes)
     cc-options:     -DWITH_TARGET_ATTRIBUTES
 
-Test-Suite test-cryptonite
+Test-Suite test-crypton
   type:              exitcode-stdio-1.0
   hs-source-dirs:    tests
   Main-is:           Tests.hs
@@ -467,11 +467,11 @@ Test-Suite test-cryptonite
                    , tasty-quickcheck
                    , tasty-hunit
                    , tasty-kat
-                   , cryptonite
+                   , crypton
   ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
   default-language:  Haskell2010
 
-Benchmark bench-cryptonite
+Benchmark bench-crypton
   type:              exitcode-stdio-1.0
   hs-source-dirs:    benchs
   Main-is:           Bench.hs
@@ -482,6 +482,6 @@ Benchmark bench-cryptonite
                    , memory
                    , gauge
                    , random
-                   , cryptonite
+                   , crypton
   ghc-options:       -Wall -fno-warn-missing-signatures
   default-language:  Haskell2010
