@@ -1,3 +1,5 @@
+![GitHub Actions status](https://github.com/kazu-yamamoto/crypton/workflows/Haskell%20CI/badge.svg)
+
 crypton
 ==========
 
