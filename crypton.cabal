@@ -76,7 +76,7 @@ Flag support_rdrand
 
 Flag support_pclmuldq
   Description:       Allow compilation with pclmuldq on architecture that supports it
-  Default:           False
+  Default:           True
   Manual:            True
 
 Flag support_sse

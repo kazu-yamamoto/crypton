@@ -76,13 +76,6 @@ or as part of an installation:
 
 For help with cabal flags, see: [stackoverflow : is there a way to define flags for cabal](http://stackoverflow.com/questions/23523869/is-there-any-way-to-define-flags-for-cabal-dependencies)
 
-Enabling PCLMULDQ
------------------
-
-When the C toolchain supports it, enabling flag *support_pclmuldq* can bring
-additional security and performance for AES GCM.  A CPU with the necessary
-instruction set will use an alternate implementation selected at runtime.
-
 Links
 -----
 
