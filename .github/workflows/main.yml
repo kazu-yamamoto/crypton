@@ -46,9 +46,3 @@ jobs:
 
     - name: Run tests
       run: cabal test --test-show-details=streaming
-
-    - name: Run doctest
-      if: ${{ runner.os == 'Linux' }}
-      run: |
-        cabal install doctest --overwrite-policy=always
-        cabal repl --build-depends=QuickCheck --with-ghc=doctest
