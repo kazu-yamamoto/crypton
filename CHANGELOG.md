@@ -1,3 +1,10 @@
+## 0.31
+
+* Crypton is forked from cryptonite with the original authors permission.
+* Ignoring exceptons from hClose to read the next entropy
+  [#1](https://github.com/kazu-yamamoto/crypton/pull/1)
+* Enabling the support_pclmuldq flag by default.
+
 ## 0.30
 
 * Fix some C symbol blake2b prefix to be cryptonite_ prefix (fix mixing with other C library)
