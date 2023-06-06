@@ -29,7 +29,7 @@ License:             BSD3
 License-file:        LICENSE
 Copyright:           Vincent Hanquez <vincent@snarc.org>
 Author:              Vincent Hanquez <vincent@snarc.org>
-Maintainer:          vincent@snarc.org
+Maintainer:          Kazu Yamamoto <kazu@iij.ad.jp>
 Category:            Cryptography
 Stability:           experimental
 Build-Type:          Simple
