@@ -3,7 +3,7 @@
 crypton
 ==========
 
-Crypton is a fork from cryptonite with the original authoer's permission.
+Crypton is a fork from cryptonite with the original author's permission.
 
 Crypton is a haskell repository of cryptographic primitives. Each crypto
 algorithm has specificities that are hard to wrap in common APIs and types,
