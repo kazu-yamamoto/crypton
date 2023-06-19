@@ -39,31 +39,31 @@
 
 #include "p256/p256.h"
 
-const cryptonite_p256_int cryptonite_SECP256r1_n =  // curve order
+const crypton_p256_int crypton_SECP256r1_n =  // curve order
   {{P256_LITERAL(0xfc632551, 0xf3b9cac2), P256_LITERAL(0xa7179e84, 0xbce6faad),
     P256_LITERAL(-1, -1), P256_LITERAL(0, -1)}};
 
-const cryptonite_p256_int cryptonite_SECP256r1_p =  // curve field size
+const crypton_p256_int crypton_SECP256r1_p =  // curve field size
   {{P256_LITERAL(-1, -1), P256_LITERAL(-1, 0),
     P256_LITERAL(0, 0), P256_LITERAL(1, -1) }};
 
-const cryptonite_p256_int cryptonite_SECP256r1_b =  // curve b
+const crypton_p256_int crypton_SECP256r1_b =  // curve b
   {{P256_LITERAL(0x27d2604b, 0x3bce3c3e), P256_LITERAL(0xcc53b0f6, 0x651d06b0),
     P256_LITERAL(0x769886bc, 0xb3ebbd55), P256_LITERAL(0xaa3a93e7, 0x5ac635d8)}};
 
-void cryptonite_p256_init(cryptonite_p256_int* a) {
+void crypton_p256_init(crypton_p256_int* a) {
   memset(a, 0, sizeof(*a));
 }
 
-void cryptonite_p256_clear(cryptonite_p256_int* a) { cryptonite_p256_init(a); }
+void crypton_p256_clear(crypton_p256_int* a) { crypton_p256_init(a); }
 
-int cryptonite_p256_get_bit(const cryptonite_p256_int* scalar, int bit) {
+int crypton_p256_get_bit(const crypton_p256_int* scalar, int bit) {
   return (P256_DIGIT(scalar, bit / P256_BITSPERDIGIT)
               >> (bit & (P256_BITSPERDIGIT - 1))) & 1;
 }
 
-int cryptonite_p256_is_zero(const cryptonite_p256_int* a) {
-  cryptonite_p256_digit result = 0;
+int crypton_p256_is_zero(const crypton_p256_int* a) {
+  crypton_p256_digit result = 0;
   int i = 0;
   for (i = 0; i < P256_NDIGITS; ++i) result |= P256_DIGIT(a, i);
   return result == 0;
@@ -71,85 +71,85 @@ int cryptonite_p256_is_zero(const cryptonite_p256_int* a) {
 
 // top, c[] += a[] * b
 // Returns new top
-static cryptonite_p256_digit mulAdd(const cryptonite_p256_int* a,
-                         cryptonite_p256_digit b,
-                         cryptonite_p256_digit top,
-                         cryptonite_p256_digit* c) {
+static crypton_p256_digit mulAdd(const crypton_p256_int* a,
+                         crypton_p256_digit b,
+                         crypton_p256_digit top,
+                         crypton_p256_digit* c) {
   int i;
-  cryptonite_p256_ddigit carry = 0;
+  crypton_p256_ddigit carry = 0;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
     carry += *c;
-    carry += (cryptonite_p256_ddigit)P256_DIGIT(a, i) * b;
-    *c++ = (cryptonite_p256_digit)carry;
+    carry += (crypton_p256_ddigit)P256_DIGIT(a, i) * b;
+    *c++ = (crypton_p256_digit)carry;
     carry >>= P256_BITSPERDIGIT;
   }
-  return top + (cryptonite_p256_digit)carry;
+  return top + (crypton_p256_digit)carry;
 }
 
 // top, c[] -= top_a, a[]
-static cryptonite_p256_digit subTop(cryptonite_p256_digit top_a,
-                         const cryptonite_p256_digit* a,
-                         cryptonite_p256_digit top_c,
-                         cryptonite_p256_digit* c) {
+static crypton_p256_digit subTop(crypton_p256_digit top_a,
+                         const crypton_p256_digit* a,
+                         crypton_p256_digit top_c,
+                         crypton_p256_digit* c) {
   int i;
-  cryptonite_p256_sddigit borrow = 0;
+  crypton_p256_sddigit borrow = 0;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
     borrow += *c;
     borrow -= *a++;
-    *c++ = (cryptonite_p256_digit)borrow;
+    *c++ = (crypton_p256_digit)borrow;
     borrow >>= P256_BITSPERDIGIT;
   }
   borrow += top_c;
   borrow -= top_a;
-  top_c = (cryptonite_p256_digit)borrow;
+  top_c = (crypton_p256_digit)borrow;
   assert((borrow >> P256_BITSPERDIGIT) == 0);
   return top_c;
 }
 
 // top, c[] -= MOD[] & mask (0 or -1)
 // returns new top.
-static cryptonite_p256_digit subM(const cryptonite_p256_int* MOD,
-                       cryptonite_p256_digit top,
-                       cryptonite_p256_digit* c,
-                       cryptonite_p256_digit mask) {
+static crypton_p256_digit subM(const crypton_p256_int* MOD,
+                       crypton_p256_digit top,
+                       crypton_p256_digit* c,
+                       crypton_p256_digit mask) {
   int i;
-  cryptonite_p256_sddigit borrow = 0;
+  crypton_p256_sddigit borrow = 0;
   for (i = 0; i < P256_NDIGITS; ++i) {
     borrow += *c;
     borrow -= P256_DIGIT(MOD, i) & mask;
-    *c++ = (cryptonite_p256_digit)borrow;
+    *c++ = (crypton_p256_digit)borrow;
     borrow >>= P256_BITSPERDIGIT;
   }
-  return top + (cryptonite_p256_digit)borrow;
+  return top + (crypton_p256_digit)borrow;
 }
 
 // top, c[] += MOD[] & mask (0 or -1)
 // returns new top.
-static cryptonite_p256_digit addM(const cryptonite_p256_int* MOD,
-                       cryptonite_p256_digit top,
-                       cryptonite_p256_digit* c,
-                       cryptonite_p256_digit mask) {
+static crypton_p256_digit addM(const crypton_p256_int* MOD,
+                       crypton_p256_digit top,
+                       crypton_p256_digit* c,
+                       crypton_p256_digit mask) {
   int i;
-  cryptonite_p256_ddigit carry = 0;
+  crypton_p256_ddigit carry = 0;
   for (i = 0; i < P256_NDIGITS; ++i) {
     carry += *c;
     carry += P256_DIGIT(MOD, i) & mask;
-    *c++ = (cryptonite_p256_digit)carry;
+    *c++ = (crypton_p256_digit)carry;
     carry >>= P256_BITSPERDIGIT;
   }
-  return top + (cryptonite_p256_digit)carry;
+  return top + (crypton_p256_digit)carry;
 }
 
 // c = a * b mod MOD. c can be a and/or b.
-void cryptonite_p256_modmul(const cryptonite_p256_int* MOD,
-                 const cryptonite_p256_int* a,
-                 const cryptonite_p256_digit top_b,
-                 const cryptonite_p256_int* b,
-                 cryptonite_p256_int* c) {
-  cryptonite_p256_digit tmp[P256_NDIGITS * 2 + 1] = { 0 };
-  cryptonite_p256_digit top = 0;
+void crypton_p256_modmul(const crypton_p256_int* MOD,
+                 const crypton_p256_int* a,
+                 const crypton_p256_digit top_b,
+                 const crypton_p256_int* b,
+                 crypton_p256_int* c) {
+  crypton_p256_digit tmp[P256_NDIGITS * 2 + 1] = { 0 };
+  crypton_p256_digit top = 0;
   int i;
 
   // Multiply/add into tmp.
@@ -164,8 +164,8 @@ void cryptonite_p256_modmul(const cryptonite_p256_int* MOD,
 
   // Reduce tmp, digit by digit.
   for (; i >= 0; --i) {
-    cryptonite_p256_digit reducer[P256_NDIGITS] = { 0 };
-    cryptonite_p256_digit top_reducer;
+    crypton_p256_digit reducer[P256_NDIGITS] = { 0 };
+    crypton_p256_digit top_reducer;
 
     // top can be any value at this point.
     // Guestimate reducer as top * MOD, since msw of MOD is -1.
@@ -195,198 +195,198 @@ void cryptonite_p256_modmul(const cryptonite_p256_int* MOD,
 
   memcpy(c, tmp, P256_NBYTES);
 }
-int cryptonite_p256_is_odd(const cryptonite_p256_int* a) { return P256_DIGIT(a, 0) & 1; }
-int cryptonite_p256_is_even(const cryptonite_p256_int* a) { return !(P256_DIGIT(a, 0) & 1); }
+int crypton_p256_is_odd(const crypton_p256_int* a) { return P256_DIGIT(a, 0) & 1; }
+int crypton_p256_is_even(const crypton_p256_int* a) { return !(P256_DIGIT(a, 0) & 1); }
 
-cryptonite_p256_digit cryptonite_p256_shl(const cryptonite_p256_int* a, int n, cryptonite_p256_int* b) {
+crypton_p256_digit crypton_p256_shl(const crypton_p256_int* a, int n, crypton_p256_int* b) {
   int i;
-  cryptonite_p256_digit top = P256_DIGIT(a, P256_NDIGITS - 1);
+  crypton_p256_digit top = P256_DIGIT(a, P256_NDIGITS - 1);
 
   n %= P256_BITSPERDIGIT;
   for (i = P256_NDIGITS - 1; i > 0; --i) {
-    cryptonite_p256_digit accu = (P256_DIGIT(a, i) << n);
+    crypton_p256_digit accu = (P256_DIGIT(a, i) << n);
     accu |= (P256_DIGIT(a, i - 1) >> (P256_BITSPERDIGIT - n));
     P256_DIGIT(b, i) = accu;
   }
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) << n);
 
-  top = (cryptonite_p256_digit)((((cryptonite_p256_ddigit)top) << n) >> P256_BITSPERDIGIT);
+  top = (crypton_p256_digit)((((crypton_p256_ddigit)top) << n) >> P256_BITSPERDIGIT);
 
   return top;
 }
 
-void cryptonite_p256_shr(const cryptonite_p256_int* a, int n, cryptonite_p256_int* b) {
+void crypton_p256_shr(const crypton_p256_int* a, int n, crypton_p256_int* b) {
   int i;
 
   n %= P256_BITSPERDIGIT;
   for (i = 0; i < P256_NDIGITS - 1; ++i) {
-    cryptonite_p256_digit accu = (P256_DIGIT(a, i) >> n);
+    crypton_p256_digit accu = (P256_DIGIT(a, i) >> n);
     accu |= (P256_DIGIT(a, i + 1) << (P256_BITSPERDIGIT - n));
     P256_DIGIT(b, i) = accu;
   }
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) >> n);
 }
 
-static void cryptonite_p256_shr1(const cryptonite_p256_int* a, int highbit, cryptonite_p256_int* b) {
+static void crypton_p256_shr1(const crypton_p256_int* a, int highbit, crypton_p256_int* b) {
   int i;
 
   for (i = 0; i < P256_NDIGITS - 1; ++i) {
-    cryptonite_p256_digit accu = (P256_DIGIT(a, i) >> 1);
+    crypton_p256_digit accu = (P256_DIGIT(a, i) >> 1);
     accu |= (P256_DIGIT(a, i + 1) << (P256_BITSPERDIGIT - 1));
     P256_DIGIT(b, i) = accu;
   }
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) >> 1) |
-      (((cryptonite_p256_sdigit) highbit) << (P256_BITSPERDIGIT - 1));
+      (((crypton_p256_sdigit) highbit) << (P256_BITSPERDIGIT - 1));
 }
 
 // Return -1, 0, 1 for a < b, a == b or a > b respectively.
-int cryptonite_p256_cmp(const cryptonite_p256_int* a, const cryptonite_p256_int* b) {
+int crypton_p256_cmp(const crypton_p256_int* a, const crypton_p256_int* b) {
   int i;
-  cryptonite_p256_sddigit borrow = 0;
-  cryptonite_p256_digit notzero = 0;
+  crypton_p256_sddigit borrow = 0;
+  crypton_p256_digit notzero = 0;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
-    borrow += (cryptonite_p256_sddigit)P256_DIGIT(a, i) - P256_DIGIT(b, i);
+    borrow += (crypton_p256_sddigit)P256_DIGIT(a, i) - P256_DIGIT(b, i);
     // Track whether any result digit is ever not zero.
     // Relies on !!(non-zero) evaluating to 1, e.g., !!(-1) evaluating to 1.
-    notzero |= !!((cryptonite_p256_digit)borrow);
+    notzero |= !!((crypton_p256_digit)borrow);
     borrow >>= P256_BITSPERDIGIT;
   }
   return (int)borrow | notzero;
 }
 
 // c = a - b. Returns borrow: 0 or -1.
-int cryptonite_p256_sub(const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c) {
+int crypton_p256_sub(const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c) {
   int i;
-  cryptonite_p256_sddigit borrow = 0;
+  crypton_p256_sddigit borrow = 0;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
-    borrow += (cryptonite_p256_sddigit)P256_DIGIT(a, i) - P256_DIGIT(b, i);
-    if (c) P256_DIGIT(c, i) = (cryptonite_p256_digit)borrow;
+    borrow += (crypton_p256_sddigit)P256_DIGIT(a, i) - P256_DIGIT(b, i);
+    if (c) P256_DIGIT(c, i) = (crypton_p256_digit)borrow;
     borrow >>= P256_BITSPERDIGIT;
   }
   return (int)borrow;
 }
 
 // c = a + b. Returns carry: 0 or 1.
-int cryptonite_p256_add(const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c) {
+int crypton_p256_add(const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c) {
   int i;
-  cryptonite_p256_ddigit carry = 0;
+  crypton_p256_ddigit carry = 0;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
-    carry += (cryptonite_p256_ddigit)P256_DIGIT(a, i) + P256_DIGIT(b, i);
-    if (c) P256_DIGIT(c, i) = (cryptonite_p256_digit)carry;
+    carry += (crypton_p256_ddigit)P256_DIGIT(a, i) + P256_DIGIT(b, i);
+    if (c) P256_DIGIT(c, i) = (crypton_p256_digit)carry;
     carry >>= P256_BITSPERDIGIT;
   }
   return (int)carry;
 }
 
 // b = a + d. Returns carry, 0 or 1.
-int cryptonite_p256_add_d(const cryptonite_p256_int* a, cryptonite_p256_digit d, cryptonite_p256_int* b) {
+int crypton_p256_add_d(const crypton_p256_int* a, crypton_p256_digit d, crypton_p256_int* b) {
   int i;
-  cryptonite_p256_ddigit carry = d;
+  crypton_p256_ddigit carry = d;
 
   for (i = 0; i < P256_NDIGITS; ++i) {
-    carry += (cryptonite_p256_ddigit)P256_DIGIT(a, i);
-    if (b) P256_DIGIT(b, i) = (cryptonite_p256_digit)carry;
+    carry += (crypton_p256_ddigit)P256_DIGIT(a, i);
+    if (b) P256_DIGIT(b, i) = (crypton_p256_digit)carry;
     carry >>= P256_BITSPERDIGIT;
   }
   return (int)carry;
 }
 
 // b = 1/a mod MOD, binary euclid.
-void cryptonite_p256_modinv_vartime(const cryptonite_p256_int* MOD,
-                         const cryptonite_p256_int* a,
-                         cryptonite_p256_int* b) {
-  cryptonite_p256_int R = P256_ZERO;
-  cryptonite_p256_int S = P256_ONE;
-  cryptonite_p256_int U = *MOD;
-  cryptonite_p256_int V = *a;
+void crypton_p256_modinv_vartime(const crypton_p256_int* MOD,
+                         const crypton_p256_int* a,
+                         crypton_p256_int* b) {
+  crypton_p256_int R = P256_ZERO;
+  crypton_p256_int S = P256_ONE;
+  crypton_p256_int U = *MOD;
+  crypton_p256_int V = *a;
 
   for (;;) {
-    if (cryptonite_p256_is_even(&U)) {
-      cryptonite_p256_shr1(&U, 0, &U);
-      if (cryptonite_p256_is_even(&R)) {
-        cryptonite_p256_shr1(&R, 0, &R);
+    if (crypton_p256_is_even(&U)) {
+      crypton_p256_shr1(&U, 0, &U);
+      if (crypton_p256_is_even(&R)) {
+        crypton_p256_shr1(&R, 0, &R);
       } else {
         // R = (R+MOD)/2
-        cryptonite_p256_shr1(&R, cryptonite_p256_add(&R, MOD, &R), &R);
+        crypton_p256_shr1(&R, crypton_p256_add(&R, MOD, &R), &R);
       }
-    } else if (cryptonite_p256_is_even(&V)) {
-      cryptonite_p256_shr1(&V, 0, &V);
-      if (cryptonite_p256_is_even(&S)) {
-        cryptonite_p256_shr1(&S, 0, &S);
+    } else if (crypton_p256_is_even(&V)) {
+      crypton_p256_shr1(&V, 0, &V);
+      if (crypton_p256_is_even(&S)) {
+        crypton_p256_shr1(&S, 0, &S);
       } else {
         // S = (S+MOD)/2
-        cryptonite_p256_shr1(&S, cryptonite_p256_add(&S, MOD, &S) , &S);
+        crypton_p256_shr1(&S, crypton_p256_add(&S, MOD, &S) , &S);
       }
     } else {  // U,V both odd.
-      if (!cryptonite_p256_sub(&V, &U, NULL)) {
-        cryptonite_p256_sub(&V, &U, &V);
-        if (cryptonite_p256_sub(&S, &R, &S)) cryptonite_p256_add(&S, MOD, &S);
-        if (cryptonite_p256_is_zero(&V)) break;  // done.
+      if (!crypton_p256_sub(&V, &U, NULL)) {
+        crypton_p256_sub(&V, &U, &V);
+        if (crypton_p256_sub(&S, &R, &S)) crypton_p256_add(&S, MOD, &S);
+        if (crypton_p256_is_zero(&V)) break;  // done.
       } else {
-        cryptonite_p256_sub(&U, &V, &U);
-        if (cryptonite_p256_sub(&R, &S, &R)) cryptonite_p256_add(&R, MOD, &R);
+        crypton_p256_sub(&U, &V, &U);
+        if (crypton_p256_sub(&R, &S, &R)) crypton_p256_add(&R, MOD, &R);
       }
     }
   }
 
-  cryptonite_p256_mod(MOD, &R, b);
+  crypton_p256_mod(MOD, &R, b);
 }
 
-void cryptonite_p256_mod(const cryptonite_p256_int* MOD,
-              const cryptonite_p256_int* in,
-              cryptonite_p256_int* out) {
+void crypton_p256_mod(const crypton_p256_int* MOD,
+              const crypton_p256_int* in,
+              crypton_p256_int* out) {
   if (out != in) *out = *in;
   addM(MOD, 0, P256_DIGITS(out), subM(MOD, 0, P256_DIGITS(out), -1));
 }
 
 // Verify y^2 == x^3 - 3x + b mod p
 // and 0 < x < p and 0 < y < p
-int cryptonite_p256_is_valid_point(const cryptonite_p256_int* x, const cryptonite_p256_int* y) {
-  cryptonite_p256_int y2, x3;
+int crypton_p256_is_valid_point(const crypton_p256_int* x, const crypton_p256_int* y) {
+  crypton_p256_int y2, x3;
 
-  if (cryptonite_p256_cmp(&cryptonite_SECP256r1_p, x) <= 0 ||
-      cryptonite_p256_cmp(&cryptonite_SECP256r1_p, y) <= 0 ||
-      cryptonite_p256_is_zero(x) ||
-      cryptonite_p256_is_zero(y)) return 0;
+  if (crypton_p256_cmp(&crypton_SECP256r1_p, x) <= 0 ||
+      crypton_p256_cmp(&crypton_SECP256r1_p, y) <= 0 ||
+      crypton_p256_is_zero(x) ||
+      crypton_p256_is_zero(y)) return 0;
 
-  cryptonite_p256_modmul(&cryptonite_SECP256r1_p, y, 0, y, &y2);  // y^2
+  crypton_p256_modmul(&crypton_SECP256r1_p, y, 0, y, &y2);  // y^2
 
-  cryptonite_p256_modmul(&cryptonite_SECP256r1_p, x, 0, x, &x3);  // x^2
-  cryptonite_p256_modmul(&cryptonite_SECP256r1_p, x, 0, &x3, &x3);  // x^3
-  if (cryptonite_p256_sub(&x3, x, &x3)) cryptonite_p256_add(&x3, &cryptonite_SECP256r1_p, &x3);  // x^3 - x
-  if (cryptonite_p256_sub(&x3, x, &x3)) cryptonite_p256_add(&x3, &cryptonite_SECP256r1_p, &x3);  // x^3 - 2x
-  if (cryptonite_p256_sub(&x3, x, &x3)) cryptonite_p256_add(&x3, &cryptonite_SECP256r1_p, &x3);  // x^3 - 3x
-  if (cryptonite_p256_add(&x3, &cryptonite_SECP256r1_b, &x3))  // x^3 - 3x + b
-    cryptonite_p256_sub(&x3, &cryptonite_SECP256r1_p, &x3);
+  crypton_p256_modmul(&crypton_SECP256r1_p, x, 0, x, &x3);  // x^2
+  crypton_p256_modmul(&crypton_SECP256r1_p, x, 0, &x3, &x3);  // x^3
+  if (crypton_p256_sub(&x3, x, &x3)) crypton_p256_add(&x3, &crypton_SECP256r1_p, &x3);  // x^3 - x
+  if (crypton_p256_sub(&x3, x, &x3)) crypton_p256_add(&x3, &crypton_SECP256r1_p, &x3);  // x^3 - 2x
+  if (crypton_p256_sub(&x3, x, &x3)) crypton_p256_add(&x3, &crypton_SECP256r1_p, &x3);  // x^3 - 3x
+  if (crypton_p256_add(&x3, &crypton_SECP256r1_b, &x3))  // x^3 - 3x + b
+    crypton_p256_sub(&x3, &crypton_SECP256r1_p, &x3);
 
-  return cryptonite_p256_cmp(&y2, &x3) == 0;
+  return crypton_p256_cmp(&y2, &x3) == 0;
 }
 
-void cryptonite_p256_from_bin(const uint8_t src[P256_NBYTES], cryptonite_p256_int* dst) {
+void crypton_p256_from_bin(const uint8_t src[P256_NBYTES], crypton_p256_int* dst) {
   int i, n;
   const uint8_t* p = &src[0];
 
   for (i = P256_NDIGITS - 1; i >= 0; --i) {
-    cryptonite_p256_digit dig = 0;
+    crypton_p256_digit dig = 0;
     n = P256_BITSPERDIGIT;
     while (n > 0) {
       n -= 8;
-      dig |= ((cryptonite_p256_digit) *(p++)) << n;
+      dig |= ((crypton_p256_digit) *(p++)) << n;
     }
     P256_DIGIT(dst, i) = dig;
   }
 }
 
-void cryptonite_p256_to_bin(const cryptonite_p256_int* src, uint8_t dst[P256_NBYTES])
+void crypton_p256_to_bin(const crypton_p256_int* src, uint8_t dst[P256_NBYTES])
 {
 	int i, n;
 	uint8_t* p = &dst[0];
 
 	for (i = P256_NDIGITS -1; i >= 0; --i) {
-		const cryptonite_p256_digit dig = P256_DIGIT(src, i);
+		const crypton_p256_digit dig = P256_DIGIT(src, i);
 		n = P256_BITSPERDIGIT;
 		while (n > 0) {
 			n -= 8;
@@ -402,49 +402,49 @@ void cryptonite_p256_to_bin(const cryptonite_p256_int* src, uint8_t dst[P256_NBY
 #define MSB_COMPLEMENT(x) (((x) >> (P256_BITSPERDIGIT - 1)) - 1)
 
 // c = a + b mod MOD
-void cryptonite_p256e_modadd(const cryptonite_p256_int* MOD, const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c) {
-  assert(c);  /* avoid repeated checks inside inlined cryptonite_p256_add */
-  cryptonite_p256_digit top = cryptonite_p256_add(a, b, c);
+void crypton_p256e_modadd(const crypton_p256_int* MOD, const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c) {
+  assert(c);  /* avoid repeated checks inside inlined crypton_p256_add */
+  crypton_p256_digit top = crypton_p256_add(a, b, c);
   top = subM(MOD, top, P256_DIGITS(c), -1);
   top = subM(MOD, top, P256_DIGITS(c), MSB_COMPLEMENT(top));
   addM(MOD, 0, P256_DIGITS(c), top);
 }
 
 // c = a - b mod MOD
-void cryptonite_p256e_modsub(const cryptonite_p256_int* MOD, const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c) {
-  assert(c); /* avoid repeated checks inside inlined cryptonite_p256_sub */
-  cryptonite_p256_digit top = cryptonite_p256_sub(a, b, c);
+void crypton_p256e_modsub(const crypton_p256_int* MOD, const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c) {
+  assert(c); /* avoid repeated checks inside inlined crypton_p256_sub */
+  crypton_p256_digit top = crypton_p256_sub(a, b, c);
   top = addM(MOD, top, P256_DIGITS(c), ~MSB_COMPLEMENT(top));
   top = subM(MOD, top, P256_DIGITS(c), MSB_COMPLEMENT(top));
   addM(MOD, 0, P256_DIGITS(c), top);
 }
 
 #define NTH_DOUBLE_THEN_ADD(i, a, nth, b, out)   \
-    cryptonite_p256e_montmul(a, a, out);         \
+    crypton_p256e_montmul(a, a, out);         \
     for (i = 1; i < nth; i++)                    \
-        cryptonite_p256e_montmul(out, out, out); \
-    cryptonite_p256e_montmul(out, b, out);
+        crypton_p256e_montmul(out, out, out); \
+    crypton_p256e_montmul(out, b, out);
 
-const cryptonite_p256_int cryptonite_SECP256r1_r2 = // r^2 mod n
+const crypton_p256_int crypton_SECP256r1_r2 = // r^2 mod n
   {{P256_LITERAL(0xBE79EEA2, 0x83244C95), P256_LITERAL(0x49BD6FA6, 0x4699799C),
     P256_LITERAL(0x2B6BEC59, 0x2845B239), P256_LITERAL(0xF3D95620, 0x66E12D94)}};
 
-const cryptonite_p256_int cryptonite_SECP256r1_one = {{1}};
+const crypton_p256_int crypton_SECP256r1_one = {{1}};
 
 // Montgomery multiplication, i.e. c = ab/r mod n with r = 2^256.
 // Implementation is adapted from 'sc_montmul' in libdecaf.
-static void cryptonite_p256e_montmul(const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c) {
+static void crypton_p256e_montmul(const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c) {
   int i, j, borrow;
-  cryptonite_p256_digit accum[P256_NDIGITS+1] = {0};
-  cryptonite_p256_digit hi_carry = 0;
+  crypton_p256_digit accum[P256_NDIGITS+1] = {0};
+  crypton_p256_digit hi_carry = 0;
 
   for (i=0; i<P256_NDIGITS; i++) {
-    cryptonite_p256_digit mand = P256_DIGIT(a, i);
-    const cryptonite_p256_digit *mier = P256_DIGITS(b);
+    crypton_p256_digit mand = P256_DIGIT(a, i);
+    const crypton_p256_digit *mier = P256_DIGITS(b);
 
-    cryptonite_p256_ddigit chain = 0;
+    crypton_p256_ddigit chain = 0;
     for (j=0; j<P256_NDIGITS; j++) {
-      chain += ((cryptonite_p256_ddigit)mand)*mier[j] + accum[j];
+      chain += ((crypton_p256_ddigit)mand)*mier[j] + accum[j];
       accum[j] = chain;
       chain >>= P256_BITSPERDIGIT;
     }
@@ -452,9 +452,9 @@ static void cryptonite_p256e_montmul(const cryptonite_p256_int* a, const crypton
 
     mand = accum[0] * P256_MONTGOMERY_FACTOR;
     chain = 0;
-    mier = P256_DIGITS(&cryptonite_SECP256r1_n);
+    mier = P256_DIGITS(&crypton_SECP256r1_n);
     for (j=0; j<P256_NDIGITS; j++) {
-      chain += (cryptonite_p256_ddigit)mand*mier[j] + accum[j];
+      chain += (crypton_p256_ddigit)mand*mier[j] + accum[j];
       if (j) accum[j-1] = chain;
       chain >>= P256_BITSPERDIGIT;
     }
@@ -465,31 +465,31 @@ static void cryptonite_p256e_montmul(const cryptonite_p256_int* a, const crypton
   }
 
   memcpy(P256_DIGITS(c), accum, sizeof(*c));
-  borrow = cryptonite_p256_sub(c, &cryptonite_SECP256r1_n, c);
-  addM(&cryptonite_SECP256r1_n, 0, P256_DIGITS(c), borrow + hi_carry);
+  borrow = crypton_p256_sub(c, &crypton_SECP256r1_n, c);
+  addM(&crypton_SECP256r1_n, 0, P256_DIGITS(c), borrow + hi_carry);
 }
 
 // b = 1/a mod n, using Fermat's little theorem.
-void cryptonite_p256e_scalar_invert(const cryptonite_p256_int* a, cryptonite_p256_int* b) {
-  cryptonite_p256_int _1, _10, _11, _101, _111, _1010, _1111;
-  cryptonite_p256_int _10101, _101010, _101111, x6, x8, x16, x32;
+void crypton_p256e_scalar_invert(const crypton_p256_int* a, crypton_p256_int* b) {
+  crypton_p256_int _1, _10, _11, _101, _111, _1010, _1111;
+  crypton_p256_int _10101, _101010, _101111, x6, x8, x16, x32;
   int i;
 
   // Montgomerize
-  cryptonite_p256e_montmul(a, &cryptonite_SECP256r1_r2, &_1);
+  crypton_p256e_montmul(a, &crypton_SECP256r1_r2, &_1);
 
   // P-256 (secp256r1) Scalar Inversion
   // <https://briansmith.org/ecc-inversion-addition-chains-01>
-  cryptonite_p256e_montmul(&_1     , &_1     , &_10);
-  cryptonite_p256e_montmul(&_10    , &_1     , &_11);
-  cryptonite_p256e_montmul(&_10    , &_11    , &_101);
-  cryptonite_p256e_montmul(&_10    , &_101   , &_111);
-  cryptonite_p256e_montmul(&_101   , &_101   , &_1010);
-  cryptonite_p256e_montmul(&_101   , &_1010  , &_1111);
+  crypton_p256e_montmul(&_1     , &_1     , &_10);
+  crypton_p256e_montmul(&_10    , &_1     , &_11);
+  crypton_p256e_montmul(&_10    , &_11    , &_101);
+  crypton_p256e_montmul(&_10    , &_101   , &_111);
+  crypton_p256e_montmul(&_101   , &_101   , &_1010);
+  crypton_p256e_montmul(&_101   , &_1010  , &_1111);
   NTH_DOUBLE_THEN_ADD(i, &_1010,  1   , &_1     , &_10101);
-  cryptonite_p256e_montmul(&_10101 , &_10101 , &_101010);
-  cryptonite_p256e_montmul(&_101   , &_101010, &_101111);
-  cryptonite_p256e_montmul(&_10101 , &_101010, &x6);
+  crypton_p256e_montmul(&_10101 , &_10101 , &_101010);
+  crypton_p256e_montmul(&_101   , &_101010, &_101111);
+  crypton_p256e_montmul(&_10101 , &_101010, &x6);
   NTH_DOUBLE_THEN_ADD(i, &x6   ,  2   , &_11    , &x8);
   NTH_DOUBLE_THEN_ADD(i, &x8   ,  8   , &x8     , &x16);
   NTH_DOUBLE_THEN_ADD(i, &x16  , 16   , &x16    , &x32);
@@ -524,5 +524,5 @@ void cryptonite_p256e_scalar_invert(const cryptonite_p256_int* a, cryptonite_p25
   NTH_DOUBLE_THEN_ADD(i, b     , 2 + 4, &_1111  , b);
 
   // Demontgomerize
-  cryptonite_p256e_montmul(b, &cryptonite_SECP256r1_one, b);
+  crypton_p256e_montmul(b, &crypton_SECP256r1_one, b);
 }

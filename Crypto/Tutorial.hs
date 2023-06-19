@@ -1,4 +1,4 @@
--- | Examples of how to use @cryptonite@.
+-- | Examples of how to use @crypton@.
 module Crypto.Tutorial
     ( -- * API design
       -- $api_design
@@ -15,11 +15,11 @@ module Crypto.Tutorial
 
 -- $api_design
 --
--- APIs in cryptonite are often based on type classes from package
+-- APIs in crypton are often based on type classes from package
 -- <https://hackage.haskell.org/package/memory memory>, notably
 -- 'Data.ByteArray.ByteArrayAccess' and 'Data.ByteArray.ByteArray'.
 -- Module "Data.ByteArray" provides many primitives that are useful to
--- work with cryptonite types.  For example function 'Data.ByteArray.convert'
+-- work with crypton types.  For example function 'Data.ByteArray.convert'
 -- can transform one 'Data.ByteArray.ByteArrayAccess' concrete type like
 -- 'Crypto.Hash.Digest' to a 'Data.ByteString.ByteString'.
 --

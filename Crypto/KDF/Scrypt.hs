@@ -35,8 +35,8 @@ data Parameters = Parameters
     , outputLength :: Int    -- ^ the number of bytes to generate out of Scrypt
     }
 
-foreign import ccall "cryptonite_scrypt_smix"
-    ccryptonite_scrypt_smix :: Ptr Word8 -> Word32 -> Word64 -> Ptr Word8 -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_scrypt_smix"
+    ccrypton_scrypt_smix :: Ptr Word8 -> Word32 -> Word64 -> Ptr Word8 -> Ptr Word8 -> IO ()
 
 -- | Generate the scrypt key derivation data
 generate :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
@@ -55,7 +55,7 @@ generate params password salt
             allocaBytesAligned (128*(fromIntegral $ n params)*(r params)) 8 $ \v ->
             allocaBytesAligned (256*r params + 64) 8 $ \xy -> do
                 forM_ [0..(p params-1)] $ \i ->
-                    ccryptonite_scrypt_smix (bPtr `plusPtr` (i * 128 * (r params)))
+                    ccrypton_scrypt_smix (bPtr `plusPtr` (i * 128 * (r params)))
                                             (fromIntegral $ r params) (n params) v xy
 
         return $ PBKDF2.generate prf (PBKDF2.Parameters 1 (outputLength params)) password (newSalt :: B.Bytes)

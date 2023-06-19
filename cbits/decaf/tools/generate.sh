@@ -10,16 +10,16 @@
 #
 # Notes about transformations applied:
 #
-# * only a subset of library files are used, cryptonite needing only x448
+# * only a subset of library files are used, crypton needing only x448
 #   and ed448.  Some headers like point_255.h are still included but copied
 #   empty, as the definitions are not necessary.  Only the simplest
 #   architectures arch_32 and arch_ref64 are used to get the best
 #   compatibility and generality over performance.
 #
-# * substitutions are performed in order to add a cryptonite_ prefix
+# * substitutions are performed in order to add a crypton_ prefix
 #   to all external symbols
 #
-# * code related to SHAKE is replaced by cryptonite code, referenced from
+# * code related to SHAKE is replaced by crypton code, referenced from
 #   a custom shake.h.  As a consequence, portable_endian.h is not needed.
 #
 # * aligned(32) attributes used for stack alignment are replaced by
@@ -62,12 +62,12 @@ convert() {
     -e 's/ __attribute__((visibility("hidden")))//g' \
     -e 's/ __attribute__ ((visibility ("hidden")))//g' \
     -e "s/__attribute__((aligned(32)))/$REPL/g" \
-    -e 's/decaf_/cryptonite_decaf_/g' \
-    -e 's/DECAF_/CRYPTONITE_DECAF_/g' \
-    -e 's/gf_/cryptonite_gf_/g' \
-    -e 's/keccakf/cryptonite_keccakf/g' \
-    -e 's/NO_CONTEXT_POINTS_HERE/CRYPTONITE_NO_CONTEXT_POINTS_HERE/g' \
-    -e 's/P25519_SQRT_MINUS_ONE/CRYPTONITE_P25519_SQRT_MINUS_ONE/g'
+    -e 's/decaf_/crypton_decaf_/g' \
+    -e 's/DECAF_/CRYPTON_DECAF_/g' \
+    -e 's/gf_/crypton_gf_/g' \
+    -e 's/keccakf/crypton_keccakf/g' \
+    -e 's/NO_CONTEXT_POINTS_HERE/CRYPTON_NO_CONTEXT_POINTS_HERE/g' \
+    -e 's/P25519_SQRT_MINUS_ONE/CRYPTON_P25519_SQRT_MINUS_ONE/g'
 }
 
 convert "$SRC_DIR"/utils.c  "$DEST_DIR"

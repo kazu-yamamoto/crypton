@@ -30,12 +30,12 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <cryptonite_cpu.h>
+#include <crypton_cpu.h>
 #include <aes/gf.h>
 #include <aes/x86ni.h>
 
 /* inplace GFMUL for xts mode */
-void cryptonite_aes_generic_gf_mulx(block128 *a)
+void crypton_aes_generic_gf_mulx(block128 *a)
 {
 	const uint64_t gf_mask = cpu_to_le64(0x8000000000000000ULL);
 	uint64_t r = ((a->q[1] & gf_mask) ? cpu_to_le64(0x87) : 0);
@@ -95,7 +95,7 @@ static inline void cpu_gf_mulx4(block128 *a, const block128 *b)
 }
 
 /* initialize the 4-bit table given H */
-void cryptonite_aes_generic_hinit(table_4bit htable, const block128 *h)
+void crypton_aes_generic_hinit(table_4bit htable, const block128 *h)
 {
 	block128 v, *p;
 	int i, j;
@@ -127,7 +127,7 @@ void cryptonite_aes_generic_hinit(table_4bit htable, const block128 *h)
 }
 
 /* multiply a block with H */
-void cryptonite_aes_generic_gf_mul(block128 *a, const table_4bit htable)
+void crypton_aes_generic_gf_mul(block128 *a, const table_4bit htable)
 {
 	block128 b;
 	int i;

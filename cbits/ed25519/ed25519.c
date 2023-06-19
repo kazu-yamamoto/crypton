@@ -5,13 +5,13 @@
 */
 
 
-#define ED25519_FN(fn)         cryptonite_##fn
+#define ED25519_FN(fn)         crypton_##fn
 
 #include "ed25519-donna.h"
 #include "ed25519.h"
 #include "ed25519-randombytes.h"
 #include "ed25519-hash.h"
-#include "ed25519-cryptonite-exts.h"
+#include "ed25519-crypton-exts.h"
 
 /*
 	Generates a (extsk[0..31]) and aExt (extsk[32..63])

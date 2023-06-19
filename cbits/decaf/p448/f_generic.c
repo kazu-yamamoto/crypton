@@ -24,11 +24,11 @@ static const gf MODULUS = {FIELD_LITERAL(
 #endif
 
 /** Serialize to wire format. */
-void cryptonite_gf_serialize (uint8_t serial[SER_BYTES], const gf x, int with_hibit) {
+void crypton_gf_serialize (uint8_t serial[SER_BYTES], const gf x, int with_hibit) {
     gf red;
-    cryptonite_gf_copy(red, x);
-    cryptonite_gf_strong_reduce(red);
-    if (!with_hibit) { assert(cryptonite_gf_hibit(red) == 0); }
+    crypton_gf_copy(red, x);
+    crypton_gf_strong_reduce(red);
+    if (!with_hibit) { assert(crypton_gf_hibit(red) == 0); }
     
     unsigned int j=0, fill=0;
     dword_t buffer = 0;
@@ -45,15 +45,15 @@ void cryptonite_gf_serialize (uint8_t serial[SER_BYTES], const gf x, int with_hi
 }
 
 /** Return high bit of x = low bit of 2x mod p */
-mask_t cryptonite_gf_hibit(const gf x) {
+mask_t crypton_gf_hibit(const gf x) {
     gf y;
-    cryptonite_gf_add(y,x,x);
-    cryptonite_gf_strong_reduce(y);
+    crypton_gf_add(y,x,x);
+    crypton_gf_strong_reduce(y);
     return -(y->limb[0]&1);
 }
 
 /** Deserialize from wire format; return -1 on success and 0 on failure. */
-mask_t cryptonite_gf_deserialize (gf x, const uint8_t serial[SER_BYTES], int with_hibit) {
+mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES], int with_hibit) {
     unsigned int j=0, fill=0;
     dword_t buffer = 0;
     dsword_t scarry = 0;
@@ -68,14 +68,14 @@ mask_t cryptonite_gf_deserialize (gf x, const uint8_t serial[SER_BYTES], int wit
         buffer >>= LIMB_PLACE_VALUE(LIMBPERM(i));
         scarry = (scarry + x->limb[LIMBPERM(i)] - MODULUS->limb[LIMBPERM(i)]) >> (8*sizeof(word_t));
     }
-    mask_t succ = with_hibit ? -(mask_t)1 : ~cryptonite_gf_hibit(x);
+    mask_t succ = with_hibit ? -(mask_t)1 : ~crypton_gf_hibit(x);
     return succ & word_is_zero(buffer) & ~word_is_zero(scarry);
 }
 
 /** Reduce to canonical form. */
-void cryptonite_gf_strong_reduce (gf a) {
+void crypton_gf_strong_reduce (gf a) {
     /* first, clear high */
-    cryptonite_gf_weak_reduce(a); /* Determined to have negligible perf impact. */
+    crypton_gf_weak_reduce(a); /* Determined to have negligible perf impact. */
 
     /* now the total is less than 2p */
 
@@ -107,23 +107,23 @@ void cryptonite_gf_strong_reduce (gf a) {
 }
 
 /** Subtract two gf elements d=a-b */
-void cryptonite_gf_sub (gf d, const gf a, const gf b) {
-    cryptonite_gf_sub_RAW ( d, a, b );
-    cryptonite_gf_bias( d, 2 );
-    cryptonite_gf_weak_reduce ( d );
+void crypton_gf_sub (gf d, const gf a, const gf b) {
+    crypton_gf_sub_RAW ( d, a, b );
+    crypton_gf_bias( d, 2 );
+    crypton_gf_weak_reduce ( d );
 }
 
 /** Add two field elements d = a+b */
-void cryptonite_gf_add (gf d, const gf a, const gf b) {
-    cryptonite_gf_add_RAW ( d, a, b );
-    cryptonite_gf_weak_reduce ( d );
+void crypton_gf_add (gf d, const gf a, const gf b) {
+    crypton_gf_add_RAW ( d, a, b );
+    crypton_gf_weak_reduce ( d );
 }
 
 /** Compare a==b */
-mask_t cryptonite_gf_eq(const gf a, const gf b) {
+mask_t crypton_gf_eq(const gf a, const gf b) {
     gf c;
-    cryptonite_gf_sub(c,a,b);
-    cryptonite_gf_strong_reduce(c);
+    crypton_gf_sub(c,a,b);
+    crypton_gf_strong_reduce(c);
     mask_t ret=0;
     for (unsigned int i=0; i<NLIMBS; i++) {
         ret |= c->limb[LIMBPERM(i)];

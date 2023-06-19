@@ -3,7 +3,7 @@
 
 #include <decaf.h>
 
-#define API_NS(_id) cryptonite_decaf_448_##_id
+#define API_NS(_id) crypton_decaf_448_##_id
 const API_NS(point_t) API_NS(point_base) = {{
 {FIELD_LITERAL(0x00fffffffffffffe,0x00ffffffffffffff,0x00ffffffffffffff,0x00ffffffffffffff,0x0000000000000003,0x0000000000000000,0x0000000000000000,0x0000000000000000)},
   {FIELD_LITERAL(0x0081e6d37f752992,0x003078ead1c28721,0x00135cfd2394666c,0x0041149c50506061,0x0031d30e4f5490b3,0x00902014990dc141,0x0052341b04c1e328,0x0014237853c10a1b)},

@@ -233,7 +233,7 @@ typedef enum Argon2_version {
  * @param  context  Pointer to the Argon2 internal structure
  * @return Error code if smth is wrong, ARGON2_OK otherwise
  */
-ARGON2_PUBLIC int cryptonite_argon2_ctx(argon2_context *context, argon2_type type);
+ARGON2_PUBLIC int crypton_argon2_ctx(argon2_context *context, argon2_type type);
 
 /**
  * Hashes a password with Argon2i, producing a raw hash by allocating memory at
@@ -252,7 +252,7 @@ ARGON2_PUBLIC int cryptonite_argon2_ctx(argon2_context *context, argon2_type typ
  */
 
 /* generic function underlying the above ones */
-ARGON2_PUBLIC int cryptonite_argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
+ARGON2_PUBLIC int crypton_argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
                               const uint32_t parallelism, const void *pwd,
                               const size_t pwdlen, const void *salt,
                               const size_t saltlen, void *hash,

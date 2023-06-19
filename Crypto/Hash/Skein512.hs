@@ -83,11 +83,11 @@ instance HashAlgorithm Skein512_512 where
     hashInternalFinalize p    = c_skein512_finalize p 512
 
 
-foreign import ccall unsafe "cryptonite_skein512_init"
+foreign import ccall unsafe "crypton_skein512_init"
     c_skein512_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_skein512_update"
+foreign import ccall "crypton_skein512_update"
     c_skein512_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_skein512_finalize"
+foreign import ccall unsafe "crypton_skein512_finalize"
     c_skein512_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()

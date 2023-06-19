@@ -31,8 +31,8 @@
 #ifndef BLOCK128_H
 #define BLOCK128_H
 
-#include <cryptonite_bitfn.h>
-#include <cryptonite_align.h>
+#include <crypton_bitfn.h>
+#include <crypton_align.h>
 
 typedef union {
        uint64_t q[2];

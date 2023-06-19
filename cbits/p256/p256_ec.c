@@ -358,7 +358,7 @@ static void select_jacobian_point(felem out_x, felem out_y, felem out_z,
  * number. Note that the value of scalar must be less than the order of the
  * group. */
 static void scalar_base_mult(felem nx, felem ny, felem nz,
-                             const cryptonite_p256_int* scalar) {
+                             const crypton_p256_int* scalar) {
   int i, j;
   limb n_is_infinity_mask = -1, p_is_noninfinite_mask, mask;
   u32 table_offset;
@@ -378,10 +378,10 @@ static void scalar_base_mult(felem nx, felem ny, felem nz,
     }
     table_offset = 0;
     for (j = 0; j <= 32; j += 32) {
-      char bit0 = cryptonite_p256_get_bit(scalar, 31 - i + j);
-      char bit1 = cryptonite_p256_get_bit(scalar, 95 - i + j);
-      char bit2 = cryptonite_p256_get_bit(scalar, 159 - i + j);
-      char bit3 = cryptonite_p256_get_bit(scalar, 223 - i + j);
+      char bit0 = crypton_p256_get_bit(scalar, 31 - i + j);
+      char bit1 = crypton_p256_get_bit(scalar, 95 - i + j);
+      char bit2 = crypton_p256_get_bit(scalar, 159 - i + j);
+      char bit3 = crypton_p256_get_bit(scalar, 223 - i + j);
       limb index = bit0 | (bit1 << 1) | (bit2 << 2) | (bit3 << 3);
 
       select_affine_point(px, py, kPrecomputed + table_offset, index);
@@ -426,7 +426,7 @@ static void point_to_affine(felem x_out, felem y_out, const felem nx,
 
 /* scalar_base_mult sets {nx,ny,nz} = scalar*{x,y}. */
 static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
-                        const felem y, const cryptonite_p256_int* scalar) {
+                        const felem y, const crypton_p256_int* scalar) {
   int i;
   felem px, py, pz, tx, ty, tz;
   felem precomp[16][3];
@@ -460,10 +460,10 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
       point_double(nx, ny, nz, nx, ny, nz);
     }
 
-    index = (cryptonite_p256_get_bit(scalar, 255 - i - 0) << 3) |
-            (cryptonite_p256_get_bit(scalar, 255 - i - 1) << 2) |
-            (cryptonite_p256_get_bit(scalar, 255 - i - 2) << 1) |
-            cryptonite_p256_get_bit(scalar, 255 - i - 3);
+    index = (crypton_p256_get_bit(scalar, 255 - i - 0) << 3) |
+            (crypton_p256_get_bit(scalar, 255 - i - 1) << 2) |
+            (crypton_p256_get_bit(scalar, 255 - i - 2) << 1) |
+            crypton_p256_get_bit(scalar, 255 - i - 3);
 
     /* See the comments in scalar_base_mult about handling infinities. */
     select_jacobian_point(px, py, pz, precomp[0][0], index);
@@ -482,9 +482,9 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
   }
 }
 
-/* cryptonite_p256_base_point_mul sets {out_x,out_y} = nG, where n is < the
+/* crypton_p256_base_point_mul sets {out_x,out_y} = nG, where n is < the
  * order of the group. */
-void cryptonite_p256_base_point_mul(const cryptonite_p256_int* n, cryptonite_p256_int* out_x, cryptonite_p256_int* out_y) {
+void crypton_p256_base_point_mul(const crypton_p256_int* n, crypton_p256_int* out_x, crypton_p256_int* out_y) {
   felem x, y, z;
 
   scalar_base_mult(x, y, z, n);
@@ -498,21 +498,21 @@ void cryptonite_p256_base_point_mul(const cryptonite_p256_int* n, cryptonite_p25
   }
 }
 
-/* cryptonite_p256_points_mul_vartime sets {out_x,out_y} = n1*G + n2*{in_x,in_y}, where
+/* crypton_p256_points_mul_vartime sets {out_x,out_y} = n1*G + n2*{in_x,in_y}, where
  * n1 and n2 are < the order of the group.
  *
  * As indicated by the name, this function operates in variable time. This
  * is safe because it's used for signature validation which doesn't deal
  * with secrets. */
-void cryptonite_p256_points_mul_vartime(
-    const cryptonite_p256_int* n1, const cryptonite_p256_int* n2, const cryptonite_p256_int* in_x,
-    const cryptonite_p256_int* in_y, cryptonite_p256_int* out_x, cryptonite_p256_int* out_y) {
+void crypton_p256_points_mul_vartime(
+    const crypton_p256_int* n1, const crypton_p256_int* n2, const crypton_p256_int* in_x,
+    const crypton_p256_int* in_y, crypton_p256_int* out_x, crypton_p256_int* out_y) {
   felem x1, y1, z1, x2, y2, z2, px, py;
 
   /* If both scalars are zero, then the result is the point at infinity. */
-  if (cryptonite_p256_is_zero(n1) != 0 && cryptonite_p256_is_zero(n2) != 0) {
-    cryptonite_p256_clear(out_x);
-    cryptonite_p256_clear(out_y);
+  if (crypton_p256_is_zero(n1) != 0 && crypton_p256_is_zero(n2) != 0) {
+    crypton_p256_clear(out_x);
+    crypton_p256_clear(out_y);
     return;
   }
 
@@ -521,10 +521,10 @@ void cryptonite_p256_points_mul_vartime(
   scalar_base_mult(x1, y1, z1, n1);
   scalar_mult(x2, y2, z2, px, py, n2);
 
-  if (cryptonite_p256_is_zero(n2) != 0) {
+  if (crypton_p256_is_zero(n2) != 0) {
     /* If n2 == 0, then {x2,y2,z2} is zero and the result is just
          * {x1,y1,z1}. */
-  } else if (cryptonite_p256_is_zero(n1) != 0) {
+  } else if (crypton_p256_is_zero(n1) != 0) {
     /* If n1 == 0, then {x1,y1,z1} is zero and the result is just
          * {x2,y2,z2}. */
     memcpy(x1, x2, sizeof(x2));
@@ -544,10 +544,10 @@ void cryptonite_p256_points_mul_vartime(
    add 2 points together. so far untested.
    probably vartime, as it use point_add_or_double_vartime
  */
-void cryptonite_p256e_point_add(
-    const cryptonite_p256_int *in_x1, const cryptonite_p256_int *in_y1,
-    const cryptonite_p256_int *in_x2, const cryptonite_p256_int *in_y2,
-    cryptonite_p256_int *out_x, cryptonite_p256_int *out_y)
+void crypton_p256e_point_add(
+    const crypton_p256_int *in_x1, const crypton_p256_int *in_y1,
+    const crypton_p256_int *in_x2, const crypton_p256_int *in_y2,
+    crypton_p256_int *out_x, crypton_p256_int *out_y)
 {
     felem x, y, z, px1, py1, px2, py2;
 
@@ -566,21 +566,21 @@ void cryptonite_p256e_point_add(
 /* this function is not part of the original source
    negate a point, i.e. (out_x, out_y) = (in_x, -in_y)
  */
-void cryptonite_p256e_point_negate(
-    const cryptonite_p256_int *in_x, const cryptonite_p256_int *in_y,
-    cryptonite_p256_int *out_x, cryptonite_p256_int *out_y)
+void crypton_p256e_point_negate(
+    const crypton_p256_int *in_x, const crypton_p256_int *in_y,
+    crypton_p256_int *out_x, crypton_p256_int *out_y)
 {
     memcpy(out_x, in_x, P256_NBYTES);
-    cryptonite_p256_sub(&cryptonite_SECP256r1_p, in_y, out_y);
+    crypton_p256_sub(&crypton_SECP256r1_p, in_y, out_y);
 }
 
 /* this function is not part of the original source
-   cryptonite_p256e_point_mul sets {out_x,out_y} = n*{in_x,in_y}, where
+   crypton_p256e_point_mul sets {out_x,out_y} = n*{in_x,in_y}, where
    n is < the order of the group.
  */
-void cryptonite_p256e_point_mul(const cryptonite_p256_int* n,
-    const cryptonite_p256_int* in_x, const cryptonite_p256_int* in_y,
-    cryptonite_p256_int* out_x, cryptonite_p256_int* out_y) {
+void crypton_p256e_point_mul(const crypton_p256_int* n,
+    const crypton_p256_int* in_x, const crypton_p256_int* in_y,
+    crypton_p256_int* out_x, crypton_p256_int* out_y) {
   felem x, y, z, px, py;
 
   to_montgomery(px, in_x);

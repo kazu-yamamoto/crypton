@@ -48,7 +48,7 @@ initialize nbRounds key nonce
         stPtr <- B.alloc 132 $ \stPtr ->
             B.withByteArray nonce $ \noncePtr  ->
             B.withByteArray key   $ \keyPtr ->
-                ccryptonite_chacha_init stPtr  nbRounds kLen keyPtr nonceLen noncePtr
+                ccrypton_chacha_init stPtr  nbRounds kLen keyPtr nonceLen noncePtr
         return $ State stPtr
   where kLen     = B.length key
         nonceLen = B.length nonce
@@ -64,7 +64,7 @@ initializeSimple seed
     | otherwise = unsafeDoIO $ do
         stPtr <- B.alloc 64 $ \stPtr ->
                     B.withByteArray seed $ \seedPtr ->
-                        ccryptonite_chacha_init_core stPtr 32 seedPtr 8 (seedPtr `plusPtr` 32)
+                        ccrypton_chacha_init_core stPtr 32 seedPtr 8 (seedPtr `plusPtr` 32)
         return $ StateSimple stPtr
   where
     sLen = B.length seed
@@ -81,7 +81,7 @@ combine prevSt@(State prevStMem) src
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc (B.length src) $ \dstPtr ->
             B.withByteArray src    $ \srcPtr ->
-                ccryptonite_chacha_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
+                ccrypton_chacha_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
         return (out, State st)
 
 -- | Generate a number of bytes from the ChaCha output directly
@@ -94,7 +94,7 @@ generate prevSt@(State prevStMem) len
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc len $ \dstPtr ->
-                ccryptonite_chacha_generate dstPtr ctx (fromIntegral len)
+                ccrypton_chacha_generate dstPtr ctx (fromIntegral len)
         return (out, State st)
 
 -- | similar to 'generate' but assume certains values
@@ -106,21 +106,21 @@ generateSimple (StateSimple prevSt) nbBytes = unsafeDoIO $ do
     newSt  <- B.copy prevSt (\_ -> return ())
     output <- B.alloc nbBytes $ \dstPtr ->
         B.withByteArray newSt $ \stPtr ->
-            ccryptonite_chacha_random 8 dstPtr stPtr (fromIntegral nbBytes)
+            ccrypton_chacha_random 8 dstPtr stPtr (fromIntegral nbBytes)
     return (output, StateSimple newSt)
 
-foreign import ccall "cryptonite_chacha_init_core"
-    ccryptonite_chacha_init_core :: Ptr StateSimple -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_chacha_init_core"
+    ccrypton_chacha_init_core :: Ptr StateSimple -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_chacha_init"
-    ccryptonite_chacha_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_chacha_init"
+    ccrypton_chacha_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_chacha_combine"
-    ccryptonite_chacha_combine :: Ptr Word8 -> Ptr State -> Ptr Word8 -> CUInt -> IO ()
+foreign import ccall "crypton_chacha_combine"
+    ccrypton_chacha_combine :: Ptr Word8 -> Ptr State -> Ptr Word8 -> CUInt -> IO ()
 
-foreign import ccall "cryptonite_chacha_generate"
-    ccryptonite_chacha_generate :: Ptr Word8 -> Ptr State -> CUInt -> IO ()
+foreign import ccall "crypton_chacha_generate"
+    ccrypton_chacha_generate :: Ptr Word8 -> Ptr State -> CUInt -> IO ()
 
-foreign import ccall "cryptonite_chacha_random"
-    ccryptonite_chacha_random :: Int -> Ptr Word8 -> Ptr StateSimple -> CUInt -> IO ()
+foreign import ccall "crypton_chacha_random"
+    ccrypton_chacha_random :: Int -> Ptr Word8 -> Ptr StateSimple -> CUInt -> IO ()
 

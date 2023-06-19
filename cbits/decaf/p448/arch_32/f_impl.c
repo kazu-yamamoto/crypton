@@ -5,14 +5,14 @@
 #include "f_field.h"
 
 #if (defined(__OPTIMIZE__) && !defined(__OPTIMIZE_SIZE__) && !I_HATE_UNROLLED_LOOPS) \
-     || defined(CRYPTONITE_DECAF_FORCE_UNROLL)
+     || defined(CRYPTON_DECAF_FORCE_UNROLL)
 #define REPEAT8(_x) _x _x _x _x _x _x _x _x
 #define FOR_LIMB(_i,_start,_end,_x) do { _i=_start; REPEAT8( if (_i<_end) { _x; } _i++;) } while (0)
 #else
 #define FOR_LIMB(_i,_start,_end,_x) do { for (_i=_start; _i<_end; _i++) _x; } while (0)
 #endif
 
-void cryptonite_gf_mul (cryptonite_gf_s *__restrict__ cs, const gf as, const gf bs) { 
+void crypton_gf_mul (crypton_gf_s *__restrict__ cs, const gf as, const gf bs) { 
     const uint32_t *a = as->limb, *b = bs->limb;
     uint32_t *c = cs->limb;
 
@@ -68,7 +68,7 @@ void cryptonite_gf_mul (cryptonite_gf_s *__restrict__ cs, const gf as, const gf 
     c[1] += ((uint32_t)(accum1));
 }
 
-void cryptonite_gf_mulw_unsigned (cryptonite_gf_s *__restrict__ cs, const gf as, uint32_t b) {
+void crypton_gf_mulw_unsigned (crypton_gf_s *__restrict__ cs, const gf as, uint32_t b) {
     assert(b<1<<28);
     
     const uint32_t *a = as->limb;
@@ -95,7 +95,7 @@ void cryptonite_gf_mulw_unsigned (cryptonite_gf_s *__restrict__ cs, const gf as,
     c[1] += accum8 >> 28;
 }
 
-void cryptonite_gf_sqr (cryptonite_gf_s *__restrict__ cs, const gf as) {
-    cryptonite_gf_mul(cs,as,as); /* Performs better with a dedicated square */
+void crypton_gf_sqr (crypton_gf_s *__restrict__ cs, const gf as) {
+    crypton_gf_mul(cs,as,as); /* Performs better with a dedicated square */
 }
 

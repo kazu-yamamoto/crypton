@@ -80,13 +80,13 @@ polyvalFinalize :: Polyval -> IO ScrubbedBytes
 polyvalFinalize (Polyval ctx) = B.alloc 16 $ \dst ->
     B.withByteArray ctx $ \pctx -> c_aes_polyval_finalize pctx dst
 
-foreign import ccall unsafe "cryptonite_aes.h cryptonite_aes_polyval_init"
+foreign import ccall unsafe "crypton_aes.h crypton_aes_polyval_init"
     c_aes_polyval_init :: Ptr Polyval -> CString -> IO ()
 
-foreign import ccall "cryptonite_aes.h cryptonite_aes_polyval_update"
+foreign import ccall "crypton_aes.h crypton_aes_polyval_update"
     c_aes_polyval_update :: Ptr Polyval -> CString -> CUInt -> IO ()
 
-foreign import ccall unsafe "cryptonite_aes.h cryptonite_aes_polyval_finalize"
+foreign import ccall unsafe "crypton_aes.h crypton_aes_polyval_finalize"
     c_aes_polyval_finalize :: Ptr Polyval -> CString -> IO ()
 
 

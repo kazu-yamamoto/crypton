@@ -39,13 +39,13 @@ newtype State = State ScrubbedBytes
     deriving (ByteArrayAccess,NFData)
 
 -- | C Call for initializing the encryptor
-foreign import ccall unsafe "cryptonite_rc4.h cryptonite_rc4_init"
+foreign import ccall unsafe "crypton_rc4.h crypton_rc4_init"
     c_rc4_init :: Ptr Word8 -- ^ The rc4 key
                -> Word32    -- ^ The key length
                -> Ptr State -- ^ The context
                -> IO ()
 
-foreign import ccall unsafe "cryptonite_rc4.h cryptonite_rc4_combine"
+foreign import ccall unsafe "crypton_rc4.h crypton_rc4_combine"
     c_rc4_combine :: Ptr State        -- ^ Pointer to the permutation
                   -> Ptr Word8      -- ^ Pointer to the clear text
                   -> Word32         -- ^ Length of the clear text

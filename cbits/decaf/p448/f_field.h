@@ -21,37 +21,37 @@
 
 #include "word.h"
 
-#define __CRYPTONITE_DECAF_448_GF_DEFINED__ 1
+#define __CRYPTON_DECAF_448_GF_DEFINED__ 1
 #define NLIMBS (64/sizeof(word_t))
 #define X_SER_BYTES 56
 #define SER_BYTES 56
-typedef struct cryptonite_gf_448_s {
+typedef struct crypton_gf_448_s {
     word_t limb[NLIMBS];
-} __attribute__((aligned(16))) cryptonite_gf_448_s, cryptonite_gf_448_t[1];
+} __attribute__((aligned(16))) crypton_gf_448_s, crypton_gf_448_t[1];
 
 #define GF_LIT_LIMB_BITS  56
 #define GF_BITS           448
-#define ZERO              cryptonite_gf_448_ZERO
-#define ONE               cryptonite_gf_448_ONE
-#define MODULUS           cryptonite_gf_448_MODULUS
-#define gf                cryptonite_gf_448_t
-#define cryptonite_gf_s              cryptonite_gf_448_s
-#define cryptonite_gf_eq             cryptonite_gf_448_eq
-#define cryptonite_gf_hibit          cryptonite_gf_448_hibit
-#define cryptonite_gf_copy           cryptonite_gf_448_copy
-#define cryptonite_gf_add            cryptonite_gf_448_add
-#define cryptonite_gf_sub            cryptonite_gf_448_sub
-#define cryptonite_gf_add_RAW        cryptonite_gf_448_add_RAW
-#define cryptonite_gf_sub_RAW        cryptonite_gf_448_sub_RAW
-#define cryptonite_gf_bias           cryptonite_gf_448_bias
-#define cryptonite_gf_weak_reduce    cryptonite_gf_448_weak_reduce
-#define cryptonite_gf_strong_reduce  cryptonite_gf_448_strong_reduce
-#define cryptonite_gf_mul            cryptonite_gf_448_mul
-#define cryptonite_gf_sqr            cryptonite_gf_448_sqr
-#define cryptonite_gf_mulw_unsigned  cryptonite_gf_448_mulw_unsigned
-#define cryptonite_gf_isr            cryptonite_gf_448_isr
-#define cryptonite_gf_serialize      cryptonite_gf_448_serialize
-#define cryptonite_gf_deserialize    cryptonite_gf_448_deserialize
+#define ZERO              crypton_gf_448_ZERO
+#define ONE               crypton_gf_448_ONE
+#define MODULUS           crypton_gf_448_MODULUS
+#define gf                crypton_gf_448_t
+#define crypton_gf_s              crypton_gf_448_s
+#define crypton_gf_eq             crypton_gf_448_eq
+#define crypton_gf_hibit          crypton_gf_448_hibit
+#define crypton_gf_copy           crypton_gf_448_copy
+#define crypton_gf_add            crypton_gf_448_add
+#define crypton_gf_sub            crypton_gf_448_sub
+#define crypton_gf_add_RAW        crypton_gf_448_add_RAW
+#define crypton_gf_sub_RAW        crypton_gf_448_sub_RAW
+#define crypton_gf_bias           crypton_gf_448_bias
+#define crypton_gf_weak_reduce    crypton_gf_448_weak_reduce
+#define crypton_gf_strong_reduce  crypton_gf_448_strong_reduce
+#define crypton_gf_mul            crypton_gf_448_mul
+#define crypton_gf_sqr            crypton_gf_448_sqr
+#define crypton_gf_mulw_unsigned  crypton_gf_448_mulw_unsigned
+#define crypton_gf_isr            crypton_gf_448_isr
+#define crypton_gf_serialize      crypton_gf_448_serialize
+#define crypton_gf_deserialize    crypton_gf_448_deserialize
 
 /* RFC 7748 support */
 #define X_PUBLIC_BYTES  X_SER_BYTES
@@ -67,24 +67,24 @@ extern "C" {
 #endif
 
 /* Defined below in f_impl.h */
-static INLINE_UNUSED void cryptonite_gf_copy (gf out, const gf a) { *out = *a; }
-static INLINE_UNUSED void cryptonite_gf_add_RAW (gf out, const gf a, const gf b);
-static INLINE_UNUSED void cryptonite_gf_sub_RAW (gf out, const gf a, const gf b);
-static INLINE_UNUSED void cryptonite_gf_bias (gf inout, int amount);
-static INLINE_UNUSED void cryptonite_gf_weak_reduce (gf inout);
+static INLINE_UNUSED void crypton_gf_copy (gf out, const gf a) { *out = *a; }
+static INLINE_UNUSED void crypton_gf_add_RAW (gf out, const gf a, const gf b);
+static INLINE_UNUSED void crypton_gf_sub_RAW (gf out, const gf a, const gf b);
+static INLINE_UNUSED void crypton_gf_bias (gf inout, int amount);
+static INLINE_UNUSED void crypton_gf_weak_reduce (gf inout);
 
-void cryptonite_gf_strong_reduce (gf inout);   
-void cryptonite_gf_add (gf out, const gf a, const gf b);
-void cryptonite_gf_sub (gf out, const gf a, const gf b);
-void cryptonite_gf_mul (cryptonite_gf_s *__restrict__ out, const gf a, const gf b);
-void cryptonite_gf_mulw_unsigned (cryptonite_gf_s *__restrict__ out, const gf a, uint32_t b);
-void cryptonite_gf_sqr (cryptonite_gf_s *__restrict__ out, const gf a);
-mask_t cryptonite_gf_isr(gf a, const gf x); /** a^2 x = 1, QNR, or 0 if x=0.  Return true if successful */
-mask_t cryptonite_gf_eq (const gf x, const gf y);
-mask_t cryptonite_gf_hibit (const gf x);
+void crypton_gf_strong_reduce (gf inout);   
+void crypton_gf_add (gf out, const gf a, const gf b);
+void crypton_gf_sub (gf out, const gf a, const gf b);
+void crypton_gf_mul (crypton_gf_s *__restrict__ out, const gf a, const gf b);
+void crypton_gf_mulw_unsigned (crypton_gf_s *__restrict__ out, const gf a, uint32_t b);
+void crypton_gf_sqr (crypton_gf_s *__restrict__ out, const gf a);
+mask_t crypton_gf_isr(gf a, const gf x); /** a^2 x = 1, QNR, or 0 if x=0.  Return true if successful */
+mask_t crypton_gf_eq (const gf x, const gf y);
+mask_t crypton_gf_hibit (const gf x);
 
-void cryptonite_gf_serialize (uint8_t *serial, const gf x,int with_highbit);
-mask_t cryptonite_gf_deserialize (gf x, const uint8_t serial[SER_BYTES],int with_highbit);
+void crypton_gf_serialize (uint8_t *serial, const gf x,int with_highbit);
+mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES],int with_highbit);
 
 
 #ifdef __cplusplus

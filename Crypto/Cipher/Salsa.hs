@@ -40,7 +40,7 @@ initialize nbRounds key nonce
         stPtr <- B.alloc 132 $ \stPtr ->
             B.withByteArray nonce $ \noncePtr  ->
             B.withByteArray key   $ \keyPtr ->
-                ccryptonite_salsa_init stPtr nbRounds kLen keyPtr nonceLen noncePtr
+                ccrypton_salsa_init stPtr nbRounds kLen keyPtr nonceLen noncePtr
         return $ State stPtr
   where kLen     = B.length key
         nonceLen = B.length nonce
@@ -57,7 +57,7 @@ combine prevSt@(State prevStMem) src
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc (B.length src) $ \dstPtr ->
             B.withByteArray src    $ \srcPtr -> do
-                ccryptonite_salsa_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
+                ccrypton_salsa_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
         return (out, State st)
 
 -- | Generate a number of bytes from the Salsa output directly
@@ -70,14 +70,14 @@ generate prevSt@(State prevStMem) len
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc len $ \dstPtr ->
-                ccryptonite_salsa_generate dstPtr ctx (fromIntegral len)
+                ccrypton_salsa_generate dstPtr ctx (fromIntegral len)
         return (out, State st)
 
-foreign import ccall "cryptonite_salsa_init"
-    ccryptonite_salsa_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_salsa_init"
+    ccrypton_salsa_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_salsa_combine"
-    ccryptonite_salsa_combine :: Ptr Word8 -> Ptr State -> Ptr Word8 -> CUInt -> IO ()
+foreign import ccall "crypton_salsa_combine"
+    ccrypton_salsa_combine :: Ptr Word8 -> Ptr State -> Ptr Word8 -> CUInt -> IO ()
 
-foreign import ccall "cryptonite_salsa_generate"
-    ccryptonite_salsa_generate :: Ptr Word8 -> Ptr State -> CUInt -> IO ()
+foreign import ccall "crypton_salsa_generate"
+    ccrypton_salsa_generate :: Ptr Word8 -> Ptr State -> CUInt -> IO ()

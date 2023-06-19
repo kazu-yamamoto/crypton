@@ -22,7 +22,7 @@
 #include "argon2.h"
 #include "core.c"
 
-int cryptonite_argon2_ctx(argon2_context *context, argon2_type type) {
+int crypton_argon2_ctx(argon2_context *context, argon2_type type) {
     /* 1. Validate all inputs */
     int result = validate_inputs(context);
     uint32_t memory_blocks, segment_length;
@@ -79,7 +79,7 @@ int cryptonite_argon2_ctx(argon2_context *context, argon2_type type) {
     return ARGON2_OK;
 }
 
-int cryptonite_argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
+int crypton_argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
                 const uint32_t parallelism, const void *pwd,
                 const size_t pwdlen, const void *salt, const size_t saltlen,
                 void *hash, const size_t hashlen, argon2_type type,
@@ -121,7 +121,7 @@ int cryptonite_argon2_hash(const uint32_t t_cost, const uint32_t m_cost,
     context.flags = ARGON2_DEFAULT_FLAGS;
     context.version = version;
 
-    result = cryptonite_argon2_ctx(&context, type);
+    result = crypton_argon2_ctx(&context, type);
 
     if (result != ARGON2_OK) {
         clear_internal_memory(out, hashlen);

@@ -5,7 +5,7 @@
 -- Stability   : experimental
 -- Portability : unknown
 --
--- Gives information about cryptonite runtime environment.
+-- Gives information about crypton runtime environment.
 --
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -42,7 +42,7 @@ data ProcessorOption
 -- current CPU.
 processorOptions :: [ProcessorOption]
 processorOptions = unsafeDoIO $ do
-    p <- cryptonite_aes_cpu_init
+    p <- crypton_aes_cpu_init
     options <- traverse (getOption p) aesOptions
     rdrand  <- hasRDRand
     return (decodeOptions options ++ [ RDRAND | rdrand ])
@@ -60,5 +60,5 @@ hasRDRand = fmap isJust getRDRand
 hasRDRand = return False
 #endif
 
-foreign import ccall unsafe "cryptonite_aes_cpu_init"
-    cryptonite_aes_cpu_init :: IO (Ptr Word8)
+foreign import ccall unsafe "crypton_aes_cpu_init"
+    crypton_aes_cpu_init :: IO (Ptr Word8)

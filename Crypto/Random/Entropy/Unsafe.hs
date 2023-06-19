@@ -22,11 +22,11 @@ import Crypto.Random.Entropy.Backend
 -- If the buffer cannot be refill after 3 loopings, this will raise
 -- an User Error exception
 replenish :: Int -> [EntropyBackend] -> Ptr Word8 -> IO ()
-replenish _        []       _   = fail "cryptonite: random: cannot get any source of entropy on this system"
+replenish _        []       _   = fail "crypton: random: cannot get any source of entropy on this system"
 replenish poolSize backends ptr = loop 0 backends ptr poolSize
   where loop :: Int -> [EntropyBackend] -> Ptr Word8 -> Int -> IO ()
         loop _     _  _ 0 = return ()
-        loop retry [] p n | retry == 3 = error "cryptonite: random: cannot fully replenish"
+        loop retry [] p n | retry == 3 = error "crypton: random: cannot fully replenish"
                           | otherwise  = loop (retry+1) backends p n
         loop retry (b:bs) p n = do
             r <- gatherBackend b p n

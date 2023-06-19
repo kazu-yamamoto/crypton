@@ -115,17 +115,17 @@ shakeTruncate d ptr =
     mask = (1 `shiftL` bits) - 1
     (index, bits) = integralNatVal d `divMod` 8
 
-foreign import ccall unsafe "cryptonite_sha3_init"
+foreign import ccall unsafe "crypton_sha3_init"
     c_sha3_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_sha3_update"
+foreign import ccall "crypton_sha3_update"
     c_sha3_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_sha3_finalize_shake"
+foreign import ccall unsafe "crypton_sha3_finalize_shake"
     c_sha3_finalize_shake :: Ptr (Context a) -> IO ()
 
-foreign import ccall unsafe "cryptonite_sha3_finalize_cshake"
+foreign import ccall unsafe "crypton_sha3_finalize_cshake"
     c_sha3_finalize_cshake :: Ptr (Context a) -> IO ()
 
-foreign import ccall unsafe "cryptonite_sha3_output"
+foreign import ccall unsafe "crypton_sha3_output"
     c_sha3_output :: Ptr (Context a) -> Ptr (Digest a) -> Word32 -> IO ()
