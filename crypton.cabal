@@ -57,7 +57,7 @@ extra-source-files:  cbits/*.h
                      cbits/argon2/*.h
                      cbits/argon2/*.c
                      cbits/aes/x86ni_impl.c
-                     cbits/cryptonite_hash_prefix.c
+                     cbits/crypton_hash_prefix.c
                      tests/*.hs
 
 source-repository head
@@ -261,32 +261,32 @@ Library
   cc-options:        -std=gnu99
   if flag(old_toolchain_inliner)
     cc-options:      -fgnu89-inline
-  C-sources:         cbits/cryptonite_chacha.c
-                   , cbits/cryptonite_salsa.c
-                   , cbits/cryptonite_xsalsa.c
-                   , cbits/cryptonite_rc4.c
-                   , cbits/cryptonite_cpu.c
+  C-sources:         cbits/crypton_chacha.c
+                   , cbits/crypton_salsa.c
+                   , cbits/crypton_xsalsa.c
+                   , cbits/crypton_rc4.c
+                   , cbits/crypton_cpu.c
                    , cbits/p256/p256.c
                    , cbits/p256/p256_ec.c
-                   , cbits/cryptonite_blake2s.c
-                   , cbits/cryptonite_blake2sp.c
-                   , cbits/cryptonite_blake2b.c
-                   , cbits/cryptonite_blake2bp.c
-                   , cbits/cryptonite_poly1305.c
-                   , cbits/cryptonite_sha1.c
-                   , cbits/cryptonite_sha256.c
-                   , cbits/cryptonite_sha512.c
-                   , cbits/cryptonite_sha3.c
-                   , cbits/cryptonite_md2.c
-                   , cbits/cryptonite_md4.c
-                   , cbits/cryptonite_md5.c
-                   , cbits/cryptonite_ripemd.c
-                   , cbits/cryptonite_skein256.c
-                   , cbits/cryptonite_skein512.c
-                   , cbits/cryptonite_tiger.c
-                   , cbits/cryptonite_whirlpool.c
-                   , cbits/cryptonite_scrypt.c
-                   , cbits/cryptonite_pbkdf2.c
+                   , cbits/crypton_blake2s.c
+                   , cbits/crypton_blake2sp.c
+                   , cbits/crypton_blake2b.c
+                   , cbits/crypton_blake2bp.c
+                   , cbits/crypton_poly1305.c
+                   , cbits/crypton_sha1.c
+                   , cbits/crypton_sha256.c
+                   , cbits/crypton_sha512.c
+                   , cbits/crypton_sha3.c
+                   , cbits/crypton_md2.c
+                   , cbits/crypton_md4.c
+                   , cbits/crypton_md5.c
+                   , cbits/crypton_ripemd.c
+                   , cbits/crypton_skein256.c
+                   , cbits/crypton_skein512.c
+                   , cbits/crypton_tiger.c
+                   , cbits/crypton_whirlpool.c
+                   , cbits/crypton_scrypt.c
+                   , cbits/crypton_pbkdf2.c
                    , cbits/ed25519/ed25519.c
   include-dirs:      cbits
                    , cbits/ed25519
@@ -341,7 +341,7 @@ Library
   if flag(support_rdrand) && (arch(i386) || arch(x86_64)) && !os(windows)
     CPP-options:    -DSUPPORT_RDRAND
     Other-modules:  Crypto.Random.Entropy.RDRand
-    c-sources:      cbits/cryptonite_rdrand.c
+    c-sources:      cbits/crypton_rdrand.c
 
   if flag(support_aesni) && (os(linux) || os(freebsd) || os(osx)) && (arch(i386) || arch(x86_64))
     CC-options:     -DWITH_AESNI
@@ -354,11 +354,11 @@ Library
     C-sources:       cbits/aes/x86ni.c
                    , cbits/aes/generic.c
                    , cbits/aes/gf.c
-                   , cbits/cryptonite_aes.c
+                   , cbits/crypton_aes.c
   else
     C-sources:       cbits/aes/generic.c
                    , cbits/aes/gf.c
-                   , cbits/cryptonite_aes.c
+                   , cbits/crypton_aes.c
 
   if arch(x86_64) || flag(support_sse)
     C-sources:      cbits/blake2/sse/blake2s.c
