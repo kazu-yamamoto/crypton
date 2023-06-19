@@ -27,16 +27,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_AES_GF128MUL_H
-#define CRYPTONITE_AES_GF128MUL_H
+#ifndef CRYPTON_AES_GF128MUL_H
+#define CRYPTON_AES_GF128MUL_H
 
 #include "aes/block128.h"
 
 typedef block128 table_4bit[16];
 
-void cryptonite_aes_generic_gf_mulx(block128 *a);
+void crypton_aes_generic_gf_mulx(block128 *a);
 
-void cryptonite_aes_generic_hinit(table_4bit htable, const block128 *h);
-void cryptonite_aes_generic_gf_mul(block128 *a, const table_4bit htable);
+void crypton_aes_generic_hinit(table_4bit htable, const block128 *h);
+void crypton_aes_generic_gf_mul(block128 *a, const table_4bit htable);
 
 #endif

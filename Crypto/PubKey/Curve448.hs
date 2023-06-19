@@ -104,13 +104,13 @@ generateSecretKey = SecretKey <$> getRandomBytes x448_bytes
 x448_bytes :: Int
 x448_bytes = 448 `quot` 8
 
-foreign import ccall "cryptonite_decaf_x448"
+foreign import ccall "crypton_decaf_x448"
     decaf_x448 :: Ptr Word8 -- ^ public
                -> Ptr Word8 -- ^ basepoint
                -> Ptr Word8 -- ^ secret
                -> IO ()
 
-foreign import ccall "cryptonite_decaf_x448_derive_public_key"
+foreign import ccall "crypton_decaf_x448_derive_public_key"
     decaf_x448_derive_public_key :: Ptr Word8 -- ^ public
                                  -> Ptr Word8 -- ^ secret
                                  -> IO ()

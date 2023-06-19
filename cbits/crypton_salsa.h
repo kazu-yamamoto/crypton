@@ -27,8 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_SALSA
-#define CRYPTONITE_SALSA
+#ifndef CRYPTON_SALSA
+#define CRYPTON_SALSA
 
 typedef union {
 	uint64_t q[8];
@@ -36,22 +36,22 @@ typedef union {
 	uint8_t  b[64];
 } block;
 
-typedef block cryptonite_salsa_state;
+typedef block crypton_salsa_state;
 
 typedef struct {
-	cryptonite_salsa_state st;
+	crypton_salsa_state st;
 	uint8_t prev[64];
 	uint8_t prev_ofs;
 	uint8_t prev_len;
 	uint8_t nb_rounds;
-} cryptonite_salsa_context;
+} crypton_salsa_context;
 
 /* for scrypt */
-void cryptonite_salsa_core_xor(int rounds, block *out, block *in);
+void crypton_salsa_core_xor(int rounds, block *out, block *in);
 
-void cryptonite_salsa_init_core(cryptonite_salsa_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
-void cryptonite_salsa_init(cryptonite_salsa_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
-void cryptonite_salsa_combine(uint8_t *dst, cryptonite_salsa_context *st, const uint8_t *src, uint32_t bytes);
-void cryptonite_salsa_generate(uint8_t *dst, cryptonite_salsa_context *st, uint32_t bytes);
+void crypton_salsa_init_core(crypton_salsa_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_salsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_salsa_combine(uint8_t *dst, crypton_salsa_context *st, const uint8_t *src, uint32_t bytes);
+void crypton_salsa_generate(uint8_t *dst, crypton_salsa_context *st, uint32_t bytes);
 
 #endif

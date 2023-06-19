@@ -27,12 +27,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_XSALSA
-#define CRYPTONITE_XSALSA
+#ifndef CRYPTON_XSALSA
+#define CRYPTON_XSALSA
 
-#include "cryptonite_salsa.h"
+#include "crypton_salsa.h"
 
-void cryptonite_xsalsa_init(cryptonite_salsa_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
-void cryptonite_xsalsa_derive(cryptonite_salsa_context *ctx, uint32_t ivlen, const uint8_t *iv);
+void crypton_xsalsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_xsalsa_derive(crypton_salsa_context *ctx, uint32_t ivlen, const uint8_t *iv);
 
 #endif

@@ -53,11 +53,11 @@ instance HashAlgorithm SHA512t_256 where
     hashInternalFinalize p    = c_sha512t_finalize p 256
 
 
-foreign import ccall unsafe "cryptonite_sha512t_init"
+foreign import ccall unsafe "crypton_sha512t_init"
     c_sha512t_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_sha512t_update"
+foreign import ccall "crypton_sha512t_update"
     c_sha512t_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_sha512t_finalize"
+foreign import ccall unsafe "crypton_sha512t_finalize"
     c_sha512t_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()

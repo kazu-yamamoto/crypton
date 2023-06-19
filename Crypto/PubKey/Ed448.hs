@@ -136,12 +136,12 @@ signatureSize = 114
 no_context :: Ptr Word8
 no_context = nullPtr -- not supported yet
 
-foreign import ccall "cryptonite_decaf_ed448_derive_public_key"
+foreign import ccall "crypton_decaf_ed448_derive_public_key"
     decaf_ed448_derive_public_key :: Ptr PublicKey -- public key
                                   -> Ptr SecretKey -- secret key
                                   -> IO ()
 
-foreign import ccall "cryptonite_decaf_ed448_sign"
+foreign import ccall "crypton_decaf_ed448_sign"
     decaf_ed448_sign :: Ptr Signature -- signature
                      -> Ptr SecretKey -- secret
                      -> Ptr PublicKey -- public
@@ -152,7 +152,7 @@ foreign import ccall "cryptonite_decaf_ed448_sign"
                      -> Word8         -- context len
                      -> IO ()
 
-foreign import ccall "cryptonite_decaf_ed448_verify"
+foreign import ccall "crypton_decaf_ed448_verify"
     decaf_ed448_verify :: Ptr Signature -- signature
                        -> Ptr PublicKey -- public
                        -> Ptr Word8     -- message

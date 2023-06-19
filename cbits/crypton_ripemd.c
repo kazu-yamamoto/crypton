@@ -22,12 +22,12 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "cryptonite_ripemd.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_ripemd.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 #include <string.h>
 
-void cryptonite_ripemd160_init(struct ripemd160_ctx *ctx)
+void crypton_ripemd160_init(struct ripemd160_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -250,7 +250,7 @@ static void ripemd160_do_chunk(struct ripemd160_ctx *ctx, uint32_t *buf)
 	ctx->h[0] = d2;
 }
 
-void cryptonite_ripemd160_update(struct ripemd160_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_ripemd160_update(struct ripemd160_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -284,7 +284,7 @@ void cryptonite_ripemd160_update(struct ripemd160_ctx *ctx, const uint8_t *data,
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_ripemd160_finalize(struct ripemd160_ctx *ctx, uint8_t *out)
+void crypton_ripemd160_finalize(struct ripemd160_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x80, };
 	uint64_t bits;
@@ -296,10 +296,10 @@ void cryptonite_ripemd160_finalize(struct ripemd160_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_ripemd160_update(ctx, padding, padlen);
+	crypton_ripemd160_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_ripemd160_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_ripemd160_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* output digest */
 	store_le32(out   , ctx->h[0]);

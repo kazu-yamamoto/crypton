@@ -17,16 +17,16 @@
  * every string is the encoding of a valid group element.
  *
  * The formulas contain no data-dependent branches, timing or memory accesses,
- * except for cryptonite_decaf_XXX_base_double_scalarmul_non_secret.
+ * except for crypton_decaf_XXX_base_double_scalarmul_non_secret.
  *
  * @warning This file was automatically generated in Python.
  * Please do not edit it.
  */
 
-#ifndef __CRYPTONITE_DECAF_H__
-#define __CRYPTONITE_DECAF_H__ 1
+#ifndef __CRYPTON_DECAF_H__
+#define __CRYPTON_DECAF_H__ 1
 
 #include <decaf/point_255.h>
 #include <decaf/point_448.h>
 
-#endif /* __CRYPTONITE_DECAF_H__ */
+#endif /* __CRYPTON_DECAF_H__ */

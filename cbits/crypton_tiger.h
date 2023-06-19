@@ -36,8 +36,8 @@ struct tiger_ctx
 #define TIGER_DIGEST_SIZE	24
 #define TIGER_CTX_SIZE 		(sizeof(struct tiger_ctx))
 
-void cryptonite_tiger_init(struct tiger_ctx *ctx);
-void cryptonite_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_t len);
-void cryptonite_tiger_finalize(struct tiger_ctx *ctx, uint8_t *out);
+void crypton_tiger_init(struct tiger_ctx *ctx);
+void crypton_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_t len);
+void crypton_tiger_finalize(struct tiger_ctx *ctx, uint8_t *out);
 
 #endif

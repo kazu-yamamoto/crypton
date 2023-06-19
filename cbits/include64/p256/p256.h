@@ -45,114 +45,114 @@ extern "C" {
 
 #define P256_LITERAL(lo,hi) (((uint32_t) (lo)) + (((uint64_t) (hi)) << 32))
 
-typedef int cryptonite_p256_err;
-typedef uint64_t cryptonite_p256_digit;
-typedef int64_t cryptonite_p256_sdigit;
-typedef __uint128_t cryptonite_p256_ddigit;
-typedef __int128_t cryptonite_p256_sddigit;
+typedef int crypton_p256_err;
+typedef uint64_t crypton_p256_digit;
+typedef int64_t crypton_p256_sdigit;
+typedef __uint128_t crypton_p256_ddigit;
+typedef __int128_t crypton_p256_sddigit;
 
-// Defining cryptonite_p256_int as struct to leverage struct assigment.
+// Defining crypton_p256_int as struct to leverage struct assigment.
 typedef struct {
-  cryptonite_p256_digit a[P256_NDIGITS];
-} cryptonite_p256_int;
+  crypton_p256_digit a[P256_NDIGITS];
+} crypton_p256_int;
 
-extern const cryptonite_p256_int cryptonite_SECP256r1_n;  // Curve order
-extern const cryptonite_p256_int cryptonite_SECP256r1_p;  // Curve prime
-extern const cryptonite_p256_int cryptonite_SECP256r1_b;  // Curve param
+extern const crypton_p256_int crypton_SECP256r1_n;  // Curve order
+extern const crypton_p256_int crypton_SECP256r1_p;  // Curve prime
+extern const crypton_p256_int crypton_SECP256r1_b;  // Curve param
 
-// Initialize a cryptonite_p256_int to zero.
-void cryptonite_p256_init(cryptonite_p256_int* a);
+// Initialize a crypton_p256_int to zero.
+void crypton_p256_init(crypton_p256_int* a);
 
-// Clear a cryptonite_p256_int to zero.
-void cryptonite_p256_clear(cryptonite_p256_int* a);
+// Clear a crypton_p256_int to zero.
+void crypton_p256_clear(crypton_p256_int* a);
 
 // Return bit. Index 0 is least significant.
-int cryptonite_p256_get_bit(const cryptonite_p256_int* a, int index);
+int crypton_p256_get_bit(const crypton_p256_int* a, int index);
 
 // b := a % MOD
-void cryptonite_p256_mod(
-    const cryptonite_p256_int* MOD,
-    const cryptonite_p256_int* a,
-    cryptonite_p256_int* b);
+void crypton_p256_mod(
+    const crypton_p256_int* MOD,
+    const crypton_p256_int* a,
+    crypton_p256_int* b);
 
 // c := a * (top_b | b) % MOD
-void cryptonite_p256_modmul(
-    const cryptonite_p256_int* MOD,
-    const cryptonite_p256_int* a,
-    const cryptonite_p256_digit top_b,
-    const cryptonite_p256_int* b,
-    cryptonite_p256_int* c);
+void crypton_p256_modmul(
+    const crypton_p256_int* MOD,
+    const crypton_p256_int* a,
+    const crypton_p256_digit top_b,
+    const crypton_p256_int* b,
+    crypton_p256_int* c);
 
 // b := 1 / a % MOD
 // MOD best be SECP256r1_n
-void cryptonite_p256_modinv(
-    const cryptonite_p256_int* MOD,
-    const cryptonite_p256_int* a,
-    cryptonite_p256_int* b);
+void crypton_p256_modinv(
+    const crypton_p256_int* MOD,
+    const crypton_p256_int* a,
+    crypton_p256_int* b);
 
 // b := 1 / a % MOD
 // MOD best be SECP256r1_n
-// Faster than cryptonite_p256_modinv()
-void cryptonite_p256_modinv_vartime(
-    const cryptonite_p256_int* MOD,
-    const cryptonite_p256_int* a,
-    cryptonite_p256_int* b);
+// Faster than crypton_p256_modinv()
+void crypton_p256_modinv_vartime(
+    const crypton_p256_int* MOD,
+    const crypton_p256_int* a,
+    crypton_p256_int* b);
 
 // b := a << (n % P256_BITSPERDIGIT)
 // Returns the bits shifted out of most significant digit.
-cryptonite_p256_digit cryptonite_p256_shl(const cryptonite_p256_int* a, int n, cryptonite_p256_int* b);
+crypton_p256_digit crypton_p256_shl(const crypton_p256_int* a, int n, crypton_p256_int* b);
 
 // b := a >> (n % P256_BITSPERDIGIT)
-void cryptonite_p256_shr(const cryptonite_p256_int* a, int n, cryptonite_p256_int* b);
+void crypton_p256_shr(const crypton_p256_int* a, int n, crypton_p256_int* b);
 
-int cryptonite_p256_is_zero(const cryptonite_p256_int* a);
-int cryptonite_p256_is_odd(const cryptonite_p256_int* a);
-int cryptonite_p256_is_even(const cryptonite_p256_int* a);
+int crypton_p256_is_zero(const crypton_p256_int* a);
+int crypton_p256_is_odd(const crypton_p256_int* a);
+int crypton_p256_is_even(const crypton_p256_int* a);
 
 // Returns -1, 0 or 1.
-int cryptonite_p256_cmp(const cryptonite_p256_int* a, const cryptonite_p256_int *b);
+int crypton_p256_cmp(const crypton_p256_int* a, const crypton_p256_int *b);
 
 // c: = a - b
 // Returns -1 on borrow.
-int cryptonite_p256_sub(const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c);
+int crypton_p256_sub(const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c);
 
 // c := a + b
 // Returns 1 on carry.
-int cryptonite_p256_add(const cryptonite_p256_int* a, const cryptonite_p256_int* b, cryptonite_p256_int* c);
+int crypton_p256_add(const crypton_p256_int* a, const crypton_p256_int* b, crypton_p256_int* c);
 
 // c := a + (single digit)b
 // Returns carry 1 on carry.
-int cryptonite_p256_add_d(const cryptonite_p256_int* a, cryptonite_p256_digit b, cryptonite_p256_int* c);
+int crypton_p256_add_d(const crypton_p256_int* a, crypton_p256_digit b, crypton_p256_int* c);
 
 // ec routines.
 
 // {out_x,out_y} := nG
-void cryptonite_p256_base_point_mul(const cryptonite_p256_int *n,
-                         cryptonite_p256_int *out_x,
-                         cryptonite_p256_int *out_y);
+void crypton_p256_base_point_mul(const crypton_p256_int *n,
+                         crypton_p256_int *out_x,
+                         crypton_p256_int *out_y);
 
 // {out_x,out_y} := n{in_x,in_y}
-void cryptonite_p256_point_mul(const cryptonite_p256_int *n,
-                    const cryptonite_p256_int *in_x,
-                    const cryptonite_p256_int *in_y,
-                    cryptonite_p256_int *out_x,
-                    cryptonite_p256_int *out_y);
+void crypton_p256_point_mul(const crypton_p256_int *n,
+                    const crypton_p256_int *in_x,
+                    const crypton_p256_int *in_y,
+                    crypton_p256_int *out_x,
+                    crypton_p256_int *out_y);
 
 // {out_x,out_y} := n1G + n2{in_x,in_y}
-void cryptonite_p256_points_mul_vartime(
-    const cryptonite_p256_int *n1, const cryptonite_p256_int *n2,
-    const cryptonite_p256_int *in_x, const cryptonite_p256_int *in_y,
-    cryptonite_p256_int *out_x, cryptonite_p256_int *out_y);
+void crypton_p256_points_mul_vartime(
+    const crypton_p256_int *n1, const crypton_p256_int *n2,
+    const crypton_p256_int *in_x, const crypton_p256_int *in_y,
+    crypton_p256_int *out_x, crypton_p256_int *out_y);
 
 // Return whether point {x,y} is on curve.
-int cryptonite_p256_is_valid_point(const cryptonite_p256_int* x, const cryptonite_p256_int* y);
+int crypton_p256_is_valid_point(const crypton_p256_int* x, const crypton_p256_int* y);
 
 // Outputs big-endian binary form. No leading zero skips.
-void cryptonite_p256_to_bin(const cryptonite_p256_int* src, uint8_t dst[P256_NBYTES]);
+void crypton_p256_to_bin(const crypton_p256_int* src, uint8_t dst[P256_NBYTES]);
 
 // Reads from big-endian binary form,
 // thus pre-pad with leading zeros if short.
-void cryptonite_p256_from_bin(const uint8_t src[P256_NBYTES], cryptonite_p256_int* dst);
+void crypton_p256_from_bin(const uint8_t src[P256_NBYTES], crypton_p256_int* dst);
 
 #define P256_DIGITS(x) ((x)->a)
 #define P256_DIGIT(x,y) ((x)->a[y])

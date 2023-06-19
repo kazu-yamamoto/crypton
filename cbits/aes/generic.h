@@ -27,8 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "cryptonite_aes.h"
+#include "crypton_aes.h"
 
-void cryptonite_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_block *input);
-void cryptonite_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_block *input);
-void cryptonite_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size);
+void crypton_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size);

@@ -57,13 +57,13 @@ authTag b
 instance Eq Auth where
     (Auth a1) == (Auth a2) = B.constEq a1 a2
 
-foreign import ccall unsafe "cryptonite_poly1305.h cryptonite_poly1305_init"
+foreign import ccall unsafe "crypton_poly1305.h crypton_poly1305_init"
     c_poly1305_init :: Ptr State -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_poly1305.h cryptonite_poly1305_update"
+foreign import ccall "crypton_poly1305.h crypton_poly1305_update"
     c_poly1305_update :: Ptr State -> Ptr Word8 -> CUInt -> IO ()
 
-foreign import ccall unsafe "cryptonite_poly1305.h cryptonite_poly1305_finalize"
+foreign import ccall unsafe "crypton_poly1305.h crypton_poly1305_finalize"
     c_poly1305_finalize :: Ptr Word8 -> Ptr State -> IO ()
 
 -- | initialize a Poly1305 context

@@ -26,9 +26,9 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_salsa.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_salsa.h"
 
 static void blockmix_salsa8(uint32_t *in, uint32_t *out, uint32_t *X, const uint32_t r)
 {
@@ -37,10 +37,10 @@ static void blockmix_salsa8(uint32_t *in, uint32_t *out, uint32_t *X, const uint
 	array_copy32(X, &in[(2 * r - 1) * 16], 16);
 
 	for (i = 0; i < 2 * r; i += 2) {
-		cryptonite_salsa_core_xor(8, (block *) X, (block *) &in[i*16]);
+		crypton_salsa_core_xor(8, (block *) X, (block *) &in[i*16]);
 		array_copy32(&out[i * 8], X, 16);
 
-		cryptonite_salsa_core_xor(8, (block *) X, (block *) &in[i*16+16]);
+		crypton_salsa_core_xor(8, (block *) X, (block *) &in[i*16+16]);
 		array_copy32(&out[i * 8 + r * 16], X, 16);
 	}
 }
@@ -50,7 +50,7 @@ static inline uint64_t integerify(uint32_t *B, const uint32_t r)
 	return B[(2*r-1) * 16] | (uint64_t)B[(2*r-1) * 16 + 1] << 32;
 }
 
-void cryptonite_scrypt_smix(uint8_t *B, const uint32_t r, const uint64_t N, uint32_t *V, uint32_t *XY)
+void crypton_scrypt_smix(uint8_t *B, const uint32_t r, const uint64_t N, uint32_t *V, uint32_t *XY)
 {
 	uint32_t *X = XY;
 	uint32_t *Y = &XY[32 * r];

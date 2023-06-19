@@ -40,7 +40,7 @@ initialize nbRounds key nonce
         stPtr <- B.alloc 132 $ \stPtr ->
             B.withByteArray nonce $ \noncePtr  ->
             B.withByteArray key   $ \keyPtr ->
-                ccryptonite_xsalsa_init stPtr nbRounds kLen keyPtr nonceLen noncePtr
+                ccrypton_xsalsa_init stPtr nbRounds kLen keyPtr nonceLen noncePtr
         return $ State stPtr
   where kLen     = B.length key
         nonceLen = B.length nonce
@@ -64,12 +64,12 @@ derive (State stPtr') nonce
     | otherwise = unsafeDoIO $ do
         stPtr <- B.copy stPtr' $ \stPtr ->
             B.withByteArray nonce $ \noncePtr  ->
-                ccryptonite_xsalsa_derive stPtr nonceLen noncePtr
+                ccrypton_xsalsa_derive stPtr nonceLen noncePtr
         return $ State stPtr
   where nonceLen = B.length nonce
 
-foreign import ccall "cryptonite_xsalsa_init"
-    ccryptonite_xsalsa_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_xsalsa_init"
+    ccrypton_xsalsa_init :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_xsalsa_derive"
-    ccryptonite_xsalsa_derive :: Ptr State -> Int -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_xsalsa_derive"
+    ccrypton_xsalsa_derive :: Ptr State -> Int -> Ptr Word8 -> IO ()

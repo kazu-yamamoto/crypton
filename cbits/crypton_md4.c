@@ -24,11 +24,11 @@
 
 #include <string.h>
 #include <stdio.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_md4.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_md4.h"
 
-void cryptonite_md4_init(struct md4_ctx *ctx)
+void crypton_md4_init(struct md4_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -114,7 +114,7 @@ static void md4_do_chunk(struct md4_ctx *ctx, uint32_t *buf)
 	ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c; ctx->h[3] += d;
 }
 
-void cryptonite_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -149,7 +149,7 @@ void cryptonite_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t le
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_md4_finalize(struct md4_ctx *ctx, uint8_t *out)
+void crypton_md4_finalize(struct md4_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x80, };
 	uint64_t bits;
@@ -161,10 +161,10 @@ void cryptonite_md4_finalize(struct md4_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_md4_update(ctx, padding, padlen);
+	crypton_md4_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_md4_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_md4_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* output hash */
 	store_le32(out   , ctx->h[0]);

@@ -36,8 +36,8 @@ struct md4_ctx
 #define MD4_DIGEST_SIZE		16
 #define MD4_CTX_SIZE		sizeof(struct md4_ctx)
 
-void cryptonite_md4_init(struct md4_ctx *ctx);
-void cryptonite_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t len);
-void cryptonite_md4_finalize(struct md4_ctx *ctx, uint8_t *out);
+void crypton_md4_init(struct md4_ctx *ctx);
+void crypton_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t len);
+void crypton_md4_finalize(struct md4_ctx *ctx, uint8_t *out);
 
 #endif

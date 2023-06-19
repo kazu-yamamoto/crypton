@@ -24,8 +24,8 @@ typedef struct whirlpool_ctx {
 	uint64_t hash[DIGESTBYTES/8];    /* the hashing state */
 } whirlpool_ctx;
 
-void cryptonite_whirlpool_init(struct whirlpool_ctx * const ctx);
-void cryptonite_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t * const source, uint32_t len);
-void cryptonite_whirlpool_finalize(struct whirlpool_ctx * const ctx, uint8_t * const result);
+void crypton_whirlpool_init(struct whirlpool_ctx * const ctx);
+void crypton_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t * const source, uint32_t len);
+void crypton_whirlpool_finalize(struct whirlpool_ctx * const ctx, uint8_t * const result);
 
 #endif

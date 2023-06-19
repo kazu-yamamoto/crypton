@@ -105,19 +105,19 @@ toPoint s
     | scalarIsZero s = error "cannot create point from zero"
     | otherwise      =
         withNewPoint $ \px py -> withScalar s $ \p ->
-            ccryptonite_p256_basepoint_mul p px py
+            ccrypton_p256_basepoint_mul p px py
 
 -- | Add a point to another point
 pointAdd :: Point -> Point -> Point
 pointAdd a b = withNewPoint $ \dx dy ->
     withPoint a $ \ax ay -> withPoint b $ \bx by ->
-        ccryptonite_p256e_point_add ax ay bx by dx dy
+        ccrypton_p256e_point_add ax ay bx by dx dy
 
 -- | Negate a point
 pointNegate :: Point -> Point
 pointNegate a = withNewPoint $ \dx dy ->
     withPoint a $ \ax ay ->
-        ccryptonite_p256e_point_negate ax ay dx dy
+        ccrypton_p256e_point_negate ax ay dx dy
 
 -- | Multiply a point by a scalar
 --
@@ -125,7 +125,7 @@ pointNegate a = withNewPoint $ \dx dy ->
 pointMul :: Scalar -> Point -> Point
 pointMul scalar p = withNewPoint $ \dx dy ->
     withScalar scalar $ \n -> withPoint p $ \px py ->
-        ccryptonite_p256e_point_mul n px py dx dy
+        ccrypton_p256e_point_mul n px py dx dy
 
 -- | Similar to 'pointMul', serializing the x coordinate as binary.
 -- When scalar is multiple of point order the result is all zero.
@@ -133,8 +133,8 @@ pointDh :: ByteArray binary => Scalar -> Point -> binary
 pointDh scalar p =
     B.unsafeCreate scalarSize $ \dst -> withTempPoint $ \dx dy -> do
         withScalar scalar $ \n -> withPoint p $ \px py ->
-            ccryptonite_p256e_point_mul n px py dx dy
-        ccryptonite_p256_to_bin (castPtr dx) dst
+            ccrypton_p256e_point_mul n px py dx dy
+        ccrypton_p256_to_bin (castPtr dx) dst
 
 -- | multiply the point @p with @n2 and add a lifted to curve value @n1
 --
@@ -144,12 +144,12 @@ pointDh scalar p =
 pointsMulVarTime :: Scalar -> Scalar -> Point -> Point
 pointsMulVarTime n1 n2 p = withNewPoint $ \dx dy ->
     withScalar n1 $ \pn1 -> withScalar n2 $ \pn2 -> withPoint p $ \px py ->
-        ccryptonite_p256_points_mul_vartime pn1 pn2 px py dx dy
+        ccrypton_p256_points_mul_vartime pn1 pn2 px py dx dy
 
 -- | Check if a 'Point' is valid
 pointIsValid :: Point -> Bool
 pointIsValid p = unsafeDoIO $ withPoint p $ \px py -> do
-    r <- ccryptonite_p256_is_valid_point px py
+    r <- ccrypton_p256_is_valid_point px py
     return (r /= 0)
 
 -- | Check if a 'Point' is the point at infinity
@@ -163,7 +163,7 @@ pointX p
     | otherwise           = Just $
         withNewScalarFreeze $ \d    ->
         withPoint p         $ \px _ ->
-            ccryptonite_p256_mod ccryptonite_SECP256r1_n (castPtr px) (castPtr d)
+            ccrypton_p256_mod ccrypton_SECP256r1_n (castPtr px) (castPtr d)
 
 -- | Convert a point to (x,y) Integers
 pointToIntegers :: Point -> (Integer, Integer)
@@ -171,9 +171,9 @@ pointToIntegers p = unsafeDoIO $ withPoint p $ \px py ->
     allocTemp 32 (serialize (castPtr px) (castPtr py))
   where
     serialize px py temp = do
-        ccryptonite_p256_to_bin px temp
+        ccrypton_p256_to_bin px temp
         x <- os2ip temp scalarSize
-        ccryptonite_p256_to_bin py temp
+        ccrypton_p256_to_bin py temp
         y <- os2ip temp scalarSize
         return (x,y)
 
@@ -192,13 +192,13 @@ pointFromIntegers (x,y) = withNewPoint $ \dx dy ->
             then error "pointFromIntegers: filling failed"
             else return ()
         -- then fill dest with the P256 scalar from temp
-        ccryptonite_p256_from_bin temp dest
+        ccrypton_p256_from_bin temp dest
 
 -- | Convert a point to a binary representation
 pointToBinary :: ByteArray ba => Point -> ba
 pointToBinary p = B.unsafeCreate pointSize $ \dst -> withPoint p $ \px py -> do
-    ccryptonite_p256_to_bin (castPtr px) dst
-    ccryptonite_p256_to_bin (castPtr py) (dst `plusPtr` 32)
+    ccrypton_p256_to_bin (castPtr px) dst
+    ccrypton_p256_to_bin (castPtr py) (dst `plusPtr` 32)
 
 -- | Convert from binary to a valid point
 pointFromBinary :: ByteArrayAccess ba => ba -> CryptoFailable Point
@@ -215,8 +215,8 @@ unsafePointFromBinary ba
     | B.length ba /= pointSize = CryptoFailed CryptoError_PublicKeySizeInvalid
     | otherwise                =
         CryptoPassed $ withNewPoint $ \px py -> B.withByteArray ba $ \src -> do
-            ccryptonite_p256_from_bin src                        (castPtr px)
-            ccryptonite_p256_from_bin (src `plusPtr` scalarSize) (castPtr py)
+            ccrypton_p256_from_bin src                        (castPtr px)
+            ccrypton_p256_from_bin (src `plusPtr` scalarSize) (castPtr py)
 
 ------------------------------------------------------------------------
 -- Scalar methods
@@ -233,7 +233,7 @@ scalarGenerate = unwrap . scalarFromBinary . witness <$> getRandomBytes 32
 
 -- | The scalar representing 0
 scalarZero :: Scalar
-scalarZero = withNewScalarFreeze $ \d -> ccryptonite_p256_init d
+scalarZero = withNewScalarFreeze $ \d -> ccrypton_p256_init d
 
 -- | The scalar representing the curve order
 scalarN :: Scalar
@@ -242,7 +242,7 @@ scalarN = throwCryptoError (scalarFromInteger order)
 -- | Check if the scalar is 0
 scalarIsZero :: Scalar -> Bool
 scalarIsZero s = unsafeDoIO $ withScalar s $ \d -> do
-    result <- ccryptonite_p256_is_zero d
+    result <- ccrypton_p256_is_zero d
     return $ result /= 0
 
 -- | Perform addition between two scalars
@@ -251,7 +251,7 @@ scalarIsZero s = unsafeDoIO $ withScalar s $ \d -> do
 scalarAdd :: Scalar -> Scalar -> Scalar
 scalarAdd a b =
     withNewScalarFreeze $ \d -> withScalar a $ \pa -> withScalar b $ \pb ->
-        ccryptonite_p256e_modadd ccryptonite_SECP256r1_n pa pb d
+        ccrypton_p256e_modadd ccrypton_SECP256r1_n pa pb d
 
 -- | Perform subtraction between two scalars
 --
@@ -259,7 +259,7 @@ scalarAdd a b =
 scalarSub :: Scalar -> Scalar -> Scalar
 scalarSub a b =
     withNewScalarFreeze $ \d -> withScalar a $ \pa -> withScalar b $ \pb ->
-        ccryptonite_p256e_modsub ccryptonite_SECP256r1_n pa pb d
+        ccrypton_p256e_modsub ccrypton_SECP256r1_n pa pb d
 
 -- | Perform multiplication between two scalars
 --
@@ -267,7 +267,7 @@ scalarSub a b =
 scalarMul :: Scalar -> Scalar -> Scalar
 scalarMul a b =
     withNewScalarFreeze $ \d -> withScalar a $ \pa -> withScalar b $ \pb ->
-         ccryptonite_p256_modmul ccryptonite_SECP256r1_n pa 0 pb d
+         ccrypton_p256_modmul ccrypton_SECP256r1_n pa 0 pb d
 
 -- | Give the inverse of the scalar
 --
@@ -277,7 +277,7 @@ scalarMul a b =
 scalarInv :: Scalar -> Scalar
 scalarInv a =
     withNewScalarFreeze $ \b -> withScalar a $ \pa ->
-        ccryptonite_p256_modinv_vartime ccryptonite_SECP256r1_n pa b
+        ccrypton_p256_modinv_vartime ccrypton_SECP256r1_n pa b
 
 -- | Give the inverse of the scalar using safe exponentiation
 --
@@ -285,13 +285,13 @@ scalarInv a =
 scalarInvSafe :: Scalar -> Scalar
 scalarInvSafe a =
     withNewScalarFreeze $ \b -> withScalar a $ \pa ->
-        ccryptonite_p256e_scalar_invert pa b
+        ccrypton_p256e_scalar_invert pa b
 
 -- | Compare 2 Scalar
 scalarCmp :: Scalar -> Scalar -> Ordering
 scalarCmp a b = unsafeDoIO $
     withScalar a $ \pa -> withScalar b $ \pb -> do
-        v <- ccryptonite_p256_cmp pa pb
+        v <- ccrypton_p256_cmp pa pb
         return $ compare v 0
 
 -- | convert a scalar from binary
@@ -300,13 +300,13 @@ scalarFromBinary ba
     | B.length ba /= scalarSize = CryptoFailed CryptoError_SecretKeySizeInvalid
     | otherwise                 =
         CryptoPassed $ withNewScalarFreeze $ \p -> B.withByteArray ba $ \b ->
-            ccryptonite_p256_from_bin b p
+            ccrypton_p256_from_bin b p
 {-# NOINLINE scalarFromBinary #-}
 
 -- | convert a scalar to binary
 scalarToBinary :: ByteArray ba => Scalar -> ba
 scalarToBinary s = B.unsafeCreate scalarSize $ \b -> withScalar s $ \p ->
-    ccryptonite_p256_to_bin p b
+    ccrypton_p256_to_bin p b
 {-# NOINLINE scalarToBinary #-}
 
 -- | Convert from an Integer to a P256 Scalar
@@ -356,72 +356,72 @@ allocTempScrubbed n f = ignoreSnd <$> B.allocRet n f
 ------------------------------------------------------------------------
 -- Foreign bindings
 ------------------------------------------------------------------------
-foreign import ccall "&cryptonite_SECP256r1_n"
-    ccryptonite_SECP256r1_n :: Ptr P256Scalar
-foreign import ccall "&cryptonite_SECP256r1_p"
-    ccryptonite_SECP256r1_p :: Ptr P256Scalar
-foreign import ccall "&cryptonite_SECP256r1_b"
-    ccryptonite_SECP256r1_b :: Ptr P256Scalar
+foreign import ccall "&crypton_SECP256r1_n"
+    ccrypton_SECP256r1_n :: Ptr P256Scalar
+foreign import ccall "&crypton_SECP256r1_p"
+    ccrypton_SECP256r1_p :: Ptr P256Scalar
+foreign import ccall "&crypton_SECP256r1_b"
+    ccrypton_SECP256r1_b :: Ptr P256Scalar
 
-foreign import ccall "cryptonite_p256_init"
-    ccryptonite_p256_init :: Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_is_zero"
-    ccryptonite_p256_is_zero :: Ptr P256Scalar -> IO CInt
-foreign import ccall "cryptonite_p256_clear"
-    ccryptonite_p256_clear :: Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256e_modadd"
-    ccryptonite_p256e_modadd :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_add_d"
-    ccryptonite_p256_add_d :: Ptr P256Scalar -> P256Digit -> Ptr P256Scalar -> IO CInt
-foreign import ccall "cryptonite_p256e_modsub"
-    ccryptonite_p256e_modsub :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_cmp"
-    ccryptonite_p256_cmp :: Ptr P256Scalar -> Ptr P256Scalar -> IO CInt
-foreign import ccall "cryptonite_p256_mod"
-    ccryptonite_p256_mod :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_modmul"
-    ccryptonite_p256_modmul :: Ptr P256Scalar -> Ptr P256Scalar -> P256Digit -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256e_scalar_invert"
-    ccryptonite_p256e_scalar_invert :: Ptr P256Scalar -> Ptr P256Scalar -> IO ()
---foreign import ccall "cryptonite_p256_modinv"
---    ccryptonite_p256_modinv :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_modinv_vartime"
-    ccryptonite_p256_modinv_vartime :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
-foreign import ccall "cryptonite_p256_base_point_mul"
-    ccryptonite_p256_basepoint_mul :: Ptr P256Scalar
+foreign import ccall "crypton_p256_init"
+    ccrypton_p256_init :: Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_is_zero"
+    ccrypton_p256_is_zero :: Ptr P256Scalar -> IO CInt
+foreign import ccall "crypton_p256_clear"
+    ccrypton_p256_clear :: Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256e_modadd"
+    ccrypton_p256e_modadd :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_add_d"
+    ccrypton_p256_add_d :: Ptr P256Scalar -> P256Digit -> Ptr P256Scalar -> IO CInt
+foreign import ccall "crypton_p256e_modsub"
+    ccrypton_p256e_modsub :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_cmp"
+    ccrypton_p256_cmp :: Ptr P256Scalar -> Ptr P256Scalar -> IO CInt
+foreign import ccall "crypton_p256_mod"
+    ccrypton_p256_mod :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_modmul"
+    ccrypton_p256_modmul :: Ptr P256Scalar -> Ptr P256Scalar -> P256Digit -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256e_scalar_invert"
+    ccrypton_p256e_scalar_invert :: Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+--foreign import ccall "crypton_p256_modinv"
+--    ccrypton_p256_modinv :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_modinv_vartime"
+    ccrypton_p256_modinv_vartime :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_base_point_mul"
+    ccrypton_p256_basepoint_mul :: Ptr P256Scalar
                                    -> Ptr P256X -> Ptr P256Y
                                    -> IO ()
 
-foreign import ccall "cryptonite_p256e_point_add"
-    ccryptonite_p256e_point_add :: Ptr P256X -> Ptr P256Y
+foreign import ccall "crypton_p256e_point_add"
+    ccrypton_p256e_point_add :: Ptr P256X -> Ptr P256Y
                                 -> Ptr P256X -> Ptr P256Y
                                 -> Ptr P256X -> Ptr P256Y
                                 -> IO ()
 
-foreign import ccall "cryptonite_p256e_point_negate"
-    ccryptonite_p256e_point_negate :: Ptr P256X -> Ptr P256Y
+foreign import ccall "crypton_p256e_point_negate"
+    ccrypton_p256e_point_negate :: Ptr P256X -> Ptr P256Y
                                    -> Ptr P256X -> Ptr P256Y
                                    -> IO ()
 
 -- compute (out_x,out_y) = n * (in_x,in_y)
-foreign import ccall "cryptonite_p256e_point_mul"
-    ccryptonite_p256e_point_mul :: Ptr P256Scalar -- n
+foreign import ccall "crypton_p256e_point_mul"
+    ccrypton_p256e_point_mul :: Ptr P256Scalar -- n
                                 -> Ptr P256X -> Ptr P256Y -- in_{x,y}
                                 -> Ptr P256X -> Ptr P256Y -- out_{x,y}
                                 -> IO ()
 
 -- compute (out_x,out,y) = n1 * G + n2 * (in_x,in_y)
-foreign import ccall "cryptonite_p256_points_mul_vartime"
-    ccryptonite_p256_points_mul_vartime :: Ptr P256Scalar -- n1
+foreign import ccall "crypton_p256_points_mul_vartime"
+    ccrypton_p256_points_mul_vartime :: Ptr P256Scalar -- n1
                                         -> Ptr P256Scalar -- n2
                                         -> Ptr P256X -> Ptr P256Y -- in_{x,y}
                                         -> Ptr P256X -> Ptr P256Y -- out_{x,y}
                                         -> IO ()
-foreign import ccall "cryptonite_p256_is_valid_point"
-    ccryptonite_p256_is_valid_point :: Ptr P256X -> Ptr P256Y -> IO CInt
+foreign import ccall "crypton_p256_is_valid_point"
+    ccrypton_p256_is_valid_point :: Ptr P256X -> Ptr P256Y -> IO CInt
 
-foreign import ccall "cryptonite_p256_to_bin"
-    ccryptonite_p256_to_bin :: Ptr P256Scalar -> Ptr Word8 -> IO ()
+foreign import ccall "crypton_p256_to_bin"
+    ccrypton_p256_to_bin :: Ptr P256Scalar -> Ptr Word8 -> IO ()
 
-foreign import ccall "cryptonite_p256_from_bin"
-    ccryptonite_p256_from_bin :: Ptr Word8 -> Ptr P256Scalar -> IO ()
+foreign import ccall "crypton_p256_from_bin"
+    ccrypton_p256_from_bin :: Ptr Word8 -> Ptr P256Scalar -> IO ()

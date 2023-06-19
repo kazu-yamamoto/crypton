@@ -664,50 +664,50 @@ static char felem_is_zero_vartime(const felem in) {
 
 #define kRInvDigits {0x180000000, 0xffffffff, 0xfffffffe80000001, 0x7fffffff00000001}  // 1 / 2^257 mod p256.p
 
-static const cryptonite_p256_int kR = { kRDigits };
-static const cryptonite_p256_int kRInv = { kRInvDigits };
+static const crypton_p256_int kR = { kRDigits };
+static const crypton_p256_int kRInv = { kRInvDigits };
 
 /* to_montgomery sets out = R*in. */
-static void to_montgomery(felem out, const cryptonite_p256_int* in) {
-  cryptonite_p256_int in_shifted;
+static void to_montgomery(felem out, const crypton_p256_int* in) {
+  crypton_p256_int in_shifted;
   int i;
 
-  cryptonite_p256_init(&in_shifted);
-  cryptonite_p256_modmul(&cryptonite_SECP256r1_p, in, 0, &kR, &in_shifted);
+  crypton_p256_init(&in_shifted);
+  crypton_p256_modmul(&crypton_SECP256r1_p, in, 0, &kR, &in_shifted);
 
   for (i = 0; i < NLIMBS; i++) {
     if ((i & 1) == 0) {
       out[i] = P256_DIGIT(&in_shifted, 0) & kBottom51Bits;
-      cryptonite_p256_shr(&in_shifted, 51, &in_shifted);
+      crypton_p256_shr(&in_shifted, 51, &in_shifted);
     } else {
       out[i] = P256_DIGIT(&in_shifted, 0) & kBottom52Bits;
-      cryptonite_p256_shr(&in_shifted, 52, &in_shifted);
+      crypton_p256_shr(&in_shifted, 52, &in_shifted);
     }
   }
 
-  cryptonite_p256_clear(&in_shifted);
+  crypton_p256_clear(&in_shifted);
 }
 
 /* from_montgomery sets out=in/R. */
-static void from_montgomery(cryptonite_p256_int* out, const felem in) {
-  cryptonite_p256_int result, tmp;
+static void from_montgomery(crypton_p256_int* out, const felem in) {
+  crypton_p256_int result, tmp;
   int i, top;
 
-  cryptonite_p256_init(&result);
-  cryptonite_p256_init(&tmp);
+  crypton_p256_init(&result);
+  crypton_p256_init(&tmp);
 
-  cryptonite_p256_add_d(&tmp, in[NLIMBS - 1], &result);
+  crypton_p256_add_d(&tmp, in[NLIMBS - 1], &result);
   for (i = NLIMBS - 2; i >= 0; i--) {
     if ((i & 1) == 0) {
-      top = cryptonite_p256_shl(&result, 51, &tmp);
+      top = crypton_p256_shl(&result, 51, &tmp);
     } else {
-      top = cryptonite_p256_shl(&result, 52, &tmp);
+      top = crypton_p256_shl(&result, 52, &tmp);
     }
-    top += cryptonite_p256_add_d(&tmp, in[i], &result);
+    top += crypton_p256_add_d(&tmp, in[i], &result);
   }
 
-  cryptonite_p256_modmul(&cryptonite_SECP256r1_p, &kRInv, top, &result, out);
+  crypton_p256_modmul(&crypton_SECP256r1_p, &kRInv, top, &result, out);
 
-  cryptonite_p256_clear(&result);
-  cryptonite_p256_clear(&tmp);
+  crypton_p256_clear(&result);
+  crypton_p256_clear(&tmp);
 }

@@ -15,10 +15,10 @@ import Foreign.C.Types
 import Data.Word (Word8)
 import Crypto.Random.Entropy.Source
 
-foreign import ccall unsafe "cryptonite_cpu_has_rdrand"
+foreign import ccall unsafe "crypton_cpu_has_rdrand"
    c_cpu_has_rdrand :: IO CInt
 
-foreign import ccall unsafe "cryptonite_get_rand_bytes"
+foreign import ccall unsafe "crypton_get_rand_bytes"
   c_get_rand_bytes :: Ptr Word8 -> CInt -> IO CInt
 
 -- | Fake handle to Intel RDRand entropy CPU instruction

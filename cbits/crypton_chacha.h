@@ -27,8 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_CHACHA
-#define CRYPTONITE_CHACHA
+#ifndef CRYPTON_CHACHA
+#define CRYPTON_CHACHA
 
 typedef union {
 	uint64_t q[8];
@@ -36,19 +36,19 @@ typedef union {
 	uint8_t  b[64];
 } block;
 
-typedef block cryptonite_chacha_state;
+typedef block crypton_chacha_state;
 
 typedef struct {
-	cryptonite_chacha_state st;
+	crypton_chacha_state st;
 	uint8_t prev[64];
 	uint8_t prev_ofs;
 	uint8_t prev_len;
 	uint8_t nb_rounds;
-} cryptonite_chacha_context;
+} crypton_chacha_context;
 
-void cryptonite_chacha_init_core(cryptonite_chacha_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
-void cryptonite_chacha_init(cryptonite_chacha_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
-void cryptonite_chacha_combine(uint8_t *dst, cryptonite_chacha_context *st, const uint8_t *src, uint32_t bytes);
-void cryptonite_chacha_generate(uint8_t *dst, cryptonite_chacha_context *st, uint32_t bytes);
+void crypton_chacha_init_core(crypton_chacha_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_chacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
+void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *st, const uint8_t *src, uint32_t bytes);
+void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *st, uint32_t bytes);
 
 #endif

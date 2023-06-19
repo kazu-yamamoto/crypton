@@ -1,7 +1,7 @@
 /*
  * fast-pbkdf2 - Optimal PBKDF2-HMAC calculation
  * Written in 2015 by Joseph Birr-Pixton <jpixton@gmail.com>
- * Ported to cryptonite in 2017 by Nicolas Di Prima <nicolas@primetype.co.uk>
+ * Ported to crypton in 2017 by Nicolas Di Prima <nicolas@primetype.co.uk>
  *
  * To the extent possible under law, the author(s) have dedicated all
  * copyright and related and neighboring rights to this software to the
@@ -16,12 +16,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include "cryptonite_pbkdf2.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_sha1.h"
-#include "cryptonite_sha256.h"
-#include "cryptonite_sha512.h"
+#include "crypton_pbkdf2.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_sha1.h"
+#include "crypton_sha256.h"
+#include "crypton_sha512.h"
 
 /* --- MSVC doesn't support C99 --- */
 #ifdef _MSC_VER
@@ -239,19 +239,19 @@ static inline void sha1_xor(struct sha1_ctx *restrict out, const struct sha1_ctx
   out->h[4] ^= in->h[4];
 }
 
-void cryptonite_sha1_transform(struct sha1_ctx* ctx, uint8_t block[SHA1_BLOCK_SIZE])
+void crypton_sha1_transform(struct sha1_ctx* ctx, uint8_t block[SHA1_BLOCK_SIZE])
 {
-  cryptonite_sha1_update(ctx, block, SHA1_BLOCK_SIZE);
+  crypton_sha1_update(ctx, block, SHA1_BLOCK_SIZE);
 }
 
 DECL_PBKDF2(sha1,
             SHA1_BLOCK_SIZE,
             SHA1_DIGEST_SIZE,
             struct sha1_ctx,
-            cryptonite_sha1_init,
-            cryptonite_sha1_update,
-            cryptonite_sha1_transform,
-            cryptonite_sha1_finalize,
+            crypton_sha1_init,
+            crypton_sha1_update,
+            crypton_sha1_transform,
+            crypton_sha1_finalize,
             sha1_cpy,
             sha1_extract,
             sha1_xor);
@@ -292,19 +292,19 @@ static inline void sha256_xor(struct sha256_ctx *restrict out, const struct sha2
 	out->h[7] ^= in->h[7];
 }
 
-void cryptonite_sha256_transform(struct sha256_ctx* ctx, uint8_t block[SHA256_BLOCK_SIZE])
+void crypton_sha256_transform(struct sha256_ctx* ctx, uint8_t block[SHA256_BLOCK_SIZE])
 {
-  cryptonite_sha256_update(ctx, block, SHA256_BLOCK_SIZE);
+  crypton_sha256_update(ctx, block, SHA256_BLOCK_SIZE);
 }
 
 DECL_PBKDF2(sha256,
             SHA256_BLOCK_SIZE,
             SHA256_DIGEST_SIZE,
             struct sha256_ctx,
-            cryptonite_sha256_init,
-            cryptonite_sha256_update,
-            cryptonite_sha256_transform,
-            cryptonite_sha256_finalize,
+            crypton_sha256_init,
+            crypton_sha256_update,
+            crypton_sha256_transform,
+            crypton_sha256_finalize,
             sha256_cpy,
             sha256_extract,
             sha256_xor);
@@ -345,24 +345,24 @@ static inline void sha512_xor(struct sha512_ctx *restrict out, const struct sha5
 	out->h[7] ^= in->h[7];
 }
 
-void cryptonite_sha512_transform(struct sha512_ctx* ctx, uint8_t block[SHA512_BLOCK_SIZE])
+void crypton_sha512_transform(struct sha512_ctx* ctx, uint8_t block[SHA512_BLOCK_SIZE])
 {
-	cryptonite_sha512_update(ctx, block, SHA512_BLOCK_SIZE);
+	crypton_sha512_update(ctx, block, SHA512_BLOCK_SIZE);
 }
 
 DECL_PBKDF2(sha512,
             SHA512_BLOCK_SIZE,
             SHA512_DIGEST_SIZE,
             struct sha512_ctx,
-            cryptonite_sha512_init,
-            cryptonite_sha512_update,
-            cryptonite_sha512_transform,
-            cryptonite_sha512_finalize,
+            crypton_sha512_init,
+            crypton_sha512_update,
+            crypton_sha512_transform,
+            crypton_sha512_finalize,
             sha512_cpy,
             sha512_extract,
             sha512_xor);
 
-void cryptonite_fastpbkdf2_hmac_sha1( const uint8_t *pw, size_t npw
+void crypton_fastpbkdf2_hmac_sha1( const uint8_t *pw, size_t npw
                                     , const uint8_t *salt, size_t nsalt
                                     , uint32_t iterations
                                     , uint8_t *out, size_t nout
@@ -371,7 +371,7 @@ void cryptonite_fastpbkdf2_hmac_sha1( const uint8_t *pw, size_t npw
   PBKDF2(sha1)(pw, npw, salt, nsalt, iterations, out, nout);
 }
 
-void cryptonite_fastpbkdf2_hmac_sha256( const uint8_t *pw, size_t npw
+void crypton_fastpbkdf2_hmac_sha256( const uint8_t *pw, size_t npw
                                       , const uint8_t *salt, size_t nsalt
                                       , uint32_t iterations
                                       , uint8_t *out, size_t nout
@@ -380,7 +380,7 @@ void cryptonite_fastpbkdf2_hmac_sha256( const uint8_t *pw, size_t npw
   PBKDF2(sha256)(pw, npw, salt, nsalt, iterations, out, nout);
 }
 
-void cryptonite_fastpbkdf2_hmac_sha512( const uint8_t *pw, size_t npw
+void crypton_fastpbkdf2_hmac_sha512( const uint8_t *pw, size_t npw
                                       , const uint8_t *salt, size_t nsalt
                                       , uint32_t iterations
                                       , uint8_t *out, size_t nout

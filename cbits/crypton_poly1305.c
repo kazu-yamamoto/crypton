@@ -35,9 +35,9 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "cryptonite_poly1305.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_poly1305.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 
 static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int final)
 {
@@ -84,7 +84,7 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 	ctx->h[0] = h0; ctx->h[1] = h1; ctx->h[2] = h2; ctx->h[3] = h3; ctx->h[4] = h4;
 }
 
-void cryptonite_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
+void crypton_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
 {
 	uint8_t *k = (uint8_t *) key;
 
@@ -104,7 +104,7 @@ void cryptonite_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
 	ctx->index = 0;
 }
 
-void cryptonite_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t length)
+void crypton_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t length)
 {
 	uint32_t to_fill, nb_blocks_bytes;
 
@@ -132,7 +132,7 @@ void cryptonite_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t lengt
 	}
 }
 
-void cryptonite_poly1305_finalize(poly1305_mac mac8, poly1305_ctx *ctx)
+void crypton_poly1305_finalize(poly1305_mac mac8, poly1305_ctx *ctx)
 {
 	uint32_t h0,h1,h2,h3,h4,c;
 	uint32_t g0,g1,g2,g3,g4;

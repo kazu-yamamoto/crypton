@@ -7,27 +7,27 @@
     
 #define LIMB_PLACE_VALUE(i) 56
 
-void cryptonite_gf_add_RAW (gf out, const gf a, const gf b) {
+void crypton_gf_add_RAW (gf out, const gf a, const gf b) {
     for (unsigned int i=0; i<8; i++) {
         out->limb[i] = a->limb[i] + b->limb[i];
     }
-    cryptonite_gf_weak_reduce(out);
+    crypton_gf_weak_reduce(out);
 }
 
-void cryptonite_gf_sub_RAW (gf out, const gf a, const gf b) {
+void crypton_gf_sub_RAW (gf out, const gf a, const gf b) {
     uint64_t co1 = ((1ull<<56)-1)*2, co2 = co1-2;
     for (unsigned int i=0; i<8; i++) {
         out->limb[i] = a->limb[i] - b->limb[i] + ((i==4) ? co2 : co1);
     }
-    cryptonite_gf_weak_reduce(out);
+    crypton_gf_weak_reduce(out);
 }
 
-void cryptonite_gf_bias (gf a, int amt) {
+void crypton_gf_bias (gf a, int amt) {
     (void) a;
     (void) amt;
 }
 
-void cryptonite_gf_weak_reduce (gf a) {
+void crypton_gf_weak_reduce (gf a) {
     uint64_t mask = (1ull<<56) - 1;
     uint64_t tmp = a->limb[7] >> 56;
     a->limb[4] += tmp;

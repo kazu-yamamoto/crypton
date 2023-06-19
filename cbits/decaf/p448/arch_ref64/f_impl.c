@@ -4,7 +4,7 @@
 
 #include "f_field.h"
 
-void cryptonite_gf_mul (cryptonite_gf_s *__restrict__ cs, const gf as, const gf bs) {
+void crypton_gf_mul (crypton_gf_s *__restrict__ cs, const gf as, const gf bs) {
     const uint64_t *a = as->limb, *b = bs->limb;
     uint64_t *c = cs->limb;
 
@@ -165,7 +165,7 @@ void cryptonite_gf_mul (cryptonite_gf_s *__restrict__ cs, const gf as, const gf 
     c[1] += ((uint64_t)(accum1));
 }
 
-void cryptonite_gf_mulw_unsigned (cryptonite_gf_s *__restrict__ cs, const gf as, uint32_t b) {
+void crypton_gf_mulw_unsigned (crypton_gf_s *__restrict__ cs, const gf as, uint32_t b) {
     const uint64_t *a = as->limb;
     uint64_t *c = cs->limb;
 
@@ -189,7 +189,7 @@ void cryptonite_gf_mulw_unsigned (cryptonite_gf_s *__restrict__ cs, const gf as,
     c[1] += accum4 >> 56;
 }
 
-void cryptonite_gf_sqr (cryptonite_gf_s *__restrict__ cs, const gf as) {
+void crypton_gf_sqr (crypton_gf_s *__restrict__ cs, const gf as) {
     const uint64_t *a = as->limb;
     uint64_t *c = cs->limb;
 

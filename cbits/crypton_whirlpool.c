@@ -61,8 +61,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cryptonite_bitfn.h"
-#include "cryptonite_whirlpool.h"
+#include "crypton_bitfn.h"
+#include "crypton_whirlpool.h"
 
 /* #define TRACE_INTERMEDIATE_VALUES */
 
@@ -827,7 +827,7 @@ static void processBuffer(whirlpool_ctx * const ctx)
 /**
  * Initialize the hashing state.
  */
-void cryptonite_whirlpool_init(struct whirlpool_ctx * const ctx)
+void crypton_whirlpool_init(struct whirlpool_ctx * const ctx)
 {
 	int i;
 
@@ -847,7 +847,7 @@ void cryptonite_whirlpool_init(struct whirlpool_ctx * const ctx)
  *
  * This method maintains the invariant: bufferBits < DIGESTBITS
  */
-void cryptonite_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t * const source, uint32_t sourceBytes)
+void crypton_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t * const source, uint32_t sourceBytes)
 {
 	/*
 	   sourcePos
@@ -965,7 +965,7 @@ void cryptonite_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t
  * 
  * This method uses the invariant: bufferBits < DIGESTBITS
  */
-void cryptonite_whirlpool_finalize(struct whirlpool_ctx * const ctx, uint8_t * const result)
+void crypton_whirlpool_finalize(struct whirlpool_ctx * const ctx, uint8_t * const result)
 {
 	int i;
 	uint8_t *buffer    = ctx->buffer;

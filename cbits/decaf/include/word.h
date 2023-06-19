@@ -60,9 +60,9 @@ extern int posix_memalign(void **, size_t, size_t);
 #endif
     
 /* Scalar limbs are keyed off of the API word size instead of the arch word size. */
-#if CRYPTONITE_DECAF_WORD_BITS == 64
+#if CRYPTON_DECAF_WORD_BITS == 64
     #define SC_LIMB(x) (x##ull)
-#elif CRYPTONITE_DECAF_WORD_BITS == 32
+#elif CRYPTON_DECAF_WORD_BITS == 32
     #define SC_LIMB(x) ((uint32_t)x##ull),(x##ull>>32)
 #else
     #error "For now, libdecaf only supports 32- and 64-bit architectures."
@@ -102,7 +102,7 @@ extern int posix_memalign(void **, size_t, size_t);
     typedef uint64x4_t uint64xn_t;
     typedef uint32x8_t uint32xn_t;
 
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_set_to_mask(mask_t x) {
         uint32_t y = (uint32_t)x;
         big_register_t ret = {y,y,y,y,y,y,y,y};
@@ -114,7 +114,7 @@ extern int posix_memalign(void **, size_t, size_t);
     typedef uint64x2_t uint64xn_t;
     typedef uint32x4_t uint32xn_t;
 
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_set_to_mask(mask_t x) {
         uint32_t y = x;
         big_register_t ret = {y,y,y,y};
@@ -126,7 +126,7 @@ extern int posix_memalign(void **, size_t, size_t);
     typedef uint64x2_t uint64xn_t;
     typedef uint32x4_t uint32xn_t;
     
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_set_to_mask(mask_t x) {
         return vdupq_n_u32(x);
     }
@@ -135,7 +135,7 @@ extern int posix_memalign(void **, size_t, size_t);
     typedef uint64_t big_register_t, uint64xn_t;
 
     typedef uint32_t uint32xn_t;
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_set_to_mask(mask_t x) {
         return (big_register_t)x;
     }
@@ -145,7 +145,7 @@ extern int posix_memalign(void **, size_t, size_t);
     typedef uint32_t uint32xn_t;
     typedef uint32_t big_register_t;
 
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_set_to_mask(mask_t x) {
         return (big_register_t)x;
     }
@@ -160,18 +160,18 @@ typedef struct {
 } __attribute__((packed)) unaligned_uint32xn_t;
 
 #if __AVX2__
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_is_zero(big_register_t x) {
         return (big_register_t)(x == br_set_to_mask(0));
     }
 #elif __SSE2__
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_is_zero(big_register_t x) {
         return (big_register_t)_mm_cmpeq_epi32((__m128i)x, _mm_setzero_si128());
         //return (big_register_t)(x == br_set_to_mask(0));
     }
 #elif __ARM_NEON__
-    static CRYPTONITE_DECAF_INLINE big_register_t
+    static CRYPTON_DECAF_INLINE big_register_t
     br_is_zero(big_register_t x) {
         return vceqq_u32(x,x^x);
     }
@@ -197,13 +197,13 @@ typedef struct {
     #ifdef NEED_MEMSET_S_EXTERN
         extern int memset_s(void *, size_t, int, size_t);
     #endif
-    static CRYPTONITE_DECAF_INLINE void
+    static CRYPTON_DECAF_INLINE void
     really_memset(void *p, char c, size_t s) {
         memset_s(p, s, c, s);
     }
 #else
     /* PERF: use words? */
-    static CRYPTONITE_DECAF_INLINE void
+    static CRYPTON_DECAF_INLINE void
     really_memset(void *p, char c, size_t s) {
         volatile char *pv = (volatile char *)p;
         size_t i;
@@ -222,7 +222,7 @@ typedef struct {
  * @return A suitable pointer, which can be free'd with free(),
  * or NULL if no memory can be allocated.
  */
-static CRYPTONITE_DECAF_INLINE void *
+static CRYPTON_DECAF_INLINE void *
 malloc_vector(size_t size) {
     void *out = NULL;
     
@@ -248,25 +248,25 @@ malloc_vector(size_t size) {
 
 /* The plan on booleans:
  *
- * The external interface uses cryptonite_decaf_bool_t, but this might be a different
+ * The external interface uses crypton_decaf_bool_t, but this might be a different
  * size than our particular arch's word_t (and thus mask_t).  Also, the caller
  * isn't guaranteed to pass it as nonzero.  So bool_to_mask converts word sizes
  * and checks nonzero.
  *
  * On the flip side, mask_t is always -1 or 0, but it might be a different size
- * than cryptonite_decaf_bool_t.
+ * than crypton_decaf_bool_t.
  *
  * On the third hand, we have success vs boolean types, but that's handled in
- * common.h: it converts between cryptonite_decaf_bool_t and cryptonite_decaf_error_t.
+ * common.h: it converts between crypton_decaf_bool_t and crypton_decaf_error_t.
  */
-static CRYPTONITE_DECAF_INLINE cryptonite_decaf_bool_t mask_to_bool (mask_t m) {
-    return (cryptonite_decaf_sword_t)(sword_t)m;
+static CRYPTON_DECAF_INLINE crypton_decaf_bool_t mask_to_bool (mask_t m) {
+    return (crypton_decaf_sword_t)(sword_t)m;
 }
 
-static CRYPTONITE_DECAF_INLINE mask_t bool_to_mask (cryptonite_decaf_bool_t m) {
+static CRYPTON_DECAF_INLINE mask_t bool_to_mask (crypton_decaf_bool_t m) {
     /* On most arches this will be optimized to a simple cast. */
     mask_t ret = 0;
-    unsigned int limit = sizeof(cryptonite_decaf_bool_t)/sizeof(mask_t);
+    unsigned int limit = sizeof(crypton_decaf_bool_t)/sizeof(mask_t);
     if (limit < 1) limit = 1;
     for (unsigned int i=0; i<limit; i++) {
         ret |= ~ word_is_zero(m >> (i*8*sizeof(word_t)));
@@ -274,7 +274,7 @@ static CRYPTONITE_DECAF_INLINE mask_t bool_to_mask (cryptonite_decaf_bool_t m) {
     return ret;
 }
 
-static CRYPTONITE_DECAF_INLINE void ignore_result ( cryptonite_decaf_bool_t boo ) {
+static CRYPTON_DECAF_INLINE void ignore_result ( crypton_decaf_bool_t boo ) {
     (void)boo;
 }
 

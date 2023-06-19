@@ -34,11 +34,11 @@ instance HashAlgorithm Tiger where
     hashInternalUpdate        = c_tiger_update
     hashInternalFinalize      = c_tiger_finalize
 
-foreign import ccall unsafe "cryptonite_tiger_init"
+foreign import ccall unsafe "crypton_tiger_init"
     c_tiger_init :: Ptr (Context a)-> IO ()
 
-foreign import ccall "cryptonite_tiger_update"
+foreign import ccall "crypton_tiger_update"
     c_tiger_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_tiger_finalize"
+foreign import ccall unsafe "crypton_tiger_finalize"
     c_tiger_finalize :: Ptr (Context a) -> Ptr (Digest a) -> IO ()

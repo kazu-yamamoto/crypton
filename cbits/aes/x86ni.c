@@ -33,8 +33,8 @@
 #include <wmmintrin.h>
 #include <tmmintrin.h>
 #include <string.h>
-#include <cryptonite_aes.h>
-#include <cryptonite_cpu.h>
+#include <crypton_aes.h>
+#include <crypton_cpu.h>
 #include <aes/gf.h>
 #include <aes/x86ni.h>
 #include <aes/block128.h>
@@ -67,7 +67,7 @@ static __m128i aes_128_key_expansion_aa(__m128i key, __m128i keygened)
 }
 
 TARGET_AESNI
-void cryptonite_aesni_init(aes_key *key, uint8_t *ikey, uint8_t size)
+void crypton_aesni_init(aes_key *key, uint8_t *ikey, uint8_t size)
 {
 	__m128i k[28];
 	uint64_t *out = (uint64_t *) key->data;
@@ -167,7 +167,7 @@ static __m128i gfmul_generic(__m128i tag, const table_4bit htable)
 {
 	aes_block _t ALIGNMENT(16);
 	_mm_store_si128((__m128i *) &_t, tag);
-	cryptonite_aes_generic_gf_mul(&_t, htable);
+	crypton_aes_generic_gf_mul(&_t, htable);
 	tag = _mm_load_si128((__m128i *) &_t);
 	return tag;
 }
@@ -180,7 +180,7 @@ __m128i (*gfmul_branch_ptr)(__m128i a, const table_4bit t) = gfmul_generic;
 /* See Intel carry-less-multiplication-instruction-in-gcm-mode-paper.pdf
  *
  * Adapted from figure 5, with additional byte swapping so that interface
- * is simimar to cryptonite_aes_generic_gf_mul.
+ * is simimar to crypton_aes_generic_gf_mul.
  */
 TARGET_AESNI_PCLMUL
 static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
@@ -236,7 +236,7 @@ static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
 	return _mm_shuffle_epi8(tmp6, bswap_mask);
 }
 
-void cryptonite_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
+void crypton_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
 {
 	/* When pclmul is active we don't need to fill the table.  Instead we just
 	 * store H at index 0.  It is written in reverse order, so function
@@ -247,7 +247,7 @@ void cryptonite_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
 }
 
 TARGET_AESNI_PCLMUL
-void cryptonite_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable)
+void crypton_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable)
 {
 	__m128i _a, _b;
 	_a = _mm_loadu_si128((__m128i *) a);
@@ -255,7 +255,7 @@ void cryptonite_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable)
 	_mm_storeu_si128((__m128i *) a, _b);
 }
 
-void cryptonite_aesni_init_pclmul(void)
+void crypton_aesni_init_pclmul(void)
 {
 	gfmul_branch_ptr = gfmul_pclmuldq;
 }

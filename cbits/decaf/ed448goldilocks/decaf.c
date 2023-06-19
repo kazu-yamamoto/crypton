@@ -19,10 +19,10 @@
 #include <decaf/ed448.h>
 
 /* Template stuff */
-#define API_NS(_id) cryptonite_decaf_448_##_id
-#define SCALAR_BITS CRYPTONITE_DECAF_448_SCALAR_BITS
-#define SCALAR_SER_BYTES CRYPTONITE_DECAF_448_SCALAR_BYTES
-#define SCALAR_LIMBS CRYPTONITE_DECAF_448_SCALAR_LIMBS
+#define API_NS(_id) crypton_decaf_448_##_id
+#define SCALAR_BITS CRYPTON_DECAF_448_SCALAR_BITS
+#define SCALAR_SER_BYTES CRYPTON_DECAF_448_SCALAR_BYTES
+#define SCALAR_LIMBS CRYPTON_DECAF_448_SCALAR_LIMBS
 #define scalar_t API_NS(scalar_t)
 #define point_t API_NS(point_t)
 #define precomputed_s API_NS(precomputed_s)
@@ -33,9 +33,9 @@
 #define COMBS_N 5
 #define COMBS_T 5
 #define COMBS_S 18
-#define CRYPTONITE_DECAF_WINDOW_BITS 5
-#define CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS 5
-#define CRYPTONITE_DECAF_WNAF_VAR_TABLE_BITS 3
+#define CRYPTON_DECAF_WINDOW_BITS 5
+#define CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS 5
+#define CRYPTON_DECAF_WNAF_VAR_TABLE_BITS 3
 
 #define EDDSA_USE_SIGMA_ISOGENY 0
 
@@ -46,7 +46,7 @@ static const scalar_t point_scalarmul_adjustment = {{{
     SC_LIMB(0xc873d6d54a7bb0cf), SC_LIMB(0xe933d8d723a70aad), SC_LIMB(0xbb124b65129c96fd), SC_LIMB(0x00000008335dc163)
 }}};
 
-const uint8_t cryptonite_decaf_x448_base_point[CRYPTONITE_DECAF_X448_PUBLIC_BYTES] = { 0x05 };
+const uint8_t crypton_decaf_x448_base_point[CRYPTON_DECAF_X448_PUBLIC_BYTES] = { 0x05 };
 
 #if COFACTOR==8 || EDDSA_USE_SIGMA_ISOGENY
     static const gf SQRT_ONE_MINUS_D = {FIELD_LITERAL(
@@ -78,7 +78,7 @@ const uint8_t cryptonite_decaf_x448_base_point[CRYPTONITE_DECAF_X448_PUBLIC_BYTE
     extern const gf SQRT_MINUS_ONE;
 #endif
 
-#define WBITS CRYPTONITE_DECAF_WORD_BITS /* NB this may be different from ARCH_WORD_BITS */
+#define WBITS CRYPTON_DECAF_WORD_BITS /* NB this may be different from ARCH_WORD_BITS */
 
 extern const point_t API_NS(point_base);
 
@@ -98,22 +98,22 @@ const size_t API_NS(alignof_precomputed_s) = sizeof(big_register_t);
 
 /** Inverse. */
 static void
-cryptonite_gf_invert(gf y, const gf x, int assert_nonzero) {
+crypton_gf_invert(gf y, const gf x, int assert_nonzero) {
     gf t1, t2;
-    cryptonite_gf_sqr(t1, x); // o^2
-    mask_t ret = cryptonite_gf_isr(t2, t1); // +-1/sqrt(o^2) = +-1/o
+    crypton_gf_sqr(t1, x); // o^2
+    mask_t ret = crypton_gf_isr(t2, t1); // +-1/sqrt(o^2) = +-1/o
     (void)ret;
     if (assert_nonzero) assert(ret);
-    cryptonite_gf_sqr(t1, t2);
-    cryptonite_gf_mul(t2, t1, x); // not direct to y in case of alias.
-    cryptonite_gf_copy(y, t2);
+    crypton_gf_sqr(t1, t2);
+    crypton_gf_mul(t2, t1, x); // not direct to y in case of alias.
+    crypton_gf_copy(y, t2);
 }
 
 /** Return high bit of x = low bit of 2x mod p */
-static mask_t cryptonite_gf_lobit(const gf x) {
+static mask_t crypton_gf_lobit(const gf x) {
     gf y;
-    cryptonite_gf_copy(y,x);
-    cryptonite_gf_strong_reduce(y);
+    crypton_gf_copy(y,x);
+    crypton_gf_strong_reduce(y);
     return -(y->limb[0]&1);
 }
 
@@ -121,8 +121,8 @@ static mask_t cryptonite_gf_lobit(const gf x) {
 const point_t API_NS(point_identity) = {{{{{0}}},{{{1}}},{{{1}}},{{{0}}}}};
 
 void API_NS(deisogenize) (
-    cryptonite_gf_s *__restrict__ s,
-    cryptonite_gf_s *__restrict__ minus_t_over_s,
+    crypton_gf_s *__restrict__ s,
+    crypton_gf_s *__restrict__ minus_t_over_s,
     const point_t p,
     mask_t toggle_hibit_s,
     mask_t toggle_hibit_t_over_s,
@@ -130,8 +130,8 @@ void API_NS(deisogenize) (
 );
 
 void API_NS(deisogenize) (
-    cryptonite_gf_s *__restrict__ s,
-    cryptonite_gf_s *__restrict__ minus_t_over_s,
+    crypton_gf_s *__restrict__ s,
+    crypton_gf_s *__restrict__ minus_t_over_s,
     const point_t p,
     mask_t toggle_hibit_s,
     mask_t toggle_hibit_t_over_s,
@@ -141,149 +141,149 @@ void API_NS(deisogenize) (
     (void) toggle_rotation;
     
     gf b, d;
-    cryptonite_gf_s *c = s, *a = minus_t_over_s;
-    cryptonite_gf_mulw(a, p->y, 1-EDWARDS_D);
-    cryptonite_gf_mul(c, a, p->t);     /* -dYT, with EDWARDS_D = d-1 */
-    cryptonite_gf_mul(a, p->x, p->z); 
-    cryptonite_gf_sub(d, c, a);  /* aXZ-dYT with a=-1 */
-    cryptonite_gf_add(a, p->z, p->y); 
-    cryptonite_gf_sub(b, p->z, p->y); 
-    cryptonite_gf_mul(c, b, a);
-    cryptonite_gf_mulw(b, c, -EDWARDS_D); /* (a-d)(Z+Y)(Z-Y) */
-    mask_t ok = cryptonite_gf_isr (a,b); /* r in the paper */
-    (void)ok; assert(ok | cryptonite_gf_eq(b,ZERO));
-    cryptonite_gf_mulw (b, a, -EDWARDS_D); /* u in the paper */
+    crypton_gf_s *c = s, *a = minus_t_over_s;
+    crypton_gf_mulw(a, p->y, 1-EDWARDS_D);
+    crypton_gf_mul(c, a, p->t);     /* -dYT, with EDWARDS_D = d-1 */
+    crypton_gf_mul(a, p->x, p->z); 
+    crypton_gf_sub(d, c, a);  /* aXZ-dYT with a=-1 */
+    crypton_gf_add(a, p->z, p->y); 
+    crypton_gf_sub(b, p->z, p->y); 
+    crypton_gf_mul(c, b, a);
+    crypton_gf_mulw(b, c, -EDWARDS_D); /* (a-d)(Z+Y)(Z-Y) */
+    mask_t ok = crypton_gf_isr (a,b); /* r in the paper */
+    (void)ok; assert(ok | crypton_gf_eq(b,ZERO));
+    crypton_gf_mulw (b, a, -EDWARDS_D); /* u in the paper */
 
-    cryptonite_gf_mul(c,a,d); /* r(aZX-dYT) */
-    cryptonite_gf_mul(a,b,p->z); /* uZ */
-    cryptonite_gf_add(a,a,a); /* 2uZ */
+    crypton_gf_mul(c,a,d); /* r(aZX-dYT) */
+    crypton_gf_mul(a,b,p->z); /* uZ */
+    crypton_gf_add(a,a,a); /* 2uZ */
     
-    mask_t tg = toggle_hibit_t_over_s ^ ~cryptonite_gf_hibit(minus_t_over_s);
-    cryptonite_gf_cond_neg(minus_t_over_s, tg); /* t/s <-? -t/s */
-    cryptonite_gf_cond_neg(c, tg); /* u <- -u if negative. */
+    mask_t tg = toggle_hibit_t_over_s ^ ~crypton_gf_hibit(minus_t_over_s);
+    crypton_gf_cond_neg(minus_t_over_s, tg); /* t/s <-? -t/s */
+    crypton_gf_cond_neg(c, tg); /* u <- -u if negative. */
     
-    cryptonite_gf_add(d,c,p->y);
-    cryptonite_gf_mul(s,b,d);
-    cryptonite_gf_cond_neg(s, toggle_hibit_s ^ cryptonite_gf_hibit(s));
+    crypton_gf_add(d,c,p->y);
+    crypton_gf_mul(s,b,d);
+    crypton_gf_cond_neg(s, toggle_hibit_s ^ crypton_gf_hibit(s));
 #else
     /* More complicated because of rotation */
     /* MAGIC This code is wrong for certain non-Curve25519 curves;
      * check if it's because of Cofactor==8 or IMAGINE_TWIST */
     
     gf c, d;
-    cryptonite_gf_s *b = s, *a = minus_t_over_s;
+    crypton_gf_s *b = s, *a = minus_t_over_s;
 
     #if IMAGINE_TWIST
         gf x, t;
-        cryptonite_gf_div_qnr(x,p->x);
-        cryptonite_gf_div_qnr(t,p->t);
-        cryptonite_gf_add ( a, p->z, x );
-        cryptonite_gf_sub ( b, p->z, x );
-        cryptonite_gf_mul ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 - X^2 */
+        crypton_gf_div_qnr(x,p->x);
+        crypton_gf_div_qnr(t,p->t);
+        crypton_gf_add ( a, p->z, x );
+        crypton_gf_sub ( b, p->z, x );
+        crypton_gf_mul ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 - X^2 */
     #else
-        const cryptonite_gf_s *x = p->x, *t = p->t;
-        cryptonite_gf_sqr ( a, p->z );
-        cryptonite_gf_sqr ( b, p->x );
-        cryptonite_gf_add ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 + X^2 */
+        const crypton_gf_s *x = p->x, *t = p->t;
+        crypton_gf_sqr ( a, p->z );
+        crypton_gf_sqr ( b, p->x );
+        crypton_gf_add ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 + X^2 */
     #endif
     /* Here: c = "zx" in the SAGE code = Z^2 - aX^2 */
     
-    cryptonite_gf_mul ( a, p->z, t ); /* "tz" = T*Z */
-    cryptonite_gf_sqr ( b, a );
-    cryptonite_gf_mul ( d, b, c ); /* (TZ)^2 * (Z^2-aX^2) */
-    mask_t ok = cryptonite_gf_isr(b, d);
-    (void)ok; assert(ok | cryptonite_gf_eq(d,ZERO));
-    cryptonite_gf_mul ( d, b, a ); /* "osx" = 1 / sqrt(z^2-ax^2) */
-    cryptonite_gf_mul ( a, b, c ); 
-    cryptonite_gf_mul ( b, a, d ); /* 1/tz */
+    crypton_gf_mul ( a, p->z, t ); /* "tz" = T*Z */
+    crypton_gf_sqr ( b, a );
+    crypton_gf_mul ( d, b, c ); /* (TZ)^2 * (Z^2-aX^2) */
+    mask_t ok = crypton_gf_isr(b, d);
+    (void)ok; assert(ok | crypton_gf_eq(d,ZERO));
+    crypton_gf_mul ( d, b, a ); /* "osx" = 1 / sqrt(z^2-ax^2) */
+    crypton_gf_mul ( a, b, c ); 
+    crypton_gf_mul ( b, a, d ); /* 1/tz */
 
     mask_t rotate;
     #if (COFACTOR == 8)
         gf e;
-        cryptonite_gf_sqr(e, p->z);
-        cryptonite_gf_mul(a, e, b); /* z^2 / tz = z/t = 1/xy */
-        rotate = cryptonite_gf_hibit(a) ^ toggle_rotation;
+        crypton_gf_sqr(e, p->z);
+        crypton_gf_mul(a, e, b); /* z^2 / tz = z/t = 1/xy */
+        rotate = crypton_gf_hibit(a) ^ toggle_rotation;
         /* Curve25519: cond select between zx * 1/tz or sqrt(1-d); y=-x */
-        cryptonite_gf_mul ( a, b, c ); 
-        cryptonite_gf_cond_sel ( a, a, SQRT_ONE_MINUS_D, rotate );
-        cryptonite_gf_cond_sel ( e, p->y, x, rotate );
+        crypton_gf_mul ( a, b, c ); 
+        crypton_gf_cond_sel ( a, a, SQRT_ONE_MINUS_D, rotate );
+        crypton_gf_cond_sel ( e, p->y, x, rotate );
     #else
-        const cryptonite_gf_s *e = x;
+        const crypton_gf_s *e = x;
         (void)toggle_rotation;
         rotate = 0;
     #endif
     
-    cryptonite_gf_mul ( c, a, d ); // new "osx"
-    cryptonite_gf_mul ( a, c, p->z );
-    cryptonite_gf_add ( minus_t_over_s, a, a ); // 2 * "osx" * Z
-    cryptonite_gf_mul ( d, b, p->z );
+    crypton_gf_mul ( c, a, d ); // new "osx"
+    crypton_gf_mul ( a, c, p->z );
+    crypton_gf_add ( minus_t_over_s, a, a ); // 2 * "osx" * Z
+    crypton_gf_mul ( d, b, p->z );
     
-    mask_t tg = toggle_hibit_t_over_s ^~ cryptonite_gf_hibit(minus_t_over_s);
-    cryptonite_gf_cond_neg ( minus_t_over_s, tg );
-    cryptonite_gf_cond_neg ( c, rotate ^ tg );
-    cryptonite_gf_add ( d, d, c );
-    cryptonite_gf_mul ( s, d, e ); /* here "x" = y unless rotate */
-    cryptonite_gf_cond_neg ( s, toggle_hibit_s ^ cryptonite_gf_hibit(s) );
+    mask_t tg = toggle_hibit_t_over_s ^~ crypton_gf_hibit(minus_t_over_s);
+    crypton_gf_cond_neg ( minus_t_over_s, tg );
+    crypton_gf_cond_neg ( c, rotate ^ tg );
+    crypton_gf_add ( d, d, c );
+    crypton_gf_mul ( s, d, e ); /* here "x" = y unless rotate */
+    crypton_gf_cond_neg ( s, toggle_hibit_s ^ crypton_gf_hibit(s) );
 #endif
 }
 
 void API_NS(point_encode)( unsigned char ser[SER_BYTES], const point_t p ) {
     gf s, mtos;
     API_NS(deisogenize)(s,mtos,p,0,0,0);
-    cryptonite_gf_serialize(ser,s,0);
+    crypton_gf_serialize(ser,s,0);
 }
 
-cryptonite_decaf_error_t API_NS(point_decode) (
+crypton_decaf_error_t API_NS(point_decode) (
     point_t p,
     const unsigned char ser[SER_BYTES],
-    cryptonite_decaf_bool_t allow_identity
+    crypton_decaf_bool_t allow_identity
 ) {
     gf s, a, b, c, d, e, f;
-    mask_t succ = cryptonite_gf_deserialize(s, ser, 0);
-    mask_t zero = cryptonite_gf_eq(s, ZERO);
+    mask_t succ = crypton_gf_deserialize(s, ser, 0);
+    mask_t zero = crypton_gf_eq(s, ZERO);
     succ &= bool_to_mask(allow_identity) | ~zero;
-    cryptonite_gf_sqr ( a, s ); /* s^2 */
+    crypton_gf_sqr ( a, s ); /* s^2 */
 #if IMAGINE_TWIST
-    cryptonite_gf_sub ( f, ONE, a ); /* f = 1-as^2 = 1-s^2*/
+    crypton_gf_sub ( f, ONE, a ); /* f = 1-as^2 = 1-s^2*/
 #else
-    cryptonite_gf_add ( f, ONE, a ); /* f = 1-as^2 = 1+s^2 */
+    crypton_gf_add ( f, ONE, a ); /* f = 1-as^2 = 1+s^2 */
 #endif
-    succ &= ~ cryptonite_gf_eq( f, ZERO );
-    cryptonite_gf_sqr ( b, f );  /* (1-as^2)^2 = 1 - 2as^2 + a^2 s^4 */
-    cryptonite_gf_mulw ( c, a, 4*IMAGINE_TWIST-4*EDWARDS_D ); 
-    cryptonite_gf_add ( c, c, b ); /* t^2 = 1 + (2a-4d) s^2 + s^4 */
-    cryptonite_gf_mul ( d, f, s ); /* s * (1-as^2) for denoms */
-    cryptonite_gf_sqr ( e, d );    /* s^2 * (1-as^2)^2 */
-    cryptonite_gf_mul ( b, c, e ); /* t^2 * s^2 * (1-as^2)^2 */
+    succ &= ~ crypton_gf_eq( f, ZERO );
+    crypton_gf_sqr ( b, f );  /* (1-as^2)^2 = 1 - 2as^2 + a^2 s^4 */
+    crypton_gf_mulw ( c, a, 4*IMAGINE_TWIST-4*EDWARDS_D ); 
+    crypton_gf_add ( c, c, b ); /* t^2 = 1 + (2a-4d) s^2 + s^4 */
+    crypton_gf_mul ( d, f, s ); /* s * (1-as^2) for denoms */
+    crypton_gf_sqr ( e, d );    /* s^2 * (1-as^2)^2 */
+    crypton_gf_mul ( b, c, e ); /* t^2 * s^2 * (1-as^2)^2 */
     
-    succ &= cryptonite_gf_isr(e,b) | cryptonite_gf_eq(b,ZERO); /* e = 1/(t s (1-as^2)) */
-    cryptonite_gf_mul ( b, e, d ); /* 1 / t */
-    cryptonite_gf_mul ( d, e, c ); /* t / (s(1-as^2)) */
-    cryptonite_gf_mul ( e, d, f ); /* t / s */
-    mask_t negtos = cryptonite_gf_hibit(e);
-    cryptonite_gf_cond_neg(b, negtos);
-    cryptonite_gf_cond_neg(d, negtos);
+    succ &= crypton_gf_isr(e,b) | crypton_gf_eq(b,ZERO); /* e = 1/(t s (1-as^2)) */
+    crypton_gf_mul ( b, e, d ); /* 1 / t */
+    crypton_gf_mul ( d, e, c ); /* t / (s(1-as^2)) */
+    crypton_gf_mul ( e, d, f ); /* t / s */
+    mask_t negtos = crypton_gf_hibit(e);
+    crypton_gf_cond_neg(b, negtos);
+    crypton_gf_cond_neg(d, negtos);
 
 #if IMAGINE_TWIST
-    cryptonite_gf_add ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
+    crypton_gf_add ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
 #else
-    cryptonite_gf_sub ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
+    crypton_gf_sub ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
 #endif
 
 #if COFACTOR == 8
-    cryptonite_gf_mul ( a, p->z, d); /* t(1+s^2) / s(1-s^2) = 2/xy */
-    succ &= ~cryptonite_gf_lobit(a); /* = ~cryptonite_gf_hibit(a/2), since cryptonite_gf_hibit(x) = cryptonite_gf_lobit(2x) */
+    crypton_gf_mul ( a, p->z, d); /* t(1+s^2) / s(1-s^2) = 2/xy */
+    succ &= ~crypton_gf_lobit(a); /* = ~crypton_gf_hibit(a/2), since crypton_gf_hibit(x) = crypton_gf_lobit(2x) */
 #endif
     
-    cryptonite_gf_mul ( a, f, b ); /* y = (1-s^2) / t */
-    cryptonite_gf_mul ( p->y, p->z, a ); /* Y = yZ */
+    crypton_gf_mul ( a, f, b ); /* y = (1-s^2) / t */
+    crypton_gf_mul ( p->y, p->z, a ); /* Y = yZ */
 #if IMAGINE_TWIST
-    cryptonite_gf_add ( b, s, s );
-    cryptonite_gf_mul(p->x, b, SQRT_MINUS_ONE); /* Curve25519 */
+    crypton_gf_add ( b, s, s );
+    crypton_gf_mul(p->x, b, SQRT_MINUS_ONE); /* Curve25519 */
 #else
-    cryptonite_gf_add ( p->x, s, s );
+    crypton_gf_add ( p->x, s, s );
 #endif
-    cryptonite_gf_mul ( p->t, p->x, a ); /* T = 2s (1-as^2)/t */
+    crypton_gf_mul ( p->t, p->x, a ); /* T = 2s (1-as^2)/t */
     
 #if UNSAFE_CURVE_HAS_POINTS_AT_INFINITY
     /* This can't happen for any of the supported configurations.
@@ -298,13 +298,13 @@ cryptonite_decaf_error_t API_NS(point_decode) (
      * Ed25519, without hitting that assertion.  Don't use it in
      * production.
      */
-    succ &= ~cryptonite_gf_eq(p->z,ZERO);
+    succ &= ~crypton_gf_eq(p->z,ZERO);
 #endif
     
     p->y->limb[0] -= zero;
     assert(API_NS(point_valid)(p) | ~succ);
     
-    return cryptonite_decaf_succeed_if(mask_to_bool(succ));
+    return crypton_decaf_succeed_if(mask_to_bool(succ));
 }
 
 #if IMAGINE_TWIST
@@ -327,30 +327,30 @@ void API_NS(point_sub) (
     const point_t r
 ) {
     gf a, b, c, d;
-    cryptonite_gf_sub_nr ( b, q->y, q->x ); /* 3+e */
-    cryptonite_gf_sub_nr ( d, r->y, r->x ); /* 3+e */
-    cryptonite_gf_add_nr ( c, r->y, r->x ); /* 2+e */
-    cryptonite_gf_mul ( a, c, b );
-    cryptonite_gf_add_nr ( b, q->y, q->x ); /* 2+e */
-    cryptonite_gf_mul ( p->y, d, b );
-    cryptonite_gf_mul ( b, r->t, q->t );
-    cryptonite_gf_mulw ( p->x, b, 2*EFF_D );
-    cryptonite_gf_add_nr ( b, a, p->y );    /* 2+e */
-    cryptonite_gf_sub_nr ( c, p->y, a );    /* 3+e */
-    cryptonite_gf_mul ( a, q->z, r->z );
-    cryptonite_gf_add_nr ( a, a, a );       /* 2+e */
-    if (GF_HEADROOM <= 3) cryptonite_gf_weak_reduce(a); /* or 1+e */
+    crypton_gf_sub_nr ( b, q->y, q->x ); /* 3+e */
+    crypton_gf_sub_nr ( d, r->y, r->x ); /* 3+e */
+    crypton_gf_add_nr ( c, r->y, r->x ); /* 2+e */
+    crypton_gf_mul ( a, c, b );
+    crypton_gf_add_nr ( b, q->y, q->x ); /* 2+e */
+    crypton_gf_mul ( p->y, d, b );
+    crypton_gf_mul ( b, r->t, q->t );
+    crypton_gf_mulw ( p->x, b, 2*EFF_D );
+    crypton_gf_add_nr ( b, a, p->y );    /* 2+e */
+    crypton_gf_sub_nr ( c, p->y, a );    /* 3+e */
+    crypton_gf_mul ( a, q->z, r->z );
+    crypton_gf_add_nr ( a, a, a );       /* 2+e */
+    if (GF_HEADROOM <= 3) crypton_gf_weak_reduce(a); /* or 1+e */
 #if NEG_D
-    cryptonite_gf_sub_nr ( p->y, a, p->x ); /* 4+e or 3+e */
-    cryptonite_gf_add_nr ( a, a, p->x );    /* 3+e or 2+e */
+    crypton_gf_sub_nr ( p->y, a, p->x ); /* 4+e or 3+e */
+    crypton_gf_add_nr ( a, a, p->x );    /* 3+e or 2+e */
 #else
-    cryptonite_gf_add_nr ( p->y, a, p->x ); /* 3+e or 2+e */
-    cryptonite_gf_sub_nr ( a, a, p->x );    /* 4+e or 3+e */
+    crypton_gf_add_nr ( p->y, a, p->x ); /* 3+e or 2+e */
+    crypton_gf_sub_nr ( a, a, p->x );    /* 4+e or 3+e */
 #endif
-    cryptonite_gf_mul ( p->z, a, p->y );
-    cryptonite_gf_mul ( p->x, p->y, c );
-    cryptonite_gf_mul ( p->y, a, b );
-    cryptonite_gf_mul ( p->t, b, c );
+    crypton_gf_mul ( p->z, a, p->y );
+    crypton_gf_mul ( p->x, p->y, c );
+    crypton_gf_mul ( p->y, a, b );
+    crypton_gf_mul ( p->t, b, c );
 }
     
 void API_NS(point_add) (
@@ -359,54 +359,54 @@ void API_NS(point_add) (
     const point_t r
 ) {
     gf a, b, c, d;
-    cryptonite_gf_sub_nr ( b, q->y, q->x ); /* 3+e */
-    cryptonite_gf_sub_nr ( c, r->y, r->x ); /* 3+e */
-    cryptonite_gf_add_nr ( d, r->y, r->x ); /* 2+e */
-    cryptonite_gf_mul ( a, c, b );
-    cryptonite_gf_add_nr ( b, q->y, q->x ); /* 2+e */
-    cryptonite_gf_mul ( p->y, d, b );
-    cryptonite_gf_mul ( b, r->t, q->t );
-    cryptonite_gf_mulw ( p->x, b, 2*EFF_D );
-    cryptonite_gf_add_nr ( b, a, p->y );    /* 2+e */
-    cryptonite_gf_sub_nr ( c, p->y, a );    /* 3+e */
-    cryptonite_gf_mul ( a, q->z, r->z );
-    cryptonite_gf_add_nr ( a, a, a );       /* 2+e */
-    if (GF_HEADROOM <= 3) cryptonite_gf_weak_reduce(a); /* or 1+e */
+    crypton_gf_sub_nr ( b, q->y, q->x ); /* 3+e */
+    crypton_gf_sub_nr ( c, r->y, r->x ); /* 3+e */
+    crypton_gf_add_nr ( d, r->y, r->x ); /* 2+e */
+    crypton_gf_mul ( a, c, b );
+    crypton_gf_add_nr ( b, q->y, q->x ); /* 2+e */
+    crypton_gf_mul ( p->y, d, b );
+    crypton_gf_mul ( b, r->t, q->t );
+    crypton_gf_mulw ( p->x, b, 2*EFF_D );
+    crypton_gf_add_nr ( b, a, p->y );    /* 2+e */
+    crypton_gf_sub_nr ( c, p->y, a );    /* 3+e */
+    crypton_gf_mul ( a, q->z, r->z );
+    crypton_gf_add_nr ( a, a, a );       /* 2+e */
+    if (GF_HEADROOM <= 3) crypton_gf_weak_reduce(a); /* or 1+e */
 #if NEG_D
-    cryptonite_gf_add_nr ( p->y, a, p->x ); /* 3+e or 2+e */
-    cryptonite_gf_sub_nr ( a, a, p->x );    /* 4+e or 3+e */
+    crypton_gf_add_nr ( p->y, a, p->x ); /* 3+e or 2+e */
+    crypton_gf_sub_nr ( a, a, p->x );    /* 4+e or 3+e */
 #else
-    cryptonite_gf_sub_nr ( p->y, a, p->x ); /* 4+e or 3+e */
-    cryptonite_gf_add_nr ( a, a, p->x );    /* 3+e or 2+e */
+    crypton_gf_sub_nr ( p->y, a, p->x ); /* 4+e or 3+e */
+    crypton_gf_add_nr ( a, a, p->x );    /* 3+e or 2+e */
 #endif
-    cryptonite_gf_mul ( p->z, a, p->y );
-    cryptonite_gf_mul ( p->x, p->y, c );
-    cryptonite_gf_mul ( p->y, a, b );
-    cryptonite_gf_mul ( p->t, b, c );
+    crypton_gf_mul ( p->z, a, p->y );
+    crypton_gf_mul ( p->x, p->y, c );
+    crypton_gf_mul ( p->y, a, b );
+    crypton_gf_mul ( p->t, b, c );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void
+static CRYPTON_DECAF_NOINLINE void
 point_double_internal (
     point_t p,
     const point_t q,
     int before_double
 ) {
     gf a, b, c, d;
-    cryptonite_gf_sqr ( c, q->x );
-    cryptonite_gf_sqr ( a, q->y );
-    cryptonite_gf_add_nr ( d, c, a );             /* 2+e */
-    cryptonite_gf_add_nr ( p->t, q->y, q->x );    /* 2+e */
-    cryptonite_gf_sqr ( b, p->t );
-    cryptonite_gf_subx_nr ( b, b, d, 3 );         /* 4+e */
-    cryptonite_gf_sub_nr ( p->t, a, c );          /* 3+e */
-    cryptonite_gf_sqr ( p->x, q->z );
-    cryptonite_gf_add_nr ( p->z, p->x, p->x );    /* 2+e */
-    cryptonite_gf_subx_nr ( a, p->z, p->t, 4 );   /* 6+e */
-    if (GF_HEADROOM == 5) cryptonite_gf_weak_reduce(a); /* or 1+e */
-    cryptonite_gf_mul ( p->x, a, b );
-    cryptonite_gf_mul ( p->z, p->t, a );
-    cryptonite_gf_mul ( p->y, p->t, d );
-    if (!before_double) cryptonite_gf_mul ( p->t, b, d );
+    crypton_gf_sqr ( c, q->x );
+    crypton_gf_sqr ( a, q->y );
+    crypton_gf_add_nr ( d, c, a );             /* 2+e */
+    crypton_gf_add_nr ( p->t, q->y, q->x );    /* 2+e */
+    crypton_gf_sqr ( b, p->t );
+    crypton_gf_subx_nr ( b, b, d, 3 );         /* 4+e */
+    crypton_gf_sub_nr ( p->t, a, c );          /* 3+e */
+    crypton_gf_sqr ( p->x, q->z );
+    crypton_gf_add_nr ( p->z, p->x, p->x );    /* 2+e */
+    crypton_gf_subx_nr ( a, p->z, p->t, 4 );   /* 6+e */
+    if (GF_HEADROOM == 5) crypton_gf_weak_reduce(a); /* or 1+e */
+    crypton_gf_mul ( p->x, a, b );
+    crypton_gf_mul ( p->z, p->t, a );
+    crypton_gf_mul ( p->y, p->t, d );
+    if (!before_double) crypton_gf_mul ( p->t, b, d );
 }
 
 void API_NS(point_double)(point_t p, const point_t q) {
@@ -417,98 +417,98 @@ void API_NS(point_negate) (
    point_t nega,
    const point_t a
 ) {
-    cryptonite_gf_sub(nega->x, ZERO, a->x);
-    cryptonite_gf_copy(nega->y, a->y);
-    cryptonite_gf_copy(nega->z, a->z);
-    cryptonite_gf_sub(nega->t, ZERO, a->t);
+    crypton_gf_sub(nega->x, ZERO, a->x);
+    crypton_gf_copy(nega->y, a->y);
+    crypton_gf_copy(nega->z, a->z);
+    crypton_gf_sub(nega->t, ZERO, a->t);
 }
 
 /* Operations on [p]niels */
-static CRYPTONITE_DECAF_INLINE void
+static CRYPTON_DECAF_INLINE void
 cond_neg_niels (
     niels_t n,
     mask_t neg
 ) {
-    cryptonite_gf_cond_swap(n->a, n->b, neg);
-    cryptonite_gf_cond_neg(n->c, neg);
+    crypton_gf_cond_swap(n->a, n->b, neg);
+    crypton_gf_cond_neg(n->c, neg);
 }
 
-static CRYPTONITE_DECAF_NOINLINE void pt_to_pniels (
+static CRYPTON_DECAF_NOINLINE void pt_to_pniels (
     pniels_t b,
     const point_t a
 ) {
-    cryptonite_gf_sub ( b->n->a, a->y, a->x );
-    cryptonite_gf_add ( b->n->b, a->x, a->y );
-    cryptonite_gf_mulw ( b->n->c, a->t, 2*TWISTED_D );
-    cryptonite_gf_add ( b->z, a->z, a->z );
+    crypton_gf_sub ( b->n->a, a->y, a->x );
+    crypton_gf_add ( b->n->b, a->x, a->y );
+    crypton_gf_mulw ( b->n->c, a->t, 2*TWISTED_D );
+    crypton_gf_add ( b->z, a->z, a->z );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void pniels_to_pt (
+static CRYPTON_DECAF_NOINLINE void pniels_to_pt (
     point_t e,
     const pniels_t d
 ) {
     gf eu;
-    cryptonite_gf_add ( eu, d->n->b, d->n->a );
-    cryptonite_gf_sub ( e->y, d->n->b, d->n->a );
-    cryptonite_gf_mul ( e->t, e->y, eu);
-    cryptonite_gf_mul ( e->x, d->z, e->y );
-    cryptonite_gf_mul ( e->y, d->z, eu );
-    cryptonite_gf_sqr ( e->z, d->z );
+    crypton_gf_add ( eu, d->n->b, d->n->a );
+    crypton_gf_sub ( e->y, d->n->b, d->n->a );
+    crypton_gf_mul ( e->t, e->y, eu);
+    crypton_gf_mul ( e->x, d->z, e->y );
+    crypton_gf_mul ( e->y, d->z, eu );
+    crypton_gf_sqr ( e->z, d->z );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void
+static CRYPTON_DECAF_NOINLINE void
 niels_to_pt (
     point_t e,
     const niels_t n
 ) {
-    cryptonite_gf_add ( e->y, n->b, n->a );
-    cryptonite_gf_sub ( e->x, n->b, n->a );
-    cryptonite_gf_mul ( e->t, e->y, e->x );
-    cryptonite_gf_copy ( e->z, ONE );
+    crypton_gf_add ( e->y, n->b, n->a );
+    crypton_gf_sub ( e->x, n->b, n->a );
+    crypton_gf_mul ( e->t, e->y, e->x );
+    crypton_gf_copy ( e->z, ONE );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void
+static CRYPTON_DECAF_NOINLINE void
 add_niels_to_pt (
     point_t d,
     const niels_t e,
     int before_double
 ) {
     gf a, b, c;
-    cryptonite_gf_sub_nr ( b, d->y, d->x ); /* 3+e */
-    cryptonite_gf_mul ( a, e->a, b );
-    cryptonite_gf_add_nr ( b, d->x, d->y ); /* 2+e */
-    cryptonite_gf_mul ( d->y, e->b, b );
-    cryptonite_gf_mul ( d->x, e->c, d->t );
-    cryptonite_gf_add_nr ( c, a, d->y );    /* 2+e */
-    cryptonite_gf_sub_nr ( b, d->y, a );    /* 3+e */
-    cryptonite_gf_sub_nr ( d->y, d->z, d->x ); /* 3+e */
-    cryptonite_gf_add_nr ( a, d->x, d->z ); /* 2+e */
-    cryptonite_gf_mul ( d->z, a, d->y );
-    cryptonite_gf_mul ( d->x, d->y, b );
-    cryptonite_gf_mul ( d->y, a, c );
-    if (!before_double) cryptonite_gf_mul ( d->t, b, c );
+    crypton_gf_sub_nr ( b, d->y, d->x ); /* 3+e */
+    crypton_gf_mul ( a, e->a, b );
+    crypton_gf_add_nr ( b, d->x, d->y ); /* 2+e */
+    crypton_gf_mul ( d->y, e->b, b );
+    crypton_gf_mul ( d->x, e->c, d->t );
+    crypton_gf_add_nr ( c, a, d->y );    /* 2+e */
+    crypton_gf_sub_nr ( b, d->y, a );    /* 3+e */
+    crypton_gf_sub_nr ( d->y, d->z, d->x ); /* 3+e */
+    crypton_gf_add_nr ( a, d->x, d->z ); /* 2+e */
+    crypton_gf_mul ( d->z, a, d->y );
+    crypton_gf_mul ( d->x, d->y, b );
+    crypton_gf_mul ( d->y, a, c );
+    if (!before_double) crypton_gf_mul ( d->t, b, c );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void
+static CRYPTON_DECAF_NOINLINE void
 sub_niels_from_pt (
     point_t d,
     const niels_t e,
     int before_double
 ) {
     gf a, b, c;
-    cryptonite_gf_sub_nr ( b, d->y, d->x ); /* 3+e */
-    cryptonite_gf_mul ( a, e->b, b );
-    cryptonite_gf_add_nr ( b, d->x, d->y ); /* 2+e */
-    cryptonite_gf_mul ( d->y, e->a, b );
-    cryptonite_gf_mul ( d->x, e->c, d->t );
-    cryptonite_gf_add_nr ( c, a, d->y );    /* 2+e */
-    cryptonite_gf_sub_nr ( b, d->y, a );    /* 3+e */
-    cryptonite_gf_add_nr ( d->y, d->z, d->x ); /* 2+e */
-    cryptonite_gf_sub_nr ( a, d->z, d->x ); /* 3+e */
-    cryptonite_gf_mul ( d->z, a, d->y );
-    cryptonite_gf_mul ( d->x, d->y, b );
-    cryptonite_gf_mul ( d->y, a, c );
-    if (!before_double) cryptonite_gf_mul ( d->t, b, c );
+    crypton_gf_sub_nr ( b, d->y, d->x ); /* 3+e */
+    crypton_gf_mul ( a, e->b, b );
+    crypton_gf_add_nr ( b, d->x, d->y ); /* 2+e */
+    crypton_gf_mul ( d->y, e->a, b );
+    crypton_gf_mul ( d->x, e->c, d->t );
+    crypton_gf_add_nr ( c, a, d->y );    /* 2+e */
+    crypton_gf_sub_nr ( b, d->y, a );    /* 3+e */
+    crypton_gf_add_nr ( d->y, d->z, d->x ); /* 2+e */
+    crypton_gf_sub_nr ( a, d->z, d->x ); /* 3+e */
+    crypton_gf_mul ( d->z, a, d->y );
+    crypton_gf_mul ( d->x, d->y, b );
+    crypton_gf_mul ( d->y, a, c );
+    if (!before_double) crypton_gf_mul ( d->t, b, c );
 }
 
 static void
@@ -518,8 +518,8 @@ add_pniels_to_pt (
     int before_double
 ) {
     gf L0;
-    cryptonite_gf_mul ( L0, p->z, pn->z );
-    cryptonite_gf_copy ( p->z, L0 );
+    crypton_gf_mul ( L0, p->z, pn->z );
+    crypton_gf_copy ( p->z, L0 );
     add_niels_to_pt( p, pn->n, before_double );
 }
 
@@ -530,12 +530,12 @@ sub_pniels_from_pt (
     int before_double
 ) {
     gf L0;
-    cryptonite_gf_mul ( L0, p->z, pn->z );
-    cryptonite_gf_copy ( p->z, L0 );
+    crypton_gf_mul ( L0, p->z, pn->z );
+    crypton_gf_copy ( p->z, L0 );
     sub_niels_from_pt( p, pn->n, before_double );
 }
 
-static CRYPTONITE_DECAF_NOINLINE void
+static CRYPTON_DECAF_NOINLINE void
 prepare_fixed_window(
     pniels_t *multiples,
     const point_t b,
@@ -554,8 +554,8 @@ prepare_fixed_window(
         pt_to_pniels(multiples[i], tmp);
     }
     
-    cryptonite_decaf_bzero(pn,sizeof(pn));
-    cryptonite_decaf_bzero(tmp,sizeof(tmp));
+    crypton_decaf_bzero(pn,sizeof(pn));
+    crypton_decaf_bzero(tmp,sizeof(tmp));
 }
 
 void API_NS(point_scalarmul) (
@@ -563,7 +563,7 @@ void API_NS(point_scalarmul) (
     const point_t b,
     const scalar_t scalar
 ) {
-    const int WINDOW = CRYPTONITE_DECAF_WINDOW_BITS,
+    const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
         NTABLE = 1<<(WINDOW-1);
@@ -612,10 +612,10 @@ void API_NS(point_scalarmul) (
     /* Write out the answer */
     API_NS(point_copy)(a,tmp);
     
-    cryptonite_decaf_bzero(scalar1x,sizeof(scalar1x));
-    cryptonite_decaf_bzero(pn,sizeof(pn));
-    cryptonite_decaf_bzero(multiples,sizeof(multiples));
-    cryptonite_decaf_bzero(tmp,sizeof(tmp));
+    crypton_decaf_bzero(scalar1x,sizeof(scalar1x));
+    crypton_decaf_bzero(pn,sizeof(pn));
+    crypton_decaf_bzero(multiples,sizeof(multiples));
+    crypton_decaf_bzero(tmp,sizeof(tmp));
 }
 
 void API_NS(point_double_scalarmul) (
@@ -625,7 +625,7 @@ void API_NS(point_double_scalarmul) (
     const point_t c,
     const scalar_t scalarc
 ) {
-    const int WINDOW = CRYPTONITE_DECAF_WINDOW_BITS,
+    const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
         NTABLE = 1<<(WINDOW-1);
@@ -686,12 +686,12 @@ void API_NS(point_double_scalarmul) (
     API_NS(point_copy)(a,tmp);
     
 
-    cryptonite_decaf_bzero(scalar1x,sizeof(scalar1x));
-    cryptonite_decaf_bzero(scalar2x,sizeof(scalar2x));
-    cryptonite_decaf_bzero(pn,sizeof(pn));
-    cryptonite_decaf_bzero(multiples1,sizeof(multiples1));
-    cryptonite_decaf_bzero(multiples2,sizeof(multiples2));
-    cryptonite_decaf_bzero(tmp,sizeof(tmp));
+    crypton_decaf_bzero(scalar1x,sizeof(scalar1x));
+    crypton_decaf_bzero(scalar2x,sizeof(scalar2x));
+    crypton_decaf_bzero(pn,sizeof(pn));
+    crypton_decaf_bzero(multiples1,sizeof(multiples1));
+    crypton_decaf_bzero(multiples2,sizeof(multiples2));
+    crypton_decaf_bzero(tmp,sizeof(tmp));
 }
 
 void API_NS(point_dual_scalarmul) (
@@ -701,7 +701,7 @@ void API_NS(point_dual_scalarmul) (
     const scalar_t scalar1,
     const scalar_t scalar2
 ) {
-    const int WINDOW = CRYPTONITE_DECAF_WINDOW_BITS,
+    const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
         NTABLE = 1<<(WINDOW-1);
@@ -785,27 +785,27 @@ void API_NS(point_dual_scalarmul) (
         API_NS(point_copy)(a2, multiples2[0]);
     }
 
-    cryptonite_decaf_bzero(scalar1x,sizeof(scalar1x));
-    cryptonite_decaf_bzero(scalar2x,sizeof(scalar2x));
-    cryptonite_decaf_bzero(pn,sizeof(pn));
-    cryptonite_decaf_bzero(multiples1,sizeof(multiples1));
-    cryptonite_decaf_bzero(multiples2,sizeof(multiples2));
-    cryptonite_decaf_bzero(tmp,sizeof(tmp));
-    cryptonite_decaf_bzero(working,sizeof(working));
+    crypton_decaf_bzero(scalar1x,sizeof(scalar1x));
+    crypton_decaf_bzero(scalar2x,sizeof(scalar2x));
+    crypton_decaf_bzero(pn,sizeof(pn));
+    crypton_decaf_bzero(multiples1,sizeof(multiples1));
+    crypton_decaf_bzero(multiples2,sizeof(multiples2));
+    crypton_decaf_bzero(tmp,sizeof(tmp));
+    crypton_decaf_bzero(working,sizeof(working));
 }
 
-cryptonite_decaf_bool_t API_NS(point_eq) ( const point_t p, const point_t q ) {
+crypton_decaf_bool_t API_NS(point_eq) ( const point_t p, const point_t q ) {
     /* equality mod 2-torsion compares x/y */
     gf a, b;
-    cryptonite_gf_mul ( a, p->y, q->x );
-    cryptonite_gf_mul ( b, q->y, p->x );
-    mask_t succ = cryptonite_gf_eq(a,b);
+    crypton_gf_mul ( a, p->y, q->x );
+    crypton_gf_mul ( b, q->y, p->x );
+    mask_t succ = crypton_gf_eq(a,b);
     
     #if (COFACTOR == 8) && IMAGINE_TWIST
-        cryptonite_gf_mul ( a, p->y, q->y );
-        cryptonite_gf_mul ( b, q->x, p->x );
+        crypton_gf_mul ( a, p->y, q->y );
+        crypton_gf_mul ( b, q->x, p->x );
         #if !(IMAGINE_TWIST)
-            cryptonite_gf_sub ( a, ZERO, a );
+            crypton_gf_sub ( a, ZERO, a );
         #else
            /* Interesting note: the 4tor would normally be rotation.
             * But because of the *i twist, it's actually
@@ -814,28 +814,28 @@ cryptonite_decaf_bool_t API_NS(point_eq) ( const point_t p, const point_t q ) {
     
            /* No code, just a comment. */
         #endif
-        succ |= cryptonite_gf_eq(a,b);
+        succ |= crypton_gf_eq(a,b);
     #endif
     
     return mask_to_bool(succ);
 }
 
-cryptonite_decaf_bool_t API_NS(point_valid) (
+crypton_decaf_bool_t API_NS(point_valid) (
     const point_t p
 ) {
     gf a,b,c;
-    cryptonite_gf_mul(a,p->x,p->y);
-    cryptonite_gf_mul(b,p->z,p->t);
-    mask_t out = cryptonite_gf_eq(a,b);
-    cryptonite_gf_sqr(a,p->x);
-    cryptonite_gf_sqr(b,p->y);
-    cryptonite_gf_sub(a,b,a);
-    cryptonite_gf_sqr(b,p->t);
-    cryptonite_gf_mulw(c,b,TWISTED_D);
-    cryptonite_gf_sqr(b,p->z);
-    cryptonite_gf_add(b,b,c);
-    out &= cryptonite_gf_eq(a,b);
-    out &= ~cryptonite_gf_eq(p->z,ZERO);
+    crypton_gf_mul(a,p->x,p->y);
+    crypton_gf_mul(b,p->z,p->t);
+    mask_t out = crypton_gf_eq(a,b);
+    crypton_gf_sqr(a,p->x);
+    crypton_gf_sqr(b,p->y);
+    crypton_gf_sub(a,b,a);
+    crypton_gf_sqr(b,p->t);
+    crypton_gf_mulw(c,b,TWISTED_D);
+    crypton_gf_sqr(b,p->z);
+    crypton_gf_add(b,b,c);
+    out &= crypton_gf_eq(a,b);
+    out &= ~crypton_gf_eq(p->z,ZERO);
     return mask_to_bool(out);
 }
 
@@ -845,16 +845,16 @@ void API_NS(point_debugging_torque) (
 ) {
 #if COFACTOR == 8 && IMAGINE_TWIST
     gf tmp;
-    cryptonite_gf_mul(tmp,p->x,SQRT_MINUS_ONE);
-    cryptonite_gf_mul(q->x,p->y,SQRT_MINUS_ONE);
-    cryptonite_gf_copy(q->y,tmp);
-    cryptonite_gf_copy(q->z,p->z);
-    cryptonite_gf_sub(q->t,ZERO,p->t);
+    crypton_gf_mul(tmp,p->x,SQRT_MINUS_ONE);
+    crypton_gf_mul(q->x,p->y,SQRT_MINUS_ONE);
+    crypton_gf_copy(q->y,tmp);
+    crypton_gf_copy(q->z,p->z);
+    crypton_gf_sub(q->t,ZERO,p->t);
 #else
-    cryptonite_gf_sub(q->x,ZERO,p->x);
-    cryptonite_gf_sub(q->y,ZERO,p->y);
-    cryptonite_gf_copy(q->z,p->z);
-    cryptonite_gf_copy(q->t,p->t);
+    crypton_gf_sub(q->x,ZERO,p->x);
+    crypton_gf_sub(q->y,ZERO,p->y);
+    crypton_gf_copy(q->z,p->z);
+    crypton_gf_copy(q->t,p->t);
 #endif
 }
 
@@ -865,19 +865,19 @@ void API_NS(point_debugging_pscale) (
 ) {
     gf gfac,tmp;
     /* NB this means you'll never pscale by negative numbers for p521 */
-    ignore_result(cryptonite_gf_deserialize(gfac,factor,0));
-    cryptonite_gf_cond_sel(gfac,gfac,ONE,cryptonite_gf_eq(gfac,ZERO));
-    cryptonite_gf_mul(tmp,p->x,gfac);
-    cryptonite_gf_copy(q->x,tmp);
-    cryptonite_gf_mul(tmp,p->y,gfac);
-    cryptonite_gf_copy(q->y,tmp);
-    cryptonite_gf_mul(tmp,p->z,gfac);
-    cryptonite_gf_copy(q->z,tmp);
-    cryptonite_gf_mul(tmp,p->t,gfac);
-    cryptonite_gf_copy(q->t,tmp);
+    ignore_result(crypton_gf_deserialize(gfac,factor,0));
+    crypton_gf_cond_sel(gfac,gfac,ONE,crypton_gf_eq(gfac,ZERO));
+    crypton_gf_mul(tmp,p->x,gfac);
+    crypton_gf_copy(q->x,tmp);
+    crypton_gf_mul(tmp,p->y,gfac);
+    crypton_gf_copy(q->y,tmp);
+    crypton_gf_mul(tmp,p->z,gfac);
+    crypton_gf_copy(q->z,tmp);
+    crypton_gf_mul(tmp,p->t,gfac);
+    crypton_gf_copy(q->t,tmp);
 }
 
-static void cryptonite_gf_batch_invert (
+static void crypton_gf_batch_invert (
     gf *__restrict__ out,
     const gf *in,
     unsigned int n
@@ -885,20 +885,20 @@ static void cryptonite_gf_batch_invert (
     gf t1;
     assert(n>1);
   
-    cryptonite_gf_copy(out[1], in[0]);
+    crypton_gf_copy(out[1], in[0]);
     int i;
     for (i=1; i<(int) (n-1); i++) {
-        cryptonite_gf_mul(out[i+1], out[i], in[i]);
+        crypton_gf_mul(out[i+1], out[i], in[i]);
     }
-    cryptonite_gf_mul(out[0], out[n-1], in[n-1]);
+    crypton_gf_mul(out[0], out[n-1], in[n-1]);
 
-    cryptonite_gf_invert(out[0], out[0], 1);
+    crypton_gf_invert(out[0], out[0], 1);
 
     for (i=n-1; i>0; i--) {
-        cryptonite_gf_mul(t1, out[i], out[0]);
-        cryptonite_gf_copy(out[i], t1);
-        cryptonite_gf_mul(t1, out[0], in[i]);
-        cryptonite_gf_copy(out[0], t1);
+        crypton_gf_mul(t1, out[i], out[0]);
+        crypton_gf_copy(out[i], t1);
+        crypton_gf_mul(t1, out[0], in[i]);
+        crypton_gf_copy(out[0], t1);
     }
 }
 
@@ -910,23 +910,23 @@ static void batch_normalize_niels (
 ) {
     int i;
     gf product;
-    cryptonite_gf_batch_invert(zis, zs, n);
+    crypton_gf_batch_invert(zis, zs, n);
 
     for (i=0; i<n; i++) {
-        cryptonite_gf_mul(product, table[i]->a, zis[i]);
-        cryptonite_gf_strong_reduce(product);
-        cryptonite_gf_copy(table[i]->a, product);
+        crypton_gf_mul(product, table[i]->a, zis[i]);
+        crypton_gf_strong_reduce(product);
+        crypton_gf_copy(table[i]->a, product);
         
-        cryptonite_gf_mul(product, table[i]->b, zis[i]);
-        cryptonite_gf_strong_reduce(product);
-        cryptonite_gf_copy(table[i]->b, product);
+        crypton_gf_mul(product, table[i]->b, zis[i]);
+        crypton_gf_strong_reduce(product);
+        crypton_gf_copy(table[i]->b, product);
         
-        cryptonite_gf_mul(product, table[i]->c, zis[i]);
-        cryptonite_gf_strong_reduce(product);
-        cryptonite_gf_copy(table[i]->c, product);
+        crypton_gf_mul(product, table[i]->c, zis[i]);
+        crypton_gf_strong_reduce(product);
+        crypton_gf_copy(table[i]->c, product);
     }
     
-    cryptonite_decaf_bzero(product,sizeof(product));
+    crypton_decaf_bzero(product,sizeof(product));
 }
 
 void API_NS(precompute) (
@@ -968,7 +968,7 @@ void API_NS(precompute) (
 
             pt_to_pniels(pn_tmp, start);
             memcpy(table->table[idx], pn_tmp->n, sizeof(pn_tmp->n));
-            cryptonite_gf_copy(zs[idx], pn_tmp->z);
+            crypton_gf_copy(zs[idx], pn_tmp->z);
 			
             if (j >= (1u<<(t-1)) - 1) break;
             int delta = (j+1) ^ ((j+1)>>1) ^ gray;
@@ -986,15 +986,15 @@ void API_NS(precompute) (
     
     batch_normalize_niels(table->table,(const gf *)zs,zis,n<<(t-1));
     
-    cryptonite_decaf_bzero(zs,sizeof(zs));
-    cryptonite_decaf_bzero(zis,sizeof(zis));
-    cryptonite_decaf_bzero(pn_tmp,sizeof(pn_tmp));
-    cryptonite_decaf_bzero(working,sizeof(working));
-    cryptonite_decaf_bzero(start,sizeof(start));
-    cryptonite_decaf_bzero(doubles,sizeof(doubles));
+    crypton_decaf_bzero(zs,sizeof(zs));
+    crypton_decaf_bzero(zis,sizeof(zis));
+    crypton_decaf_bzero(pn_tmp,sizeof(pn_tmp));
+    crypton_decaf_bzero(working,sizeof(working));
+    crypton_decaf_bzero(start,sizeof(start));
+    crypton_decaf_bzero(doubles,sizeof(doubles));
 }
 
-static CRYPTONITE_DECAF_INLINE void
+static CRYPTON_DECAF_INLINE void
 constant_time_lookup_niels (
     niels_s *__restrict__ ni,
     const niels_t *table,
@@ -1047,30 +1047,30 @@ void API_NS(precomputed_scalarmul) (
         }
     }
     
-    cryptonite_decaf_bzero(ni,sizeof(ni));
-    cryptonite_decaf_bzero(scalar1x,sizeof(scalar1x));
+    crypton_decaf_bzero(ni,sizeof(ni));
+    crypton_decaf_bzero(scalar1x,sizeof(scalar1x));
 }
 
 void API_NS(point_cond_sel) (
     point_t out,
     const point_t a,
     const point_t b,
-    cryptonite_decaf_bool_t pick_b
+    crypton_decaf_bool_t pick_b
 ) {
     constant_time_select(out,a,b,sizeof(point_t),bool_to_mask(pick_b),0);
 }
 
 /* FUTURE: restore Curve25519 Montgomery ladder? */
-cryptonite_decaf_error_t API_NS(direct_scalarmul) (
+crypton_decaf_error_t API_NS(direct_scalarmul) (
     uint8_t scaled[SER_BYTES],
     const uint8_t base[SER_BYTES],
     const scalar_t scalar,
-    cryptonite_decaf_bool_t allow_identity,
-    cryptonite_decaf_bool_t short_circuit
+    crypton_decaf_bool_t allow_identity,
+    crypton_decaf_bool_t short_circuit
 ) {
     point_t basep;
-    cryptonite_decaf_error_t succ = API_NS(point_decode)(basep, base, allow_identity);
-    if (short_circuit && succ != CRYPTONITE_DECAF_SUCCESS) return succ;
+    crypton_decaf_error_t succ = API_NS(point_decode)(basep, base, allow_identity);
+    if (short_circuit && succ != CRYPTON_DECAF_SUCCESS) return succ;
     API_NS(point_cond_sel)(basep, API_NS(point_base), basep, succ);
     API_NS(point_scalarmul)(basep, basep, scalar);
     API_NS(point_encode)(scaled, basep);
@@ -1079,7 +1079,7 @@ cryptonite_decaf_error_t API_NS(direct_scalarmul) (
 }
 
 void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
-    uint8_t enc[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
+    uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const point_t p
 ) {
     
@@ -1102,102 +1102,102 @@ void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
          *   (y^2+x^2)/(y^2-x^2)
          */
         gf u;
-        cryptonite_gf_sqr ( x, q->x ); // x^2
-        cryptonite_gf_sqr ( t, q->y ); // y^2
-        cryptonite_gf_add( u, x, t ); // x^2 + y^2
-        cryptonite_gf_add( z, q->y, q->x );
-        cryptonite_gf_sqr ( y, z);
-        cryptonite_gf_sub ( y, u, y ); // -2xy
-        cryptonite_gf_sub ( z, t, x ); // y^2 - x^2
-        cryptonite_gf_sqr ( x, q->z );
-        cryptonite_gf_add ( t, x, x);
-        cryptonite_gf_sub ( t, t, z);  // 2z^2 - y^2 + x^2
-        cryptonite_gf_mul ( x, y, z ); // 2xy(y^2-x^2)
-        cryptonite_gf_mul ( y, u, t ); // (x^2+y^2)(2z^2-y^2+x^2)
-        cryptonite_gf_mul ( u, z, t );
-        cryptonite_gf_copy( z, u );
-        cryptonite_gf_mul ( u, x, SQRT_ONE_MINUS_D );
-        cryptonite_gf_copy( x, u );
-        cryptonite_decaf_bzero(u,sizeof(u));
+        crypton_gf_sqr ( x, q->x ); // x^2
+        crypton_gf_sqr ( t, q->y ); // y^2
+        crypton_gf_add( u, x, t ); // x^2 + y^2
+        crypton_gf_add( z, q->y, q->x );
+        crypton_gf_sqr ( y, z);
+        crypton_gf_sub ( y, u, y ); // -2xy
+        crypton_gf_sub ( z, t, x ); // y^2 - x^2
+        crypton_gf_sqr ( x, q->z );
+        crypton_gf_add ( t, x, x);
+        crypton_gf_sub ( t, t, z);  // 2z^2 - y^2 + x^2
+        crypton_gf_mul ( x, y, z ); // 2xy(y^2-x^2)
+        crypton_gf_mul ( y, u, t ); // (x^2+y^2)(2z^2-y^2+x^2)
+        crypton_gf_mul ( u, z, t );
+        crypton_gf_copy( z, u );
+        crypton_gf_mul ( u, x, SQRT_ONE_MINUS_D );
+        crypton_gf_copy( x, u );
+        crypton_decaf_bzero(u,sizeof(u));
     }
 #elif IMAGINE_TWIST
     {
         API_NS(point_double)(q,q);
         API_NS(point_double)(q,q);
-        cryptonite_gf_mul_qnr(x, q->x);
-        cryptonite_gf_copy(y, q->y);
-        cryptonite_gf_copy(z, q->z);
+        crypton_gf_mul_qnr(x, q->x);
+        crypton_gf_copy(y, q->y);
+        crypton_gf_copy(z, q->z);
     }
 #else
     {
         /* 4-isogeny: 2xy/(y^+x^2), (y^2-x^2)/(2z^2-y^2+x^2) */
         gf u;
-        cryptonite_gf_sqr ( x, q->x );
-        cryptonite_gf_sqr ( t, q->y );
-        cryptonite_gf_add( u, x, t );
-        cryptonite_gf_add( z, q->y, q->x );
-        cryptonite_gf_sqr ( y, z);
-        cryptonite_gf_sub ( y, u, y );
-        cryptonite_gf_sub ( z, t, x );
-        cryptonite_gf_sqr ( x, q->z );
-        cryptonite_gf_add ( t, x, x); 
-        cryptonite_gf_sub ( t, t, z);
-        cryptonite_gf_mul ( x, t, y );
-        cryptonite_gf_mul ( y, z, u );
-        cryptonite_gf_mul ( z, u, t );
-        cryptonite_decaf_bzero(u,sizeof(u));
+        crypton_gf_sqr ( x, q->x );
+        crypton_gf_sqr ( t, q->y );
+        crypton_gf_add( u, x, t );
+        crypton_gf_add( z, q->y, q->x );
+        crypton_gf_sqr ( y, z);
+        crypton_gf_sub ( y, u, y );
+        crypton_gf_sub ( z, t, x );
+        crypton_gf_sqr ( x, q->z );
+        crypton_gf_add ( t, x, x); 
+        crypton_gf_sub ( t, t, z);
+        crypton_gf_mul ( x, t, y );
+        crypton_gf_mul ( y, z, u );
+        crypton_gf_mul ( z, u, t );
+        crypton_decaf_bzero(u,sizeof(u));
     }
 #endif
     /* Affinize */
-    cryptonite_gf_invert(z,z,1);
-    cryptonite_gf_mul(t,x,z);
-    cryptonite_gf_mul(x,y,z);
+    crypton_gf_invert(z,z,1);
+    crypton_gf_mul(t,x,z);
+    crypton_gf_mul(x,y,z);
     
     /* Encode */
-    enc[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES-1] = 0;
-    cryptonite_gf_serialize(enc, x, 1);
-    enc[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES-1] |= 0x80 & cryptonite_gf_lobit(t);
+    enc[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] = 0;
+    crypton_gf_serialize(enc, x, 1);
+    enc[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] |= 0x80 & crypton_gf_lobit(t);
 
-    cryptonite_decaf_bzero(x,sizeof(x));
-    cryptonite_decaf_bzero(y,sizeof(y));
-    cryptonite_decaf_bzero(z,sizeof(z));
-    cryptonite_decaf_bzero(t,sizeof(t));
+    crypton_decaf_bzero(x,sizeof(x));
+    crypton_decaf_bzero(y,sizeof(y));
+    crypton_decaf_bzero(z,sizeof(z));
+    crypton_decaf_bzero(t,sizeof(t));
     API_NS(point_destroy)(q);
 }
 
 
-cryptonite_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
+crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
     point_t p,
-    const uint8_t enc[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES]
+    const uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
 ) {
-    uint8_t enc2[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES];
+    uint8_t enc2[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
     memcpy(enc2,enc,sizeof(enc2));
 
-    mask_t low = ~word_is_zero(enc2[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES-1] & 0x80);
-    enc2[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES-1] &= ~0x80;
+    mask_t low = ~word_is_zero(enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] & 0x80);
+    enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] &= ~0x80;
     
-    mask_t succ = cryptonite_gf_deserialize(p->y, enc2, 1);
+    mask_t succ = crypton_gf_deserialize(p->y, enc2, 1);
 #if 0 == 0
-    succ &= word_is_zero(enc2[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES-1]);
+    succ &= word_is_zero(enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1]);
 #endif
 
-    cryptonite_gf_sqr(p->x,p->y);
-    cryptonite_gf_sub(p->z,ONE,p->x); /* num = 1-y^2 */
+    crypton_gf_sqr(p->x,p->y);
+    crypton_gf_sub(p->z,ONE,p->x); /* num = 1-y^2 */
     #if EDDSA_USE_SIGMA_ISOGENY
-        cryptonite_gf_mulw(p->t,p->z,EDWARDS_D); /* d-dy^2 */
-        cryptonite_gf_mulw(p->x,p->z,EDWARDS_D-1); /* num = (1-y^2)(d-1) */
-        cryptonite_gf_copy(p->z,p->x);
+        crypton_gf_mulw(p->t,p->z,EDWARDS_D); /* d-dy^2 */
+        crypton_gf_mulw(p->x,p->z,EDWARDS_D-1); /* num = (1-y^2)(d-1) */
+        crypton_gf_copy(p->z,p->x);
     #else
-        cryptonite_gf_mulw(p->t,p->x,EDWARDS_D); /* dy^2 */
+        crypton_gf_mulw(p->t,p->x,EDWARDS_D); /* dy^2 */
     #endif
-    cryptonite_gf_sub(p->t,ONE,p->t); /* denom = 1-dy^2 or 1-d + dy^2 */
+    crypton_gf_sub(p->t,ONE,p->t); /* denom = 1-dy^2 or 1-d + dy^2 */
     
-    cryptonite_gf_mul(p->x,p->z,p->t);
-    succ &= cryptonite_gf_isr(p->t,p->x); /* 1/sqrt(num * denom) */
+    crypton_gf_mul(p->x,p->z,p->t);
+    succ &= crypton_gf_isr(p->t,p->x); /* 1/sqrt(num * denom) */
     
-    cryptonite_gf_mul(p->x,p->t,p->z); /* sqrt(num / denom) */
-    cryptonite_gf_cond_neg(p->x,~cryptonite_gf_lobit(p->x)^low);
-    cryptonite_gf_copy(p->z,ONE);
+    crypton_gf_mul(p->x,p->t,p->z); /* sqrt(num / denom) */
+    crypton_gf_cond_neg(p->x,~crypton_gf_lobit(p->x)^low);
+    crypton_gf_copy(p->z,ONE);
   
     #if EDDSA_USE_SIGMA_ISOGENY
     {
@@ -1212,73 +1212,73 @@ cryptonite_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
         *   (y^2+x^2)/(y^2-x^2)
         */
         gf a, b, c, d;
-        cryptonite_gf_sqr ( c, p->x );
-        cryptonite_gf_sqr ( a, p->y );
-        cryptonite_gf_add ( d, c, a ); // x^2 + y^2
-        cryptonite_gf_add ( p->t, p->y, p->x );
-        cryptonite_gf_sqr ( b, p->t );
-        cryptonite_gf_sub ( b, b, d ); // 2xy
-        cryptonite_gf_sub ( p->t, a, c ); // y^2 - x^2
-        cryptonite_gf_sqr ( p->x, p->z );
-        cryptonite_gf_add ( p->z, p->x, p->x );
-        cryptonite_gf_sub ( a, p->z, p->t ); // 2z^2 - y^2 + x^2
-        cryptonite_gf_mul ( c, a, SQRT_ONE_MINUS_D );
-        cryptonite_gf_mul ( p->x, b, p->t); // (2xy)(y^2-x^2)
-        cryptonite_gf_mul ( p->z, p->t, c ); // (y^2-x^2)sd(2z^2 - y^2 + x^2)
-        cryptonite_gf_mul ( p->y, d, c ); // (y^2+x^2)sd(2z^2 - y^2 + x^2)
-        cryptonite_gf_mul ( p->t, d, b );
-        cryptonite_decaf_bzero(a,sizeof(a));
-        cryptonite_decaf_bzero(b,sizeof(b));
-        cryptonite_decaf_bzero(c,sizeof(c));
-        cryptonite_decaf_bzero(d,sizeof(d));
+        crypton_gf_sqr ( c, p->x );
+        crypton_gf_sqr ( a, p->y );
+        crypton_gf_add ( d, c, a ); // x^2 + y^2
+        crypton_gf_add ( p->t, p->y, p->x );
+        crypton_gf_sqr ( b, p->t );
+        crypton_gf_sub ( b, b, d ); // 2xy
+        crypton_gf_sub ( p->t, a, c ); // y^2 - x^2
+        crypton_gf_sqr ( p->x, p->z );
+        crypton_gf_add ( p->z, p->x, p->x );
+        crypton_gf_sub ( a, p->z, p->t ); // 2z^2 - y^2 + x^2
+        crypton_gf_mul ( c, a, SQRT_ONE_MINUS_D );
+        crypton_gf_mul ( p->x, b, p->t); // (2xy)(y^2-x^2)
+        crypton_gf_mul ( p->z, p->t, c ); // (y^2-x^2)sd(2z^2 - y^2 + x^2)
+        crypton_gf_mul ( p->y, d, c ); // (y^2+x^2)sd(2z^2 - y^2 + x^2)
+        crypton_gf_mul ( p->t, d, b );
+        crypton_decaf_bzero(a,sizeof(a));
+        crypton_decaf_bzero(b,sizeof(b));
+        crypton_decaf_bzero(c,sizeof(c));
+        crypton_decaf_bzero(d,sizeof(d));
     } 
     #elif IMAGINE_TWIST
     {
-        cryptonite_gf_mul(p->t,p->x,SQRT_MINUS_ONE);
-        cryptonite_gf_copy(p->x,p->t);
-        cryptonite_gf_mul(p->t,p->x,p->y);
+        crypton_gf_mul(p->t,p->x,SQRT_MINUS_ONE);
+        crypton_gf_copy(p->x,p->t);
+        crypton_gf_mul(p->t,p->x,p->y);
     }
     #else
     {
         /* 4-isogeny 2xy/(y^2-ax^2), (y^2+ax^2)/(2-y^2-ax^2) */
         gf a, b, c, d;
-        cryptonite_gf_sqr ( c, p->x );
-        cryptonite_gf_sqr ( a, p->y );
-        cryptonite_gf_add ( d, c, a );
-        cryptonite_gf_add ( p->t, p->y, p->x );
-        cryptonite_gf_sqr ( b, p->t );
-        cryptonite_gf_sub ( b, b, d );
-        cryptonite_gf_sub ( p->t, a, c );
-        cryptonite_gf_sqr ( p->x, p->z );
-        cryptonite_gf_add ( p->z, p->x, p->x );
-        cryptonite_gf_sub ( a, p->z, d );
-        cryptonite_gf_mul ( p->x, a, b );
-        cryptonite_gf_mul ( p->z, p->t, a );
-        cryptonite_gf_mul ( p->y, p->t, d );
-        cryptonite_gf_mul ( p->t, b, d );
-        cryptonite_decaf_bzero(a,sizeof(a));
-        cryptonite_decaf_bzero(b,sizeof(b));
-        cryptonite_decaf_bzero(c,sizeof(c));
-        cryptonite_decaf_bzero(d,sizeof(d));
+        crypton_gf_sqr ( c, p->x );
+        crypton_gf_sqr ( a, p->y );
+        crypton_gf_add ( d, c, a );
+        crypton_gf_add ( p->t, p->y, p->x );
+        crypton_gf_sqr ( b, p->t );
+        crypton_gf_sub ( b, b, d );
+        crypton_gf_sub ( p->t, a, c );
+        crypton_gf_sqr ( p->x, p->z );
+        crypton_gf_add ( p->z, p->x, p->x );
+        crypton_gf_sub ( a, p->z, d );
+        crypton_gf_mul ( p->x, a, b );
+        crypton_gf_mul ( p->z, p->t, a );
+        crypton_gf_mul ( p->y, p->t, d );
+        crypton_gf_mul ( p->t, b, d );
+        crypton_decaf_bzero(a,sizeof(a));
+        crypton_decaf_bzero(b,sizeof(b));
+        crypton_decaf_bzero(c,sizeof(c));
+        crypton_decaf_bzero(d,sizeof(d));
     }
     #endif
     
-    cryptonite_decaf_bzero(enc2,sizeof(enc2));
+    crypton_decaf_bzero(enc2,sizeof(enc2));
     assert(API_NS(point_valid)(p) || ~succ);
-    return cryptonite_decaf_succeed_if(mask_to_bool(succ));
+    return crypton_decaf_succeed_if(mask_to_bool(succ));
 }
 
-cryptonite_decaf_error_t cryptonite_decaf_x448 (
+crypton_decaf_error_t crypton_decaf_x448 (
     uint8_t out[X_PUBLIC_BYTES],
     const uint8_t base[X_PUBLIC_BYTES],
     const uint8_t scalar[X_PRIVATE_BYTES]
 ) {
     gf x1, x2, z2, x3, z3, t1, t2;
-    ignore_result(cryptonite_gf_deserialize(x1,base,1));
-    cryptonite_gf_copy(x2,ONE);
-    cryptonite_gf_copy(z2,ZERO);
-    cryptonite_gf_copy(x3,x1);
-    cryptonite_gf_copy(z3,ONE);
+    ignore_result(crypton_gf_deserialize(x1,base,1));
+    crypton_gf_copy(x2,ONE);
+    crypton_gf_copy(z2,ZERO);
+    crypton_gf_copy(x3,x1);
+    crypton_gf_copy(z3,ONE);
     
     int t;
     mask_t swap = 0;
@@ -1294,65 +1294,65 @@ cryptonite_decaf_error_t cryptonite_decaf_x448 (
         k_t = -k_t; /* set to all 0s or all 1s */
         
         swap ^= k_t;
-        cryptonite_gf_cond_swap(x2,x3,swap);
-        cryptonite_gf_cond_swap(z2,z3,swap);
+        crypton_gf_cond_swap(x2,x3,swap);
+        crypton_gf_cond_swap(z2,z3,swap);
         swap = k_t;
         
-        cryptonite_gf_add_nr(t1,x2,z2); /* A = x2 + z2 */        /* 2+e */
-        cryptonite_gf_sub_nr(t2,x2,z2); /* B = x2 - z2 */        /* 3+e */
-        cryptonite_gf_sub_nr(z2,x3,z3); /* D = x3 - z3 */        /* 3+e */
-        cryptonite_gf_mul(x2,t1,z2);    /* DA */
-        cryptonite_gf_add_nr(z2,z3,x3); /* C = x3 + z3 */        /* 2+e */
-        cryptonite_gf_mul(x3,t2,z2);    /* CB */
-        cryptonite_gf_sub_nr(z3,x2,x3); /* DA-CB */              /* 3+e */
-        cryptonite_gf_sqr(z2,z3);       /* (DA-CB)^2 */
-        cryptonite_gf_mul(z3,x1,z2);    /* z3 = x1(DA-CB)^2 */
-        cryptonite_gf_add_nr(z2,x2,x3); /* (DA+CB) */            /* 2+e */
-        cryptonite_gf_sqr(x3,z2);       /* x3 = (DA+CB)^2 */
+        crypton_gf_add_nr(t1,x2,z2); /* A = x2 + z2 */        /* 2+e */
+        crypton_gf_sub_nr(t2,x2,z2); /* B = x2 - z2 */        /* 3+e */
+        crypton_gf_sub_nr(z2,x3,z3); /* D = x3 - z3 */        /* 3+e */
+        crypton_gf_mul(x2,t1,z2);    /* DA */
+        crypton_gf_add_nr(z2,z3,x3); /* C = x3 + z3 */        /* 2+e */
+        crypton_gf_mul(x3,t2,z2);    /* CB */
+        crypton_gf_sub_nr(z3,x2,x3); /* DA-CB */              /* 3+e */
+        crypton_gf_sqr(z2,z3);       /* (DA-CB)^2 */
+        crypton_gf_mul(z3,x1,z2);    /* z3 = x1(DA-CB)^2 */
+        crypton_gf_add_nr(z2,x2,x3); /* (DA+CB) */            /* 2+e */
+        crypton_gf_sqr(x3,z2);       /* x3 = (DA+CB)^2 */
         
-        cryptonite_gf_sqr(z2,t1);       /* AA = A^2 */
-        cryptonite_gf_sqr(t1,t2);       /* BB = B^2 */
-        cryptonite_gf_mul(x2,z2,t1);    /* x2 = AA*BB */
-        cryptonite_gf_sub_nr(t2,z2,t1); /* E = AA-BB */          /* 3+e */
+        crypton_gf_sqr(z2,t1);       /* AA = A^2 */
+        crypton_gf_sqr(t1,t2);       /* BB = B^2 */
+        crypton_gf_mul(x2,z2,t1);    /* x2 = AA*BB */
+        crypton_gf_sub_nr(t2,z2,t1); /* E = AA-BB */          /* 3+e */
         
-        cryptonite_gf_mulw(t1,t2,-EDWARDS_D); /* E*-d = a24*E */
-        cryptonite_gf_add_nr(t1,t1,z2); /* AA + a24*E */         /* 2+e */
-        cryptonite_gf_mul(z2,t2,t1); /* z2 = E(AA+a24*E) */
+        crypton_gf_mulw(t1,t2,-EDWARDS_D); /* E*-d = a24*E */
+        crypton_gf_add_nr(t1,t1,z2); /* AA + a24*E */         /* 2+e */
+        crypton_gf_mul(z2,t2,t1); /* z2 = E(AA+a24*E) */
     }
     
     /* Finish */
-    cryptonite_gf_cond_swap(x2,x3,swap);
-    cryptonite_gf_cond_swap(z2,z3,swap);
-    cryptonite_gf_invert(z2,z2,0);
-    cryptonite_gf_mul(x1,x2,z2);
-    cryptonite_gf_serialize(out,x1,1);
-    mask_t nz = ~cryptonite_gf_eq(x1,ZERO);
+    crypton_gf_cond_swap(x2,x3,swap);
+    crypton_gf_cond_swap(z2,z3,swap);
+    crypton_gf_invert(z2,z2,0);
+    crypton_gf_mul(x1,x2,z2);
+    crypton_gf_serialize(out,x1,1);
+    mask_t nz = ~crypton_gf_eq(x1,ZERO);
     
-    cryptonite_decaf_bzero(x1,sizeof(x1));
-    cryptonite_decaf_bzero(x2,sizeof(x2));
-    cryptonite_decaf_bzero(z2,sizeof(z2));
-    cryptonite_decaf_bzero(x3,sizeof(x3));
-    cryptonite_decaf_bzero(z3,sizeof(z3));
-    cryptonite_decaf_bzero(t1,sizeof(t1));
-    cryptonite_decaf_bzero(t2,sizeof(t2));
+    crypton_decaf_bzero(x1,sizeof(x1));
+    crypton_decaf_bzero(x2,sizeof(x2));
+    crypton_decaf_bzero(z2,sizeof(z2));
+    crypton_decaf_bzero(x3,sizeof(x3));
+    crypton_decaf_bzero(z3,sizeof(z3));
+    crypton_decaf_bzero(t1,sizeof(t1));
+    crypton_decaf_bzero(t2,sizeof(t2));
     
-    return cryptonite_decaf_succeed_if(mask_to_bool(nz));
+    return crypton_decaf_succeed_if(mask_to_bool(nz));
 }
 
 /* Thanks Johan Pascal */
-void cryptonite_decaf_ed448_convert_public_key_to_x448 (
-    uint8_t x[CRYPTONITE_DECAF_X448_PUBLIC_BYTES],
-    const uint8_t ed[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES]
+void crypton_decaf_ed448_convert_public_key_to_x448 (
+    uint8_t x[CRYPTON_DECAF_X448_PUBLIC_BYTES],
+    const uint8_t ed[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
 ) {
     gf y;
     {
-        uint8_t enc2[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES];
+        uint8_t enc2[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
         memcpy(enc2,ed,sizeof(enc2));
 
         /* retrieve y from the ed compressed point */
-        enc2[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES-1] &= ~0x80;
-        ignore_result(cryptonite_gf_deserialize(y, enc2, 0));
-        cryptonite_decaf_bzero(enc2,sizeof(enc2));
+        enc2[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES-1] &= ~0x80;
+        ignore_result(crypton_gf_deserialize(y, enc2, 0));
+        crypton_decaf_bzero(enc2,sizeof(enc2));
     }
     
     {
@@ -1360,37 +1360,37 @@ void cryptonite_decaf_ed448_convert_public_key_to_x448 (
         
 #if EDDSA_USE_SIGMA_ISOGENY
         /* u = (1+y)/(1-y)*/
-        cryptonite_gf_add(n, y, ONE); /* n = y+1 */
-        cryptonite_gf_sub(d, ONE, y); /* d = 1-y */
-        cryptonite_gf_invert(d, d, 0); /* d = 1/(1-y) */
-        cryptonite_gf_mul(y, n, d); /* u = (y+1)/(1-y) */
-        cryptonite_gf_serialize(x,y,1);
+        crypton_gf_add(n, y, ONE); /* n = y+1 */
+        crypton_gf_sub(d, ONE, y); /* d = 1-y */
+        crypton_gf_invert(d, d, 0); /* d = 1/(1-y) */
+        crypton_gf_mul(y, n, d); /* u = (y+1)/(1-y) */
+        crypton_gf_serialize(x,y,1);
 #else /* EDDSA_USE_SIGMA_ISOGENY */
         /* u = y^2 * (1-dy^2) / (1-y^2) */
-        cryptonite_gf_sqr(n,y); /* y^2*/
-        cryptonite_gf_sub(d,ONE,n); /* 1-y^2*/
-        cryptonite_gf_invert(d,d,0); /* 1/(1-y^2)*/
-        cryptonite_gf_mul(y,n,d); /* y^2 / (1-y^2) */
-        cryptonite_gf_mulw(d,n,EDWARDS_D); /* dy^2*/
-        cryptonite_gf_sub(d, ONE, d); /* 1-dy^2*/
-        cryptonite_gf_mul(n, y, d); /* y^2 * (1-dy^2) / (1-y^2) */
-        cryptonite_gf_serialize(x,n,1);
+        crypton_gf_sqr(n,y); /* y^2*/
+        crypton_gf_sub(d,ONE,n); /* 1-y^2*/
+        crypton_gf_invert(d,d,0); /* 1/(1-y^2)*/
+        crypton_gf_mul(y,n,d); /* y^2 / (1-y^2) */
+        crypton_gf_mulw(d,n,EDWARDS_D); /* dy^2*/
+        crypton_gf_sub(d, ONE, d); /* 1-dy^2*/
+        crypton_gf_mul(n, y, d); /* y^2 * (1-dy^2) / (1-y^2) */
+        crypton_gf_serialize(x,n,1);
 #endif /* EDDSA_USE_SIGMA_ISOGENY */
         
-        cryptonite_decaf_bzero(y,sizeof(y));
-        cryptonite_decaf_bzero(n,sizeof(n));
-        cryptonite_decaf_bzero(d,sizeof(d));
+        crypton_decaf_bzero(y,sizeof(y));
+        crypton_decaf_bzero(n,sizeof(n));
+        crypton_decaf_bzero(d,sizeof(d));
     }
 }
 
-void cryptonite_decaf_x448_generate_key (
+void crypton_decaf_x448_generate_key (
     uint8_t out[X_PUBLIC_BYTES],
     const uint8_t scalar[X_PRIVATE_BYTES]
 ) {
-    cryptonite_decaf_x448_derive_public_key(out,scalar);
+    crypton_decaf_x448_derive_public_key(out,scalar);
 }
 
-void cryptonite_decaf_x448_derive_public_key (
+void crypton_decaf_x448_derive_public_key (
     uint8_t out[X_PUBLIC_BYTES],
     const uint8_t scalar[X_PRIVATE_BYTES]
 ) {
@@ -1423,20 +1423,20 @@ void cryptonite_decaf_x448_derive_public_key (
     
     /* Isogenize to Montgomery curve.
      *
-     * Why isn't this just a separate function, eg cryptonite_decaf_encode_like_x448?
+     * Why isn't this just a separate function, eg crypton_decaf_encode_like_x448?
      * Basically because in general it does the wrong thing if there is a cofactor
      * component in the input.  In this function though, there isn't a cofactor
      * component in the input.
      */
-    cryptonite_gf_invert(p->t,p->x,0); /* 1/x */
-    cryptonite_gf_mul(p->z,p->t,p->y); /* y/x */
-    cryptonite_gf_sqr(p->y,p->z); /* (y/x)^2 */
+    crypton_gf_invert(p->t,p->x,0); /* 1/x */
+    crypton_gf_mul(p->z,p->t,p->y); /* y/x */
+    crypton_gf_sqr(p->y,p->z); /* (y/x)^2 */
 #if IMAGINE_TWIST
-    cryptonite_gf_sub(p->y,ZERO,p->y);
+    crypton_gf_sub(p->y,ZERO,p->y);
 #endif
-    cryptonite_gf_serialize(out,p->y,1);
+    crypton_gf_serialize(out,p->y,1);
         
-    cryptonite_decaf_bzero(scalar2,sizeof(scalar2));
+    crypton_decaf_bzero(scalar2,sizeof(scalar2));
     API_NS(scalar_destroy)(the_scalar);
     API_NS(point_destroy)(p);
 }
@@ -1526,36 +1526,36 @@ prepare_wnaf_table(
     }
     
     API_NS(point_destroy)(tmp);
-    cryptonite_decaf_bzero(twop,sizeof(twop));
+    crypton_decaf_bzero(twop,sizeof(twop));
 }
 
 extern const gf API_NS(precomputed_wnaf_as_fe)[];
 static const niels_t *API_NS(wnaf_base) = (const niels_t *)API_NS(precomputed_wnaf_as_fe);
 const size_t API_NS(sizeof_precomputed_wnafs)
-    = sizeof(niels_t)<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS;
+    = sizeof(niels_t)<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS;
 
 void API_NS(precompute_wnafs) (
-    niels_t out[1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS],
+    niels_t out[1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS],
     const point_t base
 );
 
 void API_NS(precompute_wnafs) (
-    niels_t out[1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS],
+    niels_t out[1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS],
     const point_t base
 ) {
-    pniels_t tmp[1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS];
-    gf zs[1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS], zis[1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS];
+    pniels_t tmp[1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS];
+    gf zs[1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS], zis[1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS];
     int i;
-    prepare_wnaf_table(tmp,base,CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS);
-    for (i=0; i<1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS; i++) {
+    prepare_wnaf_table(tmp,base,CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS);
+    for (i=0; i<1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS; i++) {
         memcpy(out[i], tmp[i]->n, sizeof(niels_t));
-        cryptonite_gf_copy(zs[i], tmp[i]->z);
+        crypton_gf_copy(zs[i], tmp[i]->z);
     }
-    batch_normalize_niels(out, (const gf *)zs, zis, 1<<CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS);
+    batch_normalize_niels(out, (const gf *)zs, zis, 1<<CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS);
     
-    cryptonite_decaf_bzero(tmp,sizeof(tmp));
-    cryptonite_decaf_bzero(zs,sizeof(zs));
-    cryptonite_decaf_bzero(zis,sizeof(zis));
+    crypton_decaf_bzero(tmp,sizeof(tmp));
+    crypton_decaf_bzero(zs,sizeof(zs));
+    crypton_decaf_bzero(zis,sizeof(zis));
 }
 
 void API_NS(base_double_scalarmul_non_secret) (
@@ -1564,8 +1564,8 @@ void API_NS(base_double_scalarmul_non_secret) (
     const point_t base2,
     const scalar_t scalar2
 ) {
-    const int table_bits_var = CRYPTONITE_DECAF_WNAF_VAR_TABLE_BITS,
-        table_bits_pre = CRYPTONITE_DECAF_WNAF_FIXED_TABLE_BITS;
+    const int table_bits_var = CRYPTON_DECAF_WNAF_VAR_TABLE_BITS,
+        table_bits_pre = CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS;
     struct smvt_control control_var[SCALAR_BITS/(table_bits_var+1)+3];
     struct smvt_control control_pre[SCALAR_BITS/(table_bits_pre+1)+3];
     
@@ -1621,9 +1621,9 @@ void API_NS(base_double_scalarmul_non_secret) (
     }
     
     /* This function is non-secret, but whatever this is cheap. */
-    cryptonite_decaf_bzero(control_var,sizeof(control_var));
-    cryptonite_decaf_bzero(control_pre,sizeof(control_pre));
-    cryptonite_decaf_bzero(precmp_var,sizeof(precmp_var));
+    crypton_decaf_bzero(control_var,sizeof(control_var));
+    crypton_decaf_bzero(control_pre,sizeof(control_pre));
+    crypton_decaf_bzero(precmp_var,sizeof(precmp_var));
 
     assert(contv == ncb_var); (void)ncb_var;
     assert(contp == ncb_pre); (void)ncb_pre;
@@ -1632,11 +1632,11 @@ void API_NS(base_double_scalarmul_non_secret) (
 void API_NS(point_destroy) (
     point_t point
 ) {
-    cryptonite_decaf_bzero(point, sizeof(point_t));
+    crypton_decaf_bzero(point, sizeof(point_t));
 }
 
 void API_NS(precomputed_destroy) (
     precomputed_s *pre
 ) {
-    cryptonite_decaf_bzero(pre, API_NS(sizeof_precomputed_s));
+    crypton_decaf_bzero(pre, API_NS(sizeof_precomputed_s));
 }

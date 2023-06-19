@@ -37,14 +37,14 @@ instance HashAlgorithm SHA256 where
 instance HashAlgorithmPrefix SHA256 where
     hashInternalFinalizePrefix = c_sha256_finalize_prefix
 
-foreign import ccall unsafe "cryptonite_sha256_init"
+foreign import ccall unsafe "crypton_sha256_init"
     c_sha256_init :: Ptr (Context a)-> IO ()
 
-foreign import ccall "cryptonite_sha256_update"
+foreign import ccall "crypton_sha256_update"
     c_sha256_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_sha256_finalize"
+foreign import ccall unsafe "crypton_sha256_finalize"
     c_sha256_finalize :: Ptr (Context a) -> Ptr (Digest a) -> IO ()
 
-foreign import ccall "cryptonite_sha256_finalize_prefix"
+foreign import ccall "crypton_sha256_finalize_prefix"
     c_sha256_finalize_prefix :: Ptr (Context a) -> Ptr Word8 -> Word32 -> Word32 -> Ptr (Digest a) -> IO ()

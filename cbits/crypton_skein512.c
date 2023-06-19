@@ -23,10 +23,10 @@
  */
 
 #include <string.h>
-#include "cryptonite_skein.h"
-#include "cryptonite_skein512.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_skein.h"
+#include "crypton_skein512.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 
 static const uint8_t K512_0[4] = { 46, 36, 19, 37, };
 static const uint8_t K512_1[4] = { 33, 27, 14, 42, };
@@ -122,7 +122,7 @@ static inline void skein512_do_chunk(struct skein512_ctx *ctx, uint64_t *buf, ui
         ctx->h[7] = x[7] ^ cpu_to_le64(buf[7]);
 }
 
-void cryptonite_skein512_init(struct skein512_ctx *ctx, uint32_t hashlen)
+void crypton_skein512_init(struct skein512_ctx *ctx, uint32_t hashlen)
 {
 	uint64_t buf[8];
 	memset(ctx, 0, sizeof(*ctx));
@@ -138,7 +138,7 @@ void cryptonite_skein512_init(struct skein512_ctx *ctx, uint32_t hashlen)
 	SET_TYPE(ctx, FLAG_FIRST | FLAG_TYPE(TYPE_MSG));
 }
 
-void cryptonite_skein512_update(struct skein512_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_skein512_update(struct skein512_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t to_fill;
 
@@ -182,7 +182,7 @@ void cryptonite_skein512_update(struct skein512_ctx *ctx, const uint8_t *data, u
 	}
 }
 
-void cryptonite_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8_t *out)
+void crypton_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8_t *out)
 {
 	uint32_t outsize;
 	uint64_t x[8];

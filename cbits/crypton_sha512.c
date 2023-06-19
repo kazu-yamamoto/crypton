@@ -23,11 +23,11 @@
  */
 
 #include <string.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_sha512.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_sha512.h"
 
-void cryptonite_sha384_init(struct sha512_ctx *ctx)
+void crypton_sha384_init(struct sha512_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -41,7 +41,7 @@ void cryptonite_sha384_init(struct sha512_ctx *ctx)
 	ctx->h[7] = 0x47b5481dbefa4fa4ULL;
 }
 
-void cryptonite_sha512_init(struct sha512_ctx *ctx)
+void crypton_sha512_init(struct sha512_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -128,12 +128,12 @@ static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
 	ctx->h[4] += e; ctx->h[5] += f; ctx->h[6] += g; ctx->h[7] += h;
 }
 
-void cryptonite_sha384_update(struct sha384_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha384_update(struct sha384_ctx *ctx, const uint8_t *data, uint32_t len)
 {
-	return cryptonite_sha512_update(ctx, data, len);
+	return crypton_sha512_update(ctx, data, len);
 }
 
-void cryptonite_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	unsigned int index, to_fill;
 
@@ -172,23 +172,23 @@ void cryptonite_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint3
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_sha384_finalize(struct sha384_ctx *ctx, uint8_t *out)
+void crypton_sha384_finalize(struct sha384_ctx *ctx, uint8_t *out)
 {
 	uint8_t intermediate[SHA512_DIGEST_SIZE];
 
-	cryptonite_sha512_finalize(ctx, intermediate);
+	crypton_sha512_finalize(ctx, intermediate);
 	memcpy(out, intermediate, SHA384_DIGEST_SIZE);
 }
 
-void cryptonite_sha384_finalize_prefix(struct sha384_ctx *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
+void crypton_sha384_finalize_prefix(struct sha384_ctx *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
 {
 	uint8_t intermediate[SHA512_DIGEST_SIZE];
 
-	cryptonite_sha512_finalize_prefix(ctx, data, len, n, intermediate);
+	crypton_sha512_finalize_prefix(ctx, data, len, n, intermediate);
 	memcpy(out, intermediate, SHA384_DIGEST_SIZE);
 }
 
-void cryptonite_sha512_finalize(struct sha512_ctx *ctx, uint8_t *out)
+void crypton_sha512_finalize(struct sha512_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[128] = { 0x80, };
 	uint32_t i, index, padlen;
@@ -201,10 +201,10 @@ void cryptonite_sha512_finalize(struct sha512_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (unsigned int) (ctx->sz[0] & 0x7f);
 	padlen = (index < 112) ? (112 - index) : ((128 + 112) - index);
-	cryptonite_sha512_update(ctx, padding, padlen);
+	crypton_sha512_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_sha512_update(ctx, (uint8_t *) bits, sizeof(bits));
+	crypton_sha512_update(ctx, (uint8_t *) bits, sizeof(bits));
 
 	/* store to digest */
 	for (i = 0; i < 8; i++)
@@ -213,18 +213,18 @@ void cryptonite_sha512_finalize(struct sha512_ctx *ctx, uint8_t *out)
 
 #define HASHED(m) SHA512_##m
 #define HASHED_LOWER(m) sha512_##m
-#define CRYPTONITE_HASHED(m) cryptonite_sha512_##m
+#define CRYPTON_HASHED(m) crypton_sha512_##m
 #define SHA512_BLOCK_SIZE 128
 #define SHA512_BITS_ELEMS 2
 
-#include <cryptonite_hash_prefix.h>
+#include <crypton_hash_prefix.h>
 
-static inline uint32_t cryptonite_sha512_get_index(const struct sha512_ctx *ctx)
+static inline uint32_t crypton_sha512_get_index(const struct sha512_ctx *ctx)
 {
 	return (uint32_t) (ctx->sz[0] & 0x7f);
 }
 
-static inline void cryptonite_sha512_incr_sz(struct sha512_ctx *ctx, uint64_t *bits, uint32_t n)
+static inline void crypton_sha512_incr_sz(struct sha512_ctx *ctx, uint64_t *bits, uint32_t n)
 {
 	ctx->sz[0] += n;
 	ctx->sz[1] += 1 & constant_time_lt_64(ctx->sz[0], n);
@@ -232,7 +232,7 @@ static inline void cryptonite_sha512_incr_sz(struct sha512_ctx *ctx, uint64_t *b
 	bits[1] = cpu_to_be64((ctx->sz[0] << 3));
 }
 
-static inline void cryptonite_sha512_select_digest(const struct sha512_ctx *ctx, uint8_t *out, uint32_t out_mask)
+static inline void crypton_sha512_select_digest(const struct sha512_ctx *ctx, uint8_t *out, uint32_t out_mask)
 {
 	uint32_t i;
 	uint64_t out_mask_64 = out_mask;
@@ -241,11 +241,11 @@ static inline void cryptonite_sha512_select_digest(const struct sha512_ctx *ctx,
 		xor_be64(out+8*i, ctx->h[i] & out_mask_64);
 }
 
-#include <cryptonite_hash_prefix.c>
+#include <crypton_hash_prefix.c>
 
 #include <stdio.h>
 
-void cryptonite_sha512t_init(struct sha512_ctx *ctx, uint32_t hashlen)
+void crypton_sha512t_init(struct sha512_ctx *ctx, uint32_t hashlen)
 {
 	memset(ctx, 0, sizeof(*ctx));
 	if (hashlen >= 512)
@@ -276,13 +276,13 @@ void cryptonite_sha512t_init(struct sha512_ctx *ctx, uint32_t hashlen)
 		uint8_t out[64];
 		int i;
 
-		cryptonite_sha512_init(ctx);
+		crypton_sha512_init(ctx);
 		for (i = 0; i < 8; i++)
 			ctx->h[i] ^= 0xa5a5a5a5a5a5a5a5ULL;
 
 		i = sprintf(buf, "SHA-512/%d", hashlen);
-		cryptonite_sha512_update(ctx, (uint8_t *) buf, i);
-		cryptonite_sha512_finalize(ctx, out);
+		crypton_sha512_update(ctx, (uint8_t *) buf, i);
+		crypton_sha512_finalize(ctx, out);
 
 		/* re-init the context, otherwise len is changed */
 		memset(ctx, 0, sizeof(*ctx));
@@ -292,16 +292,16 @@ void cryptonite_sha512t_init(struct sha512_ctx *ctx, uint32_t hashlen)
 	}
 }
 
-void cryptonite_sha512t_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha512t_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t len)
 {
-	return cryptonite_sha512_update(ctx, data, len);
+	return crypton_sha512_update(ctx, data, len);
 }
 
-void cryptonite_sha512t_finalize(struct sha512_ctx *ctx, uint32_t hashlen, uint8_t *out)
+void crypton_sha512t_finalize(struct sha512_ctx *ctx, uint32_t hashlen, uint8_t *out)
 {
 	uint8_t intermediate[SHA512_DIGEST_SIZE];
 
-	cryptonite_sha512_finalize(ctx, intermediate);
+	crypton_sha512_finalize(ctx, intermediate);
 	memcpy(out, intermediate, hashlen / 8);
 }
 
