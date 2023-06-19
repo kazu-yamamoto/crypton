@@ -1,5 +1,5 @@
 Name:                crypton
-version:             0.31
+version:             0.32
 Synopsis:            Cryptography Primitives sink
 Description:
     A repository of cryptographic primitives.

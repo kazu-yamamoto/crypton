@@ -1,3 +1,9 @@
+## 0.32
+
+* All C symbols now have the "crypton_" prefix.
+  [#7](https://github.com/kazu-yamamoto/crypton/pull/7)
+  [#8](https://github.com/kazu-yamamoto/crypton/pull/8)
+
 ## 0.31
 
 * Crypton is forked from cryptonite with the original authors permission.
