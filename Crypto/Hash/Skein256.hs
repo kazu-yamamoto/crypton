@@ -53,11 +53,11 @@ instance HashAlgorithm Skein256_256 where
     hashInternalFinalize p    = c_skein256_finalize p 256
 
 
-foreign import ccall unsafe "cryptonite_skein256_init"
+foreign import ccall unsafe "crypton_skein256_init"
     c_skein256_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_skein256_update"
+foreign import ccall "crypton_skein256_update"
     c_skein256_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_skein256_finalize"
+foreign import ccall unsafe "crypton_skein256_finalize"
     c_skein256_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()

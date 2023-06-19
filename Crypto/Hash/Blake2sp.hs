@@ -53,11 +53,11 @@ instance HashAlgorithm Blake2sp_256 where
     hashInternalFinalize p    = c_blake2sp_finalize p 256
 
 
-foreign import ccall unsafe "cryptonite_blake2sp_init"
+foreign import ccall unsafe "crypton_blake2sp_init"
     c_blake2sp_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_blake2sp_update"
+foreign import ccall "crypton_blake2sp_update"
     c_blake2sp_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_blake2sp_finalize"
+foreign import ccall unsafe "crypton_blake2sp_finalize"
     c_blake2sp_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()

@@ -24,11 +24,11 @@
 
 #include <string.h>
 #include <stdio.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_md5.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_md5.h"
 
-void cryptonite_md5_init(struct md5_ctx *ctx)
+void crypton_md5_init(struct md5_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -127,7 +127,7 @@ static void md5_do_chunk(struct md5_ctx *ctx, uint32_t *buf)
 	ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c; ctx->h[3] += d;
 }
 
-void cryptonite_md5_update(struct md5_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_md5_update(struct md5_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -162,7 +162,7 @@ void cryptonite_md5_update(struct md5_ctx *ctx, const uint8_t *data, uint32_t le
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_md5_finalize(struct md5_ctx *ctx, uint8_t *out)
+void crypton_md5_finalize(struct md5_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x80, };
 	uint64_t bits;
@@ -174,10 +174,10 @@ void cryptonite_md5_finalize(struct md5_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_md5_update(ctx, padding, padlen);
+	crypton_md5_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_md5_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_md5_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* output hash */
 	store_le32(out   , ctx->h[0]);
@@ -188,22 +188,22 @@ void cryptonite_md5_finalize(struct md5_ctx *ctx, uint8_t *out)
 
 #define HASHED(m) MD5_##m
 #define HASHED_LOWER(m) md5_##m
-#define CRYPTONITE_HASHED(m) cryptonite_md5_##m
+#define CRYPTON_HASHED(m) crypton_md5_##m
 #define MD5_BLOCK_SIZE 64
 #define MD5_BITS_ELEMS 1
 
-static inline uint32_t cryptonite_md5_get_index(const struct md5_ctx *ctx)
+static inline uint32_t crypton_md5_get_index(const struct md5_ctx *ctx)
 {
 	return (uint32_t) (ctx->sz & 0x3f);
 }
 
-static inline void cryptonite_md5_incr_sz(struct md5_ctx *ctx, uint64_t *bits, uint32_t n)
+static inline void crypton_md5_incr_sz(struct md5_ctx *ctx, uint64_t *bits, uint32_t n)
 {
 	ctx->sz += n;
 	*bits = cpu_to_le64(ctx->sz << 3);
 }
 
-static inline void cryptonite_md5_select_digest(const struct md5_ctx *ctx, uint8_t *out, uint32_t out_mask)
+static inline void crypton_md5_select_digest(const struct md5_ctx *ctx, uint8_t *out, uint32_t out_mask)
 {
 	xor_le32(out   , ctx->h[0] & out_mask);
 	xor_le32(out+ 4, ctx->h[1] & out_mask);
@@ -211,4 +211,4 @@ static inline void cryptonite_md5_select_digest(const struct md5_ctx *ctx, uint8
 	xor_le32(out+12, ctx->h[3] & out_mask);
 }
 
-#include <cryptonite_hash_prefix.c>
+#include <crypton_hash_prefix.c>

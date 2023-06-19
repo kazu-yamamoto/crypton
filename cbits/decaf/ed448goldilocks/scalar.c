@@ -16,13 +16,13 @@
 #include <decaf.h>
 
 /* Template stuff */
-#define API_NS(_id) cryptonite_decaf_448_##_id
-#define SCALAR_BITS CRYPTONITE_DECAF_448_SCALAR_BITS
-#define SCALAR_SER_BYTES CRYPTONITE_DECAF_448_SCALAR_BYTES
-#define SCALAR_LIMBS CRYPTONITE_DECAF_448_SCALAR_LIMBS
+#define API_NS(_id) crypton_decaf_448_##_id
+#define SCALAR_BITS CRYPTON_DECAF_448_SCALAR_BITS
+#define SCALAR_SER_BYTES CRYPTON_DECAF_448_SCALAR_BYTES
+#define SCALAR_LIMBS CRYPTON_DECAF_448_SCALAR_LIMBS
 #define scalar_t API_NS(scalar_t)
 
-static const cryptonite_decaf_word_t MONTGOMERY_FACTOR = (cryptonite_decaf_word_t)0x3bd440fae918bc5ull;
+static const crypton_decaf_word_t MONTGOMERY_FACTOR = (crypton_decaf_word_t)0x3bd440fae918bc5ull;
 static const scalar_t sc_p = {{{
     SC_LIMB(0x2378c292ab5844f3), SC_LIMB(0x216cc2728dc58f55), SC_LIMB(0xc44edb49aed63690), SC_LIMB(0xffffffff7cca23e9), SC_LIMB(0xffffffffffffffff), SC_LIMB(0xffffffffffffffff), SC_LIMB(0x3fffffffffffffff)
 }}}, sc_r2 = {{{
@@ -30,28 +30,28 @@ static const scalar_t sc_p = {{{
 }}};
 /* End of template stuff */
 
-#define WBITS CRYPTONITE_DECAF_WORD_BITS /* NB this may be different from ARCH_WORD_BITS */
+#define WBITS CRYPTON_DECAF_WORD_BITS /* NB this may be different from ARCH_WORD_BITS */
 
 const scalar_t API_NS(scalar_one) = {{{1}}}, API_NS(scalar_zero) = {{{0}}};
 
 /** {extra,accum} - sub +? p
  * Must have extra <= 1
  */
-static CRYPTONITE_DECAF_NOINLINE void sc_subx(
+static CRYPTON_DECAF_NOINLINE void sc_subx(
     scalar_t out,
-    const cryptonite_decaf_word_t accum[SCALAR_LIMBS],
+    const crypton_decaf_word_t accum[SCALAR_LIMBS],
     const scalar_t sub,
     const scalar_t p,
-    cryptonite_decaf_word_t extra
+    crypton_decaf_word_t extra
 ) {
-    cryptonite_decaf_dsword_t chain = 0;
+    crypton_decaf_dsword_t chain = 0;
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + accum[i]) - sub->limb[i];
         out->limb[i] = chain;
         chain >>= WBITS;
     }
-    cryptonite_decaf_word_t borrow = chain+extra; /* = 0 or -1 */
+    crypton_decaf_word_t borrow = chain+extra; /* = 0 or -1 */
     
     chain = 0;
     for (i=0; i<SCALAR_LIMBS; i++) {
@@ -61,22 +61,22 @@ static CRYPTONITE_DECAF_NOINLINE void sc_subx(
     }
 }
 
-static CRYPTONITE_DECAF_NOINLINE void sc_montmul (
+static CRYPTON_DECAF_NOINLINE void sc_montmul (
     scalar_t out,
     const scalar_t a,
     const scalar_t b
 ) {
     unsigned int i,j;
-    cryptonite_decaf_word_t accum[SCALAR_LIMBS+1] = {0};
-    cryptonite_decaf_word_t hi_carry = 0;
+    crypton_decaf_word_t accum[SCALAR_LIMBS+1] = {0};
+    crypton_decaf_word_t hi_carry = 0;
     
     for (i=0; i<SCALAR_LIMBS; i++) {
-        cryptonite_decaf_word_t mand = a->limb[i];
-        const cryptonite_decaf_word_t *mier = b->limb;
+        crypton_decaf_word_t mand = a->limb[i];
+        const crypton_decaf_word_t *mier = b->limb;
         
-        cryptonite_decaf_dword_t chain = 0;
+        crypton_decaf_dword_t chain = 0;
         for (j=0; j<SCALAR_LIMBS; j++) {
-            chain += ((cryptonite_decaf_dword_t)mand)*mier[j] + accum[j];
+            chain += ((crypton_decaf_dword_t)mand)*mier[j] + accum[j];
             accum[j] = chain;
             chain >>= WBITS;
         }
@@ -86,7 +86,7 @@ static CRYPTONITE_DECAF_NOINLINE void sc_montmul (
         chain = 0;
         mier = sc_p->limb;
         for (j=0; j<SCALAR_LIMBS; j++) {
-            chain += (cryptonite_decaf_dword_t)mand*mier[j] + accum[j];
+            chain += (crypton_decaf_dword_t)mand*mier[j] + accum[j];
             if (j) accum[j-1] = chain;
             chain >>= WBITS;
         }
@@ -109,11 +109,11 @@ void API_NS(scalar_mul) (
 }
 
 /* PERF: could implement this */
-static CRYPTONITE_DECAF_INLINE void sc_montsqr (scalar_t out, const scalar_t a) {
+static CRYPTON_DECAF_INLINE void sc_montsqr (scalar_t out, const scalar_t a) {
     sc_montmul(out,a,a);
 }
 
-cryptonite_decaf_error_t API_NS(scalar_invert) (
+crypton_decaf_error_t API_NS(scalar_invert) (
     scalar_t out,
     const scalar_t a
 ) {
@@ -139,7 +139,7 @@ cryptonite_decaf_error_t API_NS(scalar_invert) (
         
         if (started) sc_montsqr(out,out);
         
-        cryptonite_decaf_word_t w = (i>=0) ? sc_p->limb[i/WBITS] : 0;
+        crypton_decaf_word_t w = (i>=0) ? sc_p->limb[i/WBITS] : 0;
         if (i >= 0 && i<WBITS) {
             assert(w >= 2);
             w-=2;
@@ -169,8 +169,8 @@ cryptonite_decaf_error_t API_NS(scalar_invert) (
     
     /* Demontgomerize */
     sc_montmul(out,out,API_NS(scalar_one));
-    cryptonite_decaf_bzero(precmp, sizeof(precmp));
-    return cryptonite_decaf_succeed_if(~API_NS(scalar_eq)(out,API_NS(scalar_zero)));
+    crypton_decaf_bzero(precmp, sizeof(precmp));
+    return crypton_decaf_succeed_if(~API_NS(scalar_eq)(out,API_NS(scalar_zero)));
 }
 
 void API_NS(scalar_sub) (
@@ -186,7 +186,7 @@ void API_NS(scalar_add) (
     const scalar_t a,
     const scalar_t b
 ) {
-    cryptonite_decaf_dword_t chain = 0;
+    crypton_decaf_dword_t chain = 0;
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + a->limb[i]) + b->limb[i];
@@ -203,20 +203,20 @@ API_NS(scalar_set_unsigned) (
 ) {
     memset(out,0,sizeof(scalar_t));
     unsigned int i = 0;
-    for (; i<sizeof(uint64_t)/sizeof(cryptonite_decaf_word_t); i++) {
+    for (; i<sizeof(uint64_t)/sizeof(crypton_decaf_word_t); i++) {
         out->limb[i] = w;
-#if CRYPTONITE_DECAF_WORD_BITS < 64
-        w >>= 8*sizeof(cryptonite_decaf_word_t);
+#if CRYPTON_DECAF_WORD_BITS < 64
+        w >>= 8*sizeof(crypton_decaf_word_t);
 #endif
     }
 }
 
-cryptonite_decaf_bool_t
+crypton_decaf_bool_t
 API_NS(scalar_eq) (
     const scalar_t a,
     const scalar_t b
 ) {
-    cryptonite_decaf_word_t diff = 0;
+    crypton_decaf_word_t diff = 0;
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         diff |= a->limb[i] ^ b->limb[i];
@@ -224,28 +224,28 @@ API_NS(scalar_eq) (
     return mask_to_bool(word_is_zero(diff));
 }
 
-static CRYPTONITE_DECAF_INLINE void scalar_decode_short (
+static CRYPTON_DECAF_INLINE void scalar_decode_short (
     scalar_t s,
     const unsigned char *ser,
     unsigned int nbytes
 ) {
     unsigned int i,j,k=0;
     for (i=0; i<SCALAR_LIMBS; i++) {
-        cryptonite_decaf_word_t out = 0;
-        for (j=0; j<sizeof(cryptonite_decaf_word_t) && k<nbytes; j++,k++) {
-            out |= ((cryptonite_decaf_word_t)ser[k])<<(8*j);
+        crypton_decaf_word_t out = 0;
+        for (j=0; j<sizeof(crypton_decaf_word_t) && k<nbytes; j++,k++) {
+            out |= ((crypton_decaf_word_t)ser[k])<<(8*j);
         }
         s->limb[i] = out;
     }
 }
 
-cryptonite_decaf_error_t API_NS(scalar_decode)(
+crypton_decaf_error_t API_NS(scalar_decode)(
     scalar_t s,
     const unsigned char ser[SCALAR_SER_BYTES]
 ) {
     unsigned int i;
     scalar_decode_short(s, ser, SCALAR_SER_BYTES);
-    cryptonite_decaf_dsword_t accum = 0;
+    crypton_decaf_dsword_t accum = 0;
     for (i=0; i<SCALAR_LIMBS; i++) {
         accum = (accum + s->limb[i] - sc_p->limb[i]) >> WBITS;
     }
@@ -253,13 +253,13 @@ cryptonite_decaf_error_t API_NS(scalar_decode)(
     
     API_NS(scalar_mul)(s,s,API_NS(scalar_one)); /* ham-handed reduce */
     
-    return cryptonite_decaf_succeed_if(~word_is_zero(accum));
+    return crypton_decaf_succeed_if(~word_is_zero(accum));
 }
 
 void API_NS(scalar_destroy) (
     scalar_t scalar
 ) {
-    cryptonite_decaf_bzero(scalar, sizeof(scalar_t));
+    crypton_decaf_bzero(scalar, sizeof(scalar_t));
 }
 
 void API_NS(scalar_decode_long)(
@@ -306,7 +306,7 @@ void API_NS(scalar_encode)(
 ) {
     unsigned int i,j,k=0;
     for (i=0; i<SCALAR_LIMBS; i++) {
-        for (j=0; j<sizeof(cryptonite_decaf_word_t); j++,k++) {
+        for (j=0; j<sizeof(crypton_decaf_word_t); j++,k++) {
             ser[k] = s->limb[i] >> (8*j);
         }
     }
@@ -316,7 +316,7 @@ void API_NS(scalar_cond_sel) (
     scalar_t out,
     const scalar_t a,
     const scalar_t b,
-    cryptonite_decaf_bool_t pick_b
+    crypton_decaf_bool_t pick_b
 ) {
     constant_time_select(out,a,b,sizeof(scalar_t),bool_to_mask(pick_b),sizeof(out->limb[0]));
 }
@@ -325,13 +325,13 @@ void API_NS(scalar_halve) (
     scalar_t out,
     const scalar_t a
 ) {
-    cryptonite_decaf_word_t mask = -(a->limb[0] & 1);
-    cryptonite_decaf_dword_t chain = 0;
+    crypton_decaf_word_t mask = -(a->limb[0] & 1);
+    crypton_decaf_dword_t chain = 0;
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + a->limb[i]) + (sc_p->limb[i] & mask);
         out->limb[i] = chain;
-        chain >>= CRYPTONITE_DECAF_WORD_BITS;
+        chain >>= CRYPTON_DECAF_WORD_BITS;
     }
     for (i=0; i<SCALAR_LIMBS-1; i++) {
         out->limb[i] = out->limb[i]>>1 | out->limb[i+1]<<(WBITS-1);

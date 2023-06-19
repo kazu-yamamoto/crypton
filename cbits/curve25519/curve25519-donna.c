@@ -841,7 +841,7 @@ crecip(limb *out, const limb *z) {
 }
 
 int
-cryptonite_curve25519_donna(u8 *mypublic, const u8 *secret, const u8 *basepoint) {
+crypton_curve25519_donna(u8 *mypublic, const u8 *secret, const u8 *basepoint) {
   limb bp[10], x[10], z[11], zmone[10];
   uint8_t e[32];
   int i;

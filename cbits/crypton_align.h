@@ -1,7 +1,7 @@
-#ifndef CRYPTONITE_ALIGN_H
-#define CRYPTONITE_ALIGN_H
+#ifndef CRYPTON_ALIGN_H
+#define CRYPTON_ALIGN_H
 
-#include "cryptonite_bitfn.h"
+#include "crypton_bitfn.h"
 
 #if (defined(__i386__))
 # define UNALIGNED_ACCESS_OK

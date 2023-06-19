@@ -83,25 +83,25 @@ static int blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen)
     } while ((void)0, 0)
 
     if (outlen <= BLAKE2B_OUTBYTES) {
-        TRY(_cryptonite_blake2b_init(&blake_state, outlen));
-        TRY(_cryptonite_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
-        TRY(_cryptonite_blake2b_update(&blake_state, in, inlen));
-        TRY(_cryptonite_blake2b_final(&blake_state, out, outlen));
+        TRY(_crypton_blake2b_init(&blake_state, outlen));
+        TRY(_crypton_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
+        TRY(_crypton_blake2b_update(&blake_state, in, inlen));
+        TRY(_crypton_blake2b_final(&blake_state, out, outlen));
     } else {
         uint32_t toproduce;
         uint8_t out_buffer[BLAKE2B_OUTBYTES];
         uint8_t in_buffer[BLAKE2B_OUTBYTES];
-        TRY(_cryptonite_blake2b_init(&blake_state, BLAKE2B_OUTBYTES));
-        TRY(_cryptonite_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
-        TRY(_cryptonite_blake2b_update(&blake_state, in, inlen));
-        TRY(_cryptonite_blake2b_final(&blake_state, out_buffer, BLAKE2B_OUTBYTES));
+        TRY(_crypton_blake2b_init(&blake_state, BLAKE2B_OUTBYTES));
+        TRY(_crypton_blake2b_update(&blake_state, outlen_bytes, sizeof(outlen_bytes)));
+        TRY(_crypton_blake2b_update(&blake_state, in, inlen));
+        TRY(_crypton_blake2b_final(&blake_state, out_buffer, BLAKE2B_OUTBYTES));
         memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
         out += BLAKE2B_OUTBYTES / 2;
         toproduce = (uint32_t)outlen - BLAKE2B_OUTBYTES / 2;
 
         while (toproduce > BLAKE2B_OUTBYTES) {
             memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
-            TRY(_cryptonite_blake2b(out_buffer, BLAKE2B_OUTBYTES, in_buffer,
+            TRY(_crypton_blake2b(out_buffer, BLAKE2B_OUTBYTES, in_buffer,
                         BLAKE2B_OUTBYTES, NULL, 0));
             memcpy(out, out_buffer, BLAKE2B_OUTBYTES / 2);
             out += BLAKE2B_OUTBYTES / 2;
@@ -109,7 +109,7 @@ static int blake2b_long(void *pout, size_t outlen, const void *in, size_t inlen)
         }
 
         memcpy(in_buffer, out_buffer, BLAKE2B_OUTBYTES);
-        TRY(_cryptonite_blake2b(out_buffer, toproduce, in_buffer, BLAKE2B_OUTBYTES, NULL,
+        TRY(_crypton_blake2b(out_buffer, toproduce, in_buffer, BLAKE2B_OUTBYTES, NULL,
                     0));
         memcpy(out, out_buffer, toproduce);
     }
@@ -597,31 +597,31 @@ void initial_hash(uint8_t *blockhash, argon2_context *context,
         return;
     }
 
-    _cryptonite_blake2b_init(&BlakeHash, ARGON2_PREHASH_DIGEST_LENGTH);
+    _crypton_blake2b_init(&BlakeHash, ARGON2_PREHASH_DIGEST_LENGTH);
 
     store32(&value, context->lanes);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, context->outlen);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, context->m_cost);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, context->t_cost);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, context->version);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, (uint32_t)type);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     store32(&value, context->pwdlen);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     if (context->pwd != NULL) {
-        _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)context->pwd,
+        _crypton_blake2b_update(&BlakeHash, (const uint8_t *)context->pwd,
                        context->pwdlen);
 
         if (context->flags & ARGON2_FLAG_CLEAR_PASSWORD) {
@@ -631,18 +631,18 @@ void initial_hash(uint8_t *blockhash, argon2_context *context,
     }
 
     store32(&value, context->saltlen);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     if (context->salt != NULL) {
-        _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)context->salt,
+        _crypton_blake2b_update(&BlakeHash, (const uint8_t *)context->salt,
                        context->saltlen);
     }
 
     store32(&value, context->secretlen);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     if (context->secret != NULL) {
-        _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)context->secret,
+        _crypton_blake2b_update(&BlakeHash, (const uint8_t *)context->secret,
                        context->secretlen);
 
         if (context->flags & ARGON2_FLAG_CLEAR_SECRET) {
@@ -652,14 +652,14 @@ void initial_hash(uint8_t *blockhash, argon2_context *context,
     }
 
     store32(&value, context->adlen);
-    _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
+    _crypton_blake2b_update(&BlakeHash, (const uint8_t *)&value, sizeof(value));
 
     if (context->ad != NULL) {
-        _cryptonite_blake2b_update(&BlakeHash, (const uint8_t *)context->ad,
+        _crypton_blake2b_update(&BlakeHash, (const uint8_t *)context->ad,
                        context->adlen);
     }
 
-    _cryptonite_blake2b_final(&BlakeHash, blockhash, ARGON2_PREHASH_DIGEST_LENGTH);
+    _crypton_blake2b_final(&BlakeHash, blockhash, ARGON2_PREHASH_DIGEST_LENGTH);
 }
 static
 int initialize(argon2_instance_t *instance, argon2_context *context) {

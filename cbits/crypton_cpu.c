@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  *
  */
-#include "cryptonite_cpu.h"
+#include "crypton_cpu.h"
 #include <stdint.h>
 
 #ifdef ARCH_X86
@@ -54,7 +54,7 @@ static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, ui
 }
 
 #ifdef USE_AESNI
-void cryptonite_aesni_initialize_hw(void (*init_table)(int, int))
+void crypton_aesni_initialize_hw(void (*init_table)(int, int))
 {
 	static int inited = 0;
 	if (inited == 0) {
@@ -69,7 +69,7 @@ void cryptonite_aesni_initialize_hw(void (*init_table)(int, int))
 	}
 }
 #else
-#define cryptonite_aesni_initialize_hw(init_table) 	(0)
+#define crypton_aesni_initialize_hw(init_table) 	(0)
 #endif
 
 #endif

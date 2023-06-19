@@ -23,9 +23,9 @@
  */
 
 #include <string.h>
-#include "cryptonite_tiger.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_tiger.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 
 static const uint64_t t1[256] = {
 	0x02aab17cf7e90c5eULL,0xac424b03e243a8ecULL,0x72cd5be30dd5fcd3ULL,0x6d019b93f6f97f3aULL,
@@ -297,7 +297,7 @@ static const uint64_t t4[256]=
 	0xcd56d9430ea8280eULL,0xc12591d7535f5065ULL, 0xc83223f1720aef96ULL,0xc3a0396f7363a51fULL,
 }; 
 
-void cryptonite_tiger_init(struct tiger_ctx *ctx)
+void crypton_tiger_init(struct tiger_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -364,7 +364,7 @@ static inline void tiger_do_chunk(struct tiger_ctx *ctx, uint64_t *buf)
 	ctx->h[2] += c;
 }
 
-void cryptonite_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -400,7 +400,7 @@ void cryptonite_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_tiger_finalize(struct tiger_ctx *ctx, uint8_t *out)
+void crypton_tiger_finalize(struct tiger_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x01, };
 	uint64_t bits;
@@ -412,10 +412,10 @@ void cryptonite_tiger_finalize(struct tiger_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_tiger_update(ctx, padding, padlen);
+	crypton_tiger_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_tiger_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_tiger_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* output hash */
 	store_le64(out   , ctx->h[0]);

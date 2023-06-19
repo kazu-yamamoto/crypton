@@ -116,7 +116,7 @@ fastPBKDF2_SHA1 params password salt =
     B.allocAndFreeze (outputLength params) $ \outPtr ->
     B.withByteArray password $ \passPtr ->
     B.withByteArray salt $ \saltPtr ->
-        c_cryptonite_fastpbkdf2_hmac_sha1
+        c_crypton_fastpbkdf2_hmac_sha1
             passPtr (fromIntegral $ B.length password)
             saltPtr (fromIntegral $ B.length salt)
             (fromIntegral $ iterCounts params)
@@ -131,7 +131,7 @@ fastPBKDF2_SHA256 params password salt =
     B.allocAndFreeze (outputLength params) $ \outPtr ->
     B.withByteArray password $ \passPtr ->
     B.withByteArray salt $ \saltPtr ->
-        c_cryptonite_fastpbkdf2_hmac_sha256
+        c_crypton_fastpbkdf2_hmac_sha256
             passPtr (fromIntegral $ B.length password)
             saltPtr (fromIntegral $ B.length salt)
             (fromIntegral $ iterCounts params)
@@ -146,29 +146,29 @@ fastPBKDF2_SHA512 params password salt =
     B.allocAndFreeze (outputLength params) $ \outPtr ->
     B.withByteArray password $ \passPtr ->
     B.withByteArray salt $ \saltPtr ->
-        c_cryptonite_fastpbkdf2_hmac_sha512
+        c_crypton_fastpbkdf2_hmac_sha512
             passPtr (fromIntegral $ B.length password)
             saltPtr (fromIntegral $ B.length salt)
             (fromIntegral $ iterCounts params)
             outPtr (fromIntegral $ outputLength params)
 
 
-foreign import ccall unsafe "cryptonite_pbkdf2.h cryptonite_fastpbkdf2_hmac_sha1"
-    c_cryptonite_fastpbkdf2_hmac_sha1 :: Ptr Word8 -> CSize
+foreign import ccall unsafe "crypton_pbkdf2.h crypton_fastpbkdf2_hmac_sha1"
+    c_crypton_fastpbkdf2_hmac_sha1 :: Ptr Word8 -> CSize
                                       -> Ptr Word8 -> CSize
                                       -> CUInt
                                       -> Ptr Word8 -> CSize
                                       -> IO ()
 
-foreign import ccall unsafe "cryptonite_pbkdf2.h cryptonite_fastpbkdf2_hmac_sha256"
-    c_cryptonite_fastpbkdf2_hmac_sha256 :: Ptr Word8 -> CSize
+foreign import ccall unsafe "crypton_pbkdf2.h crypton_fastpbkdf2_hmac_sha256"
+    c_crypton_fastpbkdf2_hmac_sha256 :: Ptr Word8 -> CSize
                                         -> Ptr Word8 -> CSize
                                         -> CUInt
                                         -> Ptr Word8 -> CSize
                                         -> IO ()
 
-foreign import ccall unsafe "cryptonite_pbkdf2.h cryptonite_fastpbkdf2_hmac_sha512"
-    c_cryptonite_fastpbkdf2_hmac_sha512 :: Ptr Word8 -> CSize
+foreign import ccall unsafe "crypton_pbkdf2.h crypton_fastpbkdf2_hmac_sha512"
+    c_crypton_fastpbkdf2_hmac_sha512 :: Ptr Word8 -> CSize
                                         -> Ptr Word8 -> CSize
                                         -> CUInt
                                         -> Ptr Word8 -> CSize

@@ -52,16 +52,16 @@ struct sha3_ctx
  * 512 bits (SHA3 512 bits)  => 200 - 2 * (512 / 8) = 200 - 2*64 = 200 - 128 = 72 bytes
  */
 
-void cryptonite_sha3_init(struct sha3_ctx *ctx, uint32_t hashlen);
-void cryptonite_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len);
-void cryptonite_sha3_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out);
+void crypton_sha3_init(struct sha3_ctx *ctx, uint32_t hashlen);
+void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len);
+void crypton_sha3_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out);
 
-void cryptonite_sha3_finalize_shake(struct sha3_ctx *ctx);
-void cryptonite_sha3_finalize_cshake(struct sha3_ctx *ctx);
-void cryptonite_sha3_output(struct sha3_ctx *ctx, uint8_t *out, uint32_t len);
+void crypton_sha3_finalize_shake(struct sha3_ctx *ctx);
+void crypton_sha3_finalize_cshake(struct sha3_ctx *ctx);
+void crypton_sha3_output(struct sha3_ctx *ctx, uint8_t *out, uint32_t len);
 
-void cryptonite_keccak_init(struct sha3_ctx *ctx, uint32_t hashlen);
-void cryptonite_keccak_update(struct sha3_ctx *ctx, uint8_t *data, uint32_t len);
-void cryptonite_keccak_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out);
+void crypton_keccak_init(struct sha3_ctx *ctx, uint32_t hashlen);
+void crypton_keccak_update(struct sha3_ctx *ctx, uint8_t *data, uint32_t len);
+void crypton_keccak_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out);
 
 #endif

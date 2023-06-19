@@ -13,11 +13,11 @@ typedef unsigned char ed25519_secret_key[32];
 
 typedef unsigned char curved25519_key[32];
 
-void cryptonite_ed25519_publickey(const ed25519_secret_key sk, ed25519_public_key pk);
-int cryptonite_ed25519_sign_open(const unsigned char *m, size_t mlen, const ed25519_public_key pk, const ed25519_signature RS);
-void cryptonite_ed25519_sign(const unsigned char *m, size_t mlen, const ed25519_secret_key sk, const ed25519_public_key pk, ed25519_signature RS);
+void crypton_ed25519_publickey(const ed25519_secret_key sk, ed25519_public_key pk);
+int crypton_ed25519_sign_open(const unsigned char *m, size_t mlen, const ed25519_public_key pk, const ed25519_signature RS);
+void crypton_ed25519_sign(const unsigned char *m, size_t mlen, const ed25519_secret_key sk, const ed25519_public_key pk, ed25519_signature RS);
 
-//int cryptonite_ed25519_sign_open_batch(const unsigned char **m, size_t *mlen, const unsigned char **pk, const unsigned char **RS, size_t num, int *valid);
+//int crypton_ed25519_sign_open_batch(const unsigned char **m, size_t *mlen, const unsigned char **pk, const unsigned char **RS, size_t num, int *valid);
 
 //void ed25519_randombytes_unsafe(void *out, size_t count);
 

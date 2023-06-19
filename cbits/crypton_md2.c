@@ -24,10 +24,10 @@
 
 #include <string.h>
 #include <stdio.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_md2.h"
+#include "crypton_bitfn.h"
+#include "crypton_md2.h"
 
-void cryptonite_md2_init(struct md2_ctx *ctx)
+void crypton_md2_init(struct md2_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->sz = 0ULL;
@@ -97,7 +97,7 @@ static void md2_do_chunk(struct md2_ctx *ctx, const uint8_t *buf)
 		t = ctx->cksum[i] ^= S_table[buf[i] ^ t];
 }
 
-void cryptonite_md2_update(struct md2_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_md2_update(struct md2_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -123,14 +123,14 @@ void cryptonite_md2_update(struct md2_ctx *ctx, const uint8_t *data, uint32_t le
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_md2_finalize(struct md2_ctx *ctx, uint8_t *out)
+void crypton_md2_finalize(struct md2_ctx *ctx, uint8_t *out)
 {
 	uint32_t index, padlen;
 
 	index = ctx->sz & 0xf;
 	padlen = 16 - index;
 
-	cryptonite_md2_update(ctx, padding_table[padlen], padlen);
-	cryptonite_md2_update(ctx, ctx->cksum, 16);
+	crypton_md2_update(ctx, padding_table[padlen], padlen);
+	crypton_md2_update(ctx, ctx->cksum, 16);
 	memcpy(out, ctx->h, 16);
 }

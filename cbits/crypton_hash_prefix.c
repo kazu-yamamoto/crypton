@@ -22,9 +22,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <cryptonite_hash_prefix.h>
+#include <crypton_hash_prefix.h>
 
-void CRYPTONITE_HASHED(finalize_prefix)(struct HASHED_LOWER(ctx) *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
+void CRYPTON_HASHED(finalize_prefix)(struct HASHED_LOWER(ctx) *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
 {
 	uint64_t bits[HASHED(BITS_ELEMS)];
 	uint8_t *p = (uint8_t *) &bits;
@@ -35,13 +35,13 @@ void CRYPTONITE_HASHED(finalize_prefix)(struct HASHED_LOWER(ctx) *ctx, const uin
 	n += (len - n) & constant_time_lt(len, n);
 
 	/* Initial index, based on current context state */
-	index = CRYPTONITE_HASHED(get_index)(ctx);
+	index = CRYPTON_HASHED(get_index)(ctx);
 
 	/* Final size after n bytes */
-	CRYPTONITE_HASHED(incr_sz)(ctx, bits, n);
+	CRYPTON_HASHED(incr_sz)(ctx, bits, n);
 
 	/* Padding index and length */
-	padidx = CRYPTONITE_HASHED(get_index)(ctx);
+	padidx = CRYPTON_HASHED(get_index)(ctx);
 	padlen = HASHED(BLOCK_SIZE) + cut_off - padidx;
 	padlen -= HASHED(BLOCK_SIZE) & constant_time_lt(padidx, cut_off);
 
@@ -84,7 +84,7 @@ void CRYPTONITE_HASHED(finalize_prefix)(struct HASHED_LOWER(ctx) *ctx, const uin
 			 * when len is really larger
 			 */
 			out_mask = constant_time_eq(pos, n + padlen + sizeof(bits));
-			CRYPTONITE_HASHED(select_digest)(ctx, out, out_mask);
+			CRYPTON_HASHED(select_digest)(ctx, out, out_mask);
 		}
 	}
 }

@@ -83,11 +83,11 @@ instance HashAlgorithm Keccak_512 where
     hashInternalFinalize p    = c_keccak_finalize p 512
 
 
-foreign import ccall unsafe "cryptonite_keccak_init"
+foreign import ccall unsafe "crypton_keccak_init"
     c_keccak_init :: Ptr (Context a) -> Word32 -> IO ()
 
-foreign import ccall "cryptonite_keccak_update"
+foreign import ccall "crypton_keccak_update"
     c_keccak_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_keccak_finalize"
+foreign import ccall unsafe "crypton_keccak_finalize"
     c_keccak_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()

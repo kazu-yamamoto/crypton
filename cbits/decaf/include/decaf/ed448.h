@@ -12,8 +12,8 @@
  * Please do not edit it.
  */
 
-#ifndef __CRYPTONITE_DECAF_ED448_H__
-#define __CRYPTONITE_DECAF_ED448_H__ 1
+#ifndef __CRYPTON_DECAF_ED448_H__
+#define __CRYPTON_DECAF_ED448_H__ 1
 
 #include <decaf/point_448.h>
 #include <decaf/shake.h>
@@ -24,22 +24,22 @@ extern "C" {
 #endif
 
 /** Number of bytes in an EdDSA public key. */
-#define CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES 57
+#define CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES 57
 
 /** Number of bytes in an EdDSA private key. */
-#define CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES
+#define CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES
 
 /** Number of bytes in an EdDSA private key. */
-#define CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES (CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES + CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES)
+#define CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES (CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES + CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES)
 
 /** Does EdDSA support non-contextual signatures? */
-#define CRYPTONITE_DECAF_EDDSA_448_SUPPORTS_CONTEXTLESS_SIGS 0
+#define CRYPTON_DECAF_EDDSA_448_SUPPORTS_CONTEXTLESS_SIGS 0
 
 /** Prehash context renaming macros. */
-#define cryptonite_decaf_ed448_prehash_ctx_s   cryptonite_decaf_shake256_ctx_s
-#define cryptonite_decaf_ed448_prehash_ctx_t   cryptonite_decaf_shake256_ctx_t
-#define cryptonite_decaf_ed448_prehash_update  cryptonite_decaf_shake256_update
-#define cryptonite_decaf_ed448_prehash_destroy cryptonite_decaf_shake256_destroy
+#define crypton_decaf_ed448_prehash_ctx_s   crypton_decaf_shake256_ctx_s
+#define crypton_decaf_ed448_prehash_ctx_t   crypton_decaf_shake256_ctx_t
+#define crypton_decaf_ed448_prehash_update  crypton_decaf_shake256_update
+#define crypton_decaf_ed448_prehash_destroy crypton_decaf_shake256_destroy
 
 /**
  * @brief EdDSA key generation.  This function uses a different (non-Decaf)
@@ -48,10 +48,10 @@ extern "C" {
  * @param [out] pubkey The public key.
  * @param [in] privkey The private key.
  */    
-void cryptonite_decaf_ed448_derive_public_key (
-    uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES]
-) CRYPTONITE_DECAF_API_VIS CRYPTONITE_DECAF_NONNULL CRYPTONITE_DECAF_NOINLINE;
+void crypton_decaf_ed448_derive_public_key (
+    uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
+) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA signing.
@@ -70,16 +70,16 @@ void cryptonite_decaf_ed448_derive_public_key (
  * safe.  The C++ wrapper is designed to make it harder to screw this up, but this C code gives
  * you no seat belt.
  */  
-void cryptonite_decaf_ed448_sign (
-    uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
+void crypton_decaf_ed448_sign (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const uint8_t *message,
     size_t message_len,
     uint8_t prehashed,
     const uint8_t *context,
     uint8_t context_len
-) CRYPTONITE_DECAF_API_VIS __attribute__((nonnull(1,2,3))) CRYPTONITE_DECAF_NOINLINE;
+) CRYPTON_DECAF_API_VIS __attribute__((nonnull(1,2,3))) CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA signing with prehash.
@@ -96,23 +96,23 @@ void cryptonite_decaf_ed448_sign (
  * safe.  The C++ wrapper is designed to make it harder to screw this up, but this C code gives
  * you no seat belt.
  */  
-void cryptonite_decaf_ed448_sign_prehash (
-    uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const cryptonite_decaf_ed448_prehash_ctx_t hash,
+void crypton_decaf_ed448_sign_prehash (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_ed448_prehash_ctx_t hash,
     const uint8_t *context,
     uint8_t context_len
-) CRYPTONITE_DECAF_API_VIS __attribute__((nonnull(1,2,3,4))) CRYPTONITE_DECAF_NOINLINE;
+) CRYPTON_DECAF_API_VIS __attribute__((nonnull(1,2,3,4))) CRYPTON_DECAF_NOINLINE;
     
 /**
  * @brief Prehash initialization, with contexts if supported.
  *
  * @param [out] hash The hash object to be initialized.
  */
-void cryptonite_decaf_ed448_prehash_init (
-    cryptonite_decaf_ed448_prehash_ctx_t hash
-) CRYPTONITE_DECAF_API_VIS __attribute__((nonnull(1))) CRYPTONITE_DECAF_NOINLINE;
+void crypton_decaf_ed448_prehash_init (
+    crypton_decaf_ed448_prehash_ctx_t hash
+) CRYPTON_DECAF_API_VIS __attribute__((nonnull(1))) CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA signature verification.
@@ -132,15 +132,15 @@ void cryptonite_decaf_ed448_prehash_init (
  * safe.  The C++ wrapper is designed to make it harder to screw this up, but this C code gives
  * you no seat belt.
  */
-cryptonite_decaf_error_t cryptonite_decaf_ed448_verify (
-    const uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
+crypton_decaf_error_t crypton_decaf_ed448_verify (
+    const uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const uint8_t *message,
     size_t message_len,
     uint8_t prehashed,
     const uint8_t *context,
     uint8_t context_len
-) CRYPTONITE_DECAF_API_VIS __attribute__((nonnull(1,2))) CRYPTONITE_DECAF_NOINLINE;
+) CRYPTON_DECAF_API_VIS __attribute__((nonnull(1,2))) CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA signature verification.
@@ -158,13 +158,13 @@ cryptonite_decaf_error_t cryptonite_decaf_ed448_verify (
  * safe.  The C++ wrapper is designed to make it harder to screw this up, but this C code gives
  * you no seat belt.
  */
-cryptonite_decaf_error_t cryptonite_decaf_ed448_verify_prehash (
-    const uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const cryptonite_decaf_ed448_prehash_ctx_t hash,
+crypton_decaf_error_t crypton_decaf_ed448_verify_prehash (
+    const uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_ed448_prehash_ctx_t hash,
     const uint8_t *context,
     uint8_t context_len
-) CRYPTONITE_DECAF_API_VIS __attribute__((nonnull(1,2))) CRYPTONITE_DECAF_NOINLINE;
+) CRYPTON_DECAF_API_VIS __attribute__((nonnull(1,2))) CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA point encoding.  Used internally, exposed externally.
@@ -173,10 +173,10 @@ cryptonite_decaf_error_t cryptonite_decaf_ed448_verify_prehash (
  * @param [out] enc The encoded point.
  * @param [in] p The point.
  */       
-void cryptonite_decaf_448_point_mul_by_cofactor_and_encode_like_eddsa (
-    uint8_t enc[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const cryptonite_decaf_448_point_t p
-) CRYPTONITE_DECAF_API_VIS CRYPTONITE_DECAF_NONNULL CRYPTONITE_DECAF_NOINLINE;
+void crypton_decaf_448_point_mul_by_cofactor_and_encode_like_eddsa (
+    uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_448_point_t p
+) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA point decoding.  Remember that while points on the
@@ -186,10 +186,10 @@ void cryptonite_decaf_448_point_mul_by_cofactor_and_encode_like_eddsa (
  * @param [out] enc The encoded point.
  * @param [in] p The point.
  */       
-cryptonite_decaf_error_t cryptonite_decaf_448_point_decode_like_eddsa_and_ignore_cofactor (
-    cryptonite_decaf_448_point_t p,
-    const uint8_t enc[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES]
-) CRYPTONITE_DECAF_API_VIS CRYPTONITE_DECAF_NONNULL CRYPTONITE_DECAF_NOINLINE;
+crypton_decaf_error_t crypton_decaf_448_point_decode_like_eddsa_and_ignore_cofactor (
+    crypton_decaf_448_point_t p,
+    const uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
+) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA to ECDH public key conversion
@@ -202,10 +202,10 @@ cryptonite_decaf_error_t cryptonite_decaf_448_point_decode_like_eddsa_and_ignore
  * @param[out] x The ECDH public key as in RFC7748(point on Montgomery curve)
  * @param[in] ed The EdDSA public key(point on Edwards curve)
  */
-void cryptonite_decaf_ed448_convert_public_key_to_x448 (
-    uint8_t x[CRYPTONITE_DECAF_X448_PUBLIC_BYTES],
-    const uint8_t ed[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES]
-) CRYPTONITE_DECAF_API_VIS CRYPTONITE_DECAF_NONNULL CRYPTONITE_DECAF_NOINLINE;
+void crypton_decaf_ed448_convert_public_key_to_x448 (
+    uint8_t x[CRYPTON_DECAF_X448_PUBLIC_BYTES],
+    const uint8_t ed[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
+) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief EdDSA to ECDH private key conversion
@@ -215,13 +215,13 @@ void cryptonite_decaf_ed448_convert_public_key_to_x448 (
  * @param[out] x The ECDH private key as in RFC7748
  * @param[in] ed The EdDSA private key
  */
-void cryptonite_decaf_ed448_convert_private_key_to_x448 (
-    uint8_t x[CRYPTONITE_DECAF_X448_PRIVATE_BYTES],
-    const uint8_t ed[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES]
-) CRYPTONITE_DECAF_API_VIS CRYPTONITE_DECAF_NONNULL CRYPTONITE_DECAF_NOINLINE;
+void crypton_decaf_ed448_convert_private_key_to_x448 (
+    uint8_t x[CRYPTON_DECAF_X448_PRIVATE_BYTES],
+    const uint8_t ed[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
+) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* __CRYPTONITE_DECAF_ED448_H__ */
+#endif /* __CRYPTON_DECAF_ED448_H__ */

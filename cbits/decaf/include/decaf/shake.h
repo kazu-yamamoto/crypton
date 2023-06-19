@@ -21,10 +21,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_DECAF_SHAKE_H
-#define CRYPTONITE_DECAF_SHAKE_H
+#ifndef CRYPTON_DECAF_SHAKE_H
+#define CRYPTON_DECAF_SHAKE_H
 
-#include "cryptonite_sha3.h"
+#include "crypton_sha3.h"
 
 #include <decaf/common.h>
 
@@ -35,62 +35,62 @@ typedef struct sha3_shake256_ctx
         struct sha3_ctx    sc[1];
         uint8_t            filler[136];    // 200 - 2*(256/8)
 }
-cryptonite_decaf_shake256_ctx_t[1];
+crypton_decaf_shake256_ctx_t[1];
 
-static inline void cryptonite_decaf_shake256_init(cryptonite_decaf_shake256_ctx_t ctx)
+static inline void crypton_decaf_shake256_init(crypton_decaf_shake256_ctx_t ctx)
 {
-        cryptonite_sha3_init(ctx -> sc, 256);
+        crypton_sha3_init(ctx -> sc, 256);
 }
 
-static inline void cryptonite_decaf_shake256_update(cryptonite_decaf_shake256_ctx_t ctx, const uint8_t *in, size_t inlen)
+static inline void crypton_decaf_shake256_update(crypton_decaf_shake256_ctx_t ctx, const uint8_t *in, size_t inlen)
 {
 #if __SIZE_MAX__ > UINT32_MAX
         // split data over 4 GB in 2-GB chunks
         while (inlen > UINT32_MAX) {
-                cryptonite_sha3_update(ctx -> sc, in, CHUNK_SIZE_32);
+                crypton_sha3_update(ctx -> sc, in, CHUNK_SIZE_32);
                 inlen -= CHUNK_SIZE_32;
                 in += CHUNK_SIZE_32;
         }
 #endif
-        cryptonite_sha3_update(ctx -> sc, in, (uint32_t) inlen);
+        crypton_sha3_update(ctx -> sc, in, (uint32_t) inlen);
 }
 
-static inline void cryptonite_decaf_shake256_output(cryptonite_decaf_shake256_ctx_t ctx, uint8_t *out, size_t outlen) {
+static inline void crypton_decaf_shake256_output(crypton_decaf_shake256_ctx_t ctx, uint8_t *out, size_t outlen) {
 #if __SIZE_MAX__ > UINT32_MAX
         // split data over 4 GB in 2-GB chunks
         while (outlen > UINT32_MAX) {
-                cryptonite_sha3_output(ctx -> sc, out, CHUNK_SIZE_32);
+                crypton_sha3_output(ctx -> sc, out, CHUNK_SIZE_32);
                 outlen -= CHUNK_SIZE_32;
                 out += CHUNK_SIZE_32;
         }
 #endif
-        cryptonite_sha3_output(ctx -> sc, out, (uint32_t) outlen);
+        crypton_sha3_output(ctx -> sc, out, (uint32_t) outlen);
 }
 
-static inline void cryptonite_decaf_shake256_final(cryptonite_decaf_shake256_ctx_t ctx, uint8_t *out, size_t outlen)
+static inline void crypton_decaf_shake256_final(crypton_decaf_shake256_ctx_t ctx, uint8_t *out, size_t outlen)
 {
-        cryptonite_sha3_finalize_shake(ctx -> sc);
-        cryptonite_decaf_shake256_output(ctx, out, outlen);
+        crypton_sha3_finalize_shake(ctx -> sc);
+        crypton_decaf_shake256_output(ctx, out, outlen);
 
-        cryptonite_decaf_shake256_init(ctx);
+        crypton_decaf_shake256_init(ctx);
 }
 
-static inline void cryptonite_decaf_shake256_destroy(cryptonite_decaf_shake256_ctx_t ctx)
+static inline void crypton_decaf_shake256_destroy(crypton_decaf_shake256_ctx_t ctx)
 {
-        cryptonite_decaf_bzero(ctx, sizeof(*ctx));
+        crypton_decaf_bzero(ctx, sizeof(*ctx));
 }
 
-static inline void cryptonite_decaf_shake256_hash(uint8_t *out, size_t outlen, const uint8_t *in, size_t inlen)
+static inline void crypton_decaf_shake256_hash(uint8_t *out, size_t outlen, const uint8_t *in, size_t inlen)
 {
-        cryptonite_decaf_shake256_ctx_t ctx;
+        crypton_decaf_shake256_ctx_t ctx;
 
-        cryptonite_decaf_shake256_init(ctx);
-        cryptonite_decaf_shake256_update(ctx, in, inlen);
+        crypton_decaf_shake256_init(ctx);
+        crypton_decaf_shake256_update(ctx, in, inlen);
 
-        cryptonite_sha3_finalize_shake(ctx -> sc);
-        cryptonite_decaf_shake256_output(ctx, out, outlen);
+        crypton_sha3_finalize_shake(ctx -> sc);
+        crypton_decaf_shake256_output(ctx, out, outlen);
 
-        cryptonite_decaf_shake256_destroy(ctx);
+        crypton_decaf_shake256_destroy(ctx);
 }
 
 #endif

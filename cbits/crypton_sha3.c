@@ -24,9 +24,9 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
-#include "cryptonite_sha3.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
+#include "crypton_sha3.h"
 
 #define KECCAK_NB_ROUNDS 24
 
@@ -103,9 +103,9 @@ static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
  * (and half the capacity) in bits.
  *
  * In case of cSHAKE, the message prefix with encoded N and S must be added with
- * cryptonite_sha3_update.
+ * crypton_sha3_update.
  */
-void cryptonite_sha3_init(struct sha3_ctx *ctx, uint32_t hashlen)
+void crypton_sha3_init(struct sha3_ctx *ctx, uint32_t hashlen)
 {
 	/* assert(hashlen >= SHA3_BITSIZE_MIN && hashlen <= SHA3_BITSIZE_MAX) */
 	int bufsz = SHA3_BUF_SIZE(hashlen);
@@ -114,7 +114,7 @@ void cryptonite_sha3_init(struct sha3_ctx *ctx, uint32_t hashlen)
 }
 
 /* Update a SHA-3 / SHAKE / cSHAKE context */
-void cryptonite_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t to_fill;
 
@@ -155,7 +155,7 @@ void cryptonite_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t 
 	}
 }
 
-void cryptonite_sha3_finalize_with_pad_byte(struct sha3_ctx *ctx, uint8_t pad_byte)
+void crypton_sha3_finalize_with_pad_byte(struct sha3_ctx *ctx, uint8_t pad_byte)
 {
 	/* process full buffer if needed */
 	if (ctx->bufindex == ctx->bufsz) {
@@ -177,7 +177,7 @@ void cryptonite_sha3_finalize_with_pad_byte(struct sha3_ctx *ctx, uint8_t pad_by
  * Extract some bytes from a finalized SHA-3 / SHAKE / cSHAKE context.
  * May be called multiple times.
  */
-void cryptonite_sha3_output(struct sha3_ctx *ctx, uint8_t *out, uint32_t len)
+void crypton_sha3_output(struct sha3_ctx *ctx, uint8_t *out, uint32_t len)
 {
 	uint64_t w[25];
 	uint8_t *wptr = (uint8_t *) w;
@@ -217,36 +217,36 @@ void cryptonite_sha3_output(struct sha3_ctx *ctx, uint8_t *out, uint32_t len)
 }
 
 /* Finalize a SHA-3 context and return the digest value */
-void cryptonite_sha3_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out)
+void crypton_sha3_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out)
 {
-	cryptonite_sha3_finalize_with_pad_byte(ctx, 0x06);
-	cryptonite_sha3_output(ctx, out, hashlen / 8);
+	crypton_sha3_finalize_with_pad_byte(ctx, 0x06);
+	crypton_sha3_output(ctx, out, hashlen / 8);
 }
 
-/* Finalize a SHAKE context. Output is read using cryptonite_sha3_output. */
-void cryptonite_sha3_finalize_shake(struct sha3_ctx *ctx)
+/* Finalize a SHAKE context. Output is read using crypton_sha3_output. */
+void crypton_sha3_finalize_shake(struct sha3_ctx *ctx)
 {
-	cryptonite_sha3_finalize_with_pad_byte(ctx, 0x1F);
+	crypton_sha3_finalize_with_pad_byte(ctx, 0x1F);
 }
 
-/* Finalize a cSHAKE context. Output is read using cryptonite_sha3_output. */
-void cryptonite_sha3_finalize_cshake(struct sha3_ctx *ctx)
+/* Finalize a cSHAKE context. Output is read using crypton_sha3_output. */
+void crypton_sha3_finalize_cshake(struct sha3_ctx *ctx)
 {
-	cryptonite_sha3_finalize_with_pad_byte(ctx, 0x04);
+	crypton_sha3_finalize_with_pad_byte(ctx, 0x04);
 }
 
-void cryptonite_keccak_init(struct sha3_ctx *ctx, uint32_t hashlen)
+void crypton_keccak_init(struct sha3_ctx *ctx, uint32_t hashlen)
 {
-	cryptonite_sha3_init(ctx, hashlen);
+	crypton_sha3_init(ctx, hashlen);
 }
 
-void cryptonite_keccak_update(struct sha3_ctx *ctx, uint8_t *data, uint32_t len)
+void crypton_keccak_update(struct sha3_ctx *ctx, uint8_t *data, uint32_t len)
 {
-	cryptonite_sha3_update(ctx, data, len);
+	crypton_sha3_update(ctx, data, len);
 }
 
-void cryptonite_keccak_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out)
+void crypton_keccak_finalize(struct sha3_ctx *ctx, uint32_t hashlen, uint8_t *out)
 {
-	cryptonite_sha3_finalize_with_pad_byte(ctx, 1);
-	cryptonite_sha3_output(ctx, out, hashlen / 8);
+	crypton_sha3_finalize_with_pad_byte(ctx, 1);
+	crypton_sha3_output(ctx, out, hashlen / 8);
 }

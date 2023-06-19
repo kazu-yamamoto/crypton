@@ -23,11 +23,11 @@
  */
 
 #include <string.h>
-#include "cryptonite_sha256.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_sha256.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 
-void cryptonite_sha224_init(struct sha224_ctx *ctx)
+void crypton_sha224_init(struct sha224_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -41,7 +41,7 @@ void cryptonite_sha224_init(struct sha224_ctx *ctx)
 	ctx->h[7] = 0xbefa4fa4;
 }
 
-void cryptonite_sha256_init(struct sha256_ctx *ctx)
+void crypton_sha256_init(struct sha256_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -111,12 +111,12 @@ static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 	ctx->h[4] += e; ctx->h[5] += f; ctx->h[6] += g; ctx->h[7] += h;
 }
 
-void cryptonite_sha224_update(struct sha224_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha224_update(struct sha224_ctx *ctx, const uint8_t *data, uint32_t len)
 {
-	return cryptonite_sha256_update(ctx, data, len);
+	return crypton_sha256_update(ctx, data, len);
 }
 
-void cryptonite_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -153,23 +153,23 @@ void cryptonite_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint3
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_sha224_finalize(struct sha224_ctx *ctx, uint8_t *out)
+void crypton_sha224_finalize(struct sha224_ctx *ctx, uint8_t *out)
 {
 	uint8_t intermediate[SHA256_DIGEST_SIZE];
 
-	cryptonite_sha256_finalize(ctx, intermediate);
+	crypton_sha256_finalize(ctx, intermediate);
 	memcpy(out, intermediate, SHA224_DIGEST_SIZE);
 }
 
-void cryptonite_sha224_finalize_prefix(struct sha224_ctx *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
+void crypton_sha224_finalize_prefix(struct sha224_ctx *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out)
 {
 	uint8_t intermediate[SHA256_DIGEST_SIZE];
 
-	cryptonite_sha256_finalize_prefix(ctx, data, len, n, intermediate);
+	crypton_sha256_finalize_prefix(ctx, data, len, n, intermediate);
 	memcpy(out, intermediate, SHA224_DIGEST_SIZE);
 }
 
-void cryptonite_sha256_finalize(struct sha256_ctx *ctx, uint8_t *out)
+void crypton_sha256_finalize(struct sha256_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x80, };
 	uint64_t bits;
@@ -181,10 +181,10 @@ void cryptonite_sha256_finalize(struct sha256_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_sha256_update(ctx, padding, padlen);
+	crypton_sha256_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_sha256_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_sha256_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* store to digest */
 	for (i = 0; i < 8; i++)
@@ -193,26 +193,26 @@ void cryptonite_sha256_finalize(struct sha256_ctx *ctx, uint8_t *out)
 
 #define HASHED(m) SHA256_##m
 #define HASHED_LOWER(m) sha256_##m
-#define CRYPTONITE_HASHED(m) cryptonite_sha256_##m
+#define CRYPTON_HASHED(m) crypton_sha256_##m
 #define SHA256_BLOCK_SIZE 64
 #define SHA256_BITS_ELEMS 1
 
-static inline uint32_t cryptonite_sha256_get_index(const struct sha256_ctx *ctx)
+static inline uint32_t crypton_sha256_get_index(const struct sha256_ctx *ctx)
 {
 	return (uint32_t) (ctx->sz & 0x3f);
 }
 
-static inline void cryptonite_sha256_incr_sz(struct sha256_ctx *ctx, uint64_t *bits, uint32_t n)
+static inline void crypton_sha256_incr_sz(struct sha256_ctx *ctx, uint64_t *bits, uint32_t n)
 {
 	ctx->sz += n;
 	*bits = cpu_to_be64(ctx->sz << 3);
 }
 
-static inline void cryptonite_sha256_select_digest(const struct sha256_ctx *ctx, uint8_t *out, uint32_t out_mask)
+static inline void crypton_sha256_select_digest(const struct sha256_ctx *ctx, uint8_t *out, uint32_t out_mask)
 {
 	uint32_t i;
 	for (i = 0; i < 8; i++)
 		xor_be32(out+4*i, ctx->h[i] & out_mask);
 }
 
-#include <cryptonite_hash_prefix.c>
+#include <crypton_hash_prefix.c>

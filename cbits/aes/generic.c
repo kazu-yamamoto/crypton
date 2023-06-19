@@ -32,8 +32,8 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <cryptonite_aes.h>
-#include <cryptonite_bitfn.h>
+#include <crypton_aes.h>
+#include <crypton_bitfn.h>
 
 static uint8_t sbox[256] = {
 	0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe,
@@ -405,7 +405,7 @@ static void aes_main_inv(aes_key *key, uint8_t *state)
 	t[2] = f[8]; t[6] = f[9]; t[10] = f[10]; t[14] = f[11]; \
 	t[3] = f[12]; t[7] = f[13]; t[11] = f[14]; t[15] = f[15]
 
-void cryptonite_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_block *input)
+void crypton_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
 	uint32_t block[4];
 	uint8_t *iptr, *optr, *bptr;
@@ -418,7 +418,7 @@ void cryptonite_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_b
 	swap_block(optr, bptr);
 }
 
-void cryptonite_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_block *input)
+void crypton_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
 	uint32_t block[4];
 	uint8_t *iptr, *optr, *bptr;
@@ -431,7 +431,7 @@ void cryptonite_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_b
 	swap_block(optr, bptr);
 }
 
-void cryptonite_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size)
+void crypton_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size)
 {
 	int esz;
 

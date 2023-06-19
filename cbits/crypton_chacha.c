@@ -30,9 +30,9 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "cryptonite_chacha.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_chacha.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 #include <stdio.h>
 
 #define QR(a,b,c,d) \
@@ -47,7 +47,7 @@
 static const uint8_t sigma[16] = "expand 32-byte k";
 static const uint8_t tau[16] = "expand 16-byte k";
 
-static void chacha_core(int rounds, block *out, const cryptonite_chacha_state *in)
+static void chacha_core(int rounds, block *out, const crypton_chacha_state *in)
 {
 	uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
 	int i;
@@ -93,7 +93,7 @@ static void chacha_core(int rounds, block *out, const cryptonite_chacha_state *i
 }
 
 /* only 2 valids values are 256 (32) and 128 (16) */
-void cryptonite_chacha_init_core(cryptonite_chacha_state *st,
+void crypton_chacha_init_core(crypton_chacha_state *st,
                                  uint32_t keylen, const uint8_t *key,
                                  uint32_t ivlen, const uint8_t *iv)
 {
@@ -133,19 +133,19 @@ void cryptonite_chacha_init_core(cryptonite_chacha_state *st,
 	}
 }
 
-void cryptonite_chacha_init(cryptonite_chacha_context *ctx, uint8_t nb_rounds,
+void crypton_chacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds,
                             uint32_t keylen, const uint8_t *key,
                             uint32_t ivlen, const uint8_t *iv)
 {
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->nb_rounds = nb_rounds;
-	cryptonite_chacha_init_core(&ctx->st, keylen, key, ivlen, iv);
+	crypton_chacha_init_core(&ctx->st, keylen, key, ivlen, iv);
 }
 
-void cryptonite_chacha_combine(uint8_t *dst, cryptonite_chacha_context *ctx, const uint8_t *src, uint32_t bytes)
+void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uint8_t *src, uint32_t bytes)
 {
 	block out;
-	cryptonite_chacha_state *st;
+	crypton_chacha_state *st;
 	int i;
 
 	if (!bytes)
@@ -201,9 +201,9 @@ void cryptonite_chacha_combine(uint8_t *dst, cryptonite_chacha_context *ctx, con
 	}
 }
 
-void cryptonite_chacha_generate(uint8_t *dst, cryptonite_chacha_context *ctx, uint32_t bytes)
+void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t bytes)
 {
-	cryptonite_chacha_state *st;
+	crypton_chacha_state *st;
 	block out;
 	int i;
 
@@ -269,7 +269,7 @@ void cryptonite_chacha_generate(uint8_t *dst, cryptonite_chacha_context *ctx, ui
 	}
 }
 
-void cryptonite_chacha_random(uint32_t rounds, uint8_t *dst, cryptonite_chacha_state *st, uint32_t bytes)
+void crypton_chacha_random(uint32_t rounds, uint8_t *dst, crypton_chacha_state *st, uint32_t bytes)
 {
 	block out;
 
@@ -278,11 +278,11 @@ void cryptonite_chacha_random(uint32_t rounds, uint8_t *dst, cryptonite_chacha_s
 	for (; bytes >= 16; bytes -= 16, dst += 16) {
 		chacha_core(rounds, &out, st);
 		memcpy(dst, out.b + 40, 16);
-		cryptonite_chacha_init_core(st, 32, out.b, 8, out.b + 32);
+		crypton_chacha_init_core(st, 32, out.b, 8, out.b + 32);
 	}
 	if (bytes) {
 		chacha_core(rounds, &out, st);
 		memcpy(dst, out.b + 40, bytes);
-		cryptonite_chacha_init_core(st, 32, out.b, 8, out.b + 32);
+		crypton_chacha_init_core(st, 32, out.b, 8, out.b + 32);
 	}
 }

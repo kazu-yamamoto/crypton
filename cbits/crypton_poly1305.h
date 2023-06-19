@@ -27,8 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef CRYPTONITE_POLY1305_H
-# define CRYPTONITE_POLY1305_H
+#ifndef CRYPTON_POLY1305_H
+# define CRYPTON_POLY1305_H
 
 /* 8*8+1*16+1*4 = 84 */
 typedef struct
@@ -43,8 +43,8 @@ typedef struct
 typedef uint8_t poly1305_mac[16];
 typedef uint8_t poly1305_key[32];
 
-void cryptonite_poly1305_init(poly1305_ctx *ctx, poly1305_key *key);
-void cryptonite_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t length);
-void cryptonite_poly1305_finalize(poly1305_mac mac, poly1305_ctx *ctx);
+void crypton_poly1305_init(poly1305_ctx *ctx, poly1305_key *key);
+void crypton_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t length);
+void crypton_poly1305_finalize(poly1305_mac mac, poly1305_ctx *ctx);
 
 #endif

@@ -34,11 +34,11 @@ instance HashAlgorithm MD2 where
     hashInternalUpdate        = c_md2_update
     hashInternalFinalize      = c_md2_finalize
 
-foreign import ccall unsafe "cryptonite_md2_init"
+foreign import ccall unsafe "crypton_md2_init"
     c_md2_init :: Ptr (Context a)-> IO ()
 
-foreign import ccall "cryptonite_md2_update"
+foreign import ccall "crypton_md2_update"
     c_md2_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
 
-foreign import ccall unsafe "cryptonite_md2_finalize"
+foreign import ccall unsafe "crypton_md2_finalize"
     c_md2_finalize :: Ptr (Context a) -> Ptr (Digest a) -> IO ()

@@ -23,11 +23,11 @@
  */
 
 #include <string.h>
-#include "cryptonite_sha1.h"
-#include "cryptonite_bitfn.h"
-#include "cryptonite_align.h"
+#include "crypton_sha1.h"
+#include "crypton_bitfn.h"
+#include "crypton_align.h"
 
-void cryptonite_sha1_init(struct sha1_ctx *ctx)
+void crypton_sha1_init(struct sha1_ctx *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -156,7 +156,7 @@ static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
 	ctx->h[4] += e;
 }
 
-void cryptonite_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len)
 {
 	uint32_t index, to_fill;
 
@@ -192,7 +192,7 @@ void cryptonite_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t 
 		memcpy(ctx->buf + index, data, len);
 }
 
-void cryptonite_sha1_finalize(struct sha1_ctx *ctx, uint8_t *out)
+void crypton_sha1_finalize(struct sha1_ctx *ctx, uint8_t *out)
 {
 	static uint8_t padding[64] = { 0x80, };
 	uint64_t bits;
@@ -204,10 +204,10 @@ void cryptonite_sha1_finalize(struct sha1_ctx *ctx, uint8_t *out)
 	/* pad out to 56 */
 	index = (uint32_t) (ctx->sz & 0x3f);
 	padlen = (index < 56) ? (56 - index) : ((64 + 56) - index);
-	cryptonite_sha1_update(ctx, padding, padlen);
+	crypton_sha1_update(ctx, padding, padlen);
 
 	/* append length */
-	cryptonite_sha1_update(ctx, (uint8_t *) &bits, sizeof(bits));
+	crypton_sha1_update(ctx, (uint8_t *) &bits, sizeof(bits));
 
 	/* output hash */
 	store_be32(out   , ctx->h[0]);
@@ -219,22 +219,22 @@ void cryptonite_sha1_finalize(struct sha1_ctx *ctx, uint8_t *out)
 
 #define HASHED(m) SHA1_##m
 #define HASHED_LOWER(m) sha1_##m
-#define CRYPTONITE_HASHED(m) cryptonite_sha1_##m
+#define CRYPTON_HASHED(m) crypton_sha1_##m
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_BITS_ELEMS 1
 
-static inline uint32_t cryptonite_sha1_get_index(const struct sha1_ctx *ctx)
+static inline uint32_t crypton_sha1_get_index(const struct sha1_ctx *ctx)
 {
 	return (uint32_t) (ctx->sz & 0x3f);
 }
 
-static inline void cryptonite_sha1_incr_sz(struct sha1_ctx *ctx, uint64_t *bits, uint32_t n)
+static inline void crypton_sha1_incr_sz(struct sha1_ctx *ctx, uint64_t *bits, uint32_t n)
 {
 	ctx->sz += n;
 	*bits = cpu_to_be64(ctx->sz << 3);
 }
 
-static inline void cryptonite_sha1_select_digest(const struct sha1_ctx *ctx, uint8_t *out, uint32_t out_mask)
+static inline void crypton_sha1_select_digest(const struct sha1_ctx *ctx, uint8_t *out, uint32_t out_mask)
 {
 	xor_be32(out   , ctx->h[0] & out_mask);
 	xor_be32(out+ 4, ctx->h[1] & out_mask);
@@ -243,4 +243,4 @@ static inline void cryptonite_sha1_select_digest(const struct sha1_ctx *ctx, uin
 	xor_be32(out+16, ctx->h[4] & out_mask);
 }
 
-#include <cryptonite_hash_prefix.c>
+#include <crypton_hash_prefix.c>

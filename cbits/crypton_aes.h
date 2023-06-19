@@ -29,8 +29,8 @@
  *
  * AES implementation
  */
-#ifndef CRYPTONITE_AES_H
-#define CRYPTONITE_AES_H
+#ifndef CRYPTON_AES_H
+#define CRYPTON_AES_H
 
 #include <stdint.h>
 #include "aes/block128.h"
@@ -84,47 +84,47 @@ typedef struct {
 } aes_polyval;
 
 /* in bytes: either 16,24,32 */
-void cryptonite_aes_initkey(aes_key *ctx, uint8_t *key, uint8_t size);
+void crypton_aes_initkey(aes_key *ctx, uint8_t *key, uint8_t size);
 
-void cryptonite_aes_encrypt(aes_block *output, aes_key *key, aes_block *input);
-void cryptonite_aes_decrypt(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_encrypt(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_decrypt(aes_block *output, aes_key *key, aes_block *input);
 
-void cryptonite_aes_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
-void cryptonite_aes_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
 
-void cryptonite_aes_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
-void cryptonite_aes_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
 
-void cryptonite_aes_gen_ctr(aes_block *output, aes_key *key, const aes_block *iv, uint32_t nb_blocks);
-void cryptonite_aes_gen_ctr_cont(aes_block *output, aes_key *key, aes_block *iv, uint32_t nb_blocks);
+void crypton_aes_gen_ctr(aes_block *output, aes_key *key, const aes_block *iv, uint32_t nb_blocks);
+void crypton_aes_gen_ctr_cont(aes_block *output, aes_key *key, aes_block *iv, uint32_t nb_blocks);
 
-void cryptonite_aes_encrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes_block *sector,
+void crypton_aes_encrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes_block *sector,
                      uint32_t spoint, aes_block *input, uint32_t nb_blocks);
-void cryptonite_aes_decrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes_block *sector,
+void crypton_aes_decrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes_block *sector,
                      uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 
-void cryptonite_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len);
-void cryptonite_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length);
-void cryptonite_aes_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_gcm_finish(uint8_t *tag, aes_gcm *gcm, aes_key *key);
+void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len);
+void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length);
+void crypton_aes_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_gcm_finish(uint8_t *tag, aes_gcm *gcm, aes_key *key);
 
-void cryptonite_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len);
-void cryptonite_aes_ocb_aad(aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ocb_encrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ocb_decrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ocb_finish(uint8_t *tag, aes_ocb *ocb, aes_key *key);
+void crypton_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len);
+void crypton_aes_ocb_aad(aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ocb_encrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ocb_decrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ocb_finish(uint8_t *tag, aes_ocb *ocb, aes_key *key);
 
-void cryptonite_aes_ccm_init(aes_ccm *ccm, aes_key *key, uint8_t *nonce, uint32_t len, uint32_t msg_size, int m, int l);
-void cryptonite_aes_ccm_aad(aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void cryptonite_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key);
+void crypton_aes_ccm_init(aes_ccm *ccm, aes_key *key, uint8_t *nonce, uint32_t len, uint32_t msg_size, int m, int l);
+void crypton_aes_ccm_aad(aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key);
 
-uint8_t *cryptonite_aes_cpu_init(void);
+uint8_t *crypton_aes_cpu_init(void);
 
-void cryptonite_aes_polyval_init(aes_polyval *ctx, const aes_block *h);
-void cryptonite_aes_polyval_update(aes_polyval *ctx, const uint8_t *input, uint32_t length);
-void cryptonite_aes_polyval_finalize(aes_polyval *ctx, aes_block *dst);
+void crypton_aes_polyval_init(aes_polyval *ctx, const aes_block *h);
+void crypton_aes_polyval_update(aes_polyval *ctx, const uint8_t *input, uint32_t length);
+void crypton_aes_polyval_finalize(aes_polyval *ctx, aes_block *dst);
 
 #endif

@@ -34,7 +34,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int cryptonite_cpu_has_rdrand()
+int crypton_cpu_has_rdrand()
 {
 	uint32_t ax,bx,cx,dx,func=1;
 #if defined(__PIC__) && defined(__i386__)
@@ -71,11 +71,11 @@ int cryptonite_cpu_has_rdrand()
 #ifdef __x86_64__
 # define RDRAND_SZ 8
 # define RDRAND_T  uint64_t
-#define inline_rdrand(val, err) err = cryptonite_rdrand_step(&val)
+#define inline_rdrand(val, err) err = crypton_rdrand_step(&val)
 #else
 # define RDRAND_SZ 4
 # define RDRAND_T  uint32_t
-#define inline_rdrand(val, err) err = cryptonite_rdrand_step(&val)
+#define inline_rdrand(val, err) err = crypton_rdrand_step(&val)
 #endif
 
 /* sadly many people are still using an old binutils,
@@ -83,7 +83,7 @@ int cryptonite_cpu_has_rdrand()
  */
 #if 1
 /* Returns 1 on success */
-static inline int cryptonite_rdrand_step(RDRAND_T *buffer)
+static inline int crypton_rdrand_step(RDRAND_T *buffer)
 {
 	unsigned char err;
 	asm volatile ("rdrand %0; setc %1" : "=r" (*buffer), "=qm" (err));
@@ -92,7 +92,7 @@ static inline int cryptonite_rdrand_step(RDRAND_T *buffer)
 #endif
 
 /* Returns the number of bytes successfully generated */
-int cryptonite_get_rand_bytes(uint8_t *buffer, size_t len)
+int crypton_get_rand_bytes(uint8_t *buffer, size_t len)
 {
 	RDRAND_T tmp;
 	int aligned = (intptr_t) buffer % RDRAND_SZ;

@@ -29,12 +29,12 @@
  */
 #include <stdint.h>
 #include <string.h>
-#include "cryptonite_xsalsa.h"
-#include "cryptonite_align.h"
-#include "cryptonite_bitfn.h"
+#include "crypton_xsalsa.h"
+#include "crypton_align.h"
+#include "crypton_bitfn.h"
 
 /* XSalsa20 algorithm as described in https://cr.yp.to/snuffle/xsalsa-20081128.pdf */
-void cryptonite_xsalsa_init(cryptonite_salsa_context *ctx, uint8_t nb_rounds,
+void crypton_xsalsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds,
                             uint32_t keylen, const uint8_t *key,
                             uint32_t ivlen, const uint8_t *iv)
 {
@@ -46,14 +46,14 @@ void cryptonite_xsalsa_init(cryptonite_salsa_context *ctx, uint8_t nb_rounds,
        (x1, x2, x3, x4, x11, x12, x13, x14) is a 256-bit key
        (x6, x7, x8, x9) is the first 128 bits of a 192-bit nonce
   */
-  cryptonite_salsa_init_core(&ctx->st, keylen, key, 8, iv);
+  crypton_salsa_init_core(&ctx->st, keylen, key, 8, iv);
 
   /* Continue initialization in a separate function that may also
      be called independently */
-  cryptonite_xsalsa_derive(ctx, ivlen - 8, iv + 8);
+  crypton_xsalsa_derive(ctx, ivlen - 8, iv + 8);
 }
 
-void cryptonite_xsalsa_derive(cryptonite_salsa_context *ctx,
+void crypton_xsalsa_derive(crypton_salsa_context *ctx,
                               uint32_t ivlen, const uint8_t *iv)
 {
   /* Finish creating initial 512-bit input block:
@@ -67,7 +67,7 @@ void cryptonite_xsalsa_derive(cryptonite_salsa_context *ctx,
   /* Compute (z0, z1, . . . , z15) = doubleround ^(r/2) (x0, x1, . . . , x15) */
   block hSalsa;
   memset(&hSalsa, 0, sizeof(block));
-  cryptonite_salsa_core_xor(ctx->nb_rounds, &hSalsa, &ctx->st);
+  crypton_salsa_core_xor(ctx->nb_rounds, &hSalsa, &ctx->st);
  
   /* Build a new 512-bit input block (x′0, x′1, . . . , x′15):
        (x′0, x′5, x′10, x′15) is the Salsa20 constant

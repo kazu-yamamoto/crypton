@@ -1,16 +1,16 @@
-#include "cryptonite_blake2bp.h"
+#include "crypton_blake2bp.h"
 
-void cryptonite_blake2bp_init(blake2bp_ctx *ctx, uint32_t hashlen)
+void crypton_blake2bp_init(blake2bp_ctx *ctx, uint32_t hashlen)
 {
-	_cryptonite_blake2bp_init(ctx, hashlen / 8);
+	_crypton_blake2bp_init(ctx, hashlen / 8);
 }
 
-void cryptonite_blake2bp_update(blake2bp_ctx *ctx, const uint8_t *data, uint32_t len)
+void crypton_blake2bp_update(blake2bp_ctx *ctx, const uint8_t *data, uint32_t len)
 {
-	_cryptonite_blake2bp_update(ctx, data, len);
+	_crypton_blake2bp_update(ctx, data, len);
 }
 
-void cryptonite_blake2bp_finalize(blake2bp_ctx *ctx, uint32_t hashlen, uint8_t *out)
+void crypton_blake2bp_finalize(blake2bp_ctx *ctx, uint32_t hashlen, uint8_t *out)
 {
-	_cryptonite_blake2bp_final(ctx, out, hashlen / 8);
+	_crypton_blake2bp_final(ctx, out, hashlen / 8);
 }

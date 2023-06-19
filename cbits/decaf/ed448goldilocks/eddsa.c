@@ -18,23 +18,23 @@
 #include <decaf/sha512.h>
 #include <string.h>
 
-#define API_NAME "cryptonite_decaf_448"
-#define API_NS(_id) cryptonite_decaf_448_##_id
+#define API_NAME "crypton_decaf_448"
+#define API_NS(_id) crypton_decaf_448_##_id
 
-#define hash_ctx_t   cryptonite_decaf_shake256_ctx_t
-#define hash_init    cryptonite_decaf_shake256_init
-#define hash_update  cryptonite_decaf_shake256_update
-#define hash_final   cryptonite_decaf_shake256_final
-#define hash_destroy cryptonite_decaf_shake256_destroy
-#define hash_hash    cryptonite_decaf_shake256_hash
+#define hash_ctx_t   crypton_decaf_shake256_ctx_t
+#define hash_init    crypton_decaf_shake256_init
+#define hash_update  crypton_decaf_shake256_update
+#define hash_final   crypton_decaf_shake256_final
+#define hash_destroy crypton_decaf_shake256_destroy
+#define hash_hash    crypton_decaf_shake256_hash
 
-#define NO_CONTEXT CRYPTONITE_DECAF_EDDSA_448_SUPPORTS_CONTEXTLESS_SIGS
+#define NO_CONTEXT CRYPTON_DECAF_EDDSA_448_SUPPORTS_CONTEXTLESS_SIGS
 #define EDDSA_USE_SIGMA_ISOGENY 0
 #define COFACTOR 4
 
 #if NO_CONTEXT
-const uint8_t CRYPTONITE_NO_CONTEXT_POINTS_HERE = 0;
-const uint8_t * const CRYPTONITE_DECAF_ED448_NO_CONTEXT = &CRYPTONITE_NO_CONTEXT_POINTS_HERE;
+const uint8_t CRYPTON_NO_CONTEXT_POINTS_HERE = 0;
+const uint8_t * const CRYPTON_DECAF_ED448_NO_CONTEXT = &CRYPTON_NO_CONTEXT_POINTS_HERE;
 #endif
 
 /* EDDSA_BASE_POINT_RATIO = 1 or 2
@@ -44,17 +44,17 @@ const uint8_t * const CRYPTONITE_DECAF_ED448_NO_CONTEXT = &CRYPTONITE_NO_CONTEXT
 #define EDDSA_BASE_POINT_RATIO (1+EDDSA_USE_SIGMA_ISOGENY)
 
 static void clamp (
-    uint8_t secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES]
+    uint8_t secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
 ) {
     /* Blarg */
     secret_scalar_ser[0] &= -COFACTOR;
     uint8_t hibit = (1<<0)>>1;
     if (hibit == 0) {
-        secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES - 1] = 0;
-        secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES - 2] |= 0x80;
+        secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES - 1] = 0;
+        secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES - 2] |= 0x80;
     } else {
-        secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES - 1] &= hibit-1;
-        secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES - 1] |= hibit;
+        secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES - 1] &= hibit-1;
+        secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES - 1] |= hibit;
     }
 }
 
@@ -68,7 +68,7 @@ static void hash_init_with_dom(
     hash_init(hash);
 
 #if NO_CONTEXT
-    if (context_len == 0 && context == CRYPTONITE_DECAF_ED448_NO_CONTEXT) {
+    if (context_len == 0 && context == CRYPTON_DECAF_ED448_NO_CONTEXT) {
         (void)prehashed;
         (void)for_prehash;
         (void)context;
@@ -83,39 +83,39 @@ static void hash_init_with_dom(
     hash_update(hash,context,context_len);
 }
 
-void cryptonite_decaf_ed448_prehash_init (
+void crypton_decaf_ed448_prehash_init (
     hash_ctx_t hash
 ) {
     hash_init(hash);
 }
 
 /* In this file because it uses the hash */
-void cryptonite_decaf_ed448_convert_private_key_to_x448 (
-    uint8_t x[CRYPTONITE_DECAF_X448_PRIVATE_BYTES],
-    const uint8_t ed[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES]
+void crypton_decaf_ed448_convert_private_key_to_x448 (
+    uint8_t x[CRYPTON_DECAF_X448_PRIVATE_BYTES],
+    const uint8_t ed[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
 ) {
     /* pass the private key through hash_hash function */
-    /* and keep the first CRYPTONITE_DECAF_X448_PRIVATE_BYTES bytes */
+    /* and keep the first CRYPTON_DECAF_X448_PRIVATE_BYTES bytes */
     hash_hash(
         x,
-        CRYPTONITE_DECAF_X448_PRIVATE_BYTES,
+        CRYPTON_DECAF_X448_PRIVATE_BYTES,
         ed,
-        CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES
+        CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
     );
 }
     
-void cryptonite_decaf_ed448_derive_public_key (
-    uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES]
+void crypton_decaf_ed448_derive_public_key (
+    uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
 ) {
     /* only this much used for keygen */
-    uint8_t secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
+    uint8_t secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
     
     hash_hash(
         secret_scalar_ser,
         sizeof(secret_scalar_ser),
         privkey,
-        CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES
+        CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
     );
     clamp(secret_scalar_ser);
         
@@ -140,13 +140,13 @@ void cryptonite_decaf_ed448_derive_public_key (
     /* Cleanup */
     API_NS(scalar_destroy)(secret_scalar);
     API_NS(point_destroy)(p);
-    cryptonite_decaf_bzero(secret_scalar_ser, sizeof(secret_scalar_ser));
+    crypton_decaf_bzero(secret_scalar_ser, sizeof(secret_scalar_ser));
 }
 
-void cryptonite_decaf_ed448_sign (
-    uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
+void crypton_decaf_ed448_sign (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const uint8_t *message,
     size_t message_len,
     uint8_t prehashed,
@@ -158,14 +158,14 @@ void cryptonite_decaf_ed448_sign (
     {
         /* Schedule the secret key */
         struct {
-            uint8_t secret_scalar_ser[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
-            uint8_t seed[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
+            uint8_t secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
+            uint8_t seed[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
         } __attribute__((packed)) expanded;
         hash_hash(
             (uint8_t *)&expanded,
             sizeof(expanded),
             privkey,
-            CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES
+            CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
         );
         clamp(expanded.secret_scalar_ser);   
         API_NS(scalar_decode_long)(secret_scalar, expanded.secret_scalar_ser, sizeof(expanded.secret_scalar_ser));
@@ -174,19 +174,19 @@ void cryptonite_decaf_ed448_sign (
         hash_init_with_dom(hash,prehashed,0,context,context_len);
         hash_update(hash,expanded.seed,sizeof(expanded.seed));
         hash_update(hash,message,message_len);
-        cryptonite_decaf_bzero(&expanded, sizeof(expanded));
+        crypton_decaf_bzero(&expanded, sizeof(expanded));
     }
     
     /* Decode the nonce */
     API_NS(scalar_t) nonce_scalar;
     {
-        uint8_t nonce[2*CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
+        uint8_t nonce[2*CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
         hash_final(hash,nonce,sizeof(nonce));
         API_NS(scalar_decode_long)(nonce_scalar, nonce, sizeof(nonce));
-        cryptonite_decaf_bzero(nonce, sizeof(nonce));
+        crypton_decaf_bzero(nonce, sizeof(nonce));
     }
     
-    uint8_t nonce_point[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES] = {0};
+    uint8_t nonce_point[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES] = {0};
     {
         /* Scalarmul to create the nonce-point */
         API_NS(scalar_t) nonce_scalar_2;
@@ -207,21 +207,21 @@ void cryptonite_decaf_ed448_sign (
         /* Compute the challenge */
         hash_init_with_dom(hash,prehashed,0,context,context_len);
         hash_update(hash,nonce_point,sizeof(nonce_point));
-        hash_update(hash,pubkey,CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES);
+        hash_update(hash,pubkey,CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES);
         hash_update(hash,message,message_len);
-        uint8_t challenge[2*CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
+        uint8_t challenge[2*CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
         hash_final(hash,challenge,sizeof(challenge));
         hash_destroy(hash);
         API_NS(scalar_decode_long)(challenge_scalar,challenge,sizeof(challenge));
-        cryptonite_decaf_bzero(challenge,sizeof(challenge));
+        crypton_decaf_bzero(challenge,sizeof(challenge));
     }
     
     API_NS(scalar_mul)(challenge_scalar,challenge_scalar,secret_scalar);
     API_NS(scalar_add)(challenge_scalar,challenge_scalar,nonce_scalar);
     
-    cryptonite_decaf_bzero(signature,CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES);
+    crypton_decaf_bzero(signature,CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES);
     memcpy(signature,nonce_point,sizeof(nonce_point));
-    API_NS(scalar_encode)(&signature[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],challenge_scalar);
+    API_NS(scalar_encode)(&signature[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],challenge_scalar);
     
     API_NS(scalar_destroy)(secret_scalar);
     API_NS(scalar_destroy)(nonce_scalar);
@@ -229,29 +229,29 @@ void cryptonite_decaf_ed448_sign (
 }
 
 
-void cryptonite_decaf_ed448_sign_prehash (
-    uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t privkey[CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const cryptonite_decaf_ed448_prehash_ctx_t hash,
+void crypton_decaf_ed448_sign_prehash (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_ed448_prehash_ctx_t hash,
     const uint8_t *context,
     uint8_t context_len
 ) {
     uint8_t hash_output[64]; /* MAGIC but true for all existing schemes */
     {
-        cryptonite_decaf_ed448_prehash_ctx_t hash_too;
+        crypton_decaf_ed448_prehash_ctx_t hash_too;
         memcpy(hash_too,hash,sizeof(hash_too));
         hash_final(hash_too,hash_output,sizeof(hash_output));
         hash_destroy(hash_too);
     }
 
-    cryptonite_decaf_ed448_sign(signature,privkey,pubkey,hash_output,sizeof(hash_output),1,context,context_len);
-    cryptonite_decaf_bzero(hash_output,sizeof(hash_output));
+    crypton_decaf_ed448_sign(signature,privkey,pubkey,hash_output,sizeof(hash_output),1,context,context_len);
+    crypton_decaf_bzero(hash_output,sizeof(hash_output));
 }
 
-cryptonite_decaf_error_t cryptonite_decaf_ed448_verify (
-    const uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
+crypton_decaf_error_t crypton_decaf_ed448_verify (
+    const uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const uint8_t *message,
     size_t message_len,
     uint8_t prehashed,
@@ -259,33 +259,33 @@ cryptonite_decaf_error_t cryptonite_decaf_ed448_verify (
     uint8_t context_len
 ) { 
     API_NS(point_t) pk_point, r_point;
-    cryptonite_decaf_error_t error = API_NS(point_decode_like_eddsa_and_ignore_cofactor)(pk_point,pubkey);
-    if (CRYPTONITE_DECAF_SUCCESS != error) { return error; }
+    crypton_decaf_error_t error = API_NS(point_decode_like_eddsa_and_ignore_cofactor)(pk_point,pubkey);
+    if (CRYPTON_DECAF_SUCCESS != error) { return error; }
     
     error = API_NS(point_decode_like_eddsa_and_ignore_cofactor)(r_point,signature);
-    if (CRYPTONITE_DECAF_SUCCESS != error) { return error; }
+    if (CRYPTON_DECAF_SUCCESS != error) { return error; }
     
     API_NS(scalar_t) challenge_scalar;
     {
         /* Compute the challenge */
         hash_ctx_t hash;
         hash_init_with_dom(hash,prehashed,0,context,context_len);
-        hash_update(hash,signature,CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES);
-        hash_update(hash,pubkey,CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES);
+        hash_update(hash,signature,CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES);
+        hash_update(hash,pubkey,CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES);
         hash_update(hash,message,message_len);
-        uint8_t challenge[2*CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES];
+        uint8_t challenge[2*CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES];
         hash_final(hash,challenge,sizeof(challenge));
         hash_destroy(hash);
         API_NS(scalar_decode_long)(challenge_scalar,challenge,sizeof(challenge));
-        cryptonite_decaf_bzero(challenge,sizeof(challenge));
+        crypton_decaf_bzero(challenge,sizeof(challenge));
     }
     API_NS(scalar_sub)(challenge_scalar, API_NS(scalar_zero), challenge_scalar);
     
     API_NS(scalar_t) response_scalar;
     API_NS(scalar_decode_long)(
         response_scalar,
-        &signature[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-        CRYPTONITE_DECAF_EDDSA_448_PRIVATE_BYTES
+        &signature[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+        CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
     );
 #if EDDSA_BASE_POINT_RATIO == 2
     API_NS(scalar_add)(response_scalar,response_scalar,response_scalar);
@@ -299,28 +299,28 @@ cryptonite_decaf_error_t cryptonite_decaf_ed448_verify (
         pk_point,
         challenge_scalar
     );
-    return cryptonite_decaf_succeed_if(API_NS(point_eq(pk_point,r_point)));
+    return crypton_decaf_succeed_if(API_NS(point_eq(pk_point,r_point)));
 }
 
 
-cryptonite_decaf_error_t cryptonite_decaf_ed448_verify_prehash (
-    const uint8_t signature[CRYPTONITE_DECAF_EDDSA_448_SIGNATURE_BYTES],
-    const uint8_t pubkey[CRYPTONITE_DECAF_EDDSA_448_PUBLIC_BYTES],
-    const cryptonite_decaf_ed448_prehash_ctx_t hash,
+crypton_decaf_error_t crypton_decaf_ed448_verify_prehash (
+    const uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_ed448_prehash_ctx_t hash,
     const uint8_t *context,
     uint8_t context_len
 ) {
-    cryptonite_decaf_error_t ret;
+    crypton_decaf_error_t ret;
     
     uint8_t hash_output[64]; /* MAGIC but true for all existing schemes */
     {
-        cryptonite_decaf_ed448_prehash_ctx_t hash_too;
+        crypton_decaf_ed448_prehash_ctx_t hash_too;
         memcpy(hash_too,hash,sizeof(hash_too));
         hash_final(hash_too,hash_output,sizeof(hash_output));
         hash_destroy(hash_too);
     }
     
-    ret = cryptonite_decaf_ed448_verify(signature,pubkey,hash_output,sizeof(hash_output),1,context,context_len);
+    ret = crypton_decaf_ed448_verify(signature,pubkey,hash_output,sizeof(hash_output),1,context,context_len);
     
     return ret;
 }

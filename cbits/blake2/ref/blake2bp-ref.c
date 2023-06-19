@@ -36,7 +36,7 @@
 */
 static int blake2bp_init_leaf_param( blake2b_state *S, const blake2b_param *P )
 {
-  int err = _cryptonite_blake2b_init_param(S, P);
+  int err = _crypton_blake2b_init_param(S, P);
   S->outlen = P->inner_length;
   return err;
 }
@@ -74,11 +74,11 @@ static int blake2bp_init_root( blake2b_state *S, size_t outlen, size_t keylen )
   memset( P->reserved, 0, sizeof( P->reserved ) );
   memset( P->salt, 0, sizeof( P->salt ) );
   memset( P->personal, 0, sizeof( P->personal ) );
-  return _cryptonite_blake2b_init_param( S, P );
+  return _crypton_blake2b_init_param( S, P );
 }
 
 
-int _cryptonite_blake2bp_init( blake2bp_state *S, size_t outlen )
+int _crypton_blake2bp_init( blake2bp_state *S, size_t outlen )
 {
   size_t i;
 
@@ -99,7 +99,7 @@ int _cryptonite_blake2bp_init( blake2bp_state *S, size_t outlen )
   return 0;
 }
 
-int _cryptonite_blake2bp_init_key( blake2bp_state *S, size_t outlen, const void *key, size_t keylen )
+int _crypton_blake2bp_init_key( blake2bp_state *S, size_t outlen, const void *key, size_t keylen )
 {
   size_t i;
 
@@ -125,7 +125,7 @@ int _cryptonite_blake2bp_init_key( blake2bp_state *S, size_t outlen, const void 
     memcpy( block, key, keylen );
 
     for( i = 0; i < PARALLELISM_DEGREE; ++i )
-      _cryptonite_blake2b_update( S->S[i], block, BLAKE2B_BLOCKBYTES );
+      _crypton_blake2b_update( S->S[i], block, BLAKE2B_BLOCKBYTES );
 
     secure_zero_memory( block, BLAKE2B_BLOCKBYTES ); /* Burn the key from stack */
   }
@@ -133,7 +133,7 @@ int _cryptonite_blake2bp_init_key( blake2bp_state *S, size_t outlen, const void 
 }
 
 
-int _cryptonite_blake2bp_update( blake2bp_state *S, const void *pin, size_t inlen )
+int _crypton_blake2bp_update( blake2bp_state *S, const void *pin, size_t inlen )
 {
   const unsigned char * in = (const unsigned char *)pin;
   size_t left = S->buflen;
@@ -145,7 +145,7 @@ int _cryptonite_blake2bp_update( blake2bp_state *S, const void *pin, size_t inle
     memcpy( S->buf + left, in, fill );
 
     for( i = 0; i < PARALLELISM_DEGREE; ++i )
-      _cryptonite_blake2b_update( S->S[i], S->buf + i * BLAKE2B_BLOCKBYTES, BLAKE2B_BLOCKBYTES );
+      _crypton_blake2b_update( S->S[i], S->buf + i * BLAKE2B_BLOCKBYTES, BLAKE2B_BLOCKBYTES );
 
     in += fill;
     inlen -= fill;
@@ -168,7 +168,7 @@ int _cryptonite_blake2bp_update( blake2bp_state *S, const void *pin, size_t inle
 
     while( inlen__ >= PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES )
     {
-      _cryptonite_blake2b_update( S->S[i], in__, BLAKE2B_BLOCKBYTES );
+      _crypton_blake2b_update( S->S[i], in__, BLAKE2B_BLOCKBYTES );
       in__ += PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES;
       inlen__ -= PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES;
     }
@@ -184,7 +184,7 @@ int _cryptonite_blake2bp_update( blake2bp_state *S, const void *pin, size_t inle
   return 0;
 }
 
-int _cryptonite_blake2bp_final( blake2bp_state *S, void *out, size_t outlen )
+int _crypton_blake2bp_final( blake2bp_state *S, void *out, size_t outlen )
 {
   uint8_t hash[PARALLELISM_DEGREE][BLAKE2B_OUTBYTES];
   size_t i;
@@ -201,19 +201,19 @@ int _cryptonite_blake2bp_final( blake2bp_state *S, void *out, size_t outlen )
 
       if( left > BLAKE2B_BLOCKBYTES ) left = BLAKE2B_BLOCKBYTES;
 
-      _cryptonite_blake2b_update( S->S[i], S->buf + i * BLAKE2B_BLOCKBYTES, left );
+      _crypton_blake2b_update( S->S[i], S->buf + i * BLAKE2B_BLOCKBYTES, left );
     }
 
-    _cryptonite_blake2b_final( S->S[i], hash[i], BLAKE2B_OUTBYTES );
+    _crypton_blake2b_final( S->S[i], hash[i], BLAKE2B_OUTBYTES );
   }
 
   for( i = 0; i < PARALLELISM_DEGREE; ++i )
-    _cryptonite_blake2b_update( S->R, hash[i], BLAKE2B_OUTBYTES );
+    _crypton_blake2b_update( S->R, hash[i], BLAKE2B_OUTBYTES );
 
-  return _cryptonite_blake2b_final( S->R, out, S->outlen );
+  return _crypton_blake2b_final( S->R, out, S->outlen );
 }
 
-int _cryptonite_blake2bp( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen )
+int _crypton_blake2bp( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen )
 {
   uint8_t hash[PARALLELISM_DEGREE][BLAKE2B_OUTBYTES];
   blake2b_state S[PARALLELISM_DEGREE][1];
@@ -243,7 +243,7 @@ int _cryptonite_blake2bp( void *out, size_t outlen, const void *in, size_t inlen
     memcpy( block, key, keylen );
 
     for( i = 0; i < PARALLELISM_DEGREE; ++i )
-      _cryptonite_blake2b_update( S[i], block, BLAKE2B_BLOCKBYTES );
+      _crypton_blake2b_update( S[i], block, BLAKE2B_BLOCKBYTES );
 
     secure_zero_memory( block, BLAKE2B_BLOCKBYTES ); /* Burn the key from stack */
   }
@@ -264,7 +264,7 @@ int _cryptonite_blake2bp( void *out, size_t outlen, const void *in, size_t inlen
 
     while( inlen__ >= PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES )
     {
-      _cryptonite_blake2b_update( S[i], in__, BLAKE2B_BLOCKBYTES );
+      _crypton_blake2b_update( S[i], in__, BLAKE2B_BLOCKBYTES );
       in__ += PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES;
       inlen__ -= PARALLELISM_DEGREE * BLAKE2B_BLOCKBYTES;
     }
@@ -273,10 +273,10 @@ int _cryptonite_blake2bp( void *out, size_t outlen, const void *in, size_t inlen
     {
       const size_t left = inlen__ - i * BLAKE2B_BLOCKBYTES;
       const size_t len = left <= BLAKE2B_BLOCKBYTES ? left : BLAKE2B_BLOCKBYTES;
-      _cryptonite_blake2b_update( S[i], in__, len );
+      _crypton_blake2b_update( S[i], in__, len );
     }
 
-    _cryptonite_blake2b_final( S[i], hash[i], BLAKE2B_OUTBYTES );
+    _crypton_blake2b_final( S[i], hash[i], BLAKE2B_OUTBYTES );
   }
 
   if( blake2bp_init_root( FS, outlen, keylen ) < 0 )
@@ -285,9 +285,9 @@ int _cryptonite_blake2bp( void *out, size_t outlen, const void *in, size_t inlen
   FS->last_node = 1; /* Mark as last node */
 
   for( i = 0; i < PARALLELISM_DEGREE; ++i )
-    _cryptonite_blake2b_update( FS, hash[i], BLAKE2B_OUTBYTES );
+    _crypton_blake2b_update( FS, hash[i], BLAKE2B_OUTBYTES );
 
-  return _cryptonite_blake2b_final( FS, out, outlen );;
+  return _crypton_blake2b_final( FS, out, outlen );;
 }
 
 #if defined(BLAKE2BP_SELFTEST)
@@ -326,21 +326,21 @@ int main( void )
       size_t mlen = i;
       int err = 0;
 
-      if( (err = _cryptonite_blake2bp_init_key(&S, BLAKE2B_OUTBYTES, key, BLAKE2B_KEYBYTES)) < 0 ) {
+      if( (err = _crypton_blake2bp_init_key(&S, BLAKE2B_OUTBYTES, key, BLAKE2B_KEYBYTES)) < 0 ) {
         goto fail;
       }
 
       while (mlen >= step) {
-        if ( (err = _cryptonite_blake2bp_update(&S, p, step)) < 0 ) {
+        if ( (err = _crypton_blake2bp_update(&S, p, step)) < 0 ) {
           goto fail;
         }
         mlen -= step;
         p += step;
       }
-      if ( (err = _cryptonite_blake2bp_update(&S, p, mlen)) < 0) {
+      if ( (err = _crypton_blake2bp_update(&S, p, mlen)) < 0) {
         goto fail;
       }
-      if ( (err = _cryptonite_blake2bp_final(&S, hash, BLAKE2B_OUTBYTES)) < 0) {
+      if ( (err = _crypton_blake2bp_final(&S, hash, BLAKE2B_OUTBYTES)) < 0) {
         goto fail;
       }
 

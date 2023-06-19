@@ -147,7 +147,7 @@ cOfVariant Argon2id = 2
 csizeOfInt :: Int -> CSize
 csizeOfInt = fromIntegral
 
-foreign import ccall unsafe "cryptonite_argon2_hash"
+foreign import ccall unsafe "crypton_argon2_hash"
     argon2_hash :: Word32 -> Word32 -> Word32
                 -> Ptr Pass -> CSize
                 -> Ptr Salt -> CSize

@@ -100,7 +100,7 @@ dh (PublicKey pub) (SecretKey sec) = DhSecret <$>
     B.allocAndFreeze 32        $ \result ->
     withByteArray sec          $ \psec   ->
     withByteArray pub          $ \ppub   ->
-        ccryptonite_curve25519 result psec ppub
+        ccrypton_curve25519 result psec ppub
 {-# NOINLINE dh #-}
 
 -- | Create a public key from a secret key
@@ -108,7 +108,7 @@ toPublic :: SecretKey -> PublicKey
 toPublic (SecretKey sec) = PublicKey <$>
     B.allocAndFreeze 32     $ \result ->
     withByteArray sec       $ \psec   ->
-        ccryptonite_curve25519 result psec basePoint
+        ccrypton_curve25519 result psec basePoint
   where
         basePoint = Ptr "\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"#
 {-# NOINLINE toPublic #-}
@@ -125,8 +125,8 @@ generateSecretKey = tweakToSecretKey <$> getRandomBytes 32
     modifyByte :: Ptr Word8 -> Int -> (Word8 -> Word8) -> IO ()
     modifyByte p n f = peekByteOff p n >>= pokeByteOff p n . f
 
-foreign import ccall "cryptonite_curve25519_donna"
-    ccryptonite_curve25519 :: Ptr Word8 -- ^ public
+foreign import ccall "crypton_curve25519_donna"
+    ccrypton_curve25519 :: Ptr Word8 -- ^ public
                            -> Ptr Word8 -- ^ secret
                            -> Ptr Word8 -- ^ basepoint
                            -> IO ()
