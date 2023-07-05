@@ -1,4 +1,4 @@
-## Unreleased (Minor)
+## 0.33
 
 * Add "crypton_" prefix to the final C symbols.
   [#9](https://github.com/kazu-yamamoto/crypton/pull/9)
