@@ -258,7 +258,7 @@ int _crypton_blake2s_final( blake2s_state *S, void *out, size_t outlen )
 }
 
 /* inlen, at least, should be uint64_t. Others can be size_t. */
-int blake2s( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen )
+int crypton_blake2s( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen )
 {
   blake2s_state S[1];
 
@@ -290,7 +290,7 @@ int blake2s( void *out, size_t outlen, const void *in, size_t inlen, const void 
 #if defined(SUPERCOP)
 int crypto_hash( unsigned char *out, unsigned char *in, unsigned long long inlen )
 {
-  return blake2s( out, BLAKE2S_OUTBYTES, in, inlen, NULL, 0 );
+  return crypton_blake2s( out, BLAKE2S_OUTBYTES, in, inlen, NULL, 0 );
 }
 #endif
 

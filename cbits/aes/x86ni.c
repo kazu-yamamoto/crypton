@@ -174,8 +174,8 @@ static __m128i gfmul_generic(__m128i tag, const table_4bit htable)
 
 #ifdef WITH_PCLMUL
 
-__m128i (*gfmul_branch_ptr)(__m128i a, const table_4bit t) = gfmul_generic;
-#define gfmul(a,t) ((*gfmul_branch_ptr)(a,t))
+__m128i (*crypton_gfmul_branch_ptr)(__m128i a, const table_4bit t) = gfmul_generic;
+#define gfmul(a,t) ((*crypton_gfmul_branch_ptr)(a,t))
 
 /* See Intel carry-less-multiplication-instruction-in-gcm-mode-paper.pdf
  *
@@ -257,7 +257,7 @@ void crypton_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable)
 
 void crypton_aesni_init_pclmul(void)
 {
-	gfmul_branch_ptr = gfmul_pclmuldq;
+	crypton_gfmul_branch_ptr = gfmul_pclmuldq;
 }
 
 #else
