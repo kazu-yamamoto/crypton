@@ -29,10 +29,6 @@ Versioning
 Next version of `0.x` is `0.(x+1)`. There's no exceptions, or API related meaning
 behind the numbers.
 
-Each versions of stackage (going back 3 stable LTS) has a crypton version
-that we maintain with security fixes when necessary and are versioned with the
-following `0.x.y` scheme.
-
 Coding Style
 ------------
 
