@@ -50,7 +50,7 @@ import           Foreign.Ptr
 import           Foreign.Storable
 
 -- | an IV parametrized by the cipher
-data IV c = forall byteArray . ByteArray byteArray => IV byteArray
+data IV c = forall byteArray . ByteArray byteArray => IV !byteArray
 
 instance BlockCipher c => ByteArrayAccess (IV c) where
     withByteArray (IV z) f = withByteArray z f
