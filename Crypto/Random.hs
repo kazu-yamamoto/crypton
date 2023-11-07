@@ -37,6 +37,7 @@ import Crypto.Random.SystemDRG
 import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 import qualified Data.ByteArray as B
 import Crypto.Internal.Imports
+import Crypto.Hash (Digest, SHA512, hash)
 
 import qualified Crypto.Number.Serialize as Serialize
 
@@ -49,7 +50,7 @@ seedLength = 40
 
 -- | Create a new Seed from system entropy
 seedNew :: MonadRandom randomly => randomly Seed
-seedNew = Seed `fmap` getRandomBytes seedLength
+seedNew = (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512)) `fmap` getRandomBytes 64
 
 -- | Convert a Seed to an integer
 seedToInteger :: Seed -> Integer
