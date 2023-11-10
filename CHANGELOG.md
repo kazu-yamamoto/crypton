@@ -1,3 +1,12 @@
+## 0.34
+
+* Hashing getRandomBytes before using as Seed for ChaChaDRG
+  [#24](https://github.com/kazu-yamamoto/crypton/pull/24)
+* Add support for XChaCha and XChaChaPoly1305
+  [#18](https://github.com/kazu-yamamoto/crypton/pull/18)
+* Strict byteArray of IV c
+  [#16](https://github.com/kazu-yamamoto/crypton/pull/16)
+
 ## 0.33
 
 * Add "crypton_" prefix to the final C symbols.
