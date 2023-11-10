@@ -50,6 +50,12 @@ seedLength = 40
 
 -- | Create a new Seed from system entropy
 seedNew :: MonadRandom randomly => randomly Seed
+-- The degree of its randomness depends on the source, e.g. for iOS we
+-- have to compile with DoNotUseEntropy flag, as iOS doesn't allow
+-- using getentropy, and on some other systems it can be also
+-- potentially comprisable sources. Hashing of entropy before using
+-- it as a seed is a common mitigation for attacks via RNG/entropy
+-- source.
 seedNew = (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512)) `fmap` getRandomBytes 64
 
 -- | Convert a Seed to an integer
