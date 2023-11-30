@@ -97,6 +97,8 @@ newtype Context a = Context Bytes
 newtype Digest a = Digest (Block Word8)
     deriving (Eq,Ord,ByteArrayAccess, Data)
 
+type role Digest nominal
+
 instance NFData (Digest a) where
     rnf (Digest u) = u `deepseq` ()
 
