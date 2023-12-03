@@ -7,9 +7,10 @@
 --
 -- Crypto hash types definitions
 --
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 module Crypto.Hash.Types
@@ -96,6 +97,8 @@ newtype Context a = Context Bytes
 -- 'Crypto.Hash.digestFromByteString'.
 newtype Digest a = Digest (Block Word8)
     deriving (Eq,Ord,ByteArrayAccess, Data)
+
+type role Digest nominal
 
 instance NFData (Digest a) where
     rnf (Digest u) = u `deepseq` ()
