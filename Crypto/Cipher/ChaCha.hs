@@ -18,6 +18,11 @@ module Crypto.Cipher.ChaCha (
     initializeSimple,
     generateSimple,
     StateSimple,
+
+    -- * Seeking and cursor for DRG purposes
+    getCounter,
+    setCounter,
+    generateSimpleBlock,
 ) where
 
 import Crypto.Internal.ByteArray (
@@ -163,6 +168,35 @@ generateSimple (StateSimple prevSt) nbBytes = unsafeDoIO $ do
             ccrypton_chacha_random 8 dstPtr stPtr (fromIntegral nbBytes)
     return (output, StateSimple newSt)
 
+getCounter :: StateSimple -> Word64
+getCounter (StateSimple currSt) =
+  unsafeDoIO $ do
+    B.withByteArray currSt $ \stPtr ->
+      ccrypton_chacha_counter stPtr
+
+setCounter :: Word64 -> StateSimple -> StateSimple
+setCounter newCounter (StateSimple prevSt) =
+    unsafeDoIO $ do
+        newSt  <- B.copy prevSt (\_ -> return ())
+        B.withByteArray newSt $ \stPtr ->
+            ccrypton_chacha_set_counter stPtr newCounter
+        return (StateSimple newSt)
+
+-- | similar to 'generate' but accepts a number of rounds, and always generates
+--   64 bytes (a single block)
+generateSimpleBlock :: ByteArray ba
+                    => Word8
+                    -> StateSimple
+                    -> (ba, StateSimple)
+generateSimpleBlock nbRounds (StateSimple prevSt)
+    | nbRounds `notElem` [8,12,20]    = error "ChaCha: rounds should be 8, 12 or 20"
+    | otherwise = unsafeDoIO $ do
+        newSt  <- B.copy prevSt (\_ -> return ())
+        output <- B.alloc 64 $ \dstPtr ->
+            B.withByteArray newSt $ \stPtr ->
+                ccrypton_chacha_generate_simple_block dstPtr stPtr nbRounds
+        return (output, StateSimple newSt)
+
 foreign import ccall "crypton_chacha_init_core"
     ccrypton_chacha_init_core
         :: Ptr StateSimple -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
@@ -182,3 +216,12 @@ foreign import ccall "crypton_chacha_generate"
 
 foreign import ccall "crypton_chacha_random"
     ccrypton_chacha_random :: Int -> Ptr Word8 -> Ptr StateSimple -> CUInt -> IO ()
+
+foreign import ccall "crypton_chacha_counter"
+    ccrypton_chacha_counter :: Ptr StateSimple -> IO Word64
+
+foreign import ccall "crypton_chacha_set_counter"
+    ccrypton_chacha_set_counter :: Ptr StateSimple -> Word64 -> IO ()
+
+foreign import ccall "crypton_chacha_generate_simple_block"
+    ccrypton_chacha_generate_simple_block :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
