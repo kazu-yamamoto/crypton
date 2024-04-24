@@ -310,9 +310,6 @@ library
     else
         build-depends: base
 
-    if os(linux)
-        extra-libraries: pthread
-
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
 
