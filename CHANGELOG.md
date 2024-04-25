@@ -1,3 +1,9 @@
+## 1.0.0
+
+* Versions follow the standard version policy.
+* Removing pthread stuff.
+  [#32](https://github.com/kazu-yamamoto/crypton/pull/32)
+
 ## 0.34
 
 * Hashing getRandomBytes before using as Seed for ChaChaDRG
