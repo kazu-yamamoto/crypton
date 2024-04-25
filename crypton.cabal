@@ -311,7 +311,7 @@ library
         build-depends: base
 
     if os(linux)
-        extra-libraries: pthread
+        cc-options: -pthread
 
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
