@@ -48,7 +48,7 @@ import qualified KAT_Twofish
 import qualified KAT_AFIS
 import qualified Padding
 
-tests = testGroup "cryptonite"
+tests = testGroup "crypton"
     [ testGroup "runtime"
         [ testCaseInfo "CPU" (return $ show processorOptions)
         ]
