@@ -23,6 +23,7 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators #-}
 module Crypto.PubKey.EdDSA
     ( SecretKey
     , PublicKey
