@@ -27,7 +27,7 @@
 #define SER_BYTES 56
 typedef struct crypton_gf_448_s {
     word_t limb[NLIMBS];
-} __attribute__((aligned(16))) crypton_gf_448_s, crypton_gf_448_t[1];
+} __attribute__((aligned(32))) crypton_gf_448_s, crypton_gf_448_t[1];
 
 #define GF_LIT_LIMB_BITS  56
 #define GF_BITS           448

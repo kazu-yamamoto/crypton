@@ -34,7 +34,7 @@ extern "C" {
 /** @brief Galois field element internal structure */
 typedef struct crypton_gf_448_s {
     crypton_decaf_word_t limb[512/CRYPTON_DECAF_WORD_BITS];
-} __attribute__((aligned(16))) crypton_gf_448_s, crypton_gf_448_t[1];
+} __attribute__((aligned(32))) crypton_gf_448_s, crypton_gf_448_t[1];
 #endif /* __CRYPTON_DECAF_448_GF_DEFINED__ */
 /** @endcond */
 
