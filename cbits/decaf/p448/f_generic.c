@@ -24,52 +24,52 @@ static const gf MODULUS = {FIELD_LITERAL(
 #endif
 
 /** Serialize to wire format. */
-void crypton_gf_serialize (uint8_t serial[SER_BYTES], const gf x, int with_hibit) {
+void crypton_gf_serialize (uint8_t serial[SER_BYTES], const gf x) {
     gf red;
     crypton_gf_copy(red, x);
     crypton_gf_strong_reduce(red);
-    if (!with_hibit) { assert(crypton_gf_hibit(red) == 0); }
     
     unsigned int j=0, fill=0;
     dword_t buffer = 0;
-    UNROLL for (unsigned int i=0; i<(with_hibit ? X_SER_BYTES : SER_BYTES); i++) {
+    UNROLL for (unsigned int i=0; i<SER_BYTES; i++) {
         if (fill < 8 && j < NLIMBS) {
             buffer |= ((dword_t)red->limb[LIMBPERM(j)]) << fill;
             fill += LIMB_PLACE_VALUE(LIMBPERM(j));
             j++;
         }
-        serial[i] = buffer;
+        serial[i] = (uint8_t)buffer;
         fill -= 8;
         buffer >>= 8;
     }
 }
 
 /** Return high bit of x = low bit of 2x mod p */
-mask_t crypton_gf_hibit(const gf x) {
+mask_t crypton_gf_lobit(const gf x) {
     gf y;
-    crypton_gf_add(y,x,x);
+    crypton_gf_copy(y,x);
     crypton_gf_strong_reduce(y);
-    return -(y->limb[0]&1);
+    return bit_to_mask((y->limb[0]) & 1);
 }
 
 /** Deserialize from wire format; return -1 on success and 0 on failure. */
-mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES], int with_hibit) {
+mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES], uint8_t hi_nmask) {
     unsigned int j=0, fill=0;
     dword_t buffer = 0;
     dsword_t scarry = 0;
     UNROLL for (unsigned int i=0; i<NLIMBS; i++) {
-        UNROLL while (fill < LIMB_PLACE_VALUE(LIMBPERM(i)) && j < (with_hibit ? X_SER_BYTES : SER_BYTES)) {
-            buffer |= ((dword_t)serial[j]) << fill;
+        UNROLL while (fill < (unsigned int)(LIMB_PLACE_VALUE(LIMBPERM(i))) && j < SER_BYTES) {
+            uint8_t sj = serial[j];
+            if (j==SER_BYTES-1) sj &= ~hi_nmask;
+            buffer |= ((dword_t)sj) << fill;
             fill += 8;
             j++;
         }
-        x->limb[LIMBPERM(i)] = (i<NLIMBS-1) ? buffer & LIMB_MASK(LIMBPERM(i)) : buffer;
+        x->limb[LIMBPERM(i)] = (word_t)((i<NLIMBS-1) ? buffer & LIMB_MASK(LIMBPERM(i)) : buffer);
         fill -= LIMB_PLACE_VALUE(LIMBPERM(i));
         buffer >>= LIMB_PLACE_VALUE(LIMBPERM(i));
         scarry = (scarry + x->limb[LIMBPERM(i)] - MODULUS->limb[LIMBPERM(i)]) >> (8*sizeof(word_t));
     }
-    mask_t succ = with_hibit ? -(mask_t)1 : ~crypton_gf_hibit(x);
-    return succ & word_is_zero(buffer) & ~word_is_zero(scarry);
+    return word_is_zero((word_t)buffer) & ~word_is_zero((word_t)scarry);
 }
 
 /** Reduce to canonical form. */
@@ -91,9 +91,9 @@ void crypton_gf_strong_reduce (gf a) {
      * common case: it was < p, so now scarry = -1 and this = x - p + 2^255
      * so let's add back in p.  will carry back off the top for 2^255.
      */
-    assert(word_is_zero(scarry) | word_is_zero(scarry+1));
+    assert(word_is_zero((word_t)scarry) | word_is_zero((word_t)scarry+1));
 
-    word_t scarry_0 = scarry;
+    word_t scarry_0 = (word_t)scarry;
     dword_t carry = 0;
 
     /* add it back */
@@ -103,7 +103,7 @@ void crypton_gf_strong_reduce (gf a) {
         carry >>= LIMB_PLACE_VALUE(LIMBPERM(i));
     }
 
-    assert(word_is_zero(carry + scarry_0));
+    assert(word_is_zero((word_t)(carry) + scarry_0));
 }
 
 /** Subtract two gf elements d=a-b */

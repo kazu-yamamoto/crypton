@@ -23,7 +23,6 @@
 
 #define __CRYPTON_DECAF_448_GF_DEFINED__ 1
 #define NLIMBS (64/sizeof(word_t))
-#define X_SER_BYTES 56
 #define SER_BYTES 56
 typedef struct crypton_gf_448_s {
     word_t limb[NLIMBS];
@@ -37,7 +36,7 @@ typedef struct crypton_gf_448_s {
 #define gf                crypton_gf_448_t
 #define crypton_gf_s              crypton_gf_448_s
 #define crypton_gf_eq             crypton_gf_448_eq
-#define crypton_gf_hibit          crypton_gf_448_hibit
+#define crypton_gf_lobit          crypton_gf_448_lobit
 #define crypton_gf_copy           crypton_gf_448_copy
 #define crypton_gf_add            crypton_gf_448_add
 #define crypton_gf_sub            crypton_gf_448_sub
@@ -54,7 +53,7 @@ typedef struct crypton_gf_448_s {
 #define crypton_gf_deserialize    crypton_gf_448_deserialize
 
 /* RFC 7748 support */
-#define X_PUBLIC_BYTES  X_SER_BYTES
+#define X_PUBLIC_BYTES  SER_BYTES
 #define X_PRIVATE_BYTES X_PUBLIC_BYTES
 #define X_PRIVATE_BITS  448
 
@@ -81,10 +80,10 @@ void crypton_gf_mulw_unsigned (crypton_gf_s *__restrict__ out, const gf a, uint3
 void crypton_gf_sqr (crypton_gf_s *__restrict__ out, const gf a);
 mask_t crypton_gf_isr(gf a, const gf x); /** a^2 x = 1, QNR, or 0 if x=0.  Return true if successful */
 mask_t crypton_gf_eq (const gf x, const gf y);
-mask_t crypton_gf_hibit (const gf x);
+mask_t crypton_gf_lobit (const gf x);
 
-void crypton_gf_serialize (uint8_t *serial, const gf x,int with_highbit);
-mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES],int with_highbit);
+void crypton_gf_serialize (uint8_t serial[SER_BYTES], const gf x);
+mask_t crypton_gf_deserialize (gf x, const uint8_t serial[SER_BYTES],uint8_t hi_nmask);
 
 
 #ifdef __cplusplus

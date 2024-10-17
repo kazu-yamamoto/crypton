@@ -48,15 +48,15 @@ static CRYPTON_DECAF_NOINLINE void sc_subx(
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + accum[i]) - sub->limb[i];
-        out->limb[i] = chain;
+        out->limb[i] = (crypton_decaf_word_t)chain;
         chain >>= WBITS;
     }
-    crypton_decaf_word_t borrow = chain+extra; /* = 0 or -1 */
+    crypton_decaf_word_t borrow = (crypton_decaf_word_t)chain+extra; /* = 0 or -1 */
     
     chain = 0;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + out->limb[i]) + (p->limb[i] & borrow);
-        out->limb[i] = chain;
+        out->limb[i] = (crypton_decaf_word_t)chain;
         chain >>= WBITS;
     }
 }
@@ -77,22 +77,22 @@ static CRYPTON_DECAF_NOINLINE void sc_montmul (
         crypton_decaf_dword_t chain = 0;
         for (j=0; j<SCALAR_LIMBS; j++) {
             chain += ((crypton_decaf_dword_t)mand)*mier[j] + accum[j];
-            accum[j] = chain;
+            accum[j] = (crypton_decaf_word_t)chain;
             chain >>= WBITS;
         }
-        accum[j] = chain;
+        accum[j] = (crypton_decaf_word_t)chain;
         
         mand = accum[0] * MONTGOMERY_FACTOR;
         chain = 0;
         mier = sc_p->limb;
         for (j=0; j<SCALAR_LIMBS; j++) {
             chain += (crypton_decaf_dword_t)mand*mier[j] + accum[j];
-            if (j) accum[j-1] = chain;
+            if (j) accum[j-1] = (crypton_decaf_word_t)chain;
             chain >>= WBITS;
         }
         chain += accum[j];
         chain += hi_carry;
-        accum[j-1] = chain;
+        accum[j-1] = (crypton_decaf_word_t)chain;
         hi_carry = chain >> WBITS;
     }
     
@@ -121,7 +121,7 @@ crypton_decaf_error_t API_NS(scalar_invert) (
      * Sliding window is fine here because the modulus isn't secret.
      */
     const int SCALAR_WINDOW_BITS = 3;
-    scalar_t precmp[1<<SCALAR_WINDOW_BITS];
+    scalar_t precmp[1<<3];  // Rewritten from SCALAR_WINDOW_BITS for windows compatibility
     const int LAST = (1<<SCALAR_WINDOW_BITS)-1;
 
     /* Precompute precmp = [a^1,a^3,...] */
@@ -190,10 +190,10 @@ void API_NS(scalar_add) (
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + a->limb[i]) + b->limb[i];
-        out->limb[i] = chain;
+        out->limb[i] = (crypton_decaf_word_t)chain;
         chain >>= WBITS;
     }
-    sc_subx(out, out->limb, sc_p, sc_p, chain);
+    sc_subx(out, out->limb, sc_p, sc_p, (crypton_decaf_word_t)chain);
 }
 
 void
@@ -204,7 +204,7 @@ API_NS(scalar_set_unsigned) (
     memset(out,0,sizeof(scalar_t));
     unsigned int i = 0;
     for (; i<sizeof(uint64_t)/sizeof(crypton_decaf_word_t); i++) {
-        out->limb[i] = w;
+        out->limb[i] = (crypton_decaf_word_t)w;
 #if CRYPTON_DECAF_WORD_BITS < 64
         w >>= 8*sizeof(crypton_decaf_word_t);
 #endif
@@ -227,7 +227,7 @@ API_NS(scalar_eq) (
 static CRYPTON_DECAF_INLINE void scalar_decode_short (
     scalar_t s,
     const unsigned char *ser,
-    unsigned int nbytes
+    size_t nbytes
 ) {
     unsigned int i,j,k=0;
     for (i=0; i<SCALAR_LIMBS; i++) {
@@ -253,7 +253,7 @@ crypton_decaf_error_t API_NS(scalar_decode)(
     
     API_NS(scalar_mul)(s,s,API_NS(scalar_one)); /* ham-handed reduce */
     
-    return crypton_decaf_succeed_if(~word_is_zero(accum));
+    return crypton_decaf_succeed_if(~word_is_zero((crypton_decaf_word_t)accum));
 }
 
 void API_NS(scalar_destroy) (
@@ -325,17 +325,17 @@ void API_NS(scalar_halve) (
     scalar_t out,
     const scalar_t a
 ) {
-    crypton_decaf_word_t mask = -(a->limb[0] & 1);
+    crypton_decaf_word_t mask = bit_to_mask((a->limb[0]) & 1);
     crypton_decaf_dword_t chain = 0;
     unsigned int i;
     for (i=0; i<SCALAR_LIMBS; i++) {
         chain = (chain + a->limb[i]) + (sc_p->limb[i] & mask);
-        out->limb[i] = chain;
+        out->limb[i] = (crypton_decaf_word_t)chain;
         chain >>= CRYPTON_DECAF_WORD_BITS;
     }
     for (i=0; i<SCALAR_LIMBS-1; i++) {
         out->limb[i] = out->limb[i]>>1 | out->limb[i+1]<<(WBITS-1);
     }
-    out->limb[i] = out->limb[i]>>1 | chain<<(WBITS-1);
+    out->limb[i] = out->limb[i]>>1 | (crypton_decaf_word_t)(chain<<(WBITS-1));
 }
 

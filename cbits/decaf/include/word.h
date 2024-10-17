@@ -13,6 +13,11 @@
 extern int posix_memalign(void **, size_t, size_t);
 #endif
 
+// MSVC has no posix_memalign
+#if defined(_MSC_VER)
+#define posix_memalign(p, a, s) (((*(p)) = _aligned_malloc((s), (a))), *(p) ?0 :errno)
+#endif
+
 #include <assert.h>
 #include <stdint.h>
 #include "arch_intrinsics.h"
@@ -58,6 +63,22 @@ extern int posix_memalign(void **, size_t, size_t);
 #else
     #error "For now, libdecaf only supports 32- and 64-bit architectures."
 #endif
+
+/**
+ * Expand bit 0 of the given uint8_t to a mask_t all 1 or all 0
+ * The input must be either 0 or 1
+ */
+CRYPTON_DECAF_INLINE mask_t bit_to_mask(uint8_t bit) {
+#ifdef _MSC_VER
+#pragma warning ( push)
+#pragma warning ( disable : 4146)
+#endif
+	return -(mask_t)bit;
+#ifdef _MSC_VER
+#pragma warning ( pop)
+#endif
+
+}
     
 /* Scalar limbs are keyed off of the API word size instead of the arch word size. */
 #if CRYPTON_DECAF_WORD_BITS == 64
@@ -130,7 +151,7 @@ extern int posix_memalign(void **, size_t, size_t);
     br_set_to_mask(mask_t x) {
         return vdupq_n_u32(x);
     }
-#elif _WIN64 || __amd64__ || __X86_64__ || __aarch64__
+#elif __amd64__ || __X86_64__ || __aarch64__ /* || _WIN64 -> WIN64 does not support int128 so force the build on arch32 default so do not use this define for _WIN64*/
     #define VECTOR_ALIGNED __attribute__((aligned(8)))
     typedef uint64_t big_register_t, uint64xn_t;
 

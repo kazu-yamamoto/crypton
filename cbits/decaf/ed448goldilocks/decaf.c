@@ -18,6 +18,23 @@
 #include <decaf.h>
 #include <decaf/ed448.h>
 
+/* MSVC has no builtint ctz, this is a fix as in
+https://stackoverflow.com/questions/355967/how-to-use-msvc-intrinsics-to-get-the-equivalent-of-this-gcc-code/5468852#5468852
+*/
+#ifdef _MSC_VER
+#include <intrin.h>
+
+uint32_t __inline ctz(uint32_t value)
+{
+    DWORD trailing_zero = 0;
+    if ( _BitScanForward( &trailing_zero, value ) )
+        return trailing_zero;
+    else
+        return 32;  // This is undefined, I better choose 32 than 0
+}
+#define __builtin_ctz(x) ctz(x)
+#endif
+
 /* Template stuff */
 #define API_NS(_id) crypton_decaf_448_##_id
 #define SCALAR_BITS CRYPTON_DECAF_448_SCALAR_BITS
@@ -48,10 +65,23 @@ static const scalar_t point_scalarmul_adjustment = {{{
 
 const uint8_t crypton_decaf_x448_base_point[CRYPTON_DECAF_X448_PUBLIC_BYTES] = { 0x05 };
 
-#if COFACTOR==8 || EDDSA_USE_SIGMA_ISOGENY
-    static const gf SQRT_ONE_MINUS_D = {FIELD_LITERAL(
-        /* NONE */
-    )};
+#define RISTRETTO_FACTOR CRYPTON_DECAF_448_RISTRETTO_FACTOR
+const gf RISTRETTO_FACTOR = {FIELD_LITERAL(
+    0x42ef0f45572736, 0x7bf6aa20ce5296, 0xf4fd6eded26033, 0x968c14ba839a66, 0xb8d54b64a2d780, 0x6aa0a1f1a7b8a5, 0x683bf68d722fa2, 0x22d962fbeb24f7
+)};
+
+#if IMAGINE_TWIST
+#define TWISTED_D (-(EDWARDS_D))
+#else
+#define TWISTED_D ((EDWARDS_D)-1)
+#endif
+
+#if TWISTED_D < 0
+#define EFF_D (-(TWISTED_D))
+#define NEG_D 1
+#else
+#define EFF_D TWISTED_D
+#define NEG_D 0
 #endif
 
 /* End of template stuff */
@@ -109,128 +139,112 @@ crypton_gf_invert(gf y, const gf x, int assert_nonzero) {
     crypton_gf_copy(y, t2);
 }
 
-/** Return high bit of x = low bit of 2x mod p */
-static mask_t crypton_gf_lobit(const gf x) {
-    gf y;
-    crypton_gf_copy(y,x);
-    crypton_gf_strong_reduce(y);
-    return -(y->limb[0]&1);
-}
-
 /** identity = (0,1) */
 const point_t API_NS(point_identity) = {{{{{0}}},{{{1}}},{{{1}}},{{{0}}}}};
 
+/* Predeclare because not static: called by elligator */
 void API_NS(deisogenize) (
     crypton_gf_s *__restrict__ s,
-    crypton_gf_s *__restrict__ minus_t_over_s,
+    crypton_gf_s *__restrict__ inv_el_sum,
+    crypton_gf_s *__restrict__ inv_el_m1,
     const point_t p,
-    mask_t toggle_hibit_s,
-    mask_t toggle_hibit_t_over_s,
+    mask_t toggle_s,
+    mask_t toggle_altx,
     mask_t toggle_rotation
 );
 
 void API_NS(deisogenize) (
     crypton_gf_s *__restrict__ s,
-    crypton_gf_s *__restrict__ minus_t_over_s,
+    crypton_gf_s *__restrict__ inv_el_sum,
+    crypton_gf_s *__restrict__ inv_el_m1,
     const point_t p,
-    mask_t toggle_hibit_s,
-    mask_t toggle_hibit_t_over_s,
+    mask_t toggle_s,
+    mask_t toggle_altx,
     mask_t toggle_rotation
 ) {
 #if COFACTOR == 4 && !IMAGINE_TWIST
-    (void) toggle_rotation;
+    (void)toggle_rotation; /* Only applies to cofactor 8 */
+    gf t1;
+    crypton_gf_s *t2 = s, *t3=inv_el_sum, *t4=inv_el_m1;
     
-    gf b, d;
-    crypton_gf_s *c = s, *a = minus_t_over_s;
-    crypton_gf_mulw(a, p->y, 1-EDWARDS_D);
-    crypton_gf_mul(c, a, p->t);     /* -dYT, with EDWARDS_D = d-1 */
-    crypton_gf_mul(a, p->x, p->z); 
-    crypton_gf_sub(d, c, a);  /* aXZ-dYT with a=-1 */
-    crypton_gf_add(a, p->z, p->y); 
-    crypton_gf_sub(b, p->z, p->y); 
-    crypton_gf_mul(c, b, a);
-    crypton_gf_mulw(b, c, -EDWARDS_D); /* (a-d)(Z+Y)(Z-Y) */
-    mask_t ok = crypton_gf_isr (a,b); /* r in the paper */
-    (void)ok; assert(ok | crypton_gf_eq(b,ZERO));
-    crypton_gf_mulw (b, a, -EDWARDS_D); /* u in the paper */
-
-    crypton_gf_mul(c,a,d); /* r(aZX-dYT) */
-    crypton_gf_mul(a,b,p->z); /* uZ */
-    crypton_gf_add(a,a,a); /* 2uZ */
+    crypton_gf_add(t1,p->x,p->t);
+    crypton_gf_sub(t2,p->x,p->t);
+    crypton_gf_mul(t3,t1,t2); /* t3 = num */
+    crypton_gf_sqr(t2,p->x);
+    crypton_gf_mul(t1,t2,t3);
+    crypton_gf_mulw(t2,t1,-1-TWISTED_D); /* -x^2 * (a-d) * num */
+    crypton_gf_isr(t1,t2);    /* t1 = isr */
+    crypton_gf_mul(t2,t1,t3); /* t2 = ratio */
+    crypton_gf_mul(t4,t2,RISTRETTO_FACTOR);
+    mask_t negx = crypton_gf_lobit(t4) ^ toggle_altx;
+    crypton_gf_cond_neg(t2, negx);
+    crypton_gf_mul(t3,t2,p->z);
+    crypton_gf_sub(t3,t3,p->t);
+    crypton_gf_mul(t2,t3,p->x);
+    crypton_gf_mulw(t4,t2,-1-TWISTED_D);
+    crypton_gf_mul(s,t4,t1);
+    mask_t lobs = crypton_gf_lobit(s);
+    crypton_gf_cond_neg(s,lobs);
+    crypton_gf_copy(inv_el_m1,p->x);
+    crypton_gf_cond_neg(inv_el_m1,~lobs^negx^toggle_s);
+    crypton_gf_add(inv_el_m1,inv_el_m1,p->t);
     
-    mask_t tg = toggle_hibit_t_over_s ^ ~crypton_gf_hibit(minus_t_over_s);
-    crypton_gf_cond_neg(minus_t_over_s, tg); /* t/s <-? -t/s */
-    crypton_gf_cond_neg(c, tg); /* u <- -u if negative. */
-    
-    crypton_gf_add(d,c,p->y);
-    crypton_gf_mul(s,b,d);
-    crypton_gf_cond_neg(s, toggle_hibit_s ^ crypton_gf_hibit(s));
-#else
+#elif COFACTOR == 8 && IMAGINE_TWIST
     /* More complicated because of rotation */
-    /* MAGIC This code is wrong for certain non-Curve25519 curves;
-     * check if it's because of Cofactor==8 or IMAGINE_TWIST */
-    
-    gf c, d;
-    crypton_gf_s *b = s, *a = minus_t_over_s;
+    gf t1,t2,t3,t4,t5;
+    crypton_gf_add(t1,p->z,p->y);
+    crypton_gf_sub(t2,p->z,p->y);
+    crypton_gf_mul(t3,t1,t2);      /* t3 = num */
+    crypton_gf_mul(t2,p->x,p->y);  /* t2 = den */
+    crypton_gf_sqr(t1,t2);
+    crypton_gf_mul(t4,t1,t3);
+    crypton_gf_mulw(t1,t4,-1-TWISTED_D);
+    crypton_gf_isr(t4,t1);         /* isqrt(num*(a-d)*den^2) */
+    crypton_gf_mul(t1,t2,t4);
+    crypton_gf_mul(t2,t1,RISTRETTO_FACTOR); /* t2 = "iden" in ristretto.sage */
+    crypton_gf_mul(t1,t3,t4);                 /* t1 = "inum" in ristretto.sage */
 
-    #if IMAGINE_TWIST
-        gf x, t;
-        crypton_gf_div_qnr(x,p->x);
-        crypton_gf_div_qnr(t,p->t);
-        crypton_gf_add ( a, p->z, x );
-        crypton_gf_sub ( b, p->z, x );
-        crypton_gf_mul ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 - X^2 */
-    #else
-        const crypton_gf_s *x = p->x, *t = p->t;
-        crypton_gf_sqr ( a, p->z );
-        crypton_gf_sqr ( b, p->x );
-        crypton_gf_add ( c, a, b ); /* "zx" = Z^2 - aX^2 = Z^2 + X^2 */
-    #endif
-    /* Here: c = "zx" in the SAGE code = Z^2 - aX^2 */
+    /* Calculate altxy = iden*inum*i*t^2*(d-a) */
+    crypton_gf_mul(t3,t1,t2);
+    crypton_gf_mul_i(t4,t3);
+    crypton_gf_mul(t3,t4,p->t);
+    crypton_gf_mul(t4,t3,p->t);
+    crypton_gf_mulw(t3,t4,TWISTED_D+1);      /* iden*inum*i*t^2*(d-1) */
+    mask_t rotate = toggle_rotation ^ crypton_gf_lobit(t3);
     
-    crypton_gf_mul ( a, p->z, t ); /* "tz" = T*Z */
-    crypton_gf_sqr ( b, a );
-    crypton_gf_mul ( d, b, c ); /* (TZ)^2 * (Z^2-aX^2) */
-    mask_t ok = crypton_gf_isr(b, d);
-    (void)ok; assert(ok | crypton_gf_eq(d,ZERO));
-    crypton_gf_mul ( d, b, a ); /* "osx" = 1 / sqrt(z^2-ax^2) */
-    crypton_gf_mul ( a, b, c ); 
-    crypton_gf_mul ( b, a, d ); /* 1/tz */
-
-    mask_t rotate;
-    #if (COFACTOR == 8)
-        gf e;
-        crypton_gf_sqr(e, p->z);
-        crypton_gf_mul(a, e, b); /* z^2 / tz = z/t = 1/xy */
-        rotate = crypton_gf_hibit(a) ^ toggle_rotation;
-        /* Curve25519: cond select between zx * 1/tz or sqrt(1-d); y=-x */
-        crypton_gf_mul ( a, b, c ); 
-        crypton_gf_cond_sel ( a, a, SQRT_ONE_MINUS_D, rotate );
-        crypton_gf_cond_sel ( e, p->y, x, rotate );
-    #else
-        const crypton_gf_s *e = x;
-        (void)toggle_rotation;
-        rotate = 0;
-    #endif
+    /* Rotate if altxy is negative */
+    crypton_gf_cond_swap(t1,t2,rotate);
+    crypton_gf_mul_i(t4,p->x);
+    crypton_gf_cond_sel(t4,p->y,t4,rotate);  /* t4 = "fac" = ix if rotate, else y */
     
-    crypton_gf_mul ( c, a, d ); // new "osx"
-    crypton_gf_mul ( a, c, p->z );
-    crypton_gf_add ( minus_t_over_s, a, a ); // 2 * "osx" * Z
-    crypton_gf_mul ( d, b, p->z );
+    crypton_gf_mul_i(t5,RISTRETTO_FACTOR); /* t5 = imi */
+    crypton_gf_mul(t3,t5,t2);                /* iden * imi */
+    crypton_gf_mul(t2,t5,t1);
+    crypton_gf_mul(t5,t2,p->t);              /* "altx" = iden*imi*t */
+    mask_t negx = crypton_gf_lobit(t5) ^ toggle_altx;
     
-    mask_t tg = toggle_hibit_t_over_s ^~ crypton_gf_hibit(minus_t_over_s);
-    crypton_gf_cond_neg ( minus_t_over_s, tg );
-    crypton_gf_cond_neg ( c, rotate ^ tg );
-    crypton_gf_add ( d, d, c );
-    crypton_gf_mul ( s, d, e ); /* here "x" = y unless rotate */
-    crypton_gf_cond_neg ( s, toggle_hibit_s ^ crypton_gf_hibit(s) );
+    crypton_gf_cond_neg(t1,negx^rotate);
+    crypton_gf_mul(t2,t1,p->z);
+    crypton_gf_add(t2,t2,ONE);
+    crypton_gf_mul(inv_el_sum,t2,t4);
+    crypton_gf_mul(s,inv_el_sum,t3);
+    
+    mask_t negs = crypton_gf_lobit(s);
+    crypton_gf_cond_neg(s,negs);
+    
+    mask_t negz = ~negs ^ toggle_s ^ negx;
+    crypton_gf_copy(inv_el_m1,p->z);
+    crypton_gf_cond_neg(inv_el_m1,negz);
+    crypton_gf_sub(inv_el_m1,inv_el_m1,t4);
+#else
+#error "Cofactor must be 4 (with no IMAGINE_TWIST) or 8 (with IMAGINE_TWIST)"
 #endif
 }
 
 void API_NS(point_encode)( unsigned char ser[SER_BYTES], const point_t p ) {
-    gf s, mtos;
-    API_NS(deisogenize)(s,mtos,p,0,0,0);
-    crypton_gf_serialize(ser,s,0);
+    gf s,ie1,ie2;
+    API_NS(deisogenize)(s,ie1,ie2,p,0,0,0);
+    crypton_gf_serialize(ser,s);
 }
 
 crypton_decaf_error_t API_NS(point_decode) (
@@ -238,88 +252,53 @@ crypton_decaf_error_t API_NS(point_decode) (
     const unsigned char ser[SER_BYTES],
     crypton_decaf_bool_t allow_identity
 ) {
-    gf s, a, b, c, d, e, f;
+    gf s, s2, num, tmp;
+    crypton_gf_s *tmp2=s2, *ynum=p->z, *isr=p->x, *den=p->t;
+    
     mask_t succ = crypton_gf_deserialize(s, ser, 0);
-    mask_t zero = crypton_gf_eq(s, ZERO);
-    succ &= bool_to_mask(allow_identity) | ~zero;
-    crypton_gf_sqr ( a, s ); /* s^2 */
-#if IMAGINE_TWIST
-    crypton_gf_sub ( f, ONE, a ); /* f = 1-as^2 = 1-s^2*/
-#else
-    crypton_gf_add ( f, ONE, a ); /* f = 1-as^2 = 1+s^2 */
-#endif
-    succ &= ~ crypton_gf_eq( f, ZERO );
-    crypton_gf_sqr ( b, f );  /* (1-as^2)^2 = 1 - 2as^2 + a^2 s^4 */
-    crypton_gf_mulw ( c, a, 4*IMAGINE_TWIST-4*EDWARDS_D ); 
-    crypton_gf_add ( c, c, b ); /* t^2 = 1 + (2a-4d) s^2 + s^4 */
-    crypton_gf_mul ( d, f, s ); /* s * (1-as^2) for denoms */
-    crypton_gf_sqr ( e, d );    /* s^2 * (1-as^2)^2 */
-    crypton_gf_mul ( b, c, e ); /* t^2 * s^2 * (1-as^2)^2 */
+    succ &= bool_to_mask(allow_identity) | ~crypton_gf_eq(s, ZERO);
+    succ &= ~crypton_gf_lobit(s);
     
-    succ &= crypton_gf_isr(e,b) | crypton_gf_eq(b,ZERO); /* e = 1/(t s (1-as^2)) */
-    crypton_gf_mul ( b, e, d ); /* 1 / t */
-    crypton_gf_mul ( d, e, c ); /* t / (s(1-as^2)) */
-    crypton_gf_mul ( e, d, f ); /* t / s */
-    mask_t negtos = crypton_gf_hibit(e);
-    crypton_gf_cond_neg(b, negtos);
-    crypton_gf_cond_neg(d, negtos);
+    crypton_gf_sqr(s2,s);                  /* s^2 = -as^2 */
+#if IMAGINE_TWIST
+    crypton_gf_sub(s2,ZERO,s2);            /* -as^2 */
+#endif
+    crypton_gf_sub(den,ONE,s2);            /* 1+as^2 */
+    crypton_gf_add(ynum,ONE,s2);           /* 1-as^2 */
+    crypton_gf_mulw(num,s2,-4*TWISTED_D);
+    crypton_gf_sqr(tmp,den);               /* tmp = den^2 */
+    crypton_gf_add(num,tmp,num);           /* num = den^2 - 4*d*s^2 */
+    crypton_gf_mul(tmp2,num,tmp);          /* tmp2 = num*den^2 */
+    succ &= crypton_gf_isr(isr,tmp2);      /* isr = 1/sqrt(num*den^2) */
+    crypton_gf_mul(tmp,isr,den);           /* isr*den */
+    crypton_gf_mul(p->y,tmp,ynum);         /* isr*den*(1-as^2) */
+    crypton_gf_mul(tmp2,tmp,s);            /* s*isr*den */
+    crypton_gf_add(tmp2,tmp2,tmp2);        /* 2*s*isr*den */
+    crypton_gf_mul(tmp,tmp2,isr);          /* 2*s*isr^2*den */
+    crypton_gf_mul(p->x,tmp,num);          /* 2*s*isr^2*den*num */
+    crypton_gf_mul(tmp,tmp2,RISTRETTO_FACTOR); /* 2*s*isr*den*magic */
+    crypton_gf_cond_neg(p->x,crypton_gf_lobit(tmp)); /* flip x */
+    
+#if COFACTOR==8
+    /* Additionally check y != 0 and x*y*isomagic nonegative */
+    succ &= ~crypton_gf_eq(p->y,ZERO);
+    crypton_gf_mul(tmp,p->x,p->y);
+    crypton_gf_mul(tmp2,tmp,RISTRETTO_FACTOR);
+    succ &= ~crypton_gf_lobit(tmp2);
+#endif
 
 #if IMAGINE_TWIST
-    crypton_gf_add ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
-#else
-    crypton_gf_sub ( p->z, ONE, a); /* Z = 1+as^2 = 1-s^2 */
+    crypton_gf_copy(tmp,p->x);
+    crypton_gf_mul_i(p->x,tmp);
 #endif
 
-#if COFACTOR == 8
-    crypton_gf_mul ( a, p->z, d); /* t(1+s^2) / s(1-s^2) = 2/xy */
-    succ &= ~crypton_gf_lobit(a); /* = ~crypton_gf_hibit(a/2), since crypton_gf_hibit(x) = crypton_gf_lobit(2x) */
-#endif
+    /* Fill in z and t */
+    crypton_gf_copy(p->z,ONE);
+    crypton_gf_mul(p->t,p->x,p->y);
     
-    crypton_gf_mul ( a, f, b ); /* y = (1-s^2) / t */
-    crypton_gf_mul ( p->y, p->z, a ); /* Y = yZ */
-#if IMAGINE_TWIST
-    crypton_gf_add ( b, s, s );
-    crypton_gf_mul(p->x, b, SQRT_MINUS_ONE); /* Curve25519 */
-#else
-    crypton_gf_add ( p->x, s, s );
-#endif
-    crypton_gf_mul ( p->t, p->x, a ); /* T = 2s (1-as^2)/t */
-    
-#if UNSAFE_CURVE_HAS_POINTS_AT_INFINITY
-    /* This can't happen for any of the supported configurations.
-     *
-     * If it can happen (because s=1), it's because the curve has points
-     * at infinity, which means that there may be critical security bugs
-     * elsewhere in the library.  In that case, it's better that you hit
-     * the assertion in point_valid, which will happen in the test suite
-     * since it tests s=1.
-     *
-     * This debugging option is to allow testing of IMAGINE_TWIST = 0 on
-     * Ed25519, without hitting that assertion.  Don't use it in
-     * production.
-     */
-    succ &= ~crypton_gf_eq(p->z,ZERO);
-#endif
-    
-    p->y->limb[0] -= zero;
     assert(API_NS(point_valid)(p) | ~succ);
-    
     return crypton_decaf_succeed_if(mask_to_bool(succ));
 }
-
-#if IMAGINE_TWIST
-#define TWISTED_D (-(EDWARDS_D))
-#else
-#define TWISTED_D ((EDWARDS_D)-1)
-#endif
-
-#if TWISTED_D < 0
-#define EFF_D (-(TWISTED_D))
-#define NEG_D 1
-#else
-#define EFF_D TWISTED_D
-#define NEG_D 0
-#endif
 
 void API_NS(point_sub) (
     point_t p,
@@ -563,6 +542,7 @@ void API_NS(point_scalarmul) (
     const point_t b,
     const scalar_t scalar
 ) {
+
     const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
@@ -573,7 +553,7 @@ void API_NS(point_scalarmul) (
     API_NS(scalar_halve)(scalar1x,scalar1x);
     
     /* Set up a precomputed table with odd multiples of b. */
-    pniels_t pn, multiples[NTABLE];
+    pniels_t pn, multiples[1<<((int)(CRYPTON_DECAF_WINDOW_BITS)-1)];  // == NTABLE (MSVC compatibility issue)
     point_t tmp;
     prepare_fixed_window(multiples, b, NTABLE);
 
@@ -624,12 +604,13 @@ void API_NS(point_double_scalarmul) (
     const scalar_t scalarb,
     const point_t c,
     const scalar_t scalarc
-) {
+) {    
+    
     const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
         NTABLE = 1<<(WINDOW-1);
-        
+
     scalar_t scalar1x, scalar2x;
     API_NS(scalar_add)(scalar1x, scalarb, point_scalarmul_adjustment);
     API_NS(scalar_halve)(scalar1x,scalar1x);
@@ -637,9 +618,10 @@ void API_NS(point_double_scalarmul) (
     API_NS(scalar_halve)(scalar2x,scalar2x);
     
     /* Set up a precomputed table with odd multiples of b. */
-    pniels_t pn, multiples1[NTABLE], multiples2[NTABLE];
+    pniels_t pn, multiples1[1<<((int)(CRYPTON_DECAF_WINDOW_BITS)-1)], multiples2[1<<((int)(CRYPTON_DECAF_WINDOW_BITS)-1)];
+    // Array size above equal NTABLE (MSVC compatibility issue)
     point_t tmp;
-    prepare_fixed_window(multiples1, b, NTABLE);
+    prepare_fixed_window(multiples1, b, NTABLE);  
     prepare_fixed_window(multiples2, c, NTABLE);
 
     /* Initialize. */
@@ -701,11 +683,13 @@ void API_NS(point_dual_scalarmul) (
     const scalar_t scalar1,
     const scalar_t scalar2
 ) {
+    
     const int WINDOW = CRYPTON_DECAF_WINDOW_BITS,
         WINDOW_MASK = (1<<WINDOW)-1,
         WINDOW_T_MASK = WINDOW_MASK >> 1,
         NTABLE = 1<<(WINDOW-1);
-        
+
+
     scalar_t scalar1x, scalar2x;
     API_NS(scalar_add)(scalar1x, scalar1, point_scalarmul_adjustment);
     API_NS(scalar_halve)(scalar1x,scalar1x);
@@ -713,7 +697,9 @@ void API_NS(point_dual_scalarmul) (
     API_NS(scalar_halve)(scalar2x,scalar2x);
     
     /* Set up a precomputed table with odd multiples of b. */
-    point_t multiples1[NTABLE], multiples2[NTABLE], working, tmp;
+    point_t multiples1[1<<((int)(CRYPTON_DECAF_WINDOW_BITS)-1)], multiples2[1<<((int)(CRYPTON_DECAF_WINDOW_BITS)-1)], working, tmp;
+    // Array sizes above equal NTABLE (MSVC compatibility issue)
+
     pniels_t pn;
     
     API_NS(point_copy)(working, b);
@@ -801,7 +787,7 @@ crypton_decaf_bool_t API_NS(point_eq) ( const point_t p, const point_t q ) {
     crypton_gf_mul ( b, q->y, p->x );
     mask_t succ = crypton_gf_eq(a,b);
     
-    #if (COFACTOR == 8) && IMAGINE_TWIST
+    #if (COFACTOR == 8)
         crypton_gf_mul ( a, p->y, q->y );
         crypton_gf_mul ( b, q->x, p->x );
         #if !(IMAGINE_TWIST)
@@ -936,11 +922,11 @@ void API_NS(precompute) (
     const unsigned int n = COMBS_N, t = COMBS_T, s = COMBS_S;
     assert(n*t*s >= SCALAR_BITS);
   
-    point_t working, start, doubles[t-1];
+    point_t working, start, doubles[COMBS_T-1];
     API_NS(point_copy)(working, base);
     pniels_t pn_tmp;
   
-    gf zs[n<<(t-1)], zis[n<<(t-1)];
+    gf zs[(unsigned int)(COMBS_N)<<(unsigned int)(COMBS_T-1)], zis[(unsigned int)(COMBS_N)<<(unsigned int)(COMBS_T-1)];
   
     unsigned int i,j,k;
     
@@ -1078,7 +1064,7 @@ crypton_decaf_error_t API_NS(direct_scalarmul) (
     return succ;
 }
 
-void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
+void API_NS(point_mul_by_ratio_and_encode_like_eddsa) (
     uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
     const point_t p
 ) {
@@ -1116,15 +1102,20 @@ void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
         crypton_gf_mul ( y, u, t ); // (x^2+y^2)(2z^2-y^2+x^2)
         crypton_gf_mul ( u, z, t );
         crypton_gf_copy( z, u );
-        crypton_gf_mul ( u, x, SQRT_ONE_MINUS_D );
+        crypton_gf_mul ( u, x, RISTRETTO_FACTOR );
+#if IMAGINE_TWIST
+        crypton_gf_mul_i( x, u );
+#else
+#error "... probably wrong"
         crypton_gf_copy( x, u );
+#endif
         crypton_decaf_bzero(u,sizeof(u));
     }
 #elif IMAGINE_TWIST
     {
         API_NS(point_double)(q,q);
         API_NS(point_double)(q,q);
-        crypton_gf_mul_qnr(x, q->x);
+        crypton_gf_mul_i(x, q->x);
         crypton_gf_copy(y, q->y);
         crypton_gf_copy(z, q->z);
     }
@@ -1137,7 +1128,7 @@ void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
         crypton_gf_add( u, x, t );
         crypton_gf_add( z, q->y, q->x );
         crypton_gf_sqr ( y, z);
-        crypton_gf_sub ( y, u, y );
+        crypton_gf_sub ( y, y, u );
         crypton_gf_sub ( z, t, x );
         crypton_gf_sqr ( x, q->z );
         crypton_gf_add ( t, x, x); 
@@ -1155,7 +1146,7 @@ void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
     
     /* Encode */
     enc[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] = 0;
-    crypton_gf_serialize(enc, x, 1);
+    crypton_gf_serialize(enc, x);
     enc[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] |= 0x80 & crypton_gf_lobit(t);
 
     crypton_decaf_bzero(x,sizeof(x));
@@ -1166,7 +1157,7 @@ void API_NS(point_mul_by_cofactor_and_encode_like_eddsa) (
 }
 
 
-crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
+crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_mul_by_ratio) (
     point_t p,
     const uint8_t enc[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
 ) {
@@ -1176,7 +1167,7 @@ crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
     mask_t low = ~word_is_zero(enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] & 0x80);
     enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1] &= ~0x80;
     
-    mask_t succ = crypton_gf_deserialize(p->y, enc2, 1);
+    mask_t succ = crypton_gf_deserialize(p->y, enc2, 0);
 #if 0 == 0
     succ &= word_is_zero(enc2[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES-1]);
 #endif
@@ -1196,7 +1187,7 @@ crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
     succ &= crypton_gf_isr(p->t,p->x); /* 1/sqrt(num * denom) */
     
     crypton_gf_mul(p->x,p->t,p->z); /* sqrt(num / denom) */
-    crypton_gf_cond_neg(p->x,~crypton_gf_lobit(p->x)^low);
+    crypton_gf_cond_neg(p->x,crypton_gf_lobit(p->x)^low);
     crypton_gf_copy(p->z,ONE);
   
     #if EDDSA_USE_SIGMA_ISOGENY
@@ -1221,8 +1212,9 @@ crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
         crypton_gf_sub ( p->t, a, c ); // y^2 - x^2
         crypton_gf_sqr ( p->x, p->z );
         crypton_gf_add ( p->z, p->x, p->x );
-        crypton_gf_sub ( a, p->z, p->t ); // 2z^2 - y^2 + x^2
-        crypton_gf_mul ( c, a, SQRT_ONE_MINUS_D );
+        crypton_gf_sub ( c, p->z, p->t ); // 2z^2 - y^2 + x^2
+        crypton_gf_div_i ( a, c );
+        crypton_gf_mul ( c, a, RISTRETTO_FACTOR );
         crypton_gf_mul ( p->x, b, p->t); // (2xy)(y^2-x^2)
         crypton_gf_mul ( p->z, p->t, c ); // (y^2-x^2)sd(2z^2 - y^2 + x^2)
         crypton_gf_mul ( p->y, d, c ); // (y^2+x^2)sd(2z^2 - y^2 + x^2)
@@ -1265,6 +1257,7 @@ crypton_decaf_error_t API_NS(point_decode_like_eddsa_and_ignore_cofactor) (
     
     crypton_decaf_bzero(enc2,sizeof(enc2));
     assert(API_NS(point_valid)(p) || ~succ);
+    
     return crypton_decaf_succeed_if(mask_to_bool(succ));
 }
 
@@ -1274,7 +1267,7 @@ crypton_decaf_error_t crypton_decaf_x448 (
     const uint8_t scalar[X_PRIVATE_BYTES]
 ) {
     gf x1, x2, z2, x3, z3, t1, t2;
-    ignore_result(crypton_gf_deserialize(x1,base,1));
+    ignore_result(crypton_gf_deserialize(x1,base,0));
     crypton_gf_copy(x2,ONE);
     crypton_gf_copy(z2,ZERO);
     crypton_gf_copy(x3,x1);
@@ -1290,8 +1283,7 @@ crypton_decaf_error_t crypton_decaf_x448 (
         if (t/8==0) sb &= -(uint8_t)COFACTOR;
         else if (t == X_PRIVATE_BITS-1) sb = -1;
         
-        mask_t k_t = (sb>>(t%8)) & 1;
-        k_t = -k_t; /* set to all 0s or all 1s */
+        mask_t k_t = bit_to_mask((sb>>(t%8)) & 1);
         
         swap ^= k_t;
         crypton_gf_cond_swap(x2,x3,swap);
@@ -1325,7 +1317,7 @@ crypton_decaf_error_t crypton_decaf_x448 (
     crypton_gf_cond_swap(z2,z3,swap);
     crypton_gf_invert(z2,z2,0);
     crypton_gf_mul(x1,x2,z2);
-    crypton_gf_serialize(out,x1,1);
+    crypton_gf_serialize(out,x1);
     mask_t nz = ~crypton_gf_eq(x1,ZERO);
     
     crypton_decaf_bzero(x1,sizeof(x1));
@@ -1345,15 +1337,8 @@ void crypton_decaf_ed448_convert_public_key_to_x448 (
     const uint8_t ed[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
 ) {
     gf y;
-    {
-        uint8_t enc2[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
-        memcpy(enc2,ed,sizeof(enc2));
-
-        /* retrieve y from the ed compressed point */
-        enc2[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES-1] &= ~0x80;
-        ignore_result(crypton_gf_deserialize(y, enc2, 0));
-        crypton_decaf_bzero(enc2,sizeof(enc2));
-    }
+    const uint8_t mask = (uint8_t)(0xFE<<(7));
+    ignore_result(crypton_gf_deserialize(y, ed, mask));
     
     {
         gf n,d;
@@ -1364,7 +1349,7 @@ void crypton_decaf_ed448_convert_public_key_to_x448 (
         crypton_gf_sub(d, ONE, y); /* d = 1-y */
         crypton_gf_invert(d, d, 0); /* d = 1/(1-y) */
         crypton_gf_mul(y, n, d); /* u = (y+1)/(1-y) */
-        crypton_gf_serialize(x,y,1);
+        crypton_gf_serialize(x,y);
 #else /* EDDSA_USE_SIGMA_ISOGENY */
         /* u = y^2 * (1-dy^2) / (1-y^2) */
         crypton_gf_sqr(n,y); /* y^2*/
@@ -1374,7 +1359,7 @@ void crypton_decaf_ed448_convert_public_key_to_x448 (
         crypton_gf_mulw(d,n,EDWARDS_D); /* dy^2*/
         crypton_gf_sub(d, ONE, d); /* 1-dy^2*/
         crypton_gf_mul(n, y, d); /* y^2 * (1-dy^2) / (1-y^2) */
-        crypton_gf_serialize(x,n,1);
+        crypton_gf_serialize(x,n);
 #endif /* EDDSA_USE_SIGMA_ISOGENY */
         
         crypton_decaf_bzero(y,sizeof(y));
@@ -1390,6 +1375,26 @@ void crypton_decaf_x448_generate_key (
     crypton_decaf_x448_derive_public_key(out,scalar);
 }
 
+void API_NS(point_mul_by_ratio_and_encode_like_x448) (
+    uint8_t out[X_PUBLIC_BYTES],
+    const point_t p
+) {
+    point_t q;
+#if COFACTOR == 8
+    point_double_internal(q,p,1);
+#else
+    API_NS(point_copy)(q,p);
+#endif
+    crypton_gf_invert(q->t,q->x,0); /* 1/x */
+    crypton_gf_mul(q->z,q->t,q->y); /* y/x */
+    crypton_gf_sqr(q->y,q->z); /* (y/x)^2 */
+#if IMAGINE_TWIST
+    crypton_gf_sub(q->y,ZERO,q->y);
+#endif
+    crypton_gf_serialize(out,q->y);
+    API_NS(point_destroy(q));
+}
+
 void crypton_decaf_x448_derive_public_key (
     uint8_t out[X_PUBLIC_BYTES],
     const uint8_t scalar[X_PRIVATE_BYTES]
@@ -1399,45 +1404,19 @@ void crypton_decaf_x448_derive_public_key (
     memcpy(scalar2,scalar,sizeof(scalar2));
     scalar2[0] &= -(uint8_t)COFACTOR;
     
-    scalar2[X_PRIVATE_BYTES-1] &= ~(-1u<<((X_PRIVATE_BITS+7)%8));
+    scalar2[X_PRIVATE_BYTES-1] &= ~(0xFF<<((X_PRIVATE_BITS+7)%8));
     scalar2[X_PRIVATE_BYTES-1] |= 1<<((X_PRIVATE_BITS+7)%8);
     
     scalar_t the_scalar;
     API_NS(scalar_decode_long)(the_scalar,scalar2,sizeof(scalar2));
     
-    /* We're gonna isogenize by 2, so divide by 2.
-     *
-     * Why by 2, even though it's a 4-isogeny?
-     *
-     * The isogeny map looks like
-     * Montgomery <-2-> Jacobi <-2-> Edwards
-     *
-     * Since the Jacobi base point is the PREimage of the iso to
-     * the Montgomery curve, and we're going
-     * Jacobi -> Edwards -> Jacobi -> Montgomery,
-     * we pick up only a factor of 2 over Jacobi -> Montgomery. 
-     */
-    API_NS(scalar_halve)(the_scalar,the_scalar);
+    /* Compensate for the encoding ratio */
+    for (unsigned i=1; i<CRYPTON_DECAF_X448_ENCODE_RATIO; i<<=1) {
+        API_NS(scalar_halve)(the_scalar,the_scalar);
+    }
     point_t p;
     API_NS(precomputed_scalarmul)(p,API_NS(precomputed_base),the_scalar);
-    
-    /* Isogenize to Montgomery curve.
-     *
-     * Why isn't this just a separate function, eg crypton_decaf_encode_like_x448?
-     * Basically because in general it does the wrong thing if there is a cofactor
-     * component in the input.  In this function though, there isn't a cofactor
-     * component in the input.
-     */
-    crypton_gf_invert(p->t,p->x,0); /* 1/x */
-    crypton_gf_mul(p->z,p->t,p->y); /* y/x */
-    crypton_gf_sqr(p->y,p->z); /* (y/x)^2 */
-#if IMAGINE_TWIST
-    crypton_gf_sub(p->y,ZERO,p->y);
-#endif
-    crypton_gf_serialize(out,p->y,1);
-        
-    crypton_decaf_bzero(scalar2,sizeof(scalar2));
-    API_NS(scalar_destroy)(the_scalar);
+    API_NS(point_mul_by_ratio_and_encode_like_x448)(out,p);
     API_NS(point_destroy)(p);
 }
 
@@ -1566,13 +1545,13 @@ void API_NS(base_double_scalarmul_non_secret) (
 ) {
     const int table_bits_var = CRYPTON_DECAF_WNAF_VAR_TABLE_BITS,
         table_bits_pre = CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS;
-    struct smvt_control control_var[SCALAR_BITS/(table_bits_var+1)+3];
-    struct smvt_control control_pre[SCALAR_BITS/(table_bits_pre+1)+3];
+    struct smvt_control control_var[SCALAR_BITS/((int)(CRYPTON_DECAF_WNAF_VAR_TABLE_BITS)+1)+3];
+    struct smvt_control control_pre[SCALAR_BITS/((int)(CRYPTON_DECAF_WNAF_FIXED_TABLE_BITS)+1)+3];
     
     int ncb_pre = recode_wnaf(control_pre, scalar1, table_bits_pre);
     int ncb_var = recode_wnaf(control_var, scalar2, table_bits_var);
   
-    pniels_t precmp_var[1<<table_bits_var];
+    pniels_t precmp_var[1<<(int)(CRYPTON_DECAF_WNAF_VAR_TABLE_BITS)];
     prepare_wnaf_table(precmp_var, base2, table_bits_var);
   
     int contp=0, contv=0, i = control_var[0].power;

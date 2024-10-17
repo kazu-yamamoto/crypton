@@ -52,16 +52,22 @@ typedef struct crypton_gf_448_s {
 /** Number of bits in the "which" field of an elligator inverse */
 #define CRYPTON_DECAF_448_INVERT_ELLIGATOR_WHICH_BITS 3
 
+/** The cofactor the curve would have, if we hadn't removed it */
+#define CRYPTON_DECAF_448_REMOVED_COFACTOR 4
+
+/** X448 encoding ratio. */
+#define CRYPTON_DECAF_X448_ENCODE_RATIO 2
+
 /** Number of bytes in an x448 public key */
 #define CRYPTON_DECAF_X448_PUBLIC_BYTES 56
 
 /** Number of bytes in an x448 private key */
 #define CRYPTON_DECAF_X448_PRIVATE_BYTES 56
 
-/** Twisted Edwards extended homogeneous coordinates */
+/** Representation of a point on the elliptic curve. */
 typedef struct crypton_decaf_448_point_s {
     /** @cond internal */
-    crypton_gf_448_t x,y,z,t;
+    crypton_gf_448_t x,y,z,t; /* Twisted extended homogeneous coordinates */
     /** @endcond */
 } crypton_decaf_448_point_t[1];
 
@@ -72,30 +78,51 @@ struct crypton_decaf_448_precomputed_s;
 typedef struct crypton_decaf_448_precomputed_s crypton_decaf_448_precomputed_s; 
 
 /** Size and alignment of precomputed point tables. */
-extern const size_t crypton_decaf_448_sizeof_precomputed_s CRYPTON_DECAF_API_VIS, crypton_decaf_448_alignof_precomputed_s CRYPTON_DECAF_API_VIS;
+CRYPTON_DECAF_API_VIS extern const size_t crypton_decaf_448_sizeof_precomputed_s, crypton_decaf_448_alignof_precomputed_s;
 
-/** Scalar is stored packed, because we don't need the speed. */
+/** Representation of an element of the scalar field. */
 typedef struct crypton_decaf_448_scalar_s {
     /** @cond internal */
     crypton_decaf_word_t limb[CRYPTON_DECAF_448_SCALAR_LIMBS];
     /** @endcond */
 } crypton_decaf_448_scalar_t[1];
 
-/** A scalar equal to 1. */
-extern const crypton_decaf_448_scalar_t crypton_decaf_448_scalar_one CRYPTON_DECAF_API_VIS;
+#if defined _MSC_VER
 
-/** A scalar equal to 0. */
-extern const crypton_decaf_448_scalar_t crypton_decaf_448_scalar_zero CRYPTON_DECAF_API_VIS;
+/** The scalar 1. */
+extern const crypton_decaf_448_scalar_t CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_one;
 
-/** The identity point on the curve. */
-extern const crypton_decaf_448_point_t crypton_decaf_448_point_identity CRYPTON_DECAF_API_VIS;
+/** The scalar 0. */
+extern const crypton_decaf_448_scalar_t CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_zero;
 
-/** An arbitrarily chosen base point on the curve. */
-extern const crypton_decaf_448_point_t crypton_decaf_448_point_base CRYPTON_DECAF_API_VIS;
+/** The identity (zero) point on the curve. */
+extern const crypton_decaf_448_point_t CRYPTON_DECAF_API_VIS crypton_decaf_448_point_identity;
 
-/** Precomputed table for the base point on the curve. */
-extern const struct crypton_decaf_448_precomputed_s *crypton_decaf_448_precomputed_base CRYPTON_DECAF_API_VIS;
+/** An arbitrarily-chosen base point on the curve. */
+extern const crypton_decaf_448_point_t CRYPTON_DECAF_API_VIS crypton_decaf_448_point_base;
 
+/** Precomputed table of multiples of the base point on the curve. */
+extern const struct CRYPTON_DECAF_API_VIS crypton_decaf_448_precomputed_s *crypton_decaf_448_precomputed_base;
+
+
+#else // _MSC_VER
+
+/** The scalar 1. */
+CRYPTON_DECAF_API_VIS extern const crypton_decaf_448_scalar_t crypton_decaf_448_scalar_one;
+
+/** The scalar 0. */
+CRYPTON_DECAF_API_VIS extern const crypton_decaf_448_scalar_t crypton_decaf_448_scalar_zero;
+
+/** The identity (zero) point on the curve. */
+CRYPTON_DECAF_API_VIS extern const crypton_decaf_448_point_t crypton_decaf_448_point_identity;
+
+/** An arbitrarily-chosen base point on the curve. */
+CRYPTON_DECAF_API_VIS extern const crypton_decaf_448_point_t crypton_decaf_448_point_base;
+
+/** Precomputed table of multiples of the base point on the curve. */
+CRYPTON_DECAF_API_VIS extern const struct crypton_decaf_448_precomputed_s *crypton_decaf_448_precomputed_base;
+
+#endif // _MSC_VER
 /**
  * @brief Read a scalar from wire format or from bytes.
  *
@@ -106,10 +133,10 @@ extern const struct crypton_decaf_448_precomputed_s *crypton_decaf_448_precomput
  * @retval CRYPTON_DECAF_FAILURE The scalar was greater than the modulus,
  * and has been reduced modulo that modulus.
  */
-crypton_decaf_error_t crypton_decaf_448_scalar_decode (
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_decode (
     crypton_decaf_448_scalar_t out,
     const unsigned char ser[CRYPTON_DECAF_448_SCALAR_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Read a scalar from wire format or from bytes.  Reduces mod
@@ -119,11 +146,11 @@ crypton_decaf_error_t crypton_decaf_448_scalar_decode (
  * @param [in] ser_len Length of serialized form.
  * @param [out] out Deserialized form.
  */
-void crypton_decaf_448_scalar_decode_long (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_decode_long (
     crypton_decaf_448_scalar_t out,
     const unsigned char *ser,
     size_t ser_len
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
     
 /**
  * @brief Serialize a scalar to wire format.
@@ -131,10 +158,10 @@ void crypton_decaf_448_scalar_decode_long (
  * @param [out] ser Serialized form of a scalar.
  * @param [in] s Deserialized scalar.
  */
-void crypton_decaf_448_scalar_encode (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_encode (
     unsigned char ser[CRYPTON_DECAF_448_SCALAR_BYTES],
     const crypton_decaf_448_scalar_t s
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_NOINLINE;
         
 /**
  * @brief Add two scalars.  The scalars may use the same memory.
@@ -142,11 +169,11 @@ void crypton_decaf_448_scalar_encode (
  * @param [in] b Another scalar.
  * @param [out] out a+b.
  */
-void crypton_decaf_448_scalar_add (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_add (
     crypton_decaf_448_scalar_t out,
     const crypton_decaf_448_scalar_t a,
     const crypton_decaf_448_scalar_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Compare two scalars.
@@ -155,10 +182,10 @@ void crypton_decaf_448_scalar_add (
  * @retval CRYPTON_DECAF_TRUE The scalars are equal.
  * @retval CRYPTON_DECAF_FALSE The scalars are not equal.
  */    
-crypton_decaf_bool_t crypton_decaf_448_scalar_eq (
+crypton_decaf_bool_t CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_eq (
     const crypton_decaf_448_scalar_t a,
     const crypton_decaf_448_scalar_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Subtract two scalars.  The scalars may use the same memory.
@@ -166,11 +193,11 @@ crypton_decaf_bool_t crypton_decaf_448_scalar_eq (
  * @param [in] b Another scalar.
  * @param [out] out a-b.
  */  
-void crypton_decaf_448_scalar_sub (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_sub (
     crypton_decaf_448_scalar_t out,
     const crypton_decaf_448_scalar_t a,
     const crypton_decaf_448_scalar_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Multiply two scalars.  The scalars may use the same memory.
@@ -178,21 +205,21 @@ void crypton_decaf_448_scalar_sub (
  * @param [in] b Another scalar.
  * @param [out] out a*b.
  */  
-void crypton_decaf_448_scalar_mul (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_mul (
     crypton_decaf_448_scalar_t out,
     const crypton_decaf_448_scalar_t a,
     const crypton_decaf_448_scalar_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
         
 /**
 * @brief Halve a scalar.  The scalars may use the same memory.
 * @param [in] a A scalar.
 * @param [out] out a/2.
 */
-void crypton_decaf_448_scalar_halve (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_halve (
    crypton_decaf_448_scalar_t out,
    const crypton_decaf_448_scalar_t a
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Invert a scalar.  When passed zero, return 0.  The input and output may alias.
@@ -200,10 +227,10 @@ void crypton_decaf_448_scalar_halve (
  * @param [out] out 1/a.
  * @return CRYPTON_DECAF_SUCCESS The input is nonzero.
  */  
-crypton_decaf_error_t crypton_decaf_448_scalar_invert (
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_invert (
     crypton_decaf_448_scalar_t out,
     const crypton_decaf_448_scalar_t a
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Copy a scalar.  The scalars may use the same memory, in which
@@ -223,10 +250,10 @@ static inline void CRYPTON_DECAF_NONNULL crypton_decaf_448_scalar_copy (
  * @param [in] a An integer.
  * @param [out] out Will become equal to a.
  */  
-void crypton_decaf_448_scalar_set_unsigned (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_set_unsigned (
     crypton_decaf_448_scalar_t out,
     uint64_t a
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL;
+) CRYPTON_DECAF_NONNULL;
 
 /**
  * @brief Encode a point as a sequence of bytes.
@@ -234,10 +261,10 @@ void crypton_decaf_448_scalar_set_unsigned (
  * @param [out] ser The byte representation of the point.
  * @param [in] pt The point to encode.
  */
-void crypton_decaf_448_point_encode (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_encode (
     uint8_t ser[CRYPTON_DECAF_448_SER_BYTES],
     const crypton_decaf_448_point_t pt
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Decode a point from a sequence of bytes.
@@ -253,11 +280,11 @@ void crypton_decaf_448_point_encode (
  * @retval CRYPTON_DECAF_FAILURE The decoding didn't succeed, because
  * ser does not represent a point.
  */
-crypton_decaf_error_t crypton_decaf_448_point_decode (
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS crypton_decaf_448_point_decode (
     crypton_decaf_448_point_t pt,
     const uint8_t ser[CRYPTON_DECAF_448_SER_BYTES],
     crypton_decaf_bool_t allow_identity
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Copy a point.  The input and output may alias,
@@ -282,10 +309,10 @@ static inline void CRYPTON_DECAF_NONNULL crypton_decaf_448_point_copy (
  * @retval CRYPTON_DECAF_TRUE The points are equal.
  * @retval CRYPTON_DECAF_FALSE The points are not equal.
  */
-crypton_decaf_bool_t crypton_decaf_448_point_eq (
+crypton_decaf_bool_t CRYPTON_DECAF_API_VIS crypton_decaf_448_point_eq (
     const crypton_decaf_448_point_t a,
     const crypton_decaf_448_point_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Add two points to produce a third point.  The
@@ -296,11 +323,11 @@ crypton_decaf_bool_t crypton_decaf_448_point_eq (
  * @param [in] a An addend.
  * @param [in] b An addend.
  */
-void crypton_decaf_448_point_add (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_add (
     crypton_decaf_448_point_t sum,
     const crypton_decaf_448_point_t a,
     const crypton_decaf_448_point_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL;
+) CRYPTON_DECAF_NONNULL;
 
 /**
  * @brief Double a point.  Equivalent to
@@ -309,10 +336,10 @@ void crypton_decaf_448_point_add (
  * @param [out] two_a The sum a+a.
  * @param [in] a A point.
  */
-void crypton_decaf_448_point_double (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_double (
     crypton_decaf_448_point_t two_a,
     const crypton_decaf_448_point_t a
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL;
+) CRYPTON_DECAF_NONNULL;
 
 /**
  * @brief Subtract two points to produce a third point.  The
@@ -323,11 +350,11 @@ void crypton_decaf_448_point_double (
  * @param [in] a The minuend.
  * @param [in] b The subtrahend.
  */
-void crypton_decaf_448_point_sub (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_sub (
     crypton_decaf_448_point_t diff,
     const crypton_decaf_448_point_t a,
     const crypton_decaf_448_point_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL;
+) CRYPTON_DECAF_NONNULL;
     
 /**
  * @brief Negate a point to produce another point.  The input
@@ -336,10 +363,10 @@ void crypton_decaf_448_point_sub (
  * @param [out] nega The negated input point
  * @param [in] a The input point.
  */
-void crypton_decaf_448_point_negate (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_negate (
    crypton_decaf_448_point_t nega,
    const crypton_decaf_448_point_t a
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL;
+) CRYPTON_DECAF_NONNULL;
 
 /**
  * @brief Multiply a base point by a scalar: scaled = scalar*base.
@@ -348,11 +375,11 @@ void crypton_decaf_448_point_negate (
  * @param [in] base The point to be scaled.
  * @param [in] scalar The scalar to multiply by.
  */
-void crypton_decaf_448_point_scalarmul (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_scalarmul (
     crypton_decaf_448_point_t scaled,
     const crypton_decaf_448_point_t base,
     const crypton_decaf_448_scalar_t scalar
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Multiply a base point by a scalar: scaled = scalar*base.
@@ -371,34 +398,64 @@ void crypton_decaf_448_point_scalarmul (
  * @retval CRYPTON_DECAF_FAILURE The scalarmul didn't succeed, because
  * base does not represent a point.
  */
-crypton_decaf_error_t crypton_decaf_448_direct_scalarmul (
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS crypton_decaf_448_direct_scalarmul (
     uint8_t scaled[CRYPTON_DECAF_448_SER_BYTES],
     const uint8_t base[CRYPTON_DECAF_448_SER_BYTES],
     const crypton_decaf_448_scalar_t scalar,
     crypton_decaf_bool_t allow_identity,
     crypton_decaf_bool_t short_circuit
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NOINLINE;
 
 /**
- * @brief RFC 7748 Diffie-Hellman scalarmul.  This function uses a different
- * (non-Decaf) encoding.
+ * @brief RFC 7748 Diffie-Hellman scalarmul, used to compute shared secrets.
+ * This function uses a different (non-Decaf) encoding.
  *
- * @param [out] scaled The scaled point base*scalar
- * @param [in] base The point to be scaled.
- * @param [in] scalar The scalar to multiply by.
+ * @param [out] shared The shared secret base*scalar
+ * @param [in] base The other party's public key, used as the base of the scalarmul.
+ * @param [in] scalar The private scalar to multiply by.
  *
  * @retval CRYPTON_DECAF_SUCCESS The scalarmul succeeded.
  * @retval CRYPTON_DECAF_FAILURE The scalarmul didn't succeed, because the base
  * point is in a small subgroup.
  */
-crypton_decaf_error_t crypton_decaf_x448 (
-    uint8_t out[CRYPTON_DECAF_X448_PUBLIC_BYTES],
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS crypton_decaf_x448 (
+    uint8_t shared[CRYPTON_DECAF_X448_PUBLIC_BYTES],
     const uint8_t base[CRYPTON_DECAF_X448_PUBLIC_BYTES],
     const uint8_t scalar[CRYPTON_DECAF_X448_PRIVATE_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NOINLINE;
+
+/**
+ * @brief Multiply a point by CRYPTON_DECAF_X448_ENCODE_RATIO,
+ * then encode it like RFC 7748.
+ *
+ * This function is mainly used internally, but is exported in case
+ * it will be useful.
+ *
+ * The ratio is necessary because the internal representation doesn't
+ * track the cofactor information, so on output we must clear the cofactor.
+ * This would multiply by the cofactor, but in fact internally libdecaf's
+ * points are always even, so it multiplies by half the cofactor instead.
+ *
+ * As it happens, this aligns with the base point definitions; that is,
+ * if you pass the Decaf/Ristretto base point to this function, the result
+ * will be CRYPTON_DECAF_X448_ENCODE_RATIO times the X448
+ * base point.
+ *
+ * @param [out] out The scaled and encoded point.
+ * @param [in] p The point to be scaled and encoded.
+ */
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_mul_by_ratio_and_encode_like_x448 (
+    uint8_t out[CRYPTON_DECAF_X448_PUBLIC_BYTES],
+    const crypton_decaf_448_point_t p
+) CRYPTON_DECAF_NONNULL;
 
 /** The base point for X448 Diffie-Hellman */
-extern const uint8_t crypton_decaf_x448_base_point[CRYPTON_DECAF_X448_PUBLIC_BYTES] CRYPTON_DECAF_API_VIS;
+extern const uint8_t
+#ifndef DOXYGEN
+    /* For some reason Doxygen chokes on this despite the defense in common.h... */
+    CRYPTON_DECAF_API_VIS
+#endif
+    crypton_decaf_x448_base_point[CRYPTON_DECAF_X448_PUBLIC_BYTES];
 
 /**
  * @brief RFC 7748 Diffie-Hellman base point scalarmul.  This function uses
@@ -407,13 +464,13 @@ extern const uint8_t crypton_decaf_x448_base_point[CRYPTON_DECAF_X448_PUBLIC_BYT
  * @deprecated Renamed to crypton_decaf_x448_derive_public_key.
  * I have no particular timeline for removing this name.
  *
- * @param [out] scaled The scaled point base*scalar
- * @param [in] scalar The scalar to multiply by.
+ * @param [out] out The public key base*scalar.
+ * @param [in] scalar The private scalar.
  */
-void crypton_decaf_x448_generate_key (
+void CRYPTON_DECAF_API_VIS crypton_decaf_x448_generate_key (
     uint8_t out[CRYPTON_DECAF_X448_PUBLIC_BYTES],
     const uint8_t scalar[CRYPTON_DECAF_X448_PRIVATE_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_DEPRECATED("Renamed to crypton_decaf_x448_derive_public_key");
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_DEPRECATED("Renamed to crypton_decaf_x448_derive_public_key");
     
 /**
  * @brief RFC 7748 Diffie-Hellman base point scalarmul.  This function uses
@@ -422,13 +479,13 @@ void crypton_decaf_x448_generate_key (
  * Does exactly the same thing as crypton_decaf_x448_generate_key,
  * but has a better name.
  *
- * @param [out] scaled The scaled point base*scalar
- * @param [in] scalar The scalar to multiply by.
+ * @param [out] out The public key base*scalar
+ * @param [in] scalar The private scalar.
  */
-void crypton_decaf_x448_derive_public_key (
+void CRYPTON_DECAF_API_VIS crypton_decaf_x448_derive_public_key (
     uint8_t out[CRYPTON_DECAF_X448_PUBLIC_BYTES],
     const uint8_t scalar[CRYPTON_DECAF_X448_PRIVATE_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /* FUTURE: uint8_t crypton_decaf_448_encode_like_curve448) */
 
@@ -441,10 +498,10 @@ void crypton_decaf_x448_derive_public_key (
  * @param [out] a A precomputed table of multiples of the point.
  * @param [in] b Any point.
  */
-void crypton_decaf_448_precompute (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_precompute (
     crypton_decaf_448_precomputed_s *a,
     const crypton_decaf_448_point_t b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Multiply a precomputed base point by a scalar:
@@ -457,11 +514,11 @@ void crypton_decaf_448_precompute (
  * @param [in] base The point to be scaled.
  * @param [in] scalar The scalar to multiply by.
  */
-void crypton_decaf_448_precomputed_scalarmul (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_precomputed_scalarmul (
     crypton_decaf_448_point_t scaled,
     const crypton_decaf_448_precomputed_s *base,
     const crypton_decaf_448_scalar_t scalar
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Multiply two base points by two scalars:
@@ -476,13 +533,13 @@ void crypton_decaf_448_precomputed_scalarmul (
  * @param [in] base2 A second point to be scaled.
  * @param [in] scalar2 A second scalar to multiply by.
  */
-void crypton_decaf_448_point_double_scalarmul (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_double_scalarmul (
     crypton_decaf_448_point_t combo,
     const crypton_decaf_448_point_t base1,
     const crypton_decaf_448_scalar_t scalar1,
     const crypton_decaf_448_point_t base2,
     const crypton_decaf_448_scalar_t scalar2
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
     
 /**
  * Multiply one base point by two scalars:
@@ -499,13 +556,13 @@ void crypton_decaf_448_point_double_scalarmul (
  * @param [in] scalar1 A first scalar to multiply by.
  * @param [in] scalar2 A second scalar to multiply by.
  */
-void crypton_decaf_448_point_dual_scalarmul (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_dual_scalarmul (
     crypton_decaf_448_point_t a1,
     crypton_decaf_448_point_t a2,
     const crypton_decaf_448_point_t base1,
     const crypton_decaf_448_scalar_t scalar1,
     const crypton_decaf_448_scalar_t scalar2
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Multiply two base points by two scalars:
@@ -522,12 +579,12 @@ void crypton_decaf_448_point_dual_scalarmul (
  * @warning: This function takes variable time, and may leak the scalars
  * used.  It is designed for signature verification.
  */
-void crypton_decaf_448_base_double_scalarmul_non_secret (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_base_double_scalarmul_non_secret (
     crypton_decaf_448_point_t combo,
     const crypton_decaf_448_scalar_t scalar1,
     const crypton_decaf_448_point_t base2,
     const crypton_decaf_448_scalar_t scalar2
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Constant-time decision between two points.  If pick_b
@@ -538,12 +595,12 @@ void crypton_decaf_448_base_double_scalarmul_non_secret (
  * @param [in] b Any point.
  * @param [in] pick_b If nonzero, choose point b.
  */
-void crypton_decaf_448_point_cond_sel (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_cond_sel (
     crypton_decaf_448_point_t out,
     const crypton_decaf_448_point_t a,
     const crypton_decaf_448_point_t b,
     crypton_decaf_word_t pick_b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Constant-time decision between two scalars.  If pick_b
@@ -554,12 +611,12 @@ void crypton_decaf_448_point_cond_sel (
  * @param [in] b Any scalar.
  * @param [in] pick_b If nonzero, choose scalar b.
  */
-void crypton_decaf_448_scalar_cond_sel (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_cond_sel (
     crypton_decaf_448_scalar_t out,
     const crypton_decaf_448_scalar_t a,
     const crypton_decaf_448_scalar_t b,
     crypton_decaf_word_t pick_b
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Test that a point is valid, for debugging purposes.
@@ -568,9 +625,9 @@ void crypton_decaf_448_scalar_cond_sel (
  * @retval CRYPTON_DECAF_TRUE The point is valid.
  * @retval CRYPTON_DECAF_FALSE The point is invalid.
  */
-crypton_decaf_bool_t crypton_decaf_448_point_valid (
+crypton_decaf_bool_t CRYPTON_DECAF_API_VIS crypton_decaf_448_point_valid (
     const crypton_decaf_448_point_t to_test
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_WARN_UNUSED CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Torque a point, for debugging purposes.  The output
@@ -579,10 +636,10 @@ crypton_decaf_bool_t crypton_decaf_448_point_valid (
  * @param [out] q The point to torque.
  * @param [in] p The point to torque.
  */
-void crypton_decaf_448_point_debugging_torque (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_debugging_torque (
     crypton_decaf_448_point_t q,
     const crypton_decaf_448_point_t p
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Projectively scale a point, for debugging purposes.
@@ -593,11 +650,11 @@ void crypton_decaf_448_point_debugging_torque (
  * @param [in] p The point to scale.
  * @param [in] factor Serialized GF factor to scale.
  */
-void crypton_decaf_448_point_debugging_pscale (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_debugging_pscale (
     crypton_decaf_448_point_t q,
     const crypton_decaf_448_point_t p,
     const unsigned char factor[CRYPTON_DECAF_448_SER_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Almost-Elligator-like hash to curve.
@@ -627,11 +684,11 @@ void crypton_decaf_448_point_debugging_pscale (
  * @param [in] hashed_data Output of some hash function.
  * @param [out] pt The data hashed to the curve.
  */
-void
+void CRYPTON_DECAF_API_VIS
 crypton_decaf_448_point_from_hash_nonuniform (
     crypton_decaf_448_point_t pt,
     const unsigned char hashed_data[CRYPTON_DECAF_448_HASH_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Indifferentiable hash function encoding to curve.
@@ -641,10 +698,10 @@ crypton_decaf_448_point_from_hash_nonuniform (
  * @param [in] hashed_data Output of some hash function.
  * @param [out] pt The data hashed to the curve.
  */ 
-void crypton_decaf_448_point_from_hash_uniform (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_from_hash_uniform (
     crypton_decaf_448_point_t pt,
     const unsigned char hashed_data[2*CRYPTON_DECAF_448_HASH_BYTES]
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE;
 
 /**
  * @brief Inverse of elligator-like hash to curve.
@@ -656,6 +713,16 @@ void crypton_decaf_448_point_from_hash_uniform (
  * inverse sampling, this function succeeds or fails
  * independently for different "which" values.
  *
+ * This function isn't guaranteed to find every possible
+ * preimage, but it finds all except a small finite number.
+ * In particular, when the number of bits in the modulus isn't
+ * a multiple of 8 (i.e. for curve25519), it sets the high bits
+ * independently, which enables the generated data to be uniform.
+ * But it doesn't add p, so you'll never get exactly p from this
+ * function.  This might change in the future, especially if
+ * we ever support eg Brainpool curves, where this could cause
+ * real nonuniformity.
+ *
  * @param [out] recovered_hash Encoded data.
  * @param [in] pt The point to encode.
  * @param [in] which A value determining which inverse point
@@ -664,12 +731,12 @@ void crypton_decaf_448_point_from_hash_uniform (
  * @retval CRYPTON_DECAF_SUCCESS The inverse succeeded.
  * @retval CRYPTON_DECAF_FAILURE The inverse failed.
  */
-crypton_decaf_error_t
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS
 crypton_decaf_448_invert_elligator_nonuniform (
     unsigned char recovered_hash[CRYPTON_DECAF_448_HASH_BYTES],
     const crypton_decaf_448_point_t pt,
     uint32_t which
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_WARN_UNUSED;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_WARN_UNUSED;
 
 /**
  * @brief Inverse of elligator-like hash to curve.
@@ -689,33 +756,31 @@ crypton_decaf_448_invert_elligator_nonuniform (
  * @retval CRYPTON_DECAF_SUCCESS The inverse succeeded.
  * @retval CRYPTON_DECAF_FAILURE The inverse failed.
  */
-crypton_decaf_error_t
+crypton_decaf_error_t CRYPTON_DECAF_API_VIS
 crypton_decaf_448_invert_elligator_uniform (
     unsigned char recovered_hash[2*CRYPTON_DECAF_448_HASH_BYTES],
     const crypton_decaf_448_point_t pt,
     uint32_t which
-) CRYPTON_DECAF_API_VIS CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_WARN_UNUSED;
+) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_NOINLINE CRYPTON_DECAF_WARN_UNUSED;
 
-/**
- * @brief Overwrite scalar with zeros.
- */
-void crypton_decaf_448_scalar_destroy (
+/** Securely erase a scalar. */
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_scalar_destroy (
     crypton_decaf_448_scalar_t scalar
-) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_API_VIS;
+) CRYPTON_DECAF_NONNULL;
 
-/**
- * @brief Overwrite point with zeros.
+/** Securely erase a point by overwriting it with zeros.
+ * @warning This causes the point object to become invalid.
  */
-void crypton_decaf_448_point_destroy (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_point_destroy (
     crypton_decaf_448_point_t point
-) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_API_VIS;
+) CRYPTON_DECAF_NONNULL;
 
-/**
- * @brief Overwrite precomputed table with zeros.
+/** Securely erase a precomputed table by overwriting it with zeros.
+ * @warning This causes the table object to become invalid.
  */
-void crypton_decaf_448_precomputed_destroy (
+void CRYPTON_DECAF_API_VIS crypton_decaf_448_precomputed_destroy (
     crypton_decaf_448_precomputed_s *pre
-) CRYPTON_DECAF_NONNULL CRYPTON_DECAF_API_VIS;
+) CRYPTON_DECAF_NONNULL;
 
 #ifdef __cplusplus
 } /* extern "C" */
