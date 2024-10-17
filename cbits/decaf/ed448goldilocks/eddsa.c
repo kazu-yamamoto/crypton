@@ -31,17 +31,12 @@
 #define NO_CONTEXT CRYPTON_DECAF_EDDSA_448_SUPPORTS_CONTEXTLESS_SIGS
 #define EDDSA_USE_SIGMA_ISOGENY 0
 #define COFACTOR 4
+#define EDDSA_PREHASH_BYTES 64
 
 #if NO_CONTEXT
 const uint8_t CRYPTON_NO_CONTEXT_POINTS_HERE = 0;
 const uint8_t * const CRYPTON_DECAF_ED448_NO_CONTEXT = &CRYPTON_NO_CONTEXT_POINTS_HERE;
 #endif
-
-/* EDDSA_BASE_POINT_RATIO = 1 or 2
- * Because EdDSA25519 is not on E_d but on the isogenous E_sigma_d,
- * its base point is twice ours.
- */
-#define EDDSA_BASE_POINT_RATIO (1+EDDSA_USE_SIGMA_ISOGENY)
 
 static void clamp (
     uint8_t secret_scalar_ser[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
@@ -128,22 +123,22 @@ void crypton_decaf_ed448_derive_public_key (
      * the decaf base point is on Etwist_d, and when converted it effectively
      * picks up a factor of 2 from the isogenies.  So we might start at 2 instead of 1. 
      */
-    for (unsigned int c = EDDSA_BASE_POINT_RATIO; c < COFACTOR; c <<= 1) {
+    for (unsigned int c=1; c<CRYPTON_DECAF_448_EDDSA_ENCODE_RATIO; c <<= 1) {
         API_NS(scalar_halve)(secret_scalar,secret_scalar);
     }
     
     API_NS(point_t) p;
     API_NS(precomputed_scalarmul)(p,API_NS(precomputed_base),secret_scalar);
     
-    API_NS(point_mul_by_cofactor_and_encode_like_eddsa)(pubkey, p);
+    API_NS(point_mul_by_ratio_and_encode_like_eddsa)(pubkey, p);
         
     /* Cleanup */
     API_NS(scalar_destroy)(secret_scalar);
     API_NS(point_destroy)(p);
     crypton_decaf_bzero(secret_scalar_ser, sizeof(secret_scalar_ser));
 }
-
-void crypton_decaf_ed448_sign (
+        
+static void crypton_decaf_ed448_sign_internal (
     uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
     const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
     const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
@@ -191,13 +186,13 @@ void crypton_decaf_ed448_sign (
         /* Scalarmul to create the nonce-point */
         API_NS(scalar_t) nonce_scalar_2;
         API_NS(scalar_halve)(nonce_scalar_2,nonce_scalar);
-        for (unsigned int c = 2*EDDSA_BASE_POINT_RATIO; c < COFACTOR; c <<= 1) {
+        for (unsigned int c = 2; c < CRYPTON_DECAF_448_EDDSA_ENCODE_RATIO; c <<= 1) {
             API_NS(scalar_halve)(nonce_scalar_2,nonce_scalar_2);
         }
         
         API_NS(point_t) p;
         API_NS(precomputed_scalarmul)(p,API_NS(precomputed_base),nonce_scalar_2);
-        API_NS(point_mul_by_cofactor_and_encode_like_eddsa)(nonce_point, p);
+        API_NS(point_mul_by_ratio_and_encode_like_eddsa)(nonce_point, p);
         API_NS(point_destroy)(p);
         API_NS(scalar_destroy)(nonce_scalar_2);
     }
@@ -228,6 +223,24 @@ void crypton_decaf_ed448_sign (
     API_NS(scalar_destroy)(challenge_scalar);
 }
 
+void crypton_decaf_ed448_sign (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const uint8_t *message,
+    size_t message_len,
+    uint8_t prehashed,
+    const uint8_t *context,
+    uint8_t context_len
+) {
+    uint8_t rederived_pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
+    crypton_decaf_ed448_derive_public_key(rederived_pubkey, privkey);
+    if (CRYPTON_DECAF_TRUE != crypton_decaf_memeq(rederived_pubkey, pubkey, sizeof(rederived_pubkey))) {
+        abort();
+    }
+    crypton_decaf_ed448_sign_internal(signature,privkey,rederived_pubkey,message,
+        message_len,prehashed,context,context_len);
+}
 
 void crypton_decaf_ed448_sign_prehash (
     uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
@@ -237,7 +250,7 @@ void crypton_decaf_ed448_sign_prehash (
     const uint8_t *context,
     uint8_t context_len
 ) {
-    uint8_t hash_output[64]; /* MAGIC but true for all existing schemes */
+    uint8_t hash_output[EDDSA_PREHASH_BYTES];
     {
         crypton_decaf_ed448_prehash_ctx_t hash_too;
         memcpy(hash_too,hash,sizeof(hash_too));
@@ -245,7 +258,75 @@ void crypton_decaf_ed448_sign_prehash (
         hash_destroy(hash_too);
     }
 
-    crypton_decaf_ed448_sign(signature,privkey,pubkey,hash_output,sizeof(hash_output),1,context,context_len);
+    uint8_t rederived_pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
+    crypton_decaf_ed448_derive_public_key(rederived_pubkey, privkey);
+    if (CRYPTON_DECAF_TRUE != crypton_decaf_memeq(rederived_pubkey, pubkey, sizeof(rederived_pubkey))) {
+        abort();
+    }
+
+    crypton_decaf_ed448_sign_internal(signature,privkey,rederived_pubkey,hash_output,
+        sizeof(hash_output),1,context,context_len);
+    crypton_decaf_bzero(hash_output,sizeof(hash_output));
+}
+
+void crypton_decaf_ed448_derive_keypair (
+    crypton_decaf_eddsa_448_keypair_t keypair,
+    const uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES]
+) {
+    memcpy(keypair->privkey, privkey, CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES);
+    crypton_decaf_ed448_derive_public_key(keypair->pubkey, keypair->privkey);
+}
+
+void crypton_decaf_ed448_keypair_extract_public_key (
+    uint8_t pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
+    const crypton_decaf_eddsa_448_keypair_t keypair
+) {
+    memcpy(pubkey,keypair->pubkey,CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES);
+}
+
+void crypton_decaf_ed448_keypair_extract_private_key (
+    uint8_t privkey[CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES],
+    const crypton_decaf_eddsa_448_keypair_t keypair
+) {
+    memcpy(privkey,keypair->privkey,CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES);
+}
+
+void crypton_decaf_ed448_keypair_destroy (
+    crypton_decaf_eddsa_448_keypair_t keypair
+) {
+    crypton_decaf_bzero(keypair, sizeof(crypton_decaf_eddsa_448_keypair_t));
+}
+
+void crypton_decaf_ed448_keypair_sign (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const crypton_decaf_eddsa_448_keypair_t keypair,
+    const uint8_t *message,
+    size_t message_len,
+    uint8_t prehashed,
+    const uint8_t *context,
+    uint8_t context_len
+) {
+    crypton_decaf_ed448_sign_internal(signature,keypair->privkey,keypair->pubkey,message,
+        message_len,prehashed,context,context_len);
+}
+
+void crypton_decaf_ed448_keypair_sign_prehash (
+    uint8_t signature[CRYPTON_DECAF_EDDSA_448_SIGNATURE_BYTES],
+    const crypton_decaf_eddsa_448_keypair_t keypair,
+    const crypton_decaf_ed448_prehash_ctx_t hash,
+    const uint8_t *context,
+    uint8_t context_len
+) {
+    uint8_t hash_output[EDDSA_PREHASH_BYTES];
+    {
+        crypton_decaf_ed448_prehash_ctx_t hash_too;
+        memcpy(hash_too,hash,sizeof(hash_too));
+        hash_final(hash_too,hash_output,sizeof(hash_output));
+        hash_destroy(hash_too);
+    }
+
+    crypton_decaf_ed448_sign_internal(signature,keypair->privkey,keypair->pubkey,hash_output,
+        sizeof(hash_output),1,context,context_len);
     crypton_decaf_bzero(hash_output,sizeof(hash_output));
 }
 
@@ -259,10 +340,10 @@ crypton_decaf_error_t crypton_decaf_ed448_verify (
     uint8_t context_len
 ) { 
     API_NS(point_t) pk_point, r_point;
-    crypton_decaf_error_t error = API_NS(point_decode_like_eddsa_and_ignore_cofactor)(pk_point,pubkey);
+    crypton_decaf_error_t error = API_NS(point_decode_like_eddsa_and_mul_by_ratio)(pk_point,pubkey);
     if (CRYPTON_DECAF_SUCCESS != error) { return error; }
     
-    error = API_NS(point_decode_like_eddsa_and_ignore_cofactor)(r_point,signature);
+    error = API_NS(point_decode_like_eddsa_and_mul_by_ratio)(r_point,signature);
     if (CRYPTON_DECAF_SUCCESS != error) { return error; }
     
     API_NS(scalar_t) challenge_scalar;
@@ -282,14 +363,25 @@ crypton_decaf_error_t crypton_decaf_ed448_verify (
     API_NS(scalar_sub)(challenge_scalar, API_NS(scalar_zero), challenge_scalar);
     
     API_NS(scalar_t) response_scalar;
-    API_NS(scalar_decode_long)(
+    error = API_NS(scalar_decode)(
         response_scalar,
-        &signature[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES],
-        CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
+        &signature[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES]
     );
-#if EDDSA_BASE_POINT_RATIO == 2
-    API_NS(scalar_add)(response_scalar,response_scalar,response_scalar);
+    if (CRYPTON_DECAF_SUCCESS != error) { return error; }
+
+#if CRYPTON_DECAF_448_SCALAR_BYTES < CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES
+    for (unsigned i = CRYPTON_DECAF_448_SCALAR_BYTES;
+         i < CRYPTON_DECAF_EDDSA_448_PRIVATE_BYTES;
+         i++) {
+        if (signature[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES+i] != 0x00) {
+            return CRYPTON_DECAF_FAILURE;
+        }
+    }
 #endif
+    
+    for (unsigned c=1; c<CRYPTON_DECAF_448_EDDSA_DECODE_RATIO; c<<=1) {
+        API_NS(scalar_add)(response_scalar,response_scalar,response_scalar);
+    }
     
     
     /* pk_point = -c(x(P)) + (cx + k)G = kG */
@@ -312,7 +404,7 @@ crypton_decaf_error_t crypton_decaf_ed448_verify_prehash (
 ) {
     crypton_decaf_error_t ret;
     
-    uint8_t hash_output[64]; /* MAGIC but true for all existing schemes */
+    uint8_t hash_output[EDDSA_PREHASH_BYTES];
     {
         crypton_decaf_ed448_prehash_ctx_t hash_too;
         memcpy(hash_too,hash,sizeof(hash_too));

@@ -7,6 +7,11 @@
 
 #define ARCH_WORD_BITS 32
 
+#if defined _MSC_VER
+#define __attribute(x)
+#define __inline__ __inline
+#endif // MSVC
+
 static __inline__ __attribute((always_inline,unused))
 uint32_t word_is_zero(uint32_t a) {
     /* let's hope the compiler isn't clever enough to optimize this. */

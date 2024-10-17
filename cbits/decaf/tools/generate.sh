@@ -6,7 +6,7 @@
 # (available at <git://git.code.sf.net/p/ed448goldilocks/code>).
 #
 # Project is synced with upstream commit
-# '807a7e67decbf8ccc10be862cdf9ae03653ffe70'.
+# 'cede6185df1dad9d6e465dddc7f02698d8553726'.
 #
 # Notes about transformations applied:
 #
@@ -21,11 +21,6 @@
 #
 # * code related to SHAKE is replaced by crypton code, referenced from
 #   a custom shake.h.  As a consequence, portable_endian.h is not needed.
-#
-# * aligned(32) attributes used for stack alignment are replaced by
-#   aligned(16).  This removes warnings on OpenBSD with GCC 4.2.1, and makes
-#   sure we get at least 16-byte alignment.  32-byte alignment is necessary
-#   only for AVX2 and arch_x86_64, which we don't have.
 #
 # * visibility("hidden") attributes are removed, as this is not supported
 #   on Windows/MinGW, and we have name mangling instead
@@ -49,19 +44,10 @@ fi
 
 convert() {
   local FILE_NAME="`basename "$1"`"
-  local REPL
-
-  if [ "$FILE_NAME" = word.h ]; then
-    REPL='__attribute__((aligned(32)))'
-  else
-    REPL='__attribute__((aligned(16)))'
-  fi
-
   sed <"$1" >"$2/$FILE_NAME" \
     -e 's/ __attribute((visibility("hidden")))//g' \
     -e 's/ __attribute__((visibility("hidden")))//g' \
     -e 's/ __attribute__ ((visibility ("hidden")))//g' \
-    -e "s/__attribute__((aligned(32)))/$REPL/g" \
     -e 's/decaf_/crypton_decaf_/g' \
     -e 's/DECAF_/CRYPTON_DECAF_/g' \
     -e 's/gf_/crypton_gf_/g' \
@@ -91,7 +77,7 @@ convert "$SRC_DIR"/GENERATED/include/decaf/point_448.h "$DEST_DIR"/include/decaf
 for CURVE in ed448goldilocks; do
   mkdir -p "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/decaf.c        "$DEST_DIR"/$CURVE
-  convert "$SRC_DIR"/GENERATED/c/$CURVE/decaf_tables.c "$DEST_DIR"/$CURVE
+  convert "$SRC_DIR"/$CURVE/decaf_tables.c "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/eddsa.c        "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/scalar.c       "$DEST_DIR"/$CURVE
 

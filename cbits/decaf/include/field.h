@@ -103,5 +103,10 @@ static CRYPTON_DECAF_INLINE void crypton_gf_div_qnr(crypton_gf_s *__restrict__ o
 #endif
 }
 
+#if P_MOD_8 == 5
+#define crypton_gf_mul_i crypton_gf_mul_qnr
+#define crypton_gf_div_i crypton_gf_div_qnr
+#endif
+
 
 #endif // __GF_H__
