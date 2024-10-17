@@ -6,7 +6,7 @@
 # (available at <git://git.code.sf.net/p/ed448goldilocks/code>).
 #
 # Project is synced with upstream commit
-# '807a7e67decbf8ccc10be862cdf9ae03653ffe70'.
+# 'cede6185df1dad9d6e465dddc7f02698d8553726'.
 #
 # Notes about transformations applied:
 #
@@ -77,7 +77,7 @@ convert "$SRC_DIR"/GENERATED/include/decaf/point_448.h "$DEST_DIR"/include/decaf
 for CURVE in ed448goldilocks; do
   mkdir -p "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/decaf.c        "$DEST_DIR"/$CURVE
-  convert "$SRC_DIR"/GENERATED/c/$CURVE/decaf_tables.c "$DEST_DIR"/$CURVE
+  convert "$SRC_DIR"/$CURVE/decaf_tables.c "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/eddsa.c        "$DEST_DIR"/$CURVE
   convert "$SRC_DIR"/GENERATED/c/$CURVE/scalar.c       "$DEST_DIR"/$CURVE
 
