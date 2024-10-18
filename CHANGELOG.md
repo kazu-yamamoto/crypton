@@ -1,3 +1,10 @@
+## 1.0.1
+
+* Update decaf library.
+  [#38](https://github.com/kazu-yamamoto/crypton/pull/38)
+* Add TypeOperators language extension to EdDSA.hs.
+  [#36](https://github.com/kazu-yamamoto/crypton/pull/36)
+
 ## 1.0.0
 
 * Versions follow the standard version policy.
