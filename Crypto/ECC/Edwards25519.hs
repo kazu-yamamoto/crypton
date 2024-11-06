@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.ECC.Edwards25519
 -- License     : BSD-style
@@ -48,55 +50,55 @@
 -- 3. Because of modular reduction in this implementation it is not
 -- possible to multiply points directly by scalars like 8.s or L.
 -- This has to be decomposed into several steps.
---
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Crypto.ECC.Edwards25519
-    ( Scalar
-    , Point
+module Crypto.ECC.Edwards25519 (
+    Scalar,
+    Point,
+
     -- * Scalars
-    , scalarGenerate
-    , scalarDecodeLong
-    , scalarEncode
+    scalarGenerate,
+    scalarDecodeLong,
+    scalarEncode,
+
     -- * Points
-    , pointDecode
-    , pointEncode
-    , pointHasPrimeOrder
+    pointDecode,
+    pointEncode,
+    pointHasPrimeOrder,
+
     -- * Arithmetic functions
-    , toPoint
-    , scalarAdd
-    , scalarMul
-    , pointNegate
-    , pointAdd
-    , pointDouble
-    , pointMul
-    , pointMulByCofactor
-    , pointsMulVarTime
-    ) where
+    toPoint,
+    scalarAdd,
+    scalarMul,
+    pointNegate,
+    pointAdd,
+    pointDouble,
+    pointMul,
+    pointMulByCofactor,
+    pointsMulVarTime,
+) where
 
-import           Data.Word
-import           Foreign.C.Types
-import           Foreign.Ptr
+import Data.Word
+import Foreign.C.Types
+import Foreign.Ptr
 
-import           Crypto.Error
-import           Crypto.Internal.ByteArray (Bytes, ScrubbedBytes, withByteArray)
+import Crypto.Error
+import Crypto.Internal.ByteArray (Bytes, ScrubbedBytes, withByteArray)
 import qualified Crypto.Internal.ByteArray as B
-import           Crypto.Internal.Compat
-import           Crypto.Internal.Imports
-import           Crypto.Random
-
+import Crypto.Internal.Compat
+import Crypto.Internal.Imports
+import Crypto.Random
 
 scalarArraySize :: Int
 scalarArraySize = 40 -- maximum [9 * 4 {- 32 bits -}, 5 * 8 {- 64 bits -}]
 
 -- | A scalar modulo prime order of curve edwards25519.
 newtype Scalar = Scalar ScrubbedBytes
-    deriving (Show,NFData)
+    deriving (Show, NFData)
 
 instance Eq Scalar where
     (Scalar s1) == (Scalar s2) = unsafeDoIO $
         withByteArray s1 $ \ps1 ->
-        withByteArray s2 $ \ps2 ->
-            fmap (/= 0) (ed25519_scalar_eq ps1 ps2)
+            withByteArray s2 $ \ps2 ->
+                fmap (/= 0) (ed25519_scalar_eq ps1 ps2)
     {-# NOINLINE (==) #-}
 
 pointArraySize :: Int
@@ -104,19 +106,20 @@ pointArraySize = 160 -- maximum [4 * 10 * 4 {- 32 bits -}, 4 * 5 * 8 {- 64 bits 
 
 -- | A point on curve edwards25519.
 newtype Point = Point Bytes
-    deriving NFData
+    deriving (NFData)
 
 instance Show Point where
     showsPrec d p =
         let bs = pointEncode p :: Bytes
-         in showParen (d > 10) $ showString "Point "
-                               . shows (B.convertToBase B.Base16 bs :: Bytes)
+         in showParen (d > 10) $
+                showString "Point "
+                    . shows (B.convertToBase B.Base16 bs :: Bytes)
 
 instance Eq Point where
     (Point p1) == (Point p2) = unsafeDoIO $
         withByteArray p1 $ \pp1 ->
-        withByteArray p2 $ \pp2 ->
-            fmap (/= 0) (ed25519_point_eq pp1 pp2)
+            withByteArray p2 $ \pp2 ->
+                fmap (/= 0) (ed25519_point_eq pp1 pp2)
     {-# NOINLINE (==) #-}
 
 -- | Generate a random scalar.
@@ -148,12 +151,12 @@ scalarEncode (Scalar s) =
 scalarDecodeLong :: B.ByteArrayAccess bs => bs -> CryptoFailable Scalar
 scalarDecodeLong bs
     | B.length bs > 64 = CryptoFailed CryptoError_EcScalarOutOfBounds
-    | otherwise        = unsafeDoIO $ withByteArray bs initialize
+    | otherwise = unsafeDoIO $ withByteArray bs initialize
   where
     len = fromIntegral $ B.length bs
     initialize inp = do
         s <- B.alloc scalarArraySize $ \ps ->
-                 ed25519_scalar_decode_long ps inp len
+            ed25519_scalar_decode_long ps inp len
         return $ CryptoPassed (Scalar s)
 {-# NOINLINE scalarDecodeLong #-}
 
@@ -162,16 +165,16 @@ scalarAdd :: Scalar -> Scalar -> Scalar
 scalarAdd (Scalar a) (Scalar b) =
     Scalar $ B.allocAndFreeze scalarArraySize $ \out ->
         withByteArray a $ \pa ->
-        withByteArray b $ \pb ->
-             ed25519_scalar_add out pa pb
+            withByteArray b $ \pb ->
+                ed25519_scalar_add out pa pb
 
 -- | Multiply two scalars.
 scalarMul :: Scalar -> Scalar -> Scalar
 scalarMul (Scalar a) (Scalar b) =
     Scalar $ B.allocAndFreeze scalarArraySize $ \out ->
         withByteArray a $ \pa ->
-        withByteArray b $ \pb ->
-             ed25519_scalar_mul out pa pb
+            withByteArray b $ \pb ->
+                ed25519_scalar_mul out pa pb
 
 -- | Multiplies a scalar with the curve base point.
 toPoint :: Scalar -> Point
@@ -188,7 +191,7 @@ pointEncode :: B.ByteArray bs => Point -> bs
 pointEncode (Point p) =
     B.allocAndFreeze 32 $ \out ->
         withByteArray p $ \pp ->
-             ed25519_point_encode out pp
+            ed25519_point_encode out pp
 
 -- | Deserialize a 32-byte array as a point, ensuring the point is
 -- valid on edwards25519.
@@ -197,13 +200,14 @@ pointEncode (Point p) =
 pointDecode :: B.ByteArrayAccess bs => bs -> CryptoFailable Point
 pointDecode bs
     | B.length bs == 32 = unsafeDoIO $ withByteArray bs initialize
-    | otherwise         = CryptoFailed CryptoError_PointSizeInvalid
+    | otherwise = CryptoFailed CryptoError_PointSizeInvalid
   where
     initialize inp = do
         (res, p) <- B.allocRet pointArraySize $ \pp ->
-                        ed25519_point_decode_vartime pp inp
-        if res == 0 then return $ CryptoFailed CryptoError_PointCoordinatesInvalid
-                    else return $ CryptoPassed (Point p)
+            ed25519_point_decode_vartime pp inp
+        if res == 0
+            then return $ CryptoFailed CryptoError_PointCoordinatesInvalid
+            else return $ CryptoPassed (Point p)
 {-# NOINLINE pointDecode #-}
 
 -- | Test whether a point belongs to the prime-order subgroup
@@ -224,15 +228,15 @@ pointNegate :: Point -> Point
 pointNegate (Point a) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray a $ \pa ->
-             ed25519_point_negate out pa
+            ed25519_point_negate out pa
 
 -- | Add two points.
 pointAdd :: Point -> Point -> Point
 pointAdd (Point a) (Point b) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray a $ \pa ->
-        withByteArray b $ \pb ->
-             ed25519_point_add out pa pb
+            withByteArray b $ \pb ->
+                ed25519_point_add out pa pb
 
 -- | Add a point to itself.
 --
@@ -243,7 +247,7 @@ pointDouble :: Point -> Point
 pointDouble (Point a) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray a $ \pa ->
-             ed25519_point_double out pa
+            ed25519_point_double out pa
 
 -- | Multiply a point by h = 8.
 --
@@ -254,7 +258,7 @@ pointMulByCofactor :: Point -> Point
 pointMulByCofactor (Point a) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray a $ \pa ->
-             ed25519_point_mul_by_cofactor out pa
+            ed25519_point_mul_by_cofactor out pa
 
 -- | Scalar multiplication over curve edwards25519.
 --
@@ -265,8 +269,8 @@ pointMul :: Scalar -> Point -> Point
 pointMul (Scalar scalar) (Point base) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray scalar $ \pscalar ->
-        withByteArray base   $ \pbase   ->
-             ed25519_point_scalarmul out pbase pscalar
+            withByteArray base $ \pbase ->
+                ed25519_point_scalarmul out pbase pscalar
 
 -- | Multiply the point @p@ with @s2@ and add a lifted to curve value @s1@.
 --
@@ -279,92 +283,108 @@ pointsMulVarTime :: Scalar -> Scalar -> Point -> Point
 pointsMulVarTime (Scalar s1) (Scalar s2) (Point p) =
     Point $ B.allocAndFreeze pointArraySize $ \out ->
         withByteArray s1 $ \ps1 ->
-        withByteArray s2 $ \ps2 ->
-        withByteArray p  $ \pp  ->
-             ed25519_base_double_scalarmul_vartime out ps1 pp ps2
+            withByteArray s2 $ \ps2 ->
+                withByteArray p $ \pp ->
+                    ed25519_base_double_scalarmul_vartime out ps1 pp ps2
 
 foreign import ccall unsafe "crypton_ed25519_scalar_eq"
-    ed25519_scalar_eq :: Ptr Scalar
-                      -> Ptr Scalar
-                      -> IO CInt
+    ed25519_scalar_eq
+        :: Ptr Scalar
+        -> Ptr Scalar
+        -> IO CInt
 
 foreign import ccall unsafe "crypton_ed25519_scalar_encode"
-    ed25519_scalar_encode :: Ptr Word8
-                          -> Ptr Scalar
-                          -> IO ()
+    ed25519_scalar_encode
+        :: Ptr Word8
+        -> Ptr Scalar
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_scalar_decode_long"
-    ed25519_scalar_decode_long :: Ptr Scalar
-                               -> Ptr Word8
-                               -> CSize
-                               -> IO ()
+    ed25519_scalar_decode_long
+        :: Ptr Scalar
+        -> Ptr Word8
+        -> CSize
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_scalar_add"
-    ed25519_scalar_add :: Ptr Scalar -- sum
-                       -> Ptr Scalar -- a
-                       -> Ptr Scalar -- b
-                       -> IO ()
+    ed25519_scalar_add
+        :: Ptr Scalar -- sum
+        -> Ptr Scalar -- a
+        -> Ptr Scalar -- b
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_scalar_mul"
-    ed25519_scalar_mul :: Ptr Scalar -- out
-                       -> Ptr Scalar -- a
-                       -> Ptr Scalar -- b
-                       -> IO ()
+    ed25519_scalar_mul
+        :: Ptr Scalar -- out
+        -> Ptr Scalar -- a
+        -> Ptr Scalar -- b
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_point_encode"
-    ed25519_point_encode :: Ptr Word8
-                         -> Ptr Point
-                         -> IO ()
+    ed25519_point_encode
+        :: Ptr Word8
+        -> Ptr Point
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_point_decode_vartime"
-    ed25519_point_decode_vartime :: Ptr Point
-                                 -> Ptr Word8
-                                 -> IO CInt
+    ed25519_point_decode_vartime
+        :: Ptr Point
+        -> Ptr Word8
+        -> IO CInt
 
 foreign import ccall unsafe "crypton_ed25519_point_eq"
-    ed25519_point_eq :: Ptr Point
-                     -> Ptr Point
-                     -> IO CInt
+    ed25519_point_eq
+        :: Ptr Point
+        -> Ptr Point
+        -> IO CInt
 
 foreign import ccall "crypton_ed25519_point_has_prime_order"
-    ed25519_point_has_prime_order :: Ptr Point
-                                  -> IO CInt
+    ed25519_point_has_prime_order
+        :: Ptr Point
+        -> IO CInt
 
 foreign import ccall unsafe "crypton_ed25519_point_negate"
-    ed25519_point_negate :: Ptr Point -- minus_a
-                         -> Ptr Point -- a
-                         -> IO ()
+    ed25519_point_negate
+        :: Ptr Point -- minus_a
+        -> Ptr Point -- a
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_point_add"
-    ed25519_point_add :: Ptr Point -- sum
-                      -> Ptr Point -- a
-                      -> Ptr Point -- b
-                      -> IO ()
+    ed25519_point_add
+        :: Ptr Point -- sum
+        -> Ptr Point -- a
+        -> Ptr Point -- b
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_point_double"
-    ed25519_point_double :: Ptr Point -- two_a
-                         -> Ptr Point -- a
-                         -> IO ()
+    ed25519_point_double
+        :: Ptr Point -- two_a
+        -> Ptr Point -- a
+        -> IO ()
 
 foreign import ccall unsafe "crypton_ed25519_point_mul_by_cofactor"
-    ed25519_point_mul_by_cofactor :: Ptr Point -- eight_a
-                                  -> Ptr Point -- a
-                                  -> IO ()
+    ed25519_point_mul_by_cofactor
+        :: Ptr Point -- eight_a
+        -> Ptr Point -- a
+        -> IO ()
 
 foreign import ccall "crypton_ed25519_point_base_scalarmul"
-    ed25519_point_base_scalarmul :: Ptr Point  -- scaled
-                                 -> Ptr Scalar -- scalar
-                                 -> IO ()
+    ed25519_point_base_scalarmul
+        :: Ptr Point -- scaled
+        -> Ptr Scalar -- scalar
+        -> IO ()
 
 foreign import ccall "crypton_ed25519_point_scalarmul"
-    ed25519_point_scalarmul :: Ptr Point  -- scaled
-                            -> Ptr Point  -- base
-                            -> Ptr Scalar -- scalar
-                            -> IO ()
+    ed25519_point_scalarmul
+        :: Ptr Point -- scaled
+        -> Ptr Point -- base
+        -> Ptr Scalar -- scalar
+        -> IO ()
 
 foreign import ccall "crypton_ed25519_base_double_scalarmul_vartime"
-    ed25519_base_double_scalarmul_vartime :: Ptr Point  -- combo
-                                          -> Ptr Scalar -- scalar1
-                                          -> Ptr Point  -- base2
-                                          -> Ptr Scalar -- scalar2
-                                          -> IO ()
+    ed25519_base_double_scalarmul_vartime
+        :: Ptr Point -- combo
+        -> Ptr Scalar -- scalar1
+        -> Ptr Point -- base2
+        -> Ptr Scalar -- scalar2
+        -> IO ()

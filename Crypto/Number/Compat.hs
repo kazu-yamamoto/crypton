@@ -1,31 +1,31 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnboxedTuples #-}
+
 -- |
 -- Module      : Crypto.Number.Compat
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-{-# LANGUAGE CPP           #-}
-{-# LANGUAGE MagicHash     #-}
-{-# LANGUAGE BangPatterns  #-}
-{-# LANGUAGE UnboxedTuples #-}
-module Crypto.Number.Compat
-    ( GmpSupported(..)
-    , onGmpUnsupported
-    , gmpGcde
-    , gmpLog2
-    , gmpPowModSecInteger
-    , gmpPowModInteger
-    , gmpInverse
-    , gmpNextPrime
-    , gmpTestPrimeMillerRabin
-    , gmpSizeInBytes
-    , gmpSizeInBits
-    , gmpExportInteger
-    , gmpExportIntegerLE
-    , gmpImportInteger
-    , gmpImportIntegerLE
-    ) where
+module Crypto.Number.Compat (
+    GmpSupported (..),
+    onGmpUnsupported,
+    gmpGcde,
+    gmpLog2,
+    gmpPowModSecInteger,
+    gmpPowModInteger,
+    gmpInverse,
+    gmpNextPrime,
+    gmpTestPrimeMillerRabin,
+    gmpSizeInBytes,
+    gmpSizeInBits,
+    gmpExportInteger,
+    gmpExportIntegerLE,
+    gmpImportInteger,
+    gmpImportIntegerLE,
+) where
 
 #ifndef MIN_VERSION_integer_gmp
 #define MIN_VERSION_integer_gmp(a,b,c) 0
@@ -37,17 +37,18 @@ import GHC.Base
 import GHC.Integer.Logarithms (integerLog2#)
 #endif
 import Data.Word
-import GHC.Ptr (Ptr(..))
+import GHC.Ptr (Ptr (..))
 
 -- | GMP Supported / Unsupported
-data GmpSupported a = GmpSupported a
-                    | GmpUnsupported
-                    deriving (Show,Eq)
+data GmpSupported a
+    = GmpSupported a
+    | GmpUnsupported
+    deriving (Show, Eq)
 
 -- | Simple combinator in case the operation is not supported through GMP
 onGmpUnsupported :: GmpSupported a -> a -> a
 onGmpUnsupported (GmpSupported a) _ = a
-onGmpUnsupported GmpUnsupported   f = f
+onGmpUnsupported GmpUnsupported f = f
 
 -- | Compute the GCDE of a two integer through GMP
 gmpGcde :: Integer -> Integer -> GmpSupported (Integer, Integer, Integer)

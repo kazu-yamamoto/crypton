@@ -9,13 +9,13 @@ import Crypto.Number.Basic (log2)
 import Crypto.Number.F2m
 
 genInteger :: Int -> Int -> Integer
-genInteger salt bits
-    = head
-    . dropWhile ((< bits) . log2)
-    . scanl (\a r -> a * 2^(31 :: Int) + abs r) 0
-    . randoms
-    . mkStdGen
-    $ salt + bits
+genInteger salt bits =
+    head
+        . dropWhile ((< bits) . log2)
+        . scanl (\a r -> a * 2 ^ (31 :: Int) + abs r) 0
+        . randoms
+        . mkStdGen
+        $ salt + bits
 
 benchMod :: Int -> Benchmark
 benchMod bits = bench (show bits) $ nf (modF2m m) a
@@ -46,8 +46,8 @@ bitsList :: [Int]
 bitsList = [64, 128, 256, 512, 1024, 2048]
 
 benchF2m =
-    [ bgroup    "modF2m" $ map benchMod    bitsList
-    , bgroup    "mulF2m" $ map benchMul    bitsList
+    [ bgroup "modF2m" $ map benchMod bitsList
+    , bgroup "mulF2m" $ map benchMul bitsList
     , bgroup "squareF2m" $ map benchSquare bitsList
-    , bgroup    "invF2m" $ map benchInv    bitsList
+    , bgroup "invF2m" $ map benchInv bitsList
     ]

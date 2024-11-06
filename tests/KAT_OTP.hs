@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-
-module KAT_OTP
-    ( tests
-    )
+module KAT_OTP (
+    tests,
+)
 where
 
-import Crypto.Hash.Algorithms (SHA1(..), SHA256(..), SHA512(..))
+import Crypto.Hash.Algorithms (SHA1 (..), SHA256 (..), SHA512 (..))
 import Crypto.OTP
 import Imports
 
@@ -29,7 +28,7 @@ hotpExpected =
 -- different (see the errata, or the Java example code).
 totpSHA1Expected :: [(Word64, Word32)]
 totpSHA1Expected =
-    [ (59        , 94287082)
+    [ (59, 94287082)
     , (1111111109, 07081804)
     , (1111111111, 14050471)
     , (1234567890, 89005924)
@@ -39,7 +38,7 @@ totpSHA1Expected =
 
 totpSHA256Expected :: [(Word64, Word32)]
 totpSHA256Expected =
-    [ (59        , 46119246)
+    [ (59, 46119246)
     , (1111111109, 68084774)
     , (1111111111, 67062674)
     , (1234567890, 91819424)
@@ -49,7 +48,7 @@ totpSHA256Expected =
 
 totpSHA512Expected :: [(Word64, Word32)]
 totpSHA512Expected =
-    [ (59        , 90693936)
+    [ (59, 90693936)
     , (1111111109, 25091201)
     , (1111111111, 99943326)
     , (1234567890, 93441116)
@@ -59,15 +58,16 @@ totpSHA512Expected =
 
 otpKey = "12345678901234567890" :: ByteString
 totpSHA256Key = "12345678901234567890123456789012" :: ByteString
-totpSHA512Key = "1234567890123456789012345678901234567890123456789012345678901234" :: ByteString
+totpSHA512Key =
+    "1234567890123456789012345678901234567890123456789012345678901234" :: ByteString
 
 makeKATs otp expected = concatMap (makeTest otp) (zip3 is counts otps)
   where
     is :: [Int]
-    is = [1..]
+    is = [1 ..]
 
     counts = map fst expected
-    otps  = map snd expected
+    otps = map snd expected
 
 makeTest otp (i, count, password) =
     [ testCase (show i) (assertEqual "" password (otp count))
@@ -83,19 +83,28 @@ prop_resyncExpected ctr window = resynchronize SHA1 OTP6 window key ctr (otp, []
     key = "1234" :: ByteString
     otp = hotp SHA1 OTP6 key ctr
 
-
-tests = testGroup "OTP"
-    [ testGroup "HOTP"
-        [ testGroup "KATs" (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
-        , testGroup "properties"
-            [ testProperty "resync-expected" prop_resyncExpected
+tests =
+    testGroup
+        "OTP"
+        [ testGroup
+            "HOTP"
+            [ testGroup "KATs" (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
+            , testGroup
+                "properties"
+                [ testProperty "resync-expected" prop_resyncExpected
+                ]
+            ]
+        , testGroup
+            "TOTP"
+            [ testGroup
+                "KATs"
+                [ testGroup "SHA1" (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
+                , testGroup
+                    "SHA256"
+                    (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
+                , testGroup
+                    "SHA512"
+                    (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
+                ]
             ]
         ]
-    , testGroup "TOTP"
-        [ testGroup "KATs"
-            [ testGroup "SHA1" (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
-            , testGroup "SHA256" (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
-            , testGroup "SHA512" (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
-            ]
-        ]
-    ]

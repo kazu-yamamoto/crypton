@@ -1,22 +1,23 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.Cipher.AES
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : stable
 -- Portability : good
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Crypto.Cipher.AES
-    ( AES128
-    , AES192
-    , AES256
-    ) where
+module Crypto.Cipher.AES (
+    AES128,
+    AES192,
+    AES256,
+) where
 
-import Crypto.Error
-import Crypto.Cipher.Types
-import Crypto.Cipher.Utils
-import Crypto.Cipher.Types.Block
 import Crypto.Cipher.AES.Primitive
+import Crypto.Cipher.Types
+import Crypto.Cipher.Types.Block
+import Crypto.Cipher.Utils
+import Crypto.Error
 import Crypto.Internal.Imports
 
 -- | AES with 128 bit key
@@ -32,20 +33,19 @@ newtype AES256 = AES256 AES
     deriving (NFData)
 
 instance Cipher AES128 where
-    cipherName    _ = "AES128"
+    cipherName _ = "AES128"
     cipherKeySize _ = KeySizeFixed 16
-    cipherInit k    = AES128 <$> (initAES =<< validateKeySize (undefined :: AES128) k)
+    cipherInit k = AES128 <$> (initAES =<< validateKeySize (undefined :: AES128) k)
 
 instance Cipher AES192 where
-    cipherName    _ = "AES192"
+    cipherName _ = "AES192"
     cipherKeySize _ = KeySizeFixed 24
-    cipherInit k    = AES192 <$> (initAES =<< validateKeySize (undefined :: AES192) k)
+    cipherInit k = AES192 <$> (initAES =<< validateKeySize (undefined :: AES192) k)
 
 instance Cipher AES256 where
-    cipherName    _ = "AES256"
+    cipherName _ = "AES256"
     cipherKeySize _ = KeySizeFixed 32
-    cipherInit k    = AES256 <$> (initAES =<< validateKeySize (undefined :: AES256) k)
-
+    cipherInit k = AES256 <$> (initAES =<< validateKeySize (undefined :: AES256) k)
 
 #define INSTANCE_BLOCKCIPHER(CSTR) \
 instance BlockCipher CSTR where \

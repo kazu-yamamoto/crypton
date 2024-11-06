@@ -6,10 +6,9 @@
 -- Portability : Excellent
 --
 -- Stream cipher basic types
---
-module Crypto.Cipher.Types.Stream
-    ( StreamCipher(..)
-    ) where
+module Crypto.Cipher.Types.Stream (
+    StreamCipher (..),
+) where
 
 import Crypto.Cipher.Types.Base
 import Crypto.Internal.ByteArray (ByteArray)

@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module      : Crypto.Internal.DeepSeq
 -- License     : BSD-style
@@ -8,11 +10,9 @@
 -- Simple abstraction module to allow compilation without deepseq
 -- by defining our own NFData class if not compiling with deepseq
 -- support.
---
-{-# LANGUAGE CPP #-}
-module Crypto.Internal.DeepSeq
-    ( NFData(..)
-    ) where
+module Crypto.Internal.DeepSeq (
+    NFData (..),
+) where
 
 #ifdef WITH_DEEPSEQ_SUPPORT
 import Control.DeepSeq

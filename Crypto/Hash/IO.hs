@@ -1,3 +1,6 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- |
 -- Module      : Crypto.Hash.IO
 -- License     : BSD-style
@@ -6,22 +9,19 @@
 -- Portability : unknown
 --
 -- Generalized impure cryptographic hash interface
---
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-module Crypto.Hash.IO
-    ( HashAlgorithm(..)
-    , MutableContext
-    , hashMutableInit
-    , hashMutableInitWith
-    , hashMutableUpdate
-    , hashMutableFinalize
-    , hashMutableReset
-    ) where
+module Crypto.Hash.IO (
+    HashAlgorithm (..),
+    MutableContext,
+    hashMutableInit,
+    hashMutableInitWith,
+    hashMutableUpdate,
+    hashMutableFinalize,
+    hashMutableReset,
+) where
 
-import           Crypto.Hash.Types
+import Crypto.Hash.Types
 import qualified Crypto.Internal.ByteArray as B
-import           Foreign.Ptr
+import Foreign.Ptr
 
 -- | A Mutable hash context
 --
@@ -38,8 +38,10 @@ newtype MutableContext a = MutableContext B.Bytes
 hashMutableInit :: HashAlgorithm alg => IO (MutableContext alg)
 hashMutableInit = doInit undefined B.alloc
   where
-        doInit :: HashAlgorithm a => a -> (Int -> (Ptr (Context a) -> IO ()) -> IO B.Bytes) -> IO (MutableContext a)
-        doInit alg alloc = MutableContext `fmap` alloc (hashInternalContextSize alg) hashInternalInit
+    doInit
+        :: HashAlgorithm a
+        => a -> (Int -> (Ptr (Context a) -> IO ()) -> IO B.Bytes) -> IO (MutableContext a)
+    doInit alg alloc = MutableContext `fmap` alloc (hashInternalContextSize alg) hashInternalInit
 
 -- | Create a new mutable hash context.
 --
@@ -48,16 +50,21 @@ hashMutableInitWith :: HashAlgorithm alg => alg -> IO (MutableContext alg)
 hashMutableInitWith _ = hashMutableInit
 
 -- | Update a mutable hash context in place
-hashMutableUpdate :: (B.ByteArrayAccess ba, HashAlgorithm a) => MutableContext a -> ba -> IO ()
+hashMutableUpdate
+    :: (B.ByteArrayAccess ba, HashAlgorithm a) => MutableContext a -> ba -> IO ()
 hashMutableUpdate mc dat = doUpdate mc (B.withByteArray mc)
-  where doUpdate :: HashAlgorithm a => MutableContext a -> ((Ptr (Context a) -> IO ()) -> IO ()) -> IO ()
-        doUpdate _ withCtx =
-            withCtx             $ \ctx ->
-            B.withByteArray dat $ \d   ->
+  where
+    doUpdate
+        :: HashAlgorithm a
+        => MutableContext a -> ((Ptr (Context a) -> IO ()) -> IO ()) -> IO ()
+    doUpdate _ withCtx =
+        withCtx $ \ctx ->
+            B.withByteArray dat $ \d ->
                 hashInternalUpdate ctx d (fromIntegral $ B.length dat)
 
 -- | Finalize a mutable hash context and compute a digest
-hashMutableFinalize :: forall a . HashAlgorithm a => MutableContext a -> IO (Digest a)
+hashMutableFinalize
+    :: forall a. HashAlgorithm a => MutableContext a -> IO (Digest a)
 hashMutableFinalize mc = do
     b <- B.alloc (hashDigestSize (undefined :: a)) $ \dig -> B.withByteArray mc $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
     return $ Digest b
@@ -66,5 +73,7 @@ hashMutableFinalize mc = do
 hashMutableReset :: HashAlgorithm a => MutableContext a -> IO ()
 hashMutableReset mc = doReset mc (B.withByteArray mc)
   where
-    doReset :: HashAlgorithm a => MutableContext a -> ((Ptr (Context a) -> IO ()) -> IO ()) -> IO ()
+    doReset
+        :: HashAlgorithm a
+        => MutableContext a -> ((Ptr (Context a) -> IO ()) -> IO ()) -> IO ()
     doReset _ withCtx = withCtx hashInternalInit

@@ -1,17 +1,17 @@
 -- | Examples of how to use @crypton@.
-module Crypto.Tutorial
-    ( -- * API design
-      -- $api_design
+module Crypto.Tutorial (
+    -- * API design
+    -- $api_design
 
-      -- * Hash algorithms
-      -- $hash_algorithms
+    -- * Hash algorithms
+    -- $hash_algorithms
 
-      -- * Symmetric block ciphers
-      -- $symmetric_block_ciphers
+    -- * Symmetric block ciphers
+    -- $symmetric_block_ciphers
 
-      -- * Combining primitives
-      -- $combining_primitives
-    ) where
+    -- * Combining primitives
+    -- $combining_primitives
+) where
 
 -- $api_design
 --

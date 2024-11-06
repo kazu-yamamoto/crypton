@@ -1,3 +1,9 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+
 -- |
 -- Module      : Crypto.ECC
 -- License     : BSD-style
@@ -6,50 +12,48 @@
 -- Portability : unknown
 --
 -- Elliptic Curve Cryptography
---
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-module Crypto.ECC
-    ( Curve_P256R1(..)
-    , Curve_P384R1(..)
-    , Curve_P521R1(..)
-    , Curve_X25519(..)
-    , Curve_X448(..)
-    , Curve_Edwards25519(..)
-    , EllipticCurve(..)
-    , EllipticCurveDH(..)
-    , EllipticCurveArith(..)
-    , EllipticCurveBasepointArith(..)
-    , KeyPair(..)
-    , SharedSecret(..)
-    ) where
+module Crypto.ECC (
+    Curve_P256R1 (..),
+    Curve_P384R1 (..),
+    Curve_P521R1 (..),
+    Curve_X25519 (..),
+    Curve_X448 (..),
+    Curve_Edwards25519 (..),
+    EllipticCurve (..),
+    EllipticCurveDH (..),
+    EllipticCurveArith (..),
+    EllipticCurveBasepointArith (..),
+    KeyPair (..),
+    SharedSecret (..),
+) where
 
-import qualified Crypto.PubKey.ECC.P256 as P256
 import qualified Crypto.ECC.Edwards25519 as Edwards25519
-import qualified Crypto.ECC.Simple.Types as Simple
 import qualified Crypto.ECC.Simple.Prim as Simple
-import           Crypto.Random
-import           Crypto.Error
-import           Crypto.Internal.Imports
-import           Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
+import qualified Crypto.ECC.Simple.Types as Simple
+import Crypto.Error
+import Crypto.Internal.ByteArray (
+    ByteArray,
+    ByteArrayAccess,
+    ScrubbedBytes,
+ )
 import qualified Crypto.Internal.ByteArray as B
-import           Crypto.Number.Basic (numBits)
-import           Crypto.Number.Serialize (i2ospOf_, os2ip)
+import Crypto.Internal.Imports
+import Crypto.Number.Basic (numBits)
+import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import qualified Crypto.Number.Serialize.LE as LE
 import qualified Crypto.PubKey.Curve25519 as X25519
 import qualified Crypto.PubKey.Curve448 as X448
-import           Data.ByteArray (convert)
-import           Data.Data (Data())
-import           Data.Kind (Type)
-import           Data.Proxy
+import qualified Crypto.PubKey.ECC.P256 as P256
+import Crypto.Random
+import Data.ByteArray (convert)
+import Data.Data (Data ())
+import Data.Kind (Type)
+import Data.Proxy
 
 -- | An elliptic curve key pair composed of the private part (a scalar), and
 -- the associated point.
 data KeyPair curve = KeyPair
-    { keypairGetPublic  :: !(Point curve)
+    { keypairGetPublic :: !(Point curve)
     , keypairGetPrivate :: !(Scalar curve)
     }
 
@@ -58,17 +62,19 @@ newtype SharedSecret = SharedSecret ScrubbedBytes
 
 class EllipticCurve curve where
     -- | Point on an Elliptic Curve
-    type Point curve  :: Type
+    type Point curve :: Type
 
     -- | Scalar in the Elliptic Curve domain
     type Scalar curve :: Type
 
     -- | Generate a new random scalar on the curve.
     -- The scalar will represent a number between 1 and the order of the curve non included
-    curveGenerateScalar :: MonadRandom randomly => proxy curve -> randomly (Scalar curve)
+    curveGenerateScalar
+        :: MonadRandom randomly => proxy curve -> randomly (Scalar curve)
 
     -- | Generate a new random keypair
-    curveGenerateKeyPair :: MonadRandom randomly => proxy curve -> randomly (KeyPair curve)
+    curveGenerateKeyPair
+        :: MonadRandom randomly => proxy curve -> randomly (KeyPair curve)
 
     -- | Get the curve size in bits
     curveSizeBits :: proxy curve -> Int
@@ -100,7 +106,8 @@ class EllipticCurve curve => EllipticCurveDH curve where
     -- This additional test avoids risks existing with function 'ecdhRaw'.
     -- Implementations always return a 'CryptoError' instead of a special
     -- value or an exception.
-    ecdh :: proxy curve -> Scalar curve -> Point curve -> CryptoFailable SharedSecret
+    ecdh
+        :: proxy curve -> Scalar curve -> Point curve -> CryptoFailable SharedSecret
 
 class (EllipticCurve curve, Eq (Point curve)) => EllipticCurveArith curve where
     -- | Add points on a curve
@@ -115,7 +122,10 @@ class (EllipticCurve curve, Eq (Point curve)) => EllipticCurveArith curve where
 --   -- | Scalar Inverse
 --   scalarInverse :: Scalar curve -> Scalar curve
 
-class (EllipticCurveArith curve, Eq (Scalar curve)) => EllipticCurveBasepointArith curve where
+class
+    (EllipticCurveArith curve, Eq (Scalar curve)) =>
+    EllipticCurveBasepointArith curve
+    where
     -- | Get the curve order size in bits
     curveOrderBits :: proxy curve -> Int
 
@@ -123,14 +133,16 @@ class (EllipticCurveArith curve, Eq (Scalar curve)) => EllipticCurveBasepointAri
     pointBaseSmul :: proxy curve -> Scalar curve -> Point curve
 
     -- | Multiply the point @p@ with @s2@ and add a lifted to curve value @s1@
-    pointsSmulVarTime :: proxy curve -> Scalar curve -> Scalar curve -> Point curve -> Point curve
+    pointsSmulVarTime
+        :: proxy curve -> Scalar curve -> Scalar curve -> Point curve -> Point curve
     pointsSmulVarTime prx s1 s2 p = pointAdd prx (pointBaseSmul prx s1) (pointSmul prx s2 p)
 
     -- | Encode an elliptic curve scalar into big-endian form
     encodeScalar :: ByteArray bs => proxy curve -> Scalar curve -> bs
 
     -- | Try to decode the big-endian form of an elliptic curve scalar
-    decodeScalar :: ByteArray bs => proxy curve -> bs -> CryptoFailable (Scalar curve)
+    decodeScalar
+        :: ByteArray bs => proxy curve -> bs -> CryptoFailable (Scalar curve)
 
     -- | Convert an elliptic curve scalar to an integer
     scalarToInteger :: proxy curve -> Scalar curve -> Integer
@@ -148,7 +160,7 @@ class (EllipticCurveArith curve, Eq (Scalar curve)) => EllipticCurveBasepointAri
 --
 -- also known as P256
 data Curve_P256R1 = Curve_P256R1
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_P256R1 where
     type Point Curve_P256R1 = P256.Point
@@ -156,7 +168,8 @@ instance EllipticCurve Curve_P256R1 where
     curveSizeBits _ = 256
     curveGenerateScalar _ = P256.scalarGenerate
     curveGenerateKeyPair _ = toKeyPair <$> P256.scalarGenerate
-      where toKeyPair scalar = KeyPair (P256.toPoint scalar) scalar
+      where
+        toKeyPair scalar = KeyPair (P256.toPoint scalar) scalar
     encodePoint _ p = mxy
       where
         mxy :: forall bs. ByteArray bs => bs
@@ -167,19 +180,19 @@ instance EllipticCurve Curve_P256R1 where
             xy = P256.pointToBinary p
     decodePoint _ mxy = case B.uncons mxy of
         Nothing -> CryptoFailed CryptoError_PointSizeInvalid
-        Just (m,xy)
+        Just (m, xy)
             -- uncompressed
             | m == 4 -> P256.pointFromBinary xy
             | otherwise -> CryptoFailed CryptoError_PointFormatInvalid
 
 instance EllipticCurveArith Curve_P256R1 where
-    pointAdd  _ a b = P256.pointAdd a b
+    pointAdd _ a b = P256.pointAdd a b
     pointNegate _ p = P256.pointNegate p
     pointSmul _ s p = P256.pointMul s p
 
 instance EllipticCurveDH Curve_P256R1 where
     ecdhRaw _ s p = SharedSecret $ P256.pointDh s p
-    ecdh  prx s p = checkNonZeroDH (ecdhRaw prx s p)
+    ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
 
 instance EllipticCurveBasepointArith Curve_P256R1 where
     curveOrderBits _ = 256
@@ -193,7 +206,7 @@ instance EllipticCurveBasepointArith Curve_P256R1 where
     scalarMul _ = P256.scalarMul
 
 data Curve_P384R1 = Curve_P384R1
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_P384R1 where
     type Point Curve_P384R1 = Simple.Point Simple.SEC_p384r1
@@ -201,7 +214,8 @@ instance EllipticCurve Curve_P384R1 where
     curveSizeBits _ = 384
     curveGenerateScalar _ = Simple.scalarGenerate
     curveGenerateKeyPair _ = toKeyPair <$> Simple.scalarGenerate
-      where toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
+      where
+        toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
     encodePoint _ point = encodeECPoint point
     decodePoint _ bs = decodeECPoint bs
 
@@ -227,7 +241,7 @@ instance EllipticCurveBasepointArith Curve_P384R1 where
     scalarMul _ = ecScalarMul
 
 data Curve_P521R1 = Curve_P521R1
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_P521R1 where
     type Point Curve_P521R1 = Simple.Point Simple.SEC_p521r1
@@ -235,7 +249,8 @@ instance EllipticCurve Curve_P521R1 where
     curveSizeBits _ = 521
     curveGenerateScalar _ = Simple.scalarGenerate
     curveGenerateKeyPair _ = toKeyPair <$> Simple.scalarGenerate
-      where toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
+      where
+        toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
     encodePoint _ point = encodeECPoint point
     decodePoint _ bs = decodeECPoint bs
 
@@ -261,7 +276,7 @@ instance EllipticCurveBasepointArith Curve_P521R1 where
     scalarMul _ = ecScalarMul
 
 data Curve_X25519 = Curve_X25519
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_X25519 where
     type Point Curve_X25519 = X25519.PublicKey
@@ -276,11 +291,12 @@ instance EllipticCurve Curve_X25519 where
 
 instance EllipticCurveDH Curve_X25519 where
     ecdhRaw _ s p = SharedSecret $ convert secret
-      where secret = X25519.dh p s
+      where
+        secret = X25519.dh p s
     ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
 
 data Curve_X448 = Curve_X448
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_X448 where
     type Point Curve_X448 = X448.PublicKey
@@ -295,11 +311,12 @@ instance EllipticCurve Curve_X448 where
 
 instance EllipticCurveDH Curve_X448 where
     ecdhRaw _ s p = SharedSecret $ convert secret
-      where secret = X448.dh p s
+      where
+        secret = X448.dh p s
     ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
 
 data Curve_Edwards25519 = Curve_Edwards25519
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance EllipticCurve Curve_Edwards25519 where
     type Point Curve_Edwards25519 = Edwards25519.Point
@@ -307,7 +324,8 @@ instance EllipticCurve Curve_Edwards25519 where
     curveSizeBits _ = 255
     curveGenerateScalar _ = Edwards25519.scalarGenerate
     curveGenerateKeyPair _ = toKeyPair <$> Edwards25519.scalarGenerate
-      where toKeyPair scalar = KeyPair (Edwards25519.toPoint scalar) scalar
+      where
+        toKeyPair scalar = KeyPair (Edwards25519.toPoint scalar) scalar
     encodePoint _ point = Edwards25519.pointEncode point
     decodePoint _ bs = Edwards25519.pointDecode bs
 
@@ -323,7 +341,7 @@ instance EllipticCurveBasepointArith Curve_Edwards25519 where
     encodeScalar _ = B.reverse . Edwards25519.scalarEncode
     decodeScalar _ bs
         | B.length bs == 32 = Edwards25519.scalarDecodeLong (B.reverse bs)
-        | otherwise         = CryptoFailed CryptoError_SecretKeySizeInvalid
+        | otherwise = CryptoFailed CryptoError_SecretKeySizeInvalid
     scalarToInteger _ s = LE.os2ip (Edwards25519.scalarEncode s :: B.Bytes)
     scalarFromInteger _ i =
         case LE.i2ospOf 32 i of
@@ -335,15 +353,18 @@ instance EllipticCurveBasepointArith Curve_Edwards25519 where
 checkNonZeroDH :: SharedSecret -> CryptoFailable SharedSecret
 checkNonZeroDH s@(SharedSecret b)
     | B.constAllZero b = CryptoFailed CryptoError_ScalarMultiplicationInvalid
-    | otherwise        = CryptoPassed s
+    | otherwise = CryptoPassed s
 
-encodeECShared :: Simple.Curve curve => Proxy curve -> Simple.Point curve -> CryptoFailable SharedSecret
-encodeECShared _   Simple.PointO      = CryptoFailed CryptoError_ScalarMultiplicationInvalid
+encodeECShared
+    :: Simple.Curve curve
+    => Proxy curve -> Simple.Point curve -> CryptoFailable SharedSecret
+encodeECShared _ Simple.PointO = CryptoFailed CryptoError_ScalarMultiplicationInvalid
 encodeECShared prx (Simple.Point x _) = CryptoPassed . SharedSecret $ i2ospOf_ (Simple.curveSizeBytes prx) x
 
-encodeECPoint :: forall curve bs . (Simple.Curve curve, ByteArray bs) => Simple.Point curve -> bs
-encodeECPoint Simple.PointO      = error "encodeECPoint: cannot serialize point at infinity"
-encodeECPoint (Simple.Point x y) = B.concat [uncompressed,xb,yb]
+encodeECPoint
+    :: forall curve bs. (Simple.Curve curve, ByteArray bs) => Simple.Point curve -> bs
+encodeECPoint Simple.PointO = error "encodeECPoint: cannot serialize point at infinity"
+encodeECPoint (Simple.Point x y) = B.concat [uncompressed, xb, yb]
   where
     size = Simple.curveSizeBytes (Proxy :: Proxy curve)
     uncompressed, xb, yb :: bs
@@ -351,58 +372,79 @@ encodeECPoint (Simple.Point x y) = B.concat [uncompressed,xb,yb]
     xb = i2ospOf_ size x
     yb = i2ospOf_ size y
 
-decodeECPoint :: (Simple.Curve curve, ByteArray bs) => bs -> CryptoFailable (Simple.Point curve)
+decodeECPoint
+    :: (Simple.Curve curve, ByteArray bs) => bs -> CryptoFailable (Simple.Point curve)
 decodeECPoint mxy = case B.uncons mxy of
-    Nothing     -> CryptoFailed CryptoError_PointSizeInvalid
-    Just (m,xy)
+    Nothing -> CryptoFailed CryptoError_PointSizeInvalid
+    Just (m, xy)
         -- uncompressed
         | m == 4 ->
             let siz = B.length xy `div` 2
-                (xb,yb) = B.splitAt siz xy
+                (xb, yb) = B.splitAt siz xy
                 x = os2ip xb
                 y = os2ip yb
-             in Simple.pointFromIntegers (x,y)
+             in Simple.pointFromIntegers (x, y)
         | otherwise -> CryptoFailed CryptoError_PointFormatInvalid
 
-ecPointsMulVarTime :: forall curve . Simple.Curve curve
-                   => Simple.Scalar curve
-                   -> Simple.Scalar curve -> Simple.Point curve
-                   -> Simple.Point curve
+ecPointsMulVarTime
+    :: forall curve
+     . Simple.Curve curve
+    => Simple.Scalar curve
+    -> Simple.Scalar curve
+    -> Simple.Point curve
+    -> Simple.Point curve
 ecPointsMulVarTime n1 = Simple.pointAddTwoMuls n1 g
-  where g = Simple.curveEccG $ Simple.curveParameters (Proxy :: Proxy curve)
+  where
+    g = Simple.curveEccG $ Simple.curveParameters (Proxy :: Proxy curve)
 
-ecScalarFromBinary :: forall curve bs . (Simple.Curve curve, ByteArrayAccess bs)
-                   => bs -> CryptoFailable (Simple.Scalar curve)
+ecScalarFromBinary
+    :: forall curve bs
+     . (Simple.Curve curve, ByteArrayAccess bs)
+    => bs -> CryptoFailable (Simple.Scalar curve)
 ecScalarFromBinary ba
     | B.length ba /= size = CryptoFailed CryptoError_SecretKeySizeInvalid
-    | otherwise           = CryptoPassed (Simple.Scalar $ os2ip ba)
-  where size = ecCurveOrderBytes (Proxy :: Proxy curve)
+    | otherwise = CryptoPassed (Simple.Scalar $ os2ip ba)
+  where
+    size = ecCurveOrderBytes (Proxy :: Proxy curve)
 
-ecScalarToBinary :: forall curve bs . (Simple.Curve curve, ByteArray bs)
-                 => Simple.Scalar curve -> bs
+ecScalarToBinary
+    :: forall curve bs
+     . (Simple.Curve curve, ByteArray bs)
+    => Simple.Scalar curve -> bs
 ecScalarToBinary (Simple.Scalar s) = i2ospOf_ size s
-  where size = ecCurveOrderBytes (Proxy :: Proxy curve)
+  where
+    size = ecCurveOrderBytes (Proxy :: Proxy curve)
 
-ecScalarFromInteger :: forall curve . Simple.Curve curve
-                    => Integer -> CryptoFailable (Simple.Scalar curve)
+ecScalarFromInteger
+    :: forall curve
+     . Simple.Curve curve
+    => Integer -> CryptoFailable (Simple.Scalar curve)
 ecScalarFromInteger s
     | numBits s > nb = CryptoFailed CryptoError_SecretKeySizeInvalid
-    | otherwise      = CryptoPassed (Simple.Scalar s)
-  where nb = 8 * ecCurveOrderBytes (Proxy :: Proxy curve)
+    | otherwise = CryptoPassed (Simple.Scalar s)
+  where
+    nb = 8 * ecCurveOrderBytes (Proxy :: Proxy curve)
 
 ecScalarToInteger :: Simple.Scalar curve -> Integer
 ecScalarToInteger (Simple.Scalar s) = s
 
 ecCurveOrderBytes :: Simple.Curve c => proxy c -> Int
 ecCurveOrderBytes prx = (numBits n + 7) `div` 8
-  where n = Simple.curveEccN $ Simple.curveParameters prx
+  where
+    n = Simple.curveEccN $ Simple.curveParameters prx
 
-ecScalarAdd :: forall curve . Simple.Curve curve
-            => Simple.Scalar curve -> Simple.Scalar curve -> Simple.Scalar curve
+ecScalarAdd
+    :: forall curve
+     . Simple.Curve curve
+    => Simple.Scalar curve -> Simple.Scalar curve -> Simple.Scalar curve
 ecScalarAdd (Simple.Scalar a) (Simple.Scalar b) = Simple.Scalar ((a + b) `mod` n)
-  where n = Simple.curveEccN $ Simple.curveParameters (Proxy :: Proxy curve)
+  where
+    n = Simple.curveEccN $ Simple.curveParameters (Proxy :: Proxy curve)
 
-ecScalarMul :: forall curve . Simple.Curve curve
-            => Simple.Scalar curve -> Simple.Scalar curve -> Simple.Scalar curve
+ecScalarMul
+    :: forall curve
+     . Simple.Curve curve
+    => Simple.Scalar curve -> Simple.Scalar curve -> Simple.Scalar curve
 ecScalarMul (Simple.Scalar a) (Simple.Scalar b) = Simple.Scalar ((a * b) `mod` n)
-  where n = Simple.curveEccN $ Simple.curveParameters (Proxy :: Proxy curve)
+  where
+    n = Simple.curveEccN $ Simple.curveParameters (Proxy :: Proxy curve)

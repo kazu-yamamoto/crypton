@@ -1,3 +1,10 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 -- |
 -- Module      : Crypto.PubKey.ECDSA
 -- License     : BSD-style
@@ -15,60 +22,60 @@
 -- Signature operations with P-384 and P-521 may leak the private key.
 --
 -- Signature verification should be safe for all curves.
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-module Crypto.PubKey.ECDSA
-    ( EllipticCurveECDSA (..)
+module Crypto.PubKey.ECDSA (
+    EllipticCurveECDSA (..),
+
     -- * Public keys
-    , PublicKey
-    , encodePublic
-    , decodePublic
-    , toPublic
+    PublicKey,
+    encodePublic,
+    decodePublic,
+    toPublic,
+
     -- * Private keys
-    , PrivateKey
-    , encodePrivate
-    , decodePrivate
+    PrivateKey,
+    encodePrivate,
+    decodePrivate,
+
     -- * Signatures
-    , Signature(..)
-    , signatureFromIntegers
-    , signatureToIntegers
+    Signature (..),
+    signatureFromIntegers,
+    signatureToIntegers,
+
     -- * Generation and verification
-    , signWith
-    , signDigestWith
-    , sign
-    , signDigest
-    , verify
-    , verifyDigest
-    ) where
+    signWith,
+    signDigestWith,
+    sign,
+    signDigest,
+    verify,
+    verifyDigest,
+) where
 
-import           Control.Monad
+import Control.Monad
 
-import           Crypto.ECC
+import Crypto.ECC
 import qualified Crypto.ECC.Simple.Types as Simple
-import           Crypto.Error
-import           Crypto.Hash
-import           Crypto.Hash.Types
-import           Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
-import           Crypto.Internal.Imports
-import           Crypto.Number.ModArithmetic (inverseFermat)
+import Crypto.Error
+import Crypto.Hash
+import Crypto.Hash.Types
+import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
+import Crypto.Internal.Imports
+import Crypto.Number.ModArithmetic (inverseFermat)
 import qualified Crypto.PubKey.ECC.P256 as P256
-import           Crypto.Random.Types
+import Crypto.Random.Types
 
-import           Data.Bits
+import Data.Bits
 import qualified Data.ByteArray as B
-import           Data.Data
+import Data.Data
 
-import           Foreign.Ptr (Ptr)
-import           Foreign.Storable (peekByteOff, pokeByteOff)
+import Foreign.Ptr (Ptr)
+import Foreign.Storable (peekByteOff, pokeByteOff)
 
 -- | Represent a ECDSA signature namely R and S.
 data Signature curve = Signature
-    { sign_r :: Scalar curve -- ^ ECDSA r
-    , sign_s :: Scalar curve -- ^ ECDSA s
+    { sign_r :: Scalar curve
+    -- ^ ECDSA r
+    , sign_s :: Scalar curve
+    -- ^ ECDSA s
     }
 
 deriving instance Eq (Scalar curve) => Eq (Signature curve)
@@ -99,15 +106,17 @@ class EllipticCurveBasepointArith curve => EllipticCurveECDSA curve where
     pointX :: proxy curve -> Point curve -> Maybe (Scalar curve)
 
 instance EllipticCurveECDSA Curve_P256R1 where
-    scalarIsValid _ s = not (P256.scalarIsZero s)
-                            && P256.scalarCmp s P256.scalarN == LT
+    scalarIsValid _ s =
+        not (P256.scalarIsZero s)
+            && P256.scalarCmp s P256.scalarN == LT
 
     scalarIsZero _ = P256.scalarIsZero
 
-    scalarInv _ s = let inv = P256.scalarInvSafe s
-                     in if P256.scalarIsZero inv then Nothing else Just inv
+    scalarInv _ s =
+        let inv = P256.scalarInvSafe s
+         in if P256.scalarIsZero inv then Nothing else Just inv
 
-    pointX _  = P256.pointX
+    pointX _ = P256.pointX
 
 instance EllipticCurveECDSA Curve_P384R1 where
     scalarIsValid _ = ecScalarIsValid (Proxy :: Proxy Simple.SEC_p384r1)
@@ -116,7 +125,7 @@ instance EllipticCurveECDSA Curve_P384R1 where
 
     scalarInv _ = ecScalarInv (Proxy :: Proxy Simple.SEC_p384r1)
 
-    pointX _  = ecPointX (Proxy :: Proxy Simple.SEC_p384r1)
+    pointX _ = ecPointX (Proxy :: Proxy Simple.SEC_p384r1)
 
 instance EllipticCurveECDSA Curve_P521R1 where
     scalarIsValid _ = ecScalarIsValid (Proxy :: Proxy Simple.SEC_p521r1)
@@ -125,12 +134,12 @@ instance EllipticCurveECDSA Curve_P521R1 where
 
     scalarInv _ = ecScalarInv (Proxy :: Proxy Simple.SEC_p521r1)
 
-    pointX _  = ecPointX (Proxy :: Proxy Simple.SEC_p521r1)
-
+    pointX _ = ecPointX (Proxy :: Proxy Simple.SEC_p521r1)
 
 -- | Create a signature from integers (R, S).
-signatureFromIntegers :: EllipticCurveECDSA curve
-                      => proxy curve -> (Integer, Integer) -> CryptoFailable (Signature curve)
+signatureFromIntegers
+    :: EllipticCurveECDSA curve
+    => proxy curve -> (Integer, Integer) -> CryptoFailable (Signature curve)
 signatureFromIntegers prx (r, s) =
     liftA2 Signature (scalarFromInteger prx r) (scalarFromInteger prx s)
 
@@ -138,41 +147,52 @@ signatureFromIntegers prx (r, s) =
 --
 -- The values can then be used to encode the signature to binary with
 -- ASN.1.
-signatureToIntegers :: EllipticCurveECDSA curve
-                    => proxy curve -> Signature curve -> (Integer, Integer)
+signatureToIntegers
+    :: EllipticCurveECDSA curve
+    => proxy curve -> Signature curve -> (Integer, Integer)
 signatureToIntegers prx sig =
     (scalarToInteger prx $ sign_r sig, scalarToInteger prx $ sign_s sig)
 
 -- | Encode a public key into binary form, i.e. the uncompressed encoding
 -- referenced from <https://tools.ietf.org/html/rfc5480 RFC 5480> section 2.2.
-encodePublic :: (EllipticCurve curve, ByteArray bs)
-             => proxy curve -> PublicKey curve -> bs
+encodePublic
+    :: (EllipticCurve curve, ByteArray bs)
+    => proxy curve -> PublicKey curve -> bs
 encodePublic = encodePoint
 
 -- | Try to decode the binary form of a public key.
-decodePublic :: (EllipticCurve curve, ByteArray bs)
-             => proxy curve -> bs -> CryptoFailable (PublicKey curve)
+decodePublic
+    :: (EllipticCurve curve, ByteArray bs)
+    => proxy curve -> bs -> CryptoFailable (PublicKey curve)
 decodePublic = decodePoint
 
 -- | Encode a private key into binary form, i.e. the @privateKey@ field
 -- described in <https://tools.ietf.org/html/rfc5915 RFC 5915>.
-encodePrivate :: (EllipticCurveECDSA curve, ByteArray bs)
-              => proxy curve -> PrivateKey curve -> bs
+encodePrivate
+    :: (EllipticCurveECDSA curve, ByteArray bs)
+    => proxy curve -> PrivateKey curve -> bs
 encodePrivate = encodeScalar
 
 -- | Try to decode the binary form of a private key.
-decodePrivate :: (EllipticCurveECDSA curve, ByteArray bs)
-              => proxy curve -> bs -> CryptoFailable (PrivateKey curve)
+decodePrivate
+    :: (EllipticCurveECDSA curve, ByteArray bs)
+    => proxy curve -> bs -> CryptoFailable (PrivateKey curve)
 decodePrivate = decodeScalar
 
 -- | Create a public key from a private key.
-toPublic :: EllipticCurveECDSA curve
-         => proxy curve -> PrivateKey curve -> PublicKey curve
+toPublic
+    :: EllipticCurveECDSA curve
+    => proxy curve -> PrivateKey curve -> PublicKey curve
 toPublic = pointBaseSmul
 
 -- | Sign digest using the private key and an explicit k scalar.
-signDigestWith :: (EllipticCurveECDSA curve, HashAlgorithm hash)
-               => proxy curve -> Scalar curve -> PrivateKey curve -> Digest hash -> Maybe (Signature curve)
+signDigestWith
+    :: (EllipticCurveECDSA curve, HashAlgorithm hash)
+    => proxy curve
+    -> Scalar curve
+    -> PrivateKey curve
+    -> Digest hash
+    -> Maybe (Signature curve)
 signDigestWith prx k d digest = do
     let z = tHashDigest prx digest
         point = pointBaseSmul prx k
@@ -183,90 +203,113 @@ signDigestWith prx k d digest = do
     return $ Signature r s
 
 -- | Sign message using the private key and an explicit k scalar.
-signWith :: (EllipticCurveECDSA curve, ByteArrayAccess msg, HashAlgorithm hash)
-         => proxy curve -> Scalar curve -> PrivateKey curve -> hash -> msg -> Maybe (Signature curve)
+signWith
+    :: (EllipticCurveECDSA curve, ByteArrayAccess msg, HashAlgorithm hash)
+    => proxy curve
+    -> Scalar curve
+    -> PrivateKey curve
+    -> hash
+    -> msg
+    -> Maybe (Signature curve)
 signWith prx k d hashAlg msg = signDigestWith prx k d (hashWith hashAlg msg)
 
 -- | Sign a digest using hash and private key.
-signDigest :: (EllipticCurveECDSA curve, MonadRandom m, HashAlgorithm hash)
-           => proxy curve -> PrivateKey curve -> Digest hash -> m (Signature curve)
+signDigest
+    :: (EllipticCurveECDSA curve, MonadRandom m, HashAlgorithm hash)
+    => proxy curve -> PrivateKey curve -> Digest hash -> m (Signature curve)
 signDigest prx pk digest = do
     k <- curveGenerateScalar prx
     case signDigestWith prx k pk digest of
-        Nothing  -> signDigest prx pk digest
+        Nothing -> signDigest prx pk digest
         Just sig -> return sig
 
 -- | Sign a message using hash and private key.
-sign :: (EllipticCurveECDSA curve, MonadRandom m, ByteArrayAccess msg, HashAlgorithm hash)
-     => proxy curve -> PrivateKey curve -> hash -> msg -> m (Signature curve)
+sign
+    :: ( EllipticCurveECDSA curve
+       , MonadRandom m
+       , ByteArrayAccess msg
+       , HashAlgorithm hash
+       )
+    => proxy curve -> PrivateKey curve -> hash -> msg -> m (Signature curve)
 sign prx pk hashAlg msg = signDigest prx pk (hashWith hashAlg msg)
 
 -- | Verify a digest using hash and public key.
-verifyDigest :: (EllipticCurveECDSA curve, HashAlgorithm hash)
-       => proxy curve -> PublicKey curve -> Signature curve -> Digest hash -> Bool
+verifyDigest
+    :: (EllipticCurveECDSA curve, HashAlgorithm hash)
+    => proxy curve -> PublicKey curve -> Signature curve -> Digest hash -> Bool
 verifyDigest prx q (Signature r s) digest
     | not (scalarIsValid prx r) = False
     | not (scalarIsValid prx s) = False
     | otherwise = maybe False (r ==) $ do
         w <- scalarInv prx s
-        let z  = tHashDigest prx digest
+        let z = tHashDigest prx digest
             u1 = scalarMul prx z w
             u2 = scalarMul prx r w
-            x  = pointsSmulVarTime prx u1 u2 q
+            x = pointsSmulVarTime prx u1 u2 q
         pointX prx x
-    -- Note: precondition q /= PointO is not tested because we assume
-    -- point decoding never decodes point at infinity.
+
+-- Note: precondition q /= PointO is not tested because we assume
+-- point decoding never decodes point at infinity.
 
 -- | Verify a signature using hash and public key.
-verify :: (EllipticCurveECDSA curve, ByteArrayAccess msg, HashAlgorithm hash)
-       => proxy curve -> hash -> PublicKey curve -> Signature curve -> msg -> Bool
+verify
+    :: (EllipticCurveECDSA curve, ByteArrayAccess msg, HashAlgorithm hash)
+    => proxy curve -> hash -> PublicKey curve -> Signature curve -> msg -> Bool
 verify prx hashAlg q sig msg = verifyDigest prx q sig (hashWith hashAlg msg)
 
 -- | Truncate a digest based on curve order size.
-tHashDigest :: (EllipticCurveECDSA curve, HashAlgorithm hash)
-            => proxy curve -> Digest hash -> Scalar curve
+tHashDigest
+    :: (EllipticCurveECDSA curve, HashAlgorithm hash)
+    => proxy curve -> Digest hash -> Scalar curve
 tHashDigest prx (Digest digest) = throwCryptoError $ decodeScalar prx encoded
-  where m      = curveOrderBits prx
-        d      = m - B.length digest * 8
-        (n, r) = m `divMod` 8
-        n'     = if r > 0 then succ n else n
+  where
+    m = curveOrderBits prx
+    d = m - B.length digest * 8
+    (n, r) = m `divMod` 8
+    n' = if r > 0 then succ n else n
 
-        encoded
-            | d >  0    = B.zero (n' - B.length digest) `B.append` digest
-            | d == 0    = digest
-            | r == 0    = B.take n digest
-            | otherwise = shiftBytes digest
+    encoded
+        | d > 0 = B.zero (n' - B.length digest) `B.append` digest
+        | d == 0 = digest
+        | r == 0 = B.take n digest
+        | otherwise = shiftBytes digest
 
-        shiftBytes bs = B.allocAndFreeze n' $ \dst ->
-            B.withByteArray bs $ \src -> go dst src 0 0
+    shiftBytes bs = B.allocAndFreeze n' $ \dst ->
+        B.withByteArray bs $ \src -> go dst src 0 0
 
-        go :: Ptr Word8 -> Ptr Word8 -> Word8 -> Int -> IO ()
-        go dst src !a i
-            | i >= n'   = return ()
-            | otherwise = do
-                b <- peekByteOff src i
-                pokeByteOff dst i (unsafeShiftR b (8 - r) .|. unsafeShiftL a r)
-                go dst src b (succ i)
-
+    go :: Ptr Word8 -> Ptr Word8 -> Word8 -> Int -> IO ()
+    go dst src !a i
+        | i >= n' = return ()
+        | otherwise = do
+            b <- peekByteOff src i
+            pokeByteOff dst i (unsafeShiftR b (8 - r) .|. unsafeShiftL a r)
+            go dst src b (succ i)
 
 ecScalarIsValid :: Simple.Curve c => proxy c -> Simple.Scalar c -> Bool
 ecScalarIsValid prx (Simple.Scalar s) = s > 0 && s < n
-  where n = Simple.curveEccN $ Simple.curveParameters prx
+  where
+    n = Simple.curveEccN $ Simple.curveParameters prx
 
-ecScalarIsZero :: forall curve . Simple.Curve curve
-               => Simple.Scalar curve -> Bool
+ecScalarIsZero
+    :: forall curve
+     . Simple.Curve curve
+    => Simple.Scalar curve -> Bool
 ecScalarIsZero (Simple.Scalar a) = a == 0
 
-ecScalarInv :: Simple.Curve c
-            => proxy c -> Simple.Scalar c -> Maybe (Simple.Scalar c)
+ecScalarInv
+    :: Simple.Curve c
+    => proxy c -> Simple.Scalar c -> Maybe (Simple.Scalar c)
 ecScalarInv prx (Simple.Scalar s)
-    | i == 0    = Nothing
+    | i == 0 = Nothing
     | otherwise = Just $ Simple.Scalar i
-  where n = Simple.curveEccN $ Simple.curveParameters prx
-        i = inverseFermat s n
+  where
+    n = Simple.curveEccN $ Simple.curveParameters prx
+    i = inverseFermat s n
 
-ecPointX :: Simple.Curve c
-         => proxy c -> Simple.Point c -> Maybe (Simple.Scalar c)
-ecPointX _   Simple.PointO      = Nothing
+ecPointX
+    :: Simple.Curve c
+    => proxy c -> Simple.Point c -> Maybe (Simple.Scalar c)
+ecPointX _ Simple.PointO = Nothing
 ecPointX prx (Simple.Point x _) = Just (Simple.Scalar $ x `mod` n)
-  where n = Simple.curveEccN $ Simple.curveParameters prx
+  where
+    n = Simple.curveEccN $ Simple.curveParameters prx

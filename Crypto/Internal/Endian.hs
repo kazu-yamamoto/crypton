@@ -1,15 +1,17 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module      : Crypto.Internal.Endian
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : stable
 -- Portability : good
---
-{-# LANGUAGE CPP #-}
-module Crypto.Internal.Endian
-    ( fromBE64, toBE64
-    , fromLE64, toLE64
-    ) where
+module Crypto.Internal.Endian (
+    fromBE64,
+    toBE64,
+    fromLE64,
+    toLE64,
+) where
 
 import Crypto.Internal.Compat (byteSwap64)
 import Data.Word (Word64)

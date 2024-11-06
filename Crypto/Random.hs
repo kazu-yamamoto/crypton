@@ -1,43 +1,45 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.Random
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : stable
 -- Portability : good
---
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Crypto.Random
-    (
+module Crypto.Random (
     -- * Deterministic instances
-      ChaChaDRG
-    , SystemDRG
-    , Seed
+    ChaChaDRG,
+    SystemDRG,
+    Seed,
+
     -- * Seed
-    , seedNew
-    , seedFromInteger
-    , seedToInteger
-    , seedFromBinary
+    seedNew,
+    seedFromInteger,
+    seedToInteger,
+    seedFromBinary,
+
     -- * Deterministic Random class
-    , getSystemDRG
-    , drgNew
-    , drgNewSeed
-    , drgNewTest
-    , withDRG
-    , withRandomBytes
-    , DRG(..)
+    getSystemDRG,
+    drgNew,
+    drgNewSeed,
+    drgNewTest,
+    withDRG,
+    withRandomBytes,
+    DRG (..),
+
     -- * Random abstraction
-    , MonadRandom(..)
-    , MonadPseudoRandom
-    ) where
+    MonadRandom (..),
+    MonadPseudoRandom,
+) where
 
 import Crypto.Error
-import Crypto.Random.Types
+import Crypto.Hash (Digest, SHA512, hash)
+import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
 import Crypto.Random.SystemDRG
+import Crypto.Random.Types
 import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 import qualified Data.ByteArray as B
-import Crypto.Internal.Imports
-import Crypto.Hash (Digest, SHA512, hash)
 
 import qualified Crypto.Number.Serialize as Serialize
 
@@ -56,7 +58,9 @@ seedNew :: MonadRandom randomly => randomly Seed
 -- potentially comprisable sources. Hashing of entropy before using
 -- it as a seed is a common mitigation for attacks via RNG/entropy
 -- source.
-seedNew = (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512)) `fmap` getRandomBytes 64
+seedNew =
+    (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512))
+        `fmap` getRandomBytes 64
 
 -- | Convert a Seed to an integer
 seedToInteger :: Seed -> Integer
@@ -64,13 +68,13 @@ seedToInteger (Seed b) = Serialize.os2ip b
 
 -- | Convert an integer to a Seed
 seedFromInteger :: Integer -> Seed
-seedFromInteger i = Seed $ Serialize.i2ospOf_ seedLength (i `mod` 2^(seedLength * 8))
+seedFromInteger i = Seed $ Serialize.i2ospOf_ seedLength (i `mod` 2 ^ (seedLength * 8))
 
 -- | Convert a binary to a seed
 seedFromBinary :: ByteArrayAccess b => b -> CryptoFailable Seed
 seedFromBinary b
     | B.length b /= 40 = CryptoFailed (CryptoError_SeedSizeInvalid)
-    | otherwise        = CryptoPassed $ Seed $ B.convert b
+    | otherwise = CryptoPassed $ Seed $ B.convert b
 
 -- | Create a new DRG from system entropy
 drgNew :: MonadRandom randomly => randomly ChaChaDRG
@@ -102,4 +106,5 @@ drgNewTest = initializeWords
 -- This is equivalent to use Control.Arrow 'first' with 'randomBytesGenerate'
 withRandomBytes :: (ByteArray ba, DRG g) => g -> Int -> (ba -> a) -> (a, g)
 withRandomBytes rng len f = (f bs, rng')
-  where (bs, rng') = randomBytesGenerate len rng
+  where
+    (bs, rng') = randomBytesGenerate len rng

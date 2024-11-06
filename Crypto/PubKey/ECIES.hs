@@ -18,31 +18,37 @@
 -- This module doesn't provide any symmetric data encryption capability or any mean to derive
 -- cryptographic key material for a symmetric key from the shared secret.
 -- this is left to the user for now.
---
-module Crypto.PubKey.ECIES
-    ( deriveEncrypt
-    , deriveDecrypt
-    ) where
+module Crypto.PubKey.ECIES (
+    deriveEncrypt,
+    deriveDecrypt,
+) where
 
-import           Crypto.ECC
-import           Crypto.Error
-import           Crypto.Random
+import Crypto.ECC
+import Crypto.Error
+import Crypto.Random
 
 -- | Generate random a new Shared secret and the associated point
 -- to do a ECIES style encryption
-deriveEncrypt :: (MonadRandom randomly, EllipticCurveDH curve)
-              => proxy curve -- ^ representation of the curve
-              -> Point curve -- ^ the public key of the receiver
-              -> randomly (CryptoFailable (Point curve, SharedSecret))
+deriveEncrypt
+    :: (MonadRandom randomly, EllipticCurveDH curve)
+    => proxy curve
+    -- ^ representation of the curve
+    -> Point curve
+    -- ^ the public key of the receiver
+    -> randomly (CryptoFailable (Point curve, SharedSecret))
 deriveEncrypt proxy pub = do
     (KeyPair rPoint rScalar) <- curveGenerateKeyPair proxy
     return $ (\s -> (rPoint, s)) `fmap` ecdh proxy rScalar pub
 
 -- | Derive the shared secret with the receiver key
 -- and the R point of the scheme.
-deriveDecrypt :: EllipticCurveDH curve
-              => proxy curve  -- ^ representation of the curve
-              -> Point curve  -- ^ The received R (supposedly, randomly generated on the encrypt side)
-              -> Scalar curve -- ^ The secret key of the receiver
-              -> CryptoFailable SharedSecret
+deriveDecrypt
+    :: EllipticCurveDH curve
+    => proxy curve
+    -- ^ representation of the curve
+    -> Point curve
+    -- ^ The received R (supposedly, randomly generated on the encrypt side)
+    -> Scalar curve
+    -- ^ The secret key of the receiver
+    -> CryptoFailable SharedSecret
 deriveDecrypt proxy point secret = ecdh proxy secret point

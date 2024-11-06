@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+
 -- |
 -- Module      : Crypto.Number.Nat
 -- License     : BSD-style
@@ -26,38 +29,39 @@
 --
 -- Function @withDivisibleBy8@ above returns 'Nothing' when the argument @len@
 -- is negative or not divisible by 8.
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-module Crypto.Number.Nat
-    ( type IsDivisibleBy8
-    , type IsAtMost, type IsAtLeast
-    , isDivisibleBy8
-    , isAtMost
-    , isAtLeast
-    ) where
+module Crypto.Number.Nat (
+    type IsDivisibleBy8,
+    type IsAtMost,
+    type IsAtLeast,
+    isDivisibleBy8,
+    isAtMost,
+    isAtLeast,
+) where
 
-import           Data.Type.Equality
-import           GHC.TypeLits
-import           Unsafe.Coerce (unsafeCoerce)
+import Data.Type.Equality
+import GHC.TypeLits
+import Unsafe.Coerce (unsafeCoerce)
 
-import           Crypto.Internal.Nat
+import Crypto.Internal.Nat
 
 -- | get a runtime proof that the constraint @'IsDivisibleBy8' n@ is satified
 isDivisibleBy8 :: KnownNat n => proxy n -> Maybe (IsDiv8 n n :~: 'True)
 isDivisibleBy8 n
     | mod (natVal n) 8 == 0 = Just (unsafeCoerce Refl)
-    | otherwise             = Nothing
+    | otherwise = Nothing
 
 -- | get a runtime proof that the constraint @'IsAtMost' value bound@ is
 -- satified
-isAtMost :: (KnownNat value, KnownNat bound)
-         => proxy value -> proxy' bound -> Maybe ((value <=? bound) :~: 'True)
+isAtMost
+    :: (KnownNat value, KnownNat bound)
+    => proxy value -> proxy' bound -> Maybe ((value <=? bound) :~: 'True)
 isAtMost x y
-    | natVal x <= natVal y  = Just (unsafeCoerce Refl)
-    | otherwise             = Nothing
+    | natVal x <= natVal y = Just (unsafeCoerce Refl)
+    | otherwise = Nothing
 
 -- | get a runtime proof that the constraint @'IsAtLeast' value bound@ is
 -- satified
-isAtLeast :: (KnownNat value, KnownNat bound)
-          => proxy value -> proxy' bound -> Maybe ((bound <=? value) :~: 'True)
+isAtLeast
+    :: (KnownNat value, KnownNat bound)
+    => proxy value -> proxy' bound -> Maybe ((bound <=? value) :~: 'True)
 isAtLeast = flip isAtMost

@@ -1,21 +1,20 @@
 {-# LANGUAGE MagicHash #-}
 
 -----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+
 -- |
 -- Module      :  Crypto.Cipher.CAST5.Primitive
 -- License     :  BSD-style
 --
 -- Haskell implementation of the CAST-128 Encryption Algorithm
---
------------------------------------------------------------------------------
-
-
-module Crypto.Cipher.CAST5.Primitive
-    ( encrypt
-    , decrypt
-    , Key()
-    , buildKey
-    ) where
+module Crypto.Cipher.CAST5.Primitive (
+    encrypt,
+    decrypt,
+    Key (),
+    buildKey,
+) where
 
 import Control.Monad (void, (>=>))
 
@@ -23,23 +22,28 @@ import Data.Bits
 import Data.Memory.Endian
 import Data.Word
 
-import           Crypto.Internal.ByteArray (ByteArrayAccess)
+import Crypto.Internal.ByteArray (ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
-import           Crypto.Internal.WordArray
-
+import Crypto.Internal.WordArray
 
 -- Data Types
 
-data P = P {-# UNPACK #-} !Word32 -- left word
-           {-# UNPACK #-} !Word32 -- right word
+data P
+    = P
+        {-# UNPACK #-} !Word32 -- left word
+        {-# UNPACK #-} !Word32 -- right word
 
-data Q = Q {-# UNPACK #-} !Word32 {-# UNPACK #-} !Word32
-           {-# UNPACK #-} !Word32 {-# UNPACK #-} !Word32
+data Q
+    = Q
+        {-# UNPACK #-} !Word32
+        {-# UNPACK #-} !Word32
+        {-# UNPACK #-} !Word32
+        {-# UNPACK #-} !Word32
 
 -- | All subkeys for 12 or 16 rounds
-data Key = K12 {-# UNPACK #-} !Array32 -- [ km1, kr1, km2, kr2, ..., km12, kr12 ]
-         | K16 {-# UNPACK #-} !Array32 -- [ km1, kr1, km2, kr2, ..., km16, kr16 ]
-
+data Key
+    = K12 {-# UNPACK #-} !Array32 -- [ km1, kr1, km2, kr2, ..., km12, kr12 ]
+    | K16 {-# UNPACK #-} !Array32 -- [ km1, kr1, km2, kr2, ..., km16, kr16 ]
 
 -- Big-endian Transformations
 
@@ -53,10 +57,9 @@ decomp32 :: Word32 -> (Word8, Word8, Word8, Word8)
 decomp32 x =
     let a = fromIntegral (x `shiftR` 24)
         b = fromIntegral (x `shiftR` 16)
-        c = fromIntegral (x `shiftR`  8)
+        c = fromIntegral (x `shiftR` 8)
         d = fromIntegral x
-    in (a, b, c, d)
-
+     in (a, b, c, d)
 
 -- Encryption
 
@@ -67,19 +70,18 @@ encrypt k = comp64 . cast_enc k . decomp64
 cast_enc :: Key -> P -> P
 cast_enc (K12 a) (P l0 r0) = P r12 r11
   where
-    r1  = type1 a 0  l0  r0
-    r2  = type2 a 2  r0  r1
-    r3  = type3 a 4  r1  r2
-    r4  = type1 a 6  r2  r3
-    r5  = type2 a 8  r3  r4
-    r6  = type3 a 10 r4  r5
-    r7  = type1 a 12 r5  r6
-    r8  = type2 a 14 r6  r7
-    r9  = type3 a 16 r7  r8
-    r10 = type1 a 18 r8  r9
-    r11 = type2 a 20 r9  r10
+    r1 = type1 a 0 l0 r0
+    r2 = type2 a 2 r0 r1
+    r3 = type3 a 4 r1 r2
+    r4 = type1 a 6 r2 r3
+    r5 = type2 a 8 r3 r4
+    r6 = type3 a 10 r4 r5
+    r7 = type1 a 12 r5 r6
+    r8 = type2 a 14 r6 r7
+    r9 = type3 a 16 r7 r8
+    r10 = type1 a 18 r8 r9
+    r11 = type2 a 20 r9 r10
     r12 = type3 a 22 r10 r11
-
 cast_enc (K16 a) p = P r16 r15
   where
     P r12 r11 = cast_enc (K12 a) p
@@ -99,25 +101,23 @@ cast_dec :: Key -> P -> P
 cast_dec (K12 a) (P r12 r11) = P l0 r0
   where
     r10 = type3 a 22 r12 r11
-    r9  = type2 a 20 r11 r10
-    r8  = type1 a 18 r10 r9
-    r7  = type3 a 16 r9  r8
-    r6  = type2 a 14 r8  r7
-    r5  = type1 a 12 r7  r6
-    r4  = type3 a 10 r6  r5
-    r3  = type2 a 8  r5  r4
-    r2  = type1 a 6  r4  r3
-    r1  = type3 a 4  r3  r2
-    r0  = type2 a 2  r2  r1
-    l0  = type1 a 0  r1  r0
-
+    r9 = type2 a 20 r11 r10
+    r8 = type1 a 18 r10 r9
+    r7 = type3 a 16 r9 r8
+    r6 = type2 a 14 r8 r7
+    r5 = type1 a 12 r7 r6
+    r4 = type3 a 10 r6 r5
+    r3 = type2 a 8 r5 r4
+    r2 = type1 a 6 r4 r3
+    r1 = type3 a 4 r3 r2
+    r0 = type2 a 2 r2 r1
+    l0 = type1 a 0 r1 r0
 cast_dec (K16 a) (P r16 r15) = cast_dec (K12 a) (P r12 r11)
   where
     r14 = type1 a 30 r16 r15
     r13 = type3 a 28 r15 r14
     r12 = type2 a 26 r14 r13
     r11 = type1 a 24 r13 r12
-
 
 -- Non-Identical Rounds
 
@@ -145,14 +145,17 @@ type3 arr idx l r =
         (ja, jb, jc, jd) = decomp32 j
      in l `xor` (((sbox_s1 ja + sbox_s2 jb) `xor` sbox_s3 jc) - sbox_s4 jd)
 
-
 -- Key Schedule
 
 -- | Precompute "masking" and "rotation" subkeys
-buildKey :: ByteArrayAccess key
-         => Bool -- ^ @True@ for short keys that only need 12 rounds
-         -> key  -- ^ Input key padded to 16 bytes
-         -> Key  -- ^ Output data structure
+buildKey
+    :: ByteArrayAccess key
+    => Bool
+    -- ^ @True@ for short keys that only need 12 rounds
+    -> key
+    -- ^ Input key padded to 16 bytes
+    -> Key
+    -- ^ Output data structure
 buildKey isShort key =
     let P x0123 x4567 = decomp64 (fromBE $ B.toW64BE key 0)
         P x89AB xCDEF = decomp64 (fromBE $ B.toW64BE key 8)
@@ -160,12 +163,10 @@ buildKey isShort key =
 
 keySchedule :: Bool -> Q -> Key
 keySchedule isShort x
-    | isShort   = K12 $ allocArray32AndFreeze 24 $ \ma ->
+    | isShort = K12 $ allocArray32AndFreeze 24 $ \ma ->
         void (steps123 ma 0 x >>= skip4 >>= steps123 ma 1)
-
     | otherwise = K16 $ allocArray32AndFreeze 32 $ \ma ->
         void (steps123 ma 0 x >>= step4 ma 24 >>= steps123 ma 1 >>= step4 ma 25)
-
   where
     sbox_s56785 a b c d e = sbox_s5 a `xor` sbox_s6 b `xor` sbox_s7 c `xor` sbox_s8 d `xor` sbox_s5 e
     sbox_s56786 a b c d e = sbox_s5 a `xor` sbox_s6 b `xor` sbox_s7 c `xor` sbox_s8 d `xor` sbox_s6 e
@@ -279,7 +280,9 @@ keySchedule isShort x
 sbox_s1 :: Word8 -> Word32
 sbox_s1 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x30\xfb\x40\xd4\x9f\xa0\xff\x0b\x6b\xec\xcd\x2f\x3f\x25\x8c\x7a\x1e\x21\x3f\x2f\x9c\x00\x4d\xd3\x60\x03\xe5\x40\xcf\x9f\xc9\x49\
             \\xbf\xd4\xaf\x27\x88\xbb\xbd\xb5\xe2\x03\x40\x90\x98\xd0\x96\x75\x6e\x63\xa0\xe0\x15\xc3\x61\xd2\xc2\xe7\x66\x1d\x22\xd4\xff\x8e\
             \\x28\x68\x3b\x6f\xc0\x7f\xd0\x59\xff\x23\x79\xc8\x77\x5f\x50\xe2\x43\xc3\x40\xd3\xdf\x2f\x86\x56\x88\x7c\xa4\x1a\xa2\xd2\xbd\x2d\
@@ -316,7 +319,9 @@ sbox_s1 i = arrayRead32 t (fromIntegral i)
 sbox_s2 :: Word8 -> Word32
 sbox_s2 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x1f\x20\x10\x94\xef\x0b\xa7\x5b\x69\xe3\xcf\x7e\x39\x3f\x43\x80\xfe\x61\xcf\x7a\xee\xc5\x20\x7a\x55\x88\x9c\x94\x72\xfc\x06\x51\
             \\xad\xa7\xef\x79\x4e\x1d\x72\x35\xd5\x5a\x63\xce\xde\x04\x36\xba\x99\xc4\x30\xef\x5f\x0c\x07\x94\x18\xdc\xdb\x7d\xa1\xd6\xef\xf3\
             \\xa0\xb5\x2f\x7b\x59\xe8\x36\x05\xee\x15\xb0\x94\xe9\xff\xd9\x09\xdc\x44\x00\x86\xef\x94\x44\x59\xba\x83\xcc\xb3\xe0\xc3\xcd\xfb\
@@ -353,7 +358,9 @@ sbox_s2 i = arrayRead32 t (fromIntegral i)
 sbox_s3 :: Word8 -> Word32
 sbox_s3 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x8d\xef\xc2\x40\x25\xfa\x5d\x9f\xeb\x90\x3d\xbf\xe8\x10\xc9\x07\x47\x60\x7f\xff\x36\x9f\xe4\x4b\x8c\x1f\xc6\x44\xae\xce\xca\x90\
             \\xbe\xb1\xf9\xbf\xee\xfb\xca\xea\xe8\xcf\x19\x50\x51\xdf\x07\xae\x92\x0e\x88\x06\xf0\xad\x05\x48\xe1\x3c\x8d\x83\x92\x70\x10\xd5\
             \\x11\x10\x7d\x9f\x07\x64\x7d\xb9\xb2\xe3\xe4\xd4\x3d\x4f\x28\x5e\xb9\xaf\xa8\x20\xfa\xde\x82\xe0\xa0\x67\x26\x8b\x82\x72\x79\x2e\
@@ -390,7 +397,9 @@ sbox_s3 i = arrayRead32 t (fromIntegral i)
 sbox_s4 :: Word8 -> Word32
 sbox_s4 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x9d\xb3\x04\x20\x1f\xb6\xe9\xde\xa7\xbe\x7b\xef\xd2\x73\xa2\x98\x4a\x4f\x7b\xdb\x64\xad\x8c\x57\x85\x51\x04\x43\xfa\x02\x0e\xd1\
             \\x7e\x28\x7a\xff\xe6\x0f\xb6\x63\x09\x5f\x35\xa1\x79\xeb\xf1\x20\xfd\x05\x9d\x43\x64\x97\xb7\xb1\xf3\x64\x1f\x63\x24\x1e\x4a\xdf\
             \\x28\x14\x7f\x5f\x4f\xa2\xb8\xcd\xc9\x43\x00\x40\x0c\xc3\x22\x20\xfd\xd3\x0b\x30\xc0\xa5\x37\x4f\x1d\x2d\x00\xd9\x24\x14\x7b\x15\
@@ -427,7 +436,9 @@ sbox_s4 i = arrayRead32 t (fromIntegral i)
 sbox_s5 :: Word8 -> Word32
 sbox_s5 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x7e\xc9\x0c\x04\x2c\x6e\x74\xb9\x9b\x0e\x66\xdf\xa6\x33\x79\x11\xb8\x6a\x7f\xff\x1d\xd3\x58\xf5\x44\xdd\x9d\x44\x17\x31\x16\x7f\
             \\x08\xfb\xf1\xfa\xe7\xf5\x11\xcc\xd2\x05\x1b\x00\x73\x5a\xba\x00\x2a\xb7\x22\xd8\x38\x63\x81\xcb\xac\xf6\x24\x3a\x69\xbe\xfd\x7a\
             \\xe6\xa2\xe7\x7f\xf0\xc7\x20\xcd\xc4\x49\x48\x16\xcc\xf5\xc1\x80\x38\x85\x16\x40\x15\xb0\xa8\x48\xe6\x8b\x18\xcb\x4c\xaa\xde\xff\
@@ -464,7 +475,9 @@ sbox_s5 i = arrayRead32 t (fromIntegral i)
 sbox_s6 :: Word8 -> Word32
 sbox_s6 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\xf6\xfa\x8f\x9d\x2c\xac\x6c\xe1\x4c\xa3\x48\x67\xe2\x33\x7f\x7c\x95\xdb\x08\xe7\x01\x68\x43\xb4\xec\xed\x5c\xbc\x32\x55\x53\xac\
             \\xbf\x9f\x09\x60\xdf\xa1\xe2\xed\x83\xf0\x57\x9d\x63\xed\x86\xb9\x1a\xb6\xa6\xb8\xde\x5e\xbe\x39\xf3\x8f\xf7\x32\x89\x89\xb1\x38\
             \\x33\xf1\x49\x61\xc0\x19\x37\xbd\xf5\x06\xc6\xda\xe4\x62\x5e\x7e\xa3\x08\xea\x99\x4e\x23\xe3\x3c\x79\xcb\xd7\xcc\x48\xa1\x43\x67\
@@ -501,7 +514,9 @@ sbox_s6 i = arrayRead32 t (fromIntegral i)
 sbox_s7 :: Word8 -> Word32
 sbox_s7 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\x85\xe0\x40\x19\x33\x2b\xf5\x67\x66\x2d\xbf\xff\xcf\xc6\x56\x93\x2a\x8d\x7f\x6f\xab\x9b\xc9\x12\xde\x60\x08\xa1\x20\x28\xda\x1f\
             \\x02\x27\xbc\xe7\x4d\x64\x29\x16\x18\xfa\xc3\x00\x50\xf1\x8b\x82\x2c\xb2\xcb\x11\xb2\x32\xe7\x5c\x4b\x36\x95\xf2\xb2\x87\x07\xde\
             \\xa0\x5f\xbc\xf6\xcd\x41\x81\xe9\xe1\x50\x21\x0c\xe2\x4e\xf1\xbd\xb1\x68\xc3\x81\xfd\xe4\xe7\x89\x5c\x79\xb0\xd8\x1e\x8b\xfd\x43\
@@ -538,7 +553,9 @@ sbox_s7 i = arrayRead32 t (fromIntegral i)
 sbox_s8 :: Word8 -> Word32
 sbox_s8 i = arrayRead32 t (fromIntegral i)
   where
-    t = array32FromAddrBE 256
+    t =
+        array32FromAddrBE
+            256
             "\xe2\x16\x30\x0d\xbb\xdd\xff\xfc\xa7\xeb\xda\xbd\x35\x64\x80\x95\x77\x89\xf8\xb7\xe6\xc1\x12\x1b\x0e\x24\x16\x00\x05\x2c\xe8\xb5\
             \\x11\xa9\xcf\xb0\xe5\x95\x2f\x11\xec\xe7\x99\x0a\x93\x86\xd1\x74\x2a\x42\x93\x1c\x76\xe3\x81\x11\xb1\x2d\xef\x3a\x37\xdd\xdd\xfc\
             \\xde\x9a\xde\xb1\x0a\x0c\xc3\x2c\xbe\x19\x70\x29\x84\xa0\x09\x40\xbb\x24\x3a\x0f\xb4\xd1\x37\xcf\xb4\x4e\x79\xf0\x04\x9e\xed\xfd\

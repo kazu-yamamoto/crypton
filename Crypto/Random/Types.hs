@@ -4,17 +4,15 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-module Crypto.Random.Types
-    (
-      MonadRandom(..)
-    , MonadPseudoRandom
-    , DRG(..)
-    , withDRG
-    ) where
+module Crypto.Random.Types (
+    MonadRandom (..),
+    MonadPseudoRandom,
+    DRG (..),
+    withDRG,
+) where
 
-import Crypto.Random.Entropy
 import Crypto.Internal.ByteArray
+import Crypto.Random.Entropy
 
 -- | A monad constraint that allows to generate random bytes
 class Monad m => MonadRandom m where
@@ -39,14 +37,14 @@ instance DRG gen => Functor (MonadPseudoRandom gen) where
         let (a, g2) = runPseudoRandom m g1 in (f a, g2)
 
 instance DRG gen => Applicative (MonadPseudoRandom gen) where
-    pure a     = MonadPseudoRandom $ \g -> (a, g)
+    pure a = MonadPseudoRandom $ \g -> (a, g)
     (<*>) fm m = MonadPseudoRandom $ \g1 ->
         let (f, g2) = runPseudoRandom fm g1
             (a, g3) = runPseudoRandom m g2
          in (f a, g3)
 
 instance DRG gen => Monad (MonadPseudoRandom gen) where
-    return      = pure
+    return = pure
     (>>=) m1 m2 = MonadPseudoRandom $ \g1 ->
         let (a, g2) = runPseudoRandom m1 g1
          in runPseudoRandom (m2 a) g2

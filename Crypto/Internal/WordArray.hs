@@ -1,3 +1,7 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnboxedTuples #-}
+
 -- |
 -- Module      : Crypto.Internal.WordArray
 -- License     : BSD-style
@@ -9,35 +13,31 @@
 -- with limited safety for internal use.
 --
 -- The array produced should never be exposed to the user directly.
---
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE UnboxedTuples #-}
-module Crypto.Internal.WordArray
-    ( Array8
-    , Array32
-    , Array64
-    , MutableArray32
-    , array8
-    , array32
-    , array32FromAddrBE
-    , allocArray32AndFreeze
-    , mutableArray32
-    , array64
-    , arrayRead8
-    , arrayRead32
-    , arrayRead64
-    , mutableArrayRead32
-    , mutableArrayWrite32
-    , mutableArrayWriteXor32
-    , mutableArray32FromAddrBE
-    , mutableArray32Freeze
-    ) where
+module Crypto.Internal.WordArray (
+    Array8,
+    Array32,
+    Array64,
+    MutableArray32,
+    array8,
+    array32,
+    array32FromAddrBE,
+    allocArray32AndFreeze,
+    mutableArray32,
+    array64,
+    arrayRead8,
+    arrayRead32,
+    arrayRead64,
+    mutableArrayRead32,
+    mutableArrayWrite32,
+    mutableArrayWriteXor32,
+    mutableArray32FromAddrBE,
+    mutableArray32Freeze,
+) where
 
-import Data.Word
-import Data.Bits (xor)
 import Crypto.Internal.Compat
 import Crypto.Internal.CompatPrim
+import Data.Bits (xor)
+import Data.Word
 import GHC.Prim
 import GHC.Types
 import GHC.Word
@@ -81,15 +81,15 @@ array64 (I# n) l = unsafeDoIO $ IO $ \s ->
     case newAlignedPinnedByteArray# (n *# 8#) 8# s of
         (# s', mbarr #) -> loop 0# s' mbarr l
   where
-        loop _ st mb [] = freezeArray mb st
-        loop i st mb ((W64# x):xs)
-            | booleanPrim (i ==# n) = freezeArray mb st
-            | otherwise =
-                let !st' = writeWord64Array# mb i x st
-                 in loop (i +# 1#) st' mb xs
-        freezeArray mb st =
-            case unsafeFreezeByteArray# mb st of
-                (# st', b #) -> (# st', Array64 b #)
+    loop _ st mb [] = freezeArray mb st
+    loop i st mb ((W64# x) : xs)
+        | booleanPrim (i ==# n) = freezeArray mb st
+        | otherwise =
+            let !st' = writeWord64Array# mb i x st
+             in loop (i +# 1#) st' mb xs
+    freezeArray mb st =
+        case unsafeFreezeByteArray# mb st of
+            (# st', b #) -> (# st', Array64 b #)
 {-# NOINLINE array64 #-}
 
 -- | Create a Mutable Array of Word32 of specific size from a list of Word32
@@ -98,12 +98,12 @@ mutableArray32 (I# n) l = IO $ \s ->
     case newAlignedPinnedByteArray# (n *# 4#) 4# s of
         (# s', mbarr #) -> loop 0# s' mbarr l
   where
-        loop _ st mb [] = (# st, MutableArray32 mb #)
-        loop i st mb ((W32# x):xs)
-            | booleanPrim (i ==# n) = (# st, MutableArray32 mb #)
-            | otherwise =
-                let !st' = writeWord32Array# mb i x st
-                 in loop (i +# 1#) st' mb xs
+    loop _ st mb [] = (# st, MutableArray32 mb #)
+    loop i st mb ((W32# x) : xs)
+        | booleanPrim (i ==# n) = (# st, MutableArray32 mb #)
+        | otherwise =
+            let !st' = writeWord32Array# mb i x st
+             in loop (i +# 1#) st' mb xs
 
 -- | Create a Mutable Array of BE Word32 aliasing an Addr
 mutableArray32FromAddrBE :: Int -> Addr# -> IO MutableArray32
@@ -111,11 +111,11 @@ mutableArray32FromAddrBE (I# n) a = IO $ \s ->
     case newAlignedPinnedByteArray# (n *# 4#) 4# s of
         (# s', mbarr #) -> loop 0# s' mbarr
   where
-        loop i st mb
-            | booleanPrim (i ==# n) = (# st, MutableArray32 mb #)
-            | otherwise             =
-                let !st' = writeWord32Array# mb i (be32Prim (indexWord32OffAddr# a i)) st
-                 in loop (i +# 1#) st' mb
+    loop i st mb
+        | booleanPrim (i ==# n) = (# st, MutableArray32 mb #)
+        | otherwise =
+            let !st' = writeWord32Array# mb i (be32Prim (indexWord32OffAddr# a i)) st
+             in loop (i +# 1#) st' mb
 
 -- | freeze a Mutable Array of Word32 into a immutable Array of Word32
 mutableArray32Freeze :: MutableArray32 -> IO Array32

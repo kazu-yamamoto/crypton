@@ -1,3 +1,6 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.Cipher.AESGCMSIV
 -- License     : BSD-style
@@ -16,35 +19,32 @@
 --
 -- The specification allows inputs up to 2^36 bytes but this implementation
 -- requires AAD and plaintext/ciphertext to be both smaller than 2^32 bytes.
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Crypto.Cipher.AESGCMSIV
-    ( Nonce
-    , nonce
-    , generateNonce
-    , encrypt
-    , decrypt
-    ) where
+module Crypto.Cipher.AESGCMSIV (
+    Nonce,
+    nonce,
+    generateNonce,
+    encrypt,
+    decrypt,
+) where
 
 import Data.Bits
 import Data.Word
 
-import Foreign.C.Types
 import Foreign.C.String
+import Foreign.C.Types
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekElemOff, poke, pokeElemOff)
 
-import           Data.ByteArray
+import Data.ByteArray
 import qualified Data.ByteArray as B
-import           Data.Memory.Endian (toLE)
-import           Data.Memory.PtrMethods (memXor)
+import Data.Memory.Endian (toLE)
+import Data.Memory.PtrMethods (memXor)
 
 import Crypto.Cipher.AES.Primitive
 import Crypto.Cipher.Types
 import Crypto.Error
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Random
-
 
 -- 12-byte nonces
 
@@ -55,12 +55,11 @@ newtype Nonce = Nonce Bytes deriving (Show, Eq, ByteArrayAccess)
 nonce :: ByteArrayAccess iv => iv -> CryptoFailable Nonce
 nonce iv
     | B.length iv == 12 = CryptoPassed (Nonce $ B.convert iv)
-    | otherwise         = CryptoFailed CryptoError_IvSizeInvalid
+    | otherwise = CryptoFailed CryptoError_IvSizeInvalid
 
 -- | Generate a random nonce for use with AES-GCM-SIV.
 generateNonce :: MonadRandom m => m Nonce
 generateNonce = Nonce <$> getRandomBytes 12
-
 
 -- POLYVAL (mutable context)
 
@@ -68,13 +67,15 @@ newtype Polyval = Polyval Bytes
 
 polyvalInit :: ScrubbedBytes -> IO Polyval
 polyvalInit h = Polyval <$> doInit
-  where doInit = B.alloc 272 $ \pctx -> B.withByteArray h $ \ph ->
-            c_aes_polyval_init pctx ph
+  where
+    doInit = B.alloc 272 $ \pctx -> B.withByteArray h $ \ph ->
+        c_aes_polyval_init pctx ph
 
 polyvalUpdate :: ByteArrayAccess ba => Polyval -> ba -> IO ()
 polyvalUpdate (Polyval ctx) bs = B.withByteArray ctx $ \pctx ->
     B.withByteArray bs $ \pbs -> c_aes_polyval_update pctx pbs sz
-  where sz = fromIntegral (B.length bs)
+  where
+    sz = fromIntegral (B.length bs)
 
 polyvalFinalize :: Polyval -> IO ScrubbedBytes
 polyvalFinalize (Polyval ctx) = B.alloc 16 $ \dst ->
@@ -89,7 +90,6 @@ foreign import ccall "crypton_aes.h crypton_aes_polyval_update"
 foreign import ccall unsafe "crypton_aes.h crypton_aes_polyval_finalize"
     c_aes_polyval_finalize :: Ptr Polyval -> CString -> IO ()
 
-
 -- Key Generation
 
 le32iv :: Word32 -> Nonce -> Bytes
@@ -100,24 +100,25 @@ le32iv n (Nonce iv) = B.allocAndFreeze 16 $ \ptr -> do
 deriveKeys :: BlockCipher128 aes => aes -> Nonce -> (ScrubbedBytes, AES)
 deriveKeys aes iv =
     case cipherKeySize aes of
-        KeySizeFixed sz | sz `mod` 8 == 0 ->
-            let mak = buildKey [0 .. 1]
-                key = buildKey [2 .. fromIntegral (sz `div` 8) + 1]
-                mek = throwCryptoError (cipherInit key)
-             in (mak, mek)
+        KeySizeFixed sz
+            | sz `mod` 8 == 0 ->
+                let mak = buildKey [0 .. 1]
+                    key = buildKey [2 .. fromIntegral (sz `div` 8) + 1]
+                    mek = throwCryptoError (cipherInit key)
+                 in (mak, mek)
         _ -> error "AESGCMSIV: invalid cipher"
   where
     idx n = ecbEncrypt aes (le32iv n iv) `takeView` 8
     buildKey = B.concat . map idx
-
 
 -- Encryption and decryption
 
 lengthInvalid :: ByteArrayAccess ba => ba -> Bool
 lengthInvalid bs
     | finiteBitSize len > 32 = len >= 1 `unsafeShiftL` 32
-    | otherwise              = False
-  where len = B.length bs
+    | otherwise = False
+  where
+    len = B.length bs
 
 -- | AEAD encryption with the specified key and nonce.  The key must be given
 -- as an initialized 'Crypto.Cipher.AES.AES128' or 'Crypto.Cipher.AES.AES256'
@@ -125,8 +126,9 @@ lengthInvalid bs
 --
 -- Lengths of additional data and plaintext must be less than 2^32 bytes,
 -- otherwise an exception is thrown.
-encrypt :: (BlockCipher128 aes, ByteArrayAccess aad, ByteArray ba)
-        => aes -> Nonce -> aad -> ba -> (AuthTag, ba)
+encrypt
+    :: (BlockCipher128 aes, ByteArrayAccess aad, ByteArray ba)
+    => aes -> Nonce -> aad -> ba -> (AuthTag, ba)
 encrypt aes iv aad plaintext
     | lengthInvalid aad = error "AESGCMSIV: aad is too large"
     | lengthInvalid plaintext = error "AESGCMSIV: plaintext is too large"
@@ -143,8 +145,9 @@ encrypt aes iv aad plaintext
 --
 -- Lengths of additional data and ciphertext must be less than 2^32 bytes,
 -- otherwise an exception is thrown.
-decrypt :: (BlockCipher128 aes, ByteArrayAccess aad, ByteArray ba)
-        => aes -> Nonce -> aad -> ba -> AuthTag -> Maybe ba
+decrypt
+    :: (BlockCipher128 aes, ByteArrayAccess aad, ByteArray ba)
+    => aes -> Nonce -> aad -> ba -> AuthTag -> Maybe ba
 decrypt aes iv aad ciphertext (AuthTag tag)
     | lengthInvalid aad = error "AESGCMSIV: aad is too large"
     | lengthInvalid ciphertext = error "AESGCMSIV: ciphertext is too large"
@@ -156,18 +159,19 @@ decrypt aes iv aad ciphertext (AuthTag tag)
     plaintext = combineC32 mek (transformTag tag) ciphertext
 
 -- Calculate S_s = POLYVAL(mak, X_1, X_2, ...).
-getSs :: (ByteArrayAccess aad, ByteArrayAccess ba)
-      => ScrubbedBytes -> aad -> ba -> ScrubbedBytes
+getSs
+    :: (ByteArrayAccess aad, ByteArrayAccess ba)
+    => ScrubbedBytes -> aad -> ba -> ScrubbedBytes
 getSs mak aad plaintext = unsafeDoIO $ do
     ctx <- polyvalInit mak
     polyvalUpdate ctx aad
     polyvalUpdate ctx plaintext
-    polyvalUpdate ctx (lb :: Bytes)  -- the "length block"
+    polyvalUpdate ctx (lb :: Bytes) -- the "length block"
     polyvalFinalize ctx
   where
     lb = B.allocAndFreeze 16 $ \ptr -> do
-            pokeElemOff ptr 0 (toLE64 $ B.length aad)
-            pokeElemOff ptr 1 (toLE64 $ B.length plaintext)
+        pokeElemOff ptr 0 (toLE64 $ B.length aad)
+        pokeElemOff ptr 1 (toLE64 $ B.length plaintext)
     toLE64 x = toLE (fromIntegral x * 8 :: Word64)
 
 -- XOR the first 12 bytes of S_s with the nonce and clear the most significant
@@ -175,10 +179,10 @@ getSs mak aad plaintext = unsafeDoIO $ do
 tagInput :: ScrubbedBytes -> Nonce -> Bytes
 tagInput ss (Nonce iv) =
     B.copyAndFreeze ss $ \ptr ->
-    B.withByteArray iv $ \ivPtr -> do
-        memXor ptr ptr ivPtr 12
-        b <- peekElemOff ptr 15
-        pokeElemOff ptr 15 (b .&. (0x7f :: Word8))
+        B.withByteArray iv $ \ivPtr -> do
+            memXor ptr ptr ivPtr 12
+            b <- peekElemOff ptr 15
+            pokeElemOff ptr 15 (b .&. (0x7f :: Word8))
 
 -- Encrypt the result with AES using the message-encryption key to produce the
 -- tag.
@@ -190,4 +194,5 @@ buildTag mek ss iv = ecbEncrypt mek (tagInput ss iv)
 transformTag :: Bytes -> IV AES
 transformTag tag = toIV $ B.copyAndFreeze tag $ \ptr ->
     peekElemOff ptr 15 >>= pokeElemOff ptr 15 . (.|. (0x80 :: Word8))
-  where toIV bs = let Just iv = makeIV (bs :: Bytes) in iv
+  where
+    toIV bs = let Just iv = makeIV (bs :: Bytes) in iv

@@ -1,3 +1,8 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE TypeFamilies #-}
+
 -- |
 -- Module      : Crypto.Hash.MD2
 -- License     : BSD-style
@@ -7,35 +12,30 @@
 --
 -- Module containing the binding functions to work with the
 -- MD2 cryptographic hash.
---
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-module Crypto.Hash.MD2 ( MD2 (..) ) where
+module Crypto.Hash.MD2 (MD2 (..)) where
 
-import           Crypto.Hash.Types
-import           Foreign.Ptr (Ptr)
-import           Data.Data
-import           Data.Word (Word8, Word32)
+import Crypto.Hash.Types
+import Data.Data
+import Data.Word (Word32, Word8)
+import Foreign.Ptr (Ptr)
 
 -- | MD2 cryptographic hash algorithm
 data MD2 = MD2
-    deriving (Show,Data)
+    deriving (Show, Data)
 
 instance HashAlgorithm MD2 where
-    type HashBlockSize           MD2 = 16
-    type HashDigestSize          MD2 = 16
+    type HashBlockSize MD2 = 16
+    type HashDigestSize MD2 = 16
     type HashInternalContextSize MD2 = 96
-    hashBlockSize  _          = 16
-    hashDigestSize _          = 16
+    hashBlockSize _ = 16
+    hashDigestSize _ = 16
     hashInternalContextSize _ = 96
-    hashInternalInit          = c_md2_init
-    hashInternalUpdate        = c_md2_update
-    hashInternalFinalize      = c_md2_finalize
+    hashInternalInit = c_md2_init
+    hashInternalUpdate = c_md2_update
+    hashInternalFinalize = c_md2_finalize
 
 foreign import ccall unsafe "crypton_md2_init"
-    c_md2_init :: Ptr (Context a)-> IO ()
+    c_md2_init :: Ptr (Context a) -> IO ()
 
 foreign import ccall "crypton_md2_update"
     c_md2_update :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()

@@ -4,13 +4,12 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-module Crypto.PubKey.Internal
-    ( and'
-    , (&&!)
-    , dsaTruncHash
-    , dsaTruncHashDigest
-    ) where
+module Crypto.PubKey.Internal (
+    and',
+    (&&!),
+    dsaTruncHash,
+    dsaTruncHashDigest,
+) where
 
 import Data.Bits (shiftR)
 import Data.List (foldl')
@@ -26,13 +25,14 @@ and' l = foldl' (&&!) True l
 
 -- | This is a strict version of &&.
 (&&!) :: Bool -> Bool -> Bool
-True  &&! True  = True
-True  &&! False = False
-False &&! True  = False
+True &&! True = True
+True &&! False = False
+False &&! True = False
 False &&! False = False
 
 -- | Truncate and hash for DSA and ECDSA.
-dsaTruncHash :: (ByteArrayAccess msg, HashAlgorithm hash) => hash -> msg -> Integer -> Integer
+dsaTruncHash
+    :: (ByteArrayAccess msg, HashAlgorithm hash) => hash -> msg -> Integer -> Integer
 dsaTruncHash hashAlg = dsaTruncHashDigest . hashWith hashAlg
 
 -- | Truncate a digest for DSA and ECDSA.
@@ -40,8 +40,9 @@ dsaTruncHashDigest :: HashAlgorithm hash => Digest hash -> Integer -> Integer
 dsaTruncHashDigest digest n
     | d > 0 = shiftR e d
     | otherwise = e
-  where e = os2ip digest
-        d = hashDigestSize (getHashAlg digest) * 8 - numBits n
+  where
+    e = os2ip digest
+    d = hashDigestSize (getHashAlg digest) * 8 - numBits n
 
 getHashAlg :: Digest hash -> hash
 getHashAlg _ = undefined

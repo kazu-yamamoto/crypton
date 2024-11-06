@@ -6,16 +6,15 @@
 -- Portability : unknown
 --
 -- Extra Word size
---
-module Crypto.Internal.Words
-    ( Word128(..)
-    , w64to32
-    , w32to64
-    ) where
+module Crypto.Internal.Words (
+    Word128 (..),
+    w64to32,
+    w32to64,
+) where
 
-import Data.Word
 import Data.Bits
 import Data.Memory.ExtendedWords
+import Data.Word
 
 -- | Split a 'Word64' into the highest and lowest 'Word32'
 w64to32 :: Word64 -> (Word32, Word32)

@@ -1,3 +1,8 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnboxedTuples #-}
+
 -- |
 -- Module      : Crypto.Internal.CompatPrim
 -- License     : BSD-style
@@ -10,18 +15,13 @@
 --
 -- Note that MagicHash and CPP conflicts in places, making it "more interesting"
 -- to write compat code for primitives.
---
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE UnboxedTuples #-}
-module Crypto.Internal.CompatPrim
-    ( be32Prim
-    , le32Prim
-    , byteswap32Prim
-    , booleanPrim
-    , convert4To32
-    ) where
+module Crypto.Internal.CompatPrim (
+    be32Prim,
+    le32Prim,
+    byteswap32Prim,
+    booleanPrim,
+    convert4To32,
+) where
 
 #if !defined(ARCH_IS_LITTLE_ENDIAN) && !defined(ARCH_IS_BIG_ENDIAN)
 import Data.Memory.Endian (getSystemEndianness, Endianness(..))
@@ -68,8 +68,12 @@ byteswap32Prim w = byteSwap32# w
 #endif
 
 -- | Combine 4 word8 [a,b,c,d] to a word32 representing [a,b,c,d]
-convert4To32 :: Word# -> Word# -> Word# -> Word#
-             -> Word#
+convert4To32
+    :: Word#
+    -> Word#
+    -> Word#
+    -> Word#
+    -> Word#
 convert4To32 a b c d = or# (or# c1 c2) (or# c3 c4)
   where
 #ifdef ARCH_IS_LITTLE_ENDIAN

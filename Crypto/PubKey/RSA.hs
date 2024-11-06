@@ -4,23 +4,23 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-module Crypto.PubKey.RSA
-    ( Error(..)
-    , PublicKey(..)
-    , PrivateKey(..)
-    , Blinder(..)
-    -- * Generation function
-    , generateWith
-    , generate
-    , generateBlinder
-    ) where
+module Crypto.PubKey.RSA (
+    Error (..),
+    PublicKey (..),
+    PrivateKey (..),
+    Blinder (..),
 
-import Crypto.Random.Types
-import Crypto.Number.ModArithmetic (inverse, inverseCoprimes)
+    -- * Generation function
+    generateWith,
+    generate,
+    generateBlinder,
+) where
+
 import Crypto.Number.Generate (generateMax)
+import Crypto.Number.ModArithmetic (inverse, inverseCoprimes)
 import Crypto.Number.Prime (generatePrime)
 import Crypto.PubKey.RSA.Types
+import Crypto.Random.Types
 
 {-
 -- some bad implementation will not serialize ASN.1 integer properly, leading
@@ -51,40 +51,52 @@ toPositive int
 -- * e=0x10001 is a popular choice
 --
 -- * e=3 is popular as well, but proven to not be as secure for some cases.
---
-generateWith :: (Integer, Integer) -- ^ chosen distinct primes p and q
-             -> Int                -- ^ size in bytes
-             -> Integer            -- ^ RSA public exponent 'e'
-             -> Maybe (PublicKey, PrivateKey)
-generateWith (p,q) size e =
+generateWith
+    :: (Integer, Integer)
+    -- ^ chosen distinct primes p and q
+    -> Int
+    -- ^ size in bytes
+    -> Integer
+    -- ^ RSA public exponent 'e'
+    -> Maybe (PublicKey, PrivateKey)
+generateWith (p, q) size e =
     case inverse e phi of
         Nothing -> Nothing
-        Just d  -> Just (pub,priv d)
-  where n   = p*q
-        phi = (p-1)*(q-1)
-        -- q and p should be *distinct* *prime* numbers, hence always coprime
-        qinv = inverseCoprimes q p
-        pub = PublicKey { public_size = size
-                        , public_n    = n
-                        , public_e    = e
-                        }
-        priv d = PrivateKey { private_pub  = pub
-                            , private_d    = d
-                            , private_p    = p
-                            , private_q    = q
-                            , private_dP   = d `mod` (p-1)
-                            , private_dQ   = d `mod` (q-1)
-                            , private_qinv = qinv
-                            }
+        Just d -> Just (pub, priv d)
+  where
+    n = p * q
+    phi = (p - 1) * (q - 1)
+    -- q and p should be *distinct* *prime* numbers, hence always coprime
+    qinv = inverseCoprimes q p
+    pub =
+        PublicKey
+            { public_size = size
+            , public_n = n
+            , public_e = e
+            }
+    priv d =
+        PrivateKey
+            { private_pub = pub
+            , private_d = d
+            , private_p = p
+            , private_q = q
+            , private_dP = d `mod` (p - 1)
+            , private_dQ = d `mod` (q - 1)
+            , private_qinv = qinv
+            }
 
 -- | generate a pair of (private, public) key of size in bytes.
-generate :: MonadRandom m
-         => Int     -- ^ size in bytes
-         -> Integer -- ^ RSA public exponent 'e'
-         -> m (PublicKey, PrivateKey)
+generate
+    :: MonadRandom m
+    => Int
+    -- ^ size in bytes
+    -> Integer
+    -- ^ RSA public exponent 'e'
+    -> m (PublicKey, PrivateKey)
 generate size e = loop
   where
-    loop = do -- loop until we find a valid key pair given e
+    loop = do
+        -- loop until we find a valid key pair given e
         pq <- generatePQ
         case generateWith pq size e of
             Nothing -> loop
@@ -92,7 +104,7 @@ generate size e = loop
     generatePQ = do
         p <- generatePrime (8 * (size `div` 2))
         q <- generateQ p
-        return (p,q)
+        return (p, q)
     generateQ p = do
         q <- generatePrime (8 * (size - (size `div` 2)))
         if p == q then generateQ p else return q
@@ -101,8 +113,10 @@ generate size e = loop
 --
 -- the unique parameter apart from the random number generator is the
 -- public key value N.
-generateBlinder :: MonadRandom m
-                => Integer -- ^ RSA public N parameter.
-                -> m Blinder
+generateBlinder
+    :: MonadRandom m
+    => Integer
+    -- ^ RSA public N parameter.
+    -> m Blinder
 generateBlinder n =
     (\r -> Blinder r (inverseCoprimes r n)) <$> generateMax n

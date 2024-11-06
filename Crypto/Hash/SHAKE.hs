@@ -1,3 +1,12 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 -- |
 -- Module      : Crypto.Hash.SHAKE
 -- License     : BSD-style
@@ -7,34 +16,28 @@
 --
 -- Module containing the binding functions to work with the
 -- SHA3 extendable output functions (SHAKE).
---
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-module Crypto.Hash.SHAKE
-    (  SHAKE128 (..), SHAKE256 (..), HashSHAKE (..)
-    ) where
+module Crypto.Hash.SHAKE (
+    SHAKE128 (..),
+    SHAKE256 (..),
+    HashSHAKE (..),
+) where
 
-import           Control.Monad (when)
-import           Crypto.Hash.Types
-import           Foreign.Ptr (Ptr, castPtr)
-import           Foreign.Storable (Storable(..))
-import           Data.Bits
-import           Data.Data
-import           Data.Word (Word8, Word32)
+import Control.Monad (when)
+import Crypto.Hash.Types
+import Data.Bits
+import Data.Data
+import Data.Word (Word32, Word8)
+import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Storable (Storable (..))
 
-import           GHC.TypeLits (Nat, KnownNat, type (+))
-import           Crypto.Internal.Nat
+import Crypto.Internal.Nat
+import GHC.TypeLits (KnownNat, Nat, type (+))
 
 -- | Type class of SHAKE algorithms.
 class HashAlgorithm a => HashSHAKE a where
     -- | Alternate finalization needed for cSHAKE
     cshakeInternalFinalize :: Ptr (Context a) -> Ptr (Digest a) -> IO ()
+
     -- | Get the digest bit length
     cshakeOutputLength :: a -> Int
 
@@ -48,15 +51,15 @@ data SHAKE128 (bitlen :: Nat) = SHAKE128
     deriving (Show, Data)
 
 instance KnownNat bitlen => HashAlgorithm (SHAKE128 bitlen) where
-    type HashBlockSize           (SHAKE128 bitlen)  = 168
-    type HashDigestSize          (SHAKE128 bitlen) = Div8 (bitlen + 7)
+    type HashBlockSize (SHAKE128 bitlen) = 168
+    type HashDigestSize (SHAKE128 bitlen) = Div8 (bitlen + 7)
     type HashInternalContextSize (SHAKE128 bitlen) = 376
-    hashBlockSize  _          = 168
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 168
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 376
-    hashInternalInit p        = c_sha3_init p 128
-    hashInternalUpdate        = c_sha3_update
-    hashInternalFinalize      = shakeFinalizeOutput (Proxy :: Proxy bitlen)
+    hashInternalInit p = c_sha3_init p 128
+    hashInternalUpdate = c_sha3_update
+    hashInternalFinalize = shakeFinalizeOutput (Proxy :: Proxy bitlen)
 
 instance KnownNat bitlen => HashSHAKE (SHAKE128 bitlen) where
     cshakeInternalFinalize = cshakeFinalizeOutput (Proxy :: Proxy bitlen)
@@ -72,35 +75,37 @@ data SHAKE256 (bitlen :: Nat) = SHAKE256
     deriving (Show, Data)
 
 instance KnownNat bitlen => HashAlgorithm (SHAKE256 bitlen) where
-    type HashBlockSize           (SHAKE256 bitlen) = 136
-    type HashDigestSize          (SHAKE256 bitlen) = Div8 (bitlen + 7)
+    type HashBlockSize (SHAKE256 bitlen) = 136
+    type HashDigestSize (SHAKE256 bitlen) = Div8 (bitlen + 7)
     type HashInternalContextSize (SHAKE256 bitlen) = 344
-    hashBlockSize  _          = 136
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 136
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 344
-    hashInternalInit p        = c_sha3_init p 256
-    hashInternalUpdate        = c_sha3_update
-    hashInternalFinalize      = shakeFinalizeOutput (Proxy :: Proxy bitlen)
+    hashInternalInit p = c_sha3_init p 256
+    hashInternalUpdate = c_sha3_update
+    hashInternalFinalize = shakeFinalizeOutput (Proxy :: Proxy bitlen)
 
 instance KnownNat bitlen => HashSHAKE (SHAKE256 bitlen) where
     cshakeInternalFinalize = cshakeFinalizeOutput (Proxy :: Proxy bitlen)
     cshakeOutputLength _ = integralNatVal (Proxy :: Proxy bitlen)
 
-shakeFinalizeOutput :: KnownNat bitlen
-                    => proxy bitlen
-                    -> Ptr (Context a)
-                    -> Ptr (Digest a)
-                    -> IO ()
+shakeFinalizeOutput
+    :: KnownNat bitlen
+    => proxy bitlen
+    -> Ptr (Context a)
+    -> Ptr (Digest a)
+    -> IO ()
 shakeFinalizeOutput d ctx dig = do
     c_sha3_finalize_shake ctx
     c_sha3_output ctx dig (byteLen d)
     shakeTruncate d (castPtr dig)
 
-cshakeFinalizeOutput :: KnownNat bitlen
-                     => proxy bitlen
-                     -> Ptr (Context a)
-                     -> Ptr (Digest a)
-                     -> IO ()
+cshakeFinalizeOutput
+    :: KnownNat bitlen
+    => proxy bitlen
+    -> Ptr (Context a)
+    -> Ptr (Digest a)
+    -> IO ()
 cshakeFinalizeOutput d ctx dig = do
     c_sha3_finalize_cshake ctx
     c_sha3_output ctx dig (byteLen d)

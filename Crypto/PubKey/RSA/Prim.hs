@@ -4,19 +4,18 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-module Crypto.PubKey.RSA.Prim
-    (
+module Crypto.PubKey.RSA.Prim (
     -- * Decrypt primitive
-      dp
-    -- * Encrypt primitive
-    , ep
-    ) where
+    dp,
 
-import           Crypto.PubKey.RSA.Types
-import           Crypto.Number.ModArithmetic (expFast, expSafe)
-import           Crypto.Number.Serialize (os2ip, i2ospOf_)
-import           Crypto.Internal.ByteArray (ByteArray)
+    -- * Encrypt primitive
+    ep,
+) where
+
+import Crypto.Internal.ByteArray (ByteArray)
+import Crypto.Number.ModArithmetic (expFast, expSafe)
+import Crypto.Number.Serialize (i2ospOf_, os2ip)
+import Crypto.PubKey.RSA.Types
 
 {- dpSlow computes the decrypted message not using any precomputed cache value.
    only n and d need to valid. -}
@@ -28,28 +27,32 @@ dpSlow pk c = i2ospOf_ (private_size pk) $ expSafe (os2ip c) (private_d pk) (pri
    to compute than mod pq -}
 dpFast :: ByteArray ba => Blinder -> PrivateKey -> ba -> ba
 dpFast (Blinder r rm1) pk c =
-    i2ospOf_ (private_size pk) (multiplication rm1 (m2 + h * (private_q pk)) (private_n pk))
-    where
-        re  = expFast r (public_e $ private_pub pk) (private_n pk)
-        iC  = multiplication re (os2ip c) (private_n pk)
-        m1  = expSafe iC (private_dP pk) (private_p pk)
-        m2  = expSafe iC (private_dQ pk) (private_q pk)
-        h   = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
+    i2ospOf_
+        (private_size pk)
+        (multiplication rm1 (m2 + h * (private_q pk)) (private_n pk))
+  where
+    re = expFast r (public_e $ private_pub pk) (private_n pk)
+    iC = multiplication re (os2ip c) (private_n pk)
+    m1 = expSafe iC (private_dP pk) (private_p pk)
+    m2 = expSafe iC (private_dQ pk) (private_q pk)
+    h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
 
 dpFastNoBlinder :: ByteArray ba => PrivateKey -> ba -> ba
 dpFastNoBlinder pk c = i2ospOf_ (private_size pk) (m2 + h * (private_q pk))
-     where iC = os2ip c
-           m1 = expSafe iC (private_dP pk) (private_p pk)
-           m2 = expSafe iC (private_dQ pk) (private_q pk)
-           h  = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
+  where
+    iC = os2ip c
+    m1 = expSafe iC (private_dP pk) (private_p pk)
+    m2 = expSafe iC (private_dQ pk) (private_q pk)
+    h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
 
 -- | Compute the RSA decrypt primitive.
 -- if the p and q numbers are available, then dpFast is used
 -- otherwise, we use dpSlow which only need d and n.
 dp :: ByteArray ba => Maybe Blinder -> PrivateKey -> ba -> ba
 dp blinder pk
-    | private_p pk /= 0 && private_q pk /= 0 = maybe dpFastNoBlinder dpFast blinder $ pk
-    | otherwise                              = dpSlow pk
+    | private_p pk /= 0 && private_q pk /= 0 =
+        maybe dpFastNoBlinder dpFast blinder $ pk
+    | otherwise = dpSlow pk
 
 -- | Compute the RSA encrypt primitive
 ep :: ByteArray ba => PublicKey -> ba -> ba

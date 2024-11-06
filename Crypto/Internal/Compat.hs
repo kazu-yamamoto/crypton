@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- |
 -- Module      : Crypto.Internal.Compat
 -- License     : BSD-style
@@ -7,17 +9,15 @@
 --
 -- This module tries to keep all the difference between versions of base
 -- or other needed packages, so that modules don't need to use CPP.
---
-{-# LANGUAGE CPP #-}
-module Crypto.Internal.Compat
-    ( unsafeDoIO
-    , popCount
-    , byteSwap64
-    ) where
+module Crypto.Internal.Compat (
+    unsafeDoIO,
+    popCount,
+    byteSwap64,
+) where
 
-import System.IO.Unsafe
-import Data.Word
 import Data.Bits
+import Data.Word
+import System.IO.Unsafe
 
 -- | Perform io for hashes that do allocation and FFI.
 -- 'unsafeDupablePerformIO' is used when possible as the

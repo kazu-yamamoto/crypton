@@ -1,28 +1,28 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.PubKey.DH
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
---
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Crypto.PubKey.DH
-    ( Params(..)
-    , PublicNumber(..)
-    , PrivateNumber(..)
-    , SharedKey(..)
-    , generateParams
-    , generatePrivate
-    , calculatePublic
-    , generatePublic
-    , getShared
-    ) where
+module Crypto.PubKey.DH (
+    Params (..),
+    PublicNumber (..),
+    PrivateNumber (..),
+    SharedKey (..),
+    generateParams,
+    generatePrivate,
+    calculatePublic,
+    generatePublic,
+    getShared,
+) where
 
 import Crypto.Internal.Imports
+import Crypto.Number.Generate (generateMax)
 import Crypto.Number.ModArithmetic (expSafe)
 import Crypto.Number.Prime (generateSafePrime)
-import Crypto.Number.Generate (generateMax)
 import Crypto.Number.Serialize (i2ospOf_)
 import Crypto.Random.Types
 import Data.ByteArray (ByteArrayAccess, ScrubbedBytes)
@@ -33,29 +33,33 @@ data Params = Params
     { params_p :: Integer
     , params_g :: Integer
     , params_bits :: Int
-    } deriving (Show,Read,Eq,Data)
+    }
+    deriving (Show, Read, Eq, Data)
 
 instance NFData Params where
     rnf (Params p g bits) = rnf p `seq` rnf g `seq` bits `seq` ()
 
 -- | Represent Diffie Hellman public number Y.
 newtype PublicNumber = PublicNumber Integer
-    deriving (Show,Read,Eq,Enum,Real,Num,Ord,NFData)
+    deriving (Show, Read, Eq, Enum, Real, Num, Ord, NFData)
 
 -- | Represent Diffie Hellman private number X.
 newtype PrivateNumber = PrivateNumber Integer
-    deriving (Show,Read,Eq,Enum,Real,Num,Ord,NFData)
+    deriving (Show, Read, Eq, Enum, Real, Num, Ord, NFData)
 
 -- | Represent Diffie Hellman shared secret.
 newtype SharedKey = SharedKey ScrubbedBytes
-    deriving (Show,Eq,ByteArrayAccess,NFData)
+    deriving (Show, Eq, ByteArrayAccess, NFData)
 
 -- | generate params from a specific generator (2 or 5 are common values)
 -- we generate a safe prime (a prime number of the form 2p+1 where p is also prime)
-generateParams :: MonadRandom m =>
-                  Int                   -- ^ number of bits
-               -> Integer               -- ^ generator
-               -> m Params
+generateParams
+    :: MonadRandom m
+    => Int
+    -- ^ number of bits
+    -> Integer
+    -- ^ generator
+    -> m Params
 generateParams bits generator =
     (\p -> Params p generator bits) <$> generateSafePrime bits
 
@@ -75,6 +79,7 @@ calculatePublic (Params p g _) (PrivateNumber x) = PublicNumber $ expSafe g x p
 -- DEPRECATED use calculatePublic
 generatePublic :: Params -> PrivateNumber -> PublicNumber
 generatePublic = calculatePublic
+
 -- commented until 0.3 {-# DEPRECATED generatePublic "use calculatePublic" #-}
 
 -- | generate a shared key using our private number and the other party public number

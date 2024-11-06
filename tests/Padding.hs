@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Padding (tests) where
 
 import qualified Data.ByteString as B
@@ -18,21 +19,28 @@ zeroCases =
     , ("0123456789abcdef", 16, "0123456789abcdef", Just "0123456789abcdef")
     ]
 
---instance Arbitrary where
+-- instance Arbitrary where
 
 testPad :: Int -> (B.ByteString, Int, B.ByteString) -> TestTree
 testPad n (inp, sz, padded) =
-    testCase (show n) $ propertyHoldCase [ eqTest "padded" padded (pad (PKCS7 sz) inp)
-                                         , eqTest "unpadded" (Just inp) (unpad (PKCS7 sz) padded)
-                                         ]
+    testCase (show n) $
+        propertyHoldCase
+            [ eqTest "padded" padded (pad (PKCS7 sz) inp)
+            , eqTest "unpadded" (Just inp) (unpad (PKCS7 sz) padded)
+            ]
 
-testZeroPad :: Int -> (B.ByteString, Int, B.ByteString, Maybe B.ByteString) -> TestTree
+testZeroPad
+    :: Int -> (B.ByteString, Int, B.ByteString, Maybe B.ByteString) -> TestTree
 testZeroPad n (inp, sz, padded, unpadded) =
-    testCase (show n) $ propertyHoldCase [ eqTest "padded" padded (pad (ZERO sz) inp)
-                                         , eqTest "unpadded" unpadded (unpad (ZERO sz) padded)
-                                         ]
+    testCase (show n) $
+        propertyHoldCase
+            [ eqTest "padded" padded (pad (ZERO sz) inp)
+            , eqTest "unpadded" unpadded (unpad (ZERO sz) padded)
+            ]
 
-tests = testGroup "Padding"
-    [ testGroup "Cases" $ zipWith testPad [1..] cases
-    , testGroup "ZeroCases" $ zipWith testZeroPad [1..] zeroCases
-    ]
+tests =
+    testGroup
+        "Padding"
+        [ testGroup "Cases" $ zipWith testPad [1 ..] cases
+        , testGroup "ZeroCases" $ zipWith testZeroPad [1 ..] zeroCases
+        ]

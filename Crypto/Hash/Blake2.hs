@@ -1,3 +1,10 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+
 -- |
 -- Module      : Crypto.Hash.Blake2
 -- License     : BSD-style
@@ -25,31 +32,23 @@
 --      id-blake2s224 | 32-bit |   2**112  |         28  |
 --      id-blake2s256 | 32-bit |   2**128  |         32  |
 --     ---------------+--------+-----------+-------------+
---
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-module Crypto.Hash.Blake2
-    ( HashBlake2(..)
-    , Blake2s(..)
-    , Blake2sp(..)
-    , Blake2b(..)
-    , Blake2bp(..)
-    ) where
+module Crypto.Hash.Blake2 (
+    HashBlake2 (..),
+    Blake2s (..),
+    Blake2sp (..),
+    Blake2b (..),
+    Blake2bp (..),
+) where
 
-import           Crypto.Hash.Types
-import           Foreign.Ptr (Ptr)
-import           Data.Data
-import           Data.Word (Word8, Word32)
-import           GHC.TypeLits (Nat, KnownNat)
-import           Crypto.Internal.Nat
+import Crypto.Hash.Types
+import Crypto.Internal.Nat
+import Data.Data
+import Data.Word (Word32, Word8)
+import Foreign.Ptr (Ptr)
+import GHC.TypeLits (KnownNat, Nat)
 
 -- | Typeclass for the Blake2 family of digest functions.
 class HashAlgorithm a => HashBlake2 a where
-
     -- | Init Blake2 algorithm with the specified key of the specified length.
     -- The key length is specified in bytes.
     blake2InternalKeyedInit :: Ptr (Context a) -> Ptr Word8 -> Word32 -> IO ()
@@ -63,28 +62,38 @@ class HashAlgorithm a => HashBlake2 a where
 -- * Blake2s 160
 -- * Blake2s 224
 -- * Blake2s 256
---
 data Blake2s (bitlen :: Nat) = Blake2s
-    deriving (Show,Data)
+    deriving (Show, Data)
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 256)
-      => HashAlgorithm (Blake2s bitlen)
-      where
-    type HashBlockSize           (Blake2s bitlen) = 64
-    type HashDigestSize          (Blake2s bitlen) = Div8 bitlen
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 256
+    )
+    => HashAlgorithm (Blake2s bitlen)
+    where
+    type HashBlockSize (Blake2s bitlen) = 64
+    type HashDigestSize (Blake2s bitlen) = Div8 bitlen
     type HashInternalContextSize (Blake2s bitlen) = 136
-    hashBlockSize  _          = 64
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 64
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 136
-    hashInternalInit p        = c_blake2s_init p (integralNatVal (Proxy :: Proxy bitlen))
-    hashInternalUpdate        = c_blake2s_update
-    hashInternalFinalize p    = c_blake2s_finalize p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalInit p = c_blake2s_init p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalUpdate = c_blake2s_update
+    hashInternalFinalize p = c_blake2s_finalize p (integralNatVal (Proxy :: Proxy bitlen))
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 256)
-      => HashBlake2 (Blake2s bitlen)
-      where
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 256
+    )
+    => HashBlake2 (Blake2s bitlen)
+    where
     blake2InternalKeyedInit p = c_blake2s_init_key p outLen
-        where outLen = integralNatVal (Proxy :: Proxy bitlen)
+      where
+        outLen = integralNatVal (Proxy :: Proxy bitlen)
 
 foreign import ccall unsafe "crypton_blake2s_init"
     c_blake2s_init :: Ptr (Context a) -> Word32 -> IO ()
@@ -106,28 +115,38 @@ foreign import ccall unsafe "crypton_blake2s_finalize"
 -- * Blake2b 256
 -- * Blake2b 384
 -- * Blake2b 512
---
 data Blake2b (bitlen :: Nat) = Blake2b
-    deriving (Show,Data)
+    deriving (Show, Data)
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 512)
-      => HashAlgorithm (Blake2b bitlen)
-      where
-    type HashBlockSize           (Blake2b bitlen) = 128
-    type HashDigestSize          (Blake2b bitlen) = Div8 bitlen
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 512
+    )
+    => HashAlgorithm (Blake2b bitlen)
+    where
+    type HashBlockSize (Blake2b bitlen) = 128
+    type HashDigestSize (Blake2b bitlen) = Div8 bitlen
     type HashInternalContextSize (Blake2b bitlen) = 248
-    hashBlockSize  _          = 128
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 128
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 248
-    hashInternalInit p        = c_blake2b_init p (integralNatVal (Proxy :: Proxy bitlen))
-    hashInternalUpdate        = c_blake2b_update
-    hashInternalFinalize p    = c_blake2b_finalize p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalInit p = c_blake2b_init p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalUpdate = c_blake2b_update
+    hashInternalFinalize p = c_blake2b_finalize p (integralNatVal (Proxy :: Proxy bitlen))
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 512)
-      => HashBlake2 (Blake2b bitlen)
-      where
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 512
+    )
+    => HashBlake2 (Blake2b bitlen)
+    where
     blake2InternalKeyedInit p = c_blake2b_init_key p outLen
-        where outLen = integralNatVal (Proxy :: Proxy bitlen)
+      where
+        outLen = integralNatVal (Proxy :: Proxy bitlen)
 
 foreign import ccall unsafe "crypton_blake2b_init"
     c_blake2b_init :: Ptr (Context a) -> Word32 -> IO ()
@@ -139,26 +158,37 @@ foreign import ccall unsafe "crypton_blake2b_finalize"
     c_blake2b_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()
 
 data Blake2sp (bitlen :: Nat) = Blake2sp
-    deriving (Show,Data)
+    deriving (Show, Data)
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 256)
-      => HashAlgorithm (Blake2sp bitlen)
-      where
-    type HashBlockSize           (Blake2sp bitlen) = 64
-    type HashDigestSize          (Blake2sp bitlen) = Div8 bitlen
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 256
+    )
+    => HashAlgorithm (Blake2sp bitlen)
+    where
+    type HashBlockSize (Blake2sp bitlen) = 64
+    type HashDigestSize (Blake2sp bitlen) = Div8 bitlen
     type HashInternalContextSize (Blake2sp bitlen) = 2185
-    hashBlockSize  _          = 64
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 64
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 2185
-    hashInternalInit p        = c_blake2sp_init p (integralNatVal (Proxy :: Proxy bitlen))
-    hashInternalUpdate        = c_blake2sp_update
-    hashInternalFinalize p    = c_blake2sp_finalize p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalInit p = c_blake2sp_init p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalUpdate = c_blake2sp_update
+    hashInternalFinalize p = c_blake2sp_finalize p (integralNatVal (Proxy :: Proxy bitlen))
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 256)
-      => HashBlake2 (Blake2sp bitlen)
-      where
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 256
+    )
+    => HashBlake2 (Blake2sp bitlen)
+    where
     blake2InternalKeyedInit p = c_blake2sp_init_key p outLen
-        where outLen = integralNatVal (Proxy :: Proxy bitlen)
+      where
+        outLen = integralNatVal (Proxy :: Proxy bitlen)
 
 foreign import ccall unsafe "crypton_blake2sp_init"
     c_blake2sp_init :: Ptr (Context a) -> Word32 -> IO ()
@@ -170,26 +200,37 @@ foreign import ccall unsafe "crypton_blake2sp_finalize"
     c_blake2sp_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()
 
 data Blake2bp (bitlen :: Nat) = Blake2bp
-    deriving (Show,Data)
+    deriving (Show, Data)
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 512)
-      => HashAlgorithm (Blake2bp bitlen)
-      where
-    type HashBlockSize           (Blake2bp bitlen) = 128
-    type HashDigestSize          (Blake2bp bitlen) = Div8 bitlen
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 512
+    )
+    => HashAlgorithm (Blake2bp bitlen)
+    where
+    type HashBlockSize (Blake2bp bitlen) = 128
+    type HashDigestSize (Blake2bp bitlen) = Div8 bitlen
     type HashInternalContextSize (Blake2bp bitlen) = 2325
-    hashBlockSize  _          = 128
-    hashDigestSize _          = byteLen (Proxy :: Proxy bitlen)
+    hashBlockSize _ = 128
+    hashDigestSize _ = byteLen (Proxy :: Proxy bitlen)
     hashInternalContextSize _ = 2325
-    hashInternalInit p        = c_blake2bp_init p (integralNatVal (Proxy :: Proxy bitlen))
-    hashInternalUpdate        = c_blake2bp_update
-    hashInternalFinalize p    = c_blake2bp_finalize p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalInit p = c_blake2bp_init p (integralNatVal (Proxy :: Proxy bitlen))
+    hashInternalUpdate = c_blake2bp_update
+    hashInternalFinalize p = c_blake2bp_finalize p (integralNatVal (Proxy :: Proxy bitlen))
 
-instance (IsDivisibleBy8 bitlen, KnownNat bitlen, IsAtLeast bitlen 8, IsAtMost bitlen 512)
-      => HashBlake2 (Blake2bp bitlen)
-      where
+instance
+    ( IsDivisibleBy8 bitlen
+    , KnownNat bitlen
+    , IsAtLeast bitlen 8
+    , IsAtMost bitlen 512
+    )
+    => HashBlake2 (Blake2bp bitlen)
+    where
     blake2InternalKeyedInit p = c_blake2bp_init_key p outLen
-        where outLen = integralNatVal (Proxy :: Proxy bitlen)
+      where
+        outLen = integralNatVal (Proxy :: Proxy bitlen)
 
 foreign import ccall unsafe "crypton_blake2bp_init"
     c_blake2bp_init :: Ptr (Context a) -> Word32 -> IO ()
