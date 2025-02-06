@@ -61,6 +61,12 @@ data KeyPair curve = KeyPair
 newtype SharedSecret = SharedSecret ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
 
+instance Semigroup SharedSecret where
+    SharedSecret x <> SharedSecret y = SharedSecret (x <> y)
+
+instance Monoid SharedSecret where
+    mempty = SharedSecret mempty
+
 class EllipticCurve curve where
     -- | Point on an Elliptic Curve
     type Point curve :: Type
