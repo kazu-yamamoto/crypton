@@ -57,6 +57,7 @@ data KeyPair curve = KeyPair
     , keypairGetPrivate :: !(Scalar curve)
     }
 
+-- | Secret shared via key exchange
 newtype SharedSecret = SharedSecret ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
 
