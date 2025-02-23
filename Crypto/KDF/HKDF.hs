@@ -15,6 +15,7 @@ module Crypto.KDF.HKDF (
     extract,
     extractSkip,
     expand,
+    toPRK,
 ) where
 
 import Crypto.Hash
@@ -97,3 +98,8 @@ expand prkAt infoAt outputLength =
                 r = n - hashLen
              in (if n >= hashLen then ti else B.take n ti)
                     : loop hF ti r (i + 1)
+
+toPRK :: (HashAlgorithm a, ByteArrayAccess ba) => ba -> Maybe (PRK a)
+toPRK bs = case digestFromByteString bs of
+    Nothing -> Nothing
+    Just digest -> Just $ PRK $ HMAC digest

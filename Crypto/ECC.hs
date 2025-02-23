@@ -57,8 +57,15 @@ data KeyPair curve = KeyPair
     , keypairGetPrivate :: !(Scalar curve)
     }
 
+-- | Secret shared via key exchange
 newtype SharedSecret = SharedSecret ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
+
+instance Semigroup SharedSecret where
+    SharedSecret x <> SharedSecret y = SharedSecret (x <> y)
+
+instance Monoid SharedSecret where
+    mempty = SharedSecret mempty
 
 class EllipticCurve curve where
     -- | Point on an Elliptic Curve
@@ -84,6 +91,15 @@ class EllipticCurve curve where
 
     -- | Try to decode the binary form of an elliptic curve point
     decodePoint :: ByteArray bs => proxy curve -> bs -> CryptoFailable (Point curve)
+
+    -- | Encode an elliptic curve scalar into big-endian form
+    encodeScalar :: ByteArray bs => proxy curve -> Scalar curve -> bs
+
+    -- | Try to decode the big-endian form of an elliptic curve scalar
+    decodeScalar
+        :: ByteArray bs => proxy curve -> bs -> CryptoFailable (Scalar curve)
+
+    scalarToPoint :: proxy curve -> Scalar curve -> Point curve
 
 class EllipticCurve curve => EllipticCurveDH curve where
     -- | Generate a Diffie hellman secret value.
@@ -137,13 +153,6 @@ class
         :: proxy curve -> Scalar curve -> Scalar curve -> Point curve -> Point curve
     pointsSmulVarTime prx s1 s2 p = pointAdd prx (pointBaseSmul prx s1) (pointSmul prx s2 p)
 
-    -- | Encode an elliptic curve scalar into big-endian form
-    encodeScalar :: ByteArray bs => proxy curve -> Scalar curve -> bs
-
-    -- | Try to decode the big-endian form of an elliptic curve scalar
-    decodeScalar
-        :: ByteArray bs => proxy curve -> bs -> CryptoFailable (Scalar curve)
-
     -- | Convert an elliptic curve scalar to an integer
     scalarToInteger :: proxy curve -> Scalar curve -> Integer
 
@@ -184,6 +193,9 @@ instance EllipticCurve Curve_P256R1 where
             -- uncompressed
             | m == 4 -> P256.pointFromBinary xy
             | otherwise -> CryptoFailed CryptoError_PointFormatInvalid
+    encodeScalar _ = P256.scalarToBinary
+    decodeScalar _ = P256.scalarFromBinary
+    scalarToPoint _ = P256.toPoint
 
 instance EllipticCurveArith Curve_P256R1 where
     pointAdd _ a b = P256.pointAdd a b
@@ -198,8 +210,6 @@ instance EllipticCurveBasepointArith Curve_P256R1 where
     curveOrderBits _ = 256
     pointBaseSmul _ = P256.toPoint
     pointsSmulVarTime _ = P256.pointsMulVarTime
-    encodeScalar _ = P256.scalarToBinary
-    decodeScalar _ = P256.scalarFromBinary
     scalarToInteger _ = P256.scalarToInteger
     scalarFromInteger _ = P256.scalarFromInteger
     scalarAdd _ = P256.scalarAdd
@@ -218,6 +228,9 @@ instance EllipticCurve Curve_P384R1 where
         toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
     encodePoint _ point = encodeECPoint point
     decodePoint _ bs = decodeECPoint bs
+    encodeScalar _ = ecScalarToBinary
+    decodeScalar _ = ecScalarFromBinary
+    scalarToPoint _ = Simple.pointBaseMul
 
 instance EllipticCurveArith Curve_P384R1 where
     pointAdd _ a b = Simple.pointAdd a b
@@ -233,8 +246,6 @@ instance EllipticCurveBasepointArith Curve_P384R1 where
     curveOrderBits _ = 384
     pointBaseSmul _ = Simple.pointBaseMul
     pointsSmulVarTime _ = ecPointsMulVarTime
-    encodeScalar _ = ecScalarToBinary
-    decodeScalar _ = ecScalarFromBinary
     scalarToInteger _ = ecScalarToInteger
     scalarFromInteger _ = ecScalarFromInteger
     scalarAdd _ = ecScalarAdd
@@ -253,6 +264,9 @@ instance EllipticCurve Curve_P521R1 where
         toKeyPair scalar = KeyPair (Simple.pointBaseMul scalar) scalar
     encodePoint _ point = encodeECPoint point
     decodePoint _ bs = decodeECPoint bs
+    encodeScalar _ = ecScalarToBinary
+    decodeScalar _ = ecScalarFromBinary
+    scalarToPoint _ = Simple.pointBaseMul
 
 instance EllipticCurveArith Curve_P521R1 where
     pointAdd _ a b = Simple.pointAdd a b
@@ -268,8 +282,6 @@ instance EllipticCurveBasepointArith Curve_P521R1 where
     curveOrderBits _ = 521
     pointBaseSmul _ = Simple.pointBaseMul
     pointsSmulVarTime _ = ecPointsMulVarTime
-    encodeScalar _ = ecScalarToBinary
-    decodeScalar _ = ecScalarFromBinary
     scalarToInteger _ = ecScalarToInteger
     scalarFromInteger _ = ecScalarFromInteger
     scalarAdd _ = ecScalarAdd
@@ -288,6 +300,9 @@ instance EllipticCurve Curve_X25519 where
         return $ KeyPair (X25519.toPublic s) s
     encodePoint _ p = B.convert p
     decodePoint _ bs = X25519.publicKey bs
+    encodeScalar _ s = convert s
+    decodeScalar _ bs = X25519.secretKey bs
+    scalarToPoint _ s = X25519.toPublic s
 
 instance EllipticCurveDH Curve_X25519 where
     ecdhRaw _ s p = SharedSecret $ convert secret
@@ -308,6 +323,9 @@ instance EllipticCurve Curve_X448 where
         return $ KeyPair (X448.toPublic s) s
     encodePoint _ p = B.convert p
     decodePoint _ bs = X448.publicKey bs
+    encodeScalar _ s = convert s
+    decodeScalar _ bs = X448.secretKey bs
+    scalarToPoint _ s = X448.toPublic s
 
 instance EllipticCurveDH Curve_X448 where
     ecdhRaw _ s p = SharedSecret $ convert secret
@@ -328,6 +346,11 @@ instance EllipticCurve Curve_Edwards25519 where
         toKeyPair scalar = KeyPair (Edwards25519.toPoint scalar) scalar
     encodePoint _ point = Edwards25519.pointEncode point
     decodePoint _ bs = Edwards25519.pointDecode bs
+    encodeScalar _ = B.reverse . Edwards25519.scalarEncode
+    decodeScalar _ bs
+        | B.length bs == 32 = Edwards25519.scalarDecodeLong (B.reverse bs)
+        | otherwise = CryptoFailed CryptoError_SecretKeySizeInvalid
+    scalarToPoint _ = Edwards25519.toPoint
 
 instance EllipticCurveArith Curve_Edwards25519 where
     pointAdd _ a b = Edwards25519.pointAdd a b
@@ -338,10 +361,6 @@ instance EllipticCurveBasepointArith Curve_Edwards25519 where
     curveOrderBits _ = 253
     pointBaseSmul _ = Edwards25519.toPoint
     pointsSmulVarTime _ = Edwards25519.pointsMulVarTime
-    encodeScalar _ = B.reverse . Edwards25519.scalarEncode
-    decodeScalar _ bs
-        | B.length bs == 32 = Edwards25519.scalarDecodeLong (B.reverse bs)
-        | otherwise = CryptoFailed CryptoError_SecretKeySizeInvalid
     scalarToInteger _ s = LE.os2ip (Edwards25519.scalarEncode s :: B.Bytes)
     scalarFromInteger _ i =
         case LE.i2ospOf 32 i of

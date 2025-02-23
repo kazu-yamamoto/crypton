@@ -35,6 +35,11 @@
 -- >        auth = C.finalize st3
 -- >    return $ out `B.append` Data.ByteArray.convert auth
 module Crypto.Cipher.ChaChaPoly1305 (
+    -- * AEAD
+    ChaCha20Poly1305,
+    aeadChacha20poly1305Init,
+
+    -- * Low level
     State,
     Nonce,
     XNonce,
@@ -53,6 +58,7 @@ module Crypto.Cipher.ChaChaPoly1305 (
 
 import Control.Monad (when)
 import qualified Crypto.Cipher.ChaCha as ChaCha
+import Crypto.Cipher.Types
 import Crypto.Error
 import Crypto.Internal.ByteArray (
     ByteArray,
@@ -77,6 +83,9 @@ data State
         !Poly1305.State
         !Word64 -- AAD length
         !Word64 -- ciphertext length
+
+-- | A ChaChaPoly1305 State.
+type ChaCha20Poly1305 = State
 
 -- | Valid Nonce for ChaChaPoly1305.
 --
@@ -249,3 +258,19 @@ finalize (State _ macState aadLength plainLength) =
             , either (error "finalize: internal error") id $
                 P.fill 16 (P.putStorable (toLE aadLength) >> P.putStorable (toLE plainLength))
             ]
+
+-- | Setting up AEAD for ChaCha20Poly1305.
+aeadChacha20poly1305Init
+    :: (ByteArrayAccess k, ByteArrayAccess n)
+    => k -> n -> CryptoFailable (AEAD ChaCha20Poly1305)
+aeadChacha20poly1305Init key nonce = do
+    st0 <- nonce12 nonce >>= initialize key
+    return $ AEAD model st0
+  where
+    model =
+        AEADModeImpl
+            { aeadImplAppendHeader = \st aad -> finalizeAAD $ appendAAD aad st
+            , aeadImplEncrypt = \st plain -> encrypt plain st
+            , aeadImplDecrypt = \st cipher -> decrypt cipher st
+            , aeadImplFinalize = \st _ -> let Poly1305.Auth tag = finalize st in AuthTag tag
+            }
