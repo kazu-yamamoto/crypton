@@ -46,8 +46,8 @@ data Signature = Signature
 data ExtendedSignature = ExtendedSignature
     { parity :: Bool
     -- ^ Parity of the Y coordinate: @odd y@
-    , offset :: Bool
-    -- ^ Offset of the X coordinate: @x /= r@
+    , index :: Integer
+    -- ^ Index of the X coordinate: @x `div` n@
     , signature :: Signature
     -- ^ Inner signature
     }
@@ -98,11 +98,11 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     (x, y) <- case point of
         PointO -> Nothing
         Point x y -> return (x, y)
-    let r = x `mod` n
+    let (i, r) = x `divMod` n
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ ExtendedSignature (odd y) (x /= r) (Signature r s)
+    return $ ExtendedSignature (odd y) i (Signature r s)
 
 -- | Sign digest using the private key and an explicit k number.
 --
