@@ -94,15 +94,11 @@ signExtendedDigestWith
 signExtendedDigestWith k (PrivateKey curve d) digest = do
     let z = dsaTruncHashDigest digest n
         CurveCommon _ _ g n _ = common_curve curve
-    let point = pointMul curve k g
-    (x, y) <- case point of
-        PointO -> Nothing
-        Point x y -> return (x, y)
-    let (i, r) = x `divMod` n
+    (i, r, p) <- pointDecompose curve $ pointMul curve k g
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ ExtendedSignature (odd y) i (Signature r s)
+    return $ ExtendedSignature p i $ Signature r s
 
 -- | Sign digest using the private key and an explicit k number.
 --

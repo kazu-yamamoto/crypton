@@ -9,6 +9,7 @@ module Crypto.PubKey.ECC.Prim (
     pointBaseMul,
     pointMul,
     pointAddTwoMuls,
+    pointDecompose,
     isPointAtInfinity,
     isPointValid,
 ) where
@@ -137,6 +138,20 @@ pointAddTwoMuls c n1 p1 n2 p2
                 (True, False) -> pointAdd c p1 q
                 (False, True) -> pointAdd c p2 q
                 (False, False) -> q
+
+-- | Decompose a point into index, residue, and parity.
+--
+-- Adapted from SEC 1: Elliptic Curve Cryptography, Version 2.0, section 2.3.3.
+pointDecompose :: Curve -> Point -> Maybe (Integer, Integer, Bool)
+pointDecompose _ PointO = Nothing
+pointDecompose curve (Point x y) = do
+    let CurveCommon _ _ _ n _ = common_curve curve
+    let (index, residue) = x `divMod` n
+    parity <- case curve of
+        CurveFP _ -> pure $ odd y
+        CurveF2m _ | x == 0 -> pure False
+        CurveF2m (CurveBinary fx _) -> odd <$> divF2m fx y x
+    pure (index, residue, parity)
 
 -- | Check if a point is the point at infinity.
 isPointAtInfinity :: Point -> Bool
