@@ -4,6 +4,7 @@
 -- should be safe.
 module Crypto.PubKey.ECC.ECDSA (
     Signature (..),
+    ExtendedSignature (..),
     PublicPoint,
     PublicKey (..),
     PrivateNumber,
@@ -13,6 +14,7 @@ module Crypto.PubKey.ECC.ECDSA (
     toPrivateKey,
     signWith,
     signDigestWith,
+    signExtendedDigestWith,
     sign,
     signDigest,
     verify,
@@ -37,6 +39,17 @@ data Signature = Signature
     -- ^ ECDSA r
     , sign_s :: Integer
     -- ^ ECDSA s
+    }
+    deriving (Show, Read, Eq, Data)
+
+-- | ECDSA signature with public key recovery information.
+data ExtendedSignature = ExtendedSignature
+    { parity :: Bool
+    -- ^ Parity of the Y coordinate: @odd y@
+    , offset :: Bool
+    -- ^ Offset of the X coordinate: @x /= r@
+    , signature :: Signature
+    -- ^ Inner signature
     }
     deriving (Show, Read, Eq, Data)
 
@@ -69,6 +82,31 @@ toPrivateKey (KeyPair curve _ priv) = PrivateKey curve priv
 -- | Sign digest using the private key and an explicit k number.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
+signExtendedDigestWith
+    :: HashAlgorithm hash
+    => Integer
+    -- ^ k random number
+    -> PrivateKey
+    -- ^ private key
+    -> Digest hash
+    -- ^ digest to sign
+    -> Maybe ExtendedSignature
+signExtendedDigestWith k (PrivateKey curve d) digest = do
+    let z = dsaTruncHashDigest digest n
+        CurveCommon _ _ g n _ = common_curve curve
+    let point = pointMul curve k g
+    (x, y) <- case point of
+        PointO -> Nothing
+        Point x y -> return (x, y)
+    let r = x `mod` n
+    kInv <- inverse k n
+    let s = kInv * (z + r * d) `mod` n
+    when (r == 0 || s == 0) Nothing
+    return $ ExtendedSignature (odd y) (x /= r) (Signature r s)
+
+-- | Sign digest using the private key and an explicit k number.
+--
+-- /WARNING:/ Vulnerable to timing attacks.
 signDigestWith
     :: HashAlgorithm hash
     => Integer
@@ -78,17 +116,7 @@ signDigestWith
     -> Digest hash
     -- ^ digest to sign
     -> Maybe Signature
-signDigestWith k (PrivateKey curve d) digest = do
-    let z = dsaTruncHashDigest digest n
-        CurveCommon _ _ g n _ = common_curve curve
-    let point = pointMul curve k g
-    r <- case point of
-        PointO -> Nothing
-        Point x _ -> return $ x `mod` n
-    kInv <- inverse k n
-    let s = kInv * (z + r * d) `mod` n
-    when (r == 0 || s == 0) Nothing
-    return $ Signature r s
+signDigestWith k pk digest = signature <$> signExtendedDigestWith k pk digest
 
 -- | Sign message using the private key and an explicit k number.
 --
