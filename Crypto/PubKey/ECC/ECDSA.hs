@@ -19,6 +19,7 @@ module Crypto.PubKey.ECC.ECDSA (
     signDigest,
     verify,
     verifyDigest,
+    recover,
 ) where
 
 import Control.Monad
@@ -177,3 +178,12 @@ verify
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> PublicKey -> Signature -> msg -> Bool
 verify hashAlg pk sig msg = verifyDigest pk sig (hashWith hashAlg msg)
+
+-- | Recover the public key from a signature.
+recover :: HashAlgorithm hash => Curve -> Digest hash -> ExtendedSignature -> Maybe PublicKey
+recover curve digest (ExtendedSignature p i (Signature r s)) = do
+    let CurveCommon _ _ g n _ = common_curve curve
+    let z = dsaTruncHashDigest digest n
+    w <- inverse r n
+    c <- pointCompose curve i r p
+    pure $ PublicKey curve $ pointAddTwoMuls curve (s * w) c (negate $ z * w) g
