@@ -11,6 +11,7 @@ import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.ECDSA as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.ECDSA as ECDSA
+import Data.Functor
 import qualified Data.ByteString as B
 
 import Imports
@@ -57,6 +58,26 @@ testRecover name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
     let pub = ECC.signExtendedDigestWith k key digest >>= \ signature -> ECC.recoverDigest curve signature digest
     pure $ propertyHold [eqTest "recovery" (Just $ ECC.generateQ curve d) (ECC.public_q <$> pub)]
 
+testNormalize :: ECC.CurveName -> TestTree
+testNormalize name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
+    let curve = ECC.getCurveByName name
+    let n = ECC.ecc_n $ ECC.common_curve curve
+    k <- choose (1, n - 1)
+    d <- choose (1, n - 1)
+    let key = ECC.PrivateKey curve d
+    let pub = ECC.PublicKey curve $ ECC.generateQ curve d
+    let digest = hashWith SHA256 msg
+    let sig = ECC.signExtendedDigestWith k key digest
+    let sigN = ECC.normalize curve . ECC.signature <$> sig
+    let sigE = ECC.normalizeExtended curve <$> sig
+    let checkN = sigN <&> \ s -> ECC.verifyDigest pub s digest
+    let checkE = sigE <&> \ s -> ECC.verifyDigest pub (ECC.signature s) digest
+    let recover = sigE >>= \ s -> ECC.recoverDigest curve s digest
+    pure $ propertyHold [
+        eqTest "verification" (Just True) checkN,
+        eqTest "verification-extended" (Just True) checkE,
+        eqTest "recovery" (Just $ ECC.public_q pub) (ECC.public_q <$> recover)]
+
 tests :: TestTree
 tests = testGroup "ECDSA"
     [ localOption (QuickCheckTests 5) $
@@ -77,6 +98,12 @@ tests = testGroup "ECDSA"
         , localOption (QuickCheckTests 50) $ testRecover ECC.SEC_t131r2
         , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233k1
         , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233r1
+        ]
+    , testGroup "normalize"
+        [ localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p128r1
+        , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p128r2
+        , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256k1
+        , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256r1
         ]
     ]
   where
