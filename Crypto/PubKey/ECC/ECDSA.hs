@@ -17,6 +17,7 @@ module Crypto.PubKey.ECC.ECDSA (
     signExtendedDigestWith,
     sign,
     signDigest,
+    signExtendedDigest,
     verify,
     verifyDigest,
     recover,
@@ -134,16 +135,24 @@ signWith k pk hashAlg msg = signDigestWith k pk (hashWith hashAlg msg)
 -- | Sign digest using the private key.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
-signDigest
+signExtendedDigest
     :: (HashAlgorithm hash, MonadRandom m)
-    => PrivateKey -> Digest hash -> m Signature
-signDigest pk digest = do
+    => PrivateKey -> Digest hash -> m ExtendedSignature
+signExtendedDigest pk digest = do
     k <- generateBetween 1 (n - 1)
-    case signDigestWith k pk digest of
-        Nothing -> signDigest pk digest
+    case signExtendedDigestWith k pk digest of
+        Nothing -> signExtendedDigest pk digest
         Just sig -> return sig
   where
     n = ecc_n . common_curve $ private_curve pk
+
+-- | Sign digest using the private key.
+--
+-- /WARNING:/ Vulnerable to timing attacks.
+signDigest
+    :: (HashAlgorithm hash, MonadRandom m)
+    => PrivateKey -> Digest hash -> m Signature
+signDigest pk digest = signature <$> signExtendedDigest pk digest
 
 -- | Sign message using the private key.
 --
