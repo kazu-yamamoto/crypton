@@ -52,7 +52,7 @@ testRecover name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
     d <- choose (1, n - 1)
     let key = ECC.PrivateKey curve d
     let digest = hashWith SHA256 msg
-    let pub = ECC.signExtendedDigestWith k key digest >>= ECC.recover curve digest
+    let pub = ECC.signExtendedDigestWith k key digest >>= \ signature -> ECC.recoverDigest curve signature digest
     pure $ propertyHold [eqTest "recovery" (Just $ ECC.generateQ curve d) (ECC.public_q <$> pub)]
 
 tests = testGroup "ECDSA"
