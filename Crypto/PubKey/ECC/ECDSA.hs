@@ -45,10 +45,10 @@ data Signature = Signature
 
 -- | ECDSA signature with public key recovery information.
 data ExtendedSignature = ExtendedSignature
-    { parity :: Bool
-    -- ^ Parity of the Y coordinate: @odd y@
-    , index :: Integer
-    -- ^ Index of the X coordinate: @x `div` n@
+    { index :: Integer
+    -- ^ Index of the X coordinate
+    , parity :: Bool
+    -- ^ Parity of the Y coordinate
     , signature :: Signature
     -- ^ Inner signature
     }
@@ -99,7 +99,7 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ ExtendedSignature p i $ Signature r s
+    return $ ExtendedSignature i p $ Signature r s
 
 -- | Sign digest using the private key and an explicit k number.
 --
@@ -181,7 +181,7 @@ verify hashAlg pk sig msg = verifyDigest pk sig (hashWith hashAlg msg)
 
 -- | Recover the public key from a signature.
 recover :: HashAlgorithm hash => Curve -> Digest hash -> ExtendedSignature -> Maybe PublicKey
-recover curve digest (ExtendedSignature p i (Signature r s)) = do
+recover curve digest (ExtendedSignature i p (Signature r s)) = do
     let CurveCommon _ _ g n _ = common_curve curve
     let z = dsaTruncHashDigest digest n
     w <- inverse r n
