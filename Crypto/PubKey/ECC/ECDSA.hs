@@ -22,6 +22,8 @@ module Crypto.PubKey.ECC.ECDSA (
     verifyDigest,
     recover,
     recoverDigest,
+    normalize,
+    normalizeExtended,
 ) where
 
 import Control.Monad
@@ -205,3 +207,15 @@ recover
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> Curve -> ExtendedSignature -> msg -> Maybe PublicKey
 recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
+
+normalize :: Curve -> Signature -> Signature
+normalize curve (Signature r s)
+    | s <= n `div` 2 = Signature r s
+    | otherwise = Signature r (n - s)
+    where n = ecc_n $ common_curve curve
+
+normalizeExtended :: Curve -> ExtendedSignature -> ExtendedSignature
+normalizeExtended curve (ExtendedSignature i p (Signature r s))
+    | s <= n `div` 2 = ExtendedSignature i p (Signature r s)
+    | otherwise = ExtendedSignature i (not p) (Signature r (n - s))
+    where n = ecc_n $ common_curve curve
