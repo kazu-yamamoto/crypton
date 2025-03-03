@@ -1,709 +1,398 @@
--- Test vectors for SHA1 are taken from GEC2: www.secg.org/collateral/gec2.pdf
--- Test vectors for SHA224, SHA256, SHA384, SHA512 are taken from RFC 6979
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 module KAT_PubKey.ECDSA (ecdsaTests) where
 
+import Text.Printf
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import Test.Tasty
+import Test.Tasty.HUnit
 import Crypto.Number.Serialize
+import Crypto.Hash
+import Crypto.PubKey.ECC.Types
+import Crypto.PubKey.ECC.ECDSA
+import Crypto.PubKey.ECC.Generate
 
-import Crypto.Hash (SHA1 (..), SHA224 (..), SHA256 (..), SHA384 (..), SHA512 (..))
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import qualified Crypto.PubKey.ECC.Types as ECC
+-- existential type allows storing different hash algorithms in the same value
+data HashAlg = forall hash. (Show hash, HashAlgorithm hash) => HashAlg hash
+instance Show HashAlg where show (HashAlg alg) = show alg
 
-import Imports
+data Entry = Entry {
+    curveName :: CurveName,
+    privateNumber :: PrivateNumber,
+    publicPoint :: PublicPoint,
+    hashAlgorithm :: HashAlg,
+    message :: ByteString,
+    nonce :: Integer,
+    signature :: Signature }
+instance Show Entry where
+    show entry = printf "%s.%s.%s"
+        (show $ curveName entry)
+        (show $ B.take 8 $ message entry)
+        (show $ hashAlgorithm entry)
 
-data VectorECDSA = VectorECDSA
-    { curve :: ECC.Curve
-    , msg :: ByteString
-    , d :: Integer
-    , q :: ECC.Point
-    , k :: Integer
-    , r :: Integer
-    , s :: Integer
-    }
+-- taken from GEC 2: Test Vectors for SEC 1
+gec2Entries :: [Entry]
+gec2Entries = [
+    Entry {
+        curveName = SEC_p160r1,
+        privateNumber = 971761939728640320549601132085879836204587084162,
+        publicPoint = Point
+            466448783855397898016055842232266600516272889280
+            1110706324081757720403272427311003102474457754220,
+        hashAlgorithm = HashAlg SHA1,
+        message = "abc",
+        nonce = 702232148019446860144825009548118511996283736794,
+        signature = Signature {
+            sign_r = 1176954224688105769566774212902092897866168635793,
+            sign_s = 299742580584132926933316745664091704165278518100 } },
+    Entry {
+        curveName = SEC_t163k1,
+        privateNumber = 0x00000011f2626d90d26cb4c0379043b26e64107fc,
+        publicPoint = Point
+            0x0389fa5ad7f8304325a8c060ef7dcb83042c045bc
+            0x0eefa094a5054da196943cc80509dcb9f59e5bc2e,
+        hashAlgorithm = HashAlg SHA1,
+        message = i2osp 0xa2c1a03fdd00521bb08fc88d20344321977aaf637ef9d5470dd7d2c8628fc8d0d1f1d3587c6b3fd02386f8c13db341b14748a9475cc63baf065df64054b27d5c2cdf0f98e3bbb81d0b5dc94f8cdb87acf75720f6163de394c8c6af360bc1acb85b923a493b7b27cc111a257e36337bd94eb0fab9d5e633befb1ae7f1b244bfaa,
+        nonce = 0x0000000c3a4ff97286126dab1e5089395fcc47ebb,
+        signature = Signature {
+            sign_r = 0x0dbe6c3a1dc851e7f2338b5c26c62b4b37bf8035c,
+            sign_s = 0x1c76458135b1ff9fbd23009b8414a47996126b56a } },
+    Entry {
+        curveName = SEC_t163k1,
+        privateNumber = 0x00000006a3803301daee9af09bb5b6c991a4f49a4,
+        publicPoint = Point
+            0x4b500f555e857da8c299780130c5c3f48f02ee322
+            0x5c1c0ae25b47f06cc46fb86b12d2d8c0ba6a4bf07,
+        hashAlgorithm = HashAlg SHA1,
+        message = i2osp 0x67048080daaeb77d3ac31babdf8be23dbe75ceb4dfb94aa8113db5c5dcb6fe14b70f717b7b0ed0881835a66a86e6d840ffcb7d976c75ef2d1d4322fbbc86357384e24707aef88cea2c41a01a9a3d1b9e72ce650c7fdecc4f9448d3a77df6cdf13647ab295bb3132de0b1b2c402d8d2de7d452f1e003e0695de1470d1064eee16,
+        nonce = 0x0000002f39fbf77f3e0dc046116de692b6cf91b16,
+        signature = Signature {
+            sign_r = 0x3d3eeda42f65d727f4a564f1415654356c6c57a6c,
+            sign_s = 0x35e4d43c5f08baddf138449db1ad0b7872552b7cd } },
+    Entry {
+        curveName = SEC_t163k1,
+        privateNumber = 0x0000002e28676514bd93fea11b62db0f6e324b18d,
+        publicPoint = Point
+            0x3f9c90b71f6a1de20a2716f38ef1b5f98c757bd42
+            0x2ff0a5d266d447ef62d43fbca6c34c08c1ce35a40,
+        hashAlgorithm = HashAlg SHA1,
+        message = i2osp 0x77e007dc2acd7248256165a4b30e98986f51a81efd926b85f74c81bc2a6d2bcd030060a844091e22fbb0ff3db5a20caaefb5d58ccdcbc27f0ff8a4d940e78f303079ec1ca5b0ca3d4ecc7580f8b34a9f0496c9e719d2ec3e1614b7644bc11179e895d2c0b58a1da204fbf0f6e509f97f983eacb6487092caf6e8e4e6b3c458b2,
+        nonce = 0x00000001233ae699883e74e7f4dfb5279ff22280a,
+        signature = Signature {
+            sign_r = 0x39de3cd2cf04145e522b8fba3f23e9218226e0860,
+            sign_s = 0x2af62bfb3cfa202e2342606ee5bb0934c3b0375b6 } },
+    Entry {
+        curveName = SEC_t163k1,
+        privateNumber = 0x000000361dd088e3a6d3c910686c8dce57e5d4d8e,
+        publicPoint = Point
+            0x064f905c1da9d7e9c32d81890ae6f30dcc7839d32
+            0x06f1faedb6d9032016d3b681e7cf69c29d29eb27b,
+        hashAlgorithm = HashAlg SHA1,
+        message = i2osp 0xfbacfcce4688748406ddf5c3495021eef8fb399865b649eb2395a04a1ab28335da2c236d306fcc59f7b65ea931cf0139571e1538ede5688958c3ac69f47a285362f5ad201f89cc735b7b465408c2c41b310fc8908d0be45054df2a7351fae36b390e842f3b5cdd9ad832940df5b2d25c2ed43ce86eaf2508bcf401ae58bb1d47,
+        nonce = 0x00000022f723e9f5da56d3d0837d5dca2f937395f,
+        signature = Signature {
+            sign_r = 0x374cdc8571083fecfbd4e25e1cd69ecc66b715f2d,
+            sign_s = 0x313b10949222929b2f20b15d446c27d6dcae3f086 } }]
 
-vectorsSHA1 =
-    [ VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p160r1
-        , msg = "abc"
-        , d = 971761939728640320549601132085879836204587084162
-        , q =
-            ECC.Point
-                466448783855397898016055842232266600516272889280
-                1110706324081757720403272427311003102474457754220
-        , k = 702232148019446860144825009548118511996283736794
-        , r = 1176954224688105769566774212902092897866168635793
-        , s = 299742580584132926933316745664091704165278518100
-        }
-    , -- from official ECDSA KATs
-      VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_t163k1
-        , msg =
-            i2osp
-                0xa2c1a03fdd00521bb08fc88d20344321977aaf637ef9d5470dd7d2c8628fc8d0d1f1d3587c6b3fd02386f8c13db341b14748a9475cc63baf065df64054b27d5c2cdf0f98e3bbb81d0b5dc94f8cdb87acf75720f6163de394c8c6af360bc1acb85b923a493b7b27cc111a257e36337bd94eb0fab9d5e633befb1ae7f1b244bfaa
-        , d = 0x00000011f2626d90d26cb4c0379043b26e64107fc
-        , q =
-            ECC.Point
-                0x0389fa5ad7f8304325a8c060ef7dcb83042c045bc
-                0x0eefa094a5054da196943cc80509dcb9f59e5bc2e
-        , k = 0x0000000c3a4ff97286126dab1e5089395fcc47ebb
-        , r = 0x0dbe6c3a1dc851e7f2338b5c26c62b4b37bf8035c
-        , s = 0x1c76458135b1ff9fbd23009b8414a47996126b56a
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_t163k1
-        , msg =
-            i2osp
-                0x67048080daaeb77d3ac31babdf8be23dbe75ceb4dfb94aa8113db5c5dcb6fe14b70f717b7b0ed0881835a66a86e6d840ffcb7d976c75ef2d1d4322fbbc86357384e24707aef88cea2c41a01a9a3d1b9e72ce650c7fdecc4f9448d3a77df6cdf13647ab295bb3132de0b1b2c402d8d2de7d452f1e003e0695de1470d1064eee16
-        , d = 0x00000006a3803301daee9af09bb5b6c991a4f49a4
-        , q =
-            ECC.Point
-                0x4b500f555e857da8c299780130c5c3f48f02ee322
-                0x5c1c0ae25b47f06cc46fb86b12d2d8c0ba6a4bf07
-        , k = 0x0000002f39fbf77f3e0dc046116de692b6cf91b16
-        , r = 0x3d3eeda42f65d727f4a564f1415654356c6c57a6c
-        , s = 0x35e4d43c5f08baddf138449db1ad0b7872552b7cd
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_t163k1
-        , msg =
-            i2osp
-                0x77e007dc2acd7248256165a4b30e98986f51a81efd926b85f74c81bc2a6d2bcd030060a844091e22fbb0ff3db5a20caaefb5d58ccdcbc27f0ff8a4d940e78f303079ec1ca5b0ca3d4ecc7580f8b34a9f0496c9e719d2ec3e1614b7644bc11179e895d2c0b58a1da204fbf0f6e509f97f983eacb6487092caf6e8e4e6b3c458b2
-        , d = 0x0000002e28676514bd93fea11b62db0f6e324b18d
-        , q =
-            ECC.Point
-                0x3f9c90b71f6a1de20a2716f38ef1b5f98c757bd42
-                0x2ff0a5d266d447ef62d43fbca6c34c08c1ce35a40
-        , k = 0x00000001233ae699883e74e7f4dfb5279ff22280a
-        , r = 0x39de3cd2cf04145e522b8fba3f23e9218226e0860
-        , s = 0x2af62bfb3cfa202e2342606ee5bb0934c3b0375b6
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_t163k1
-        , msg =
-            i2osp
-                0xfbacfcce4688748406ddf5c3495021eef8fb399865b649eb2395a04a1ab28335da2c236d306fcc59f7b65ea931cf0139571e1538ede5688958c3ac69f47a285362f5ad201f89cc735b7b465408c2c41b310fc8908d0be45054df2a7351fae36b390e842f3b5cdd9ad832940df5b2d25c2ed43ce86eaf2508bcf401ae58bb1d47
-        , d = 0x000000361dd088e3a6d3c910686c8dce57e5d4d8e
-        , q =
-            ECC.Point
-                0x064f905c1da9d7e9c32d81890ae6f30dcc7839d32
-                0x06f1faedb6d9032016d3b681e7cf69c29d29eb27b
-        , k = 0x00000022f723e9f5da56d3d0837d5dca2f937395f
-        , r = 0x374cdc8571083fecfbd4e25e1cd69ecc66b715f2d
-        , s = 0x313b10949222929b2f20b15d446c27d6dcae3f086
-        }
-    ]
+data EntryCurve = EntryCurve {
+    ecName :: CurveName,
+    ecPrivate :: PrivateNumber,
+    ecPublic :: PublicPoint,
+    ecMessages :: [EntryMessage] }
+data EntryMessage = EntryMessage {
+    emMessage :: ByteString,
+    emHashes :: [EntryHash] }
+data EntryHash = EntryHash {
+    ehAlgorithm :: HashAlg,
+    ehK :: Integer,
+    ehR :: Integer,
+    ehS :: Integer }
 
-rfc6979_vectorsSHA224 =
-    [ VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "sample"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x4381526b3fc1e7128f202e194505592f01d5ff4c5af015d8
-        , r = 0xa1f00dad97aeec91c95585f36200c65f3c01812aa60378f5
-        , s = 0xe07ec1304c7c6c9debbe980b9692668f81d4de7922a0f97a
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "test"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0xf5dc805f76ef851800700cce82e7b98d8911b7d510059fbe
-        , r = 0x6945a1c1d1b2206b8145548f633bb61cef04891baf26ed34
-        , s = 0xb7fb7fdfc339c0b9bd61a9f5a8eaf9be58fc5cba2cb15293
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "sample"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0xc1d1f2f10881088301880506805feb4825fe09acb6816c36991aa06d
-        , r = 0x1cdfe6662dde1e4a1ec4cdedf6a1f5a2fb7fbd9145c12113e6abfd3e
-        , s = 0xa6694fd7718a21053f225d3f46197ca699d45006c06f871808f43ebc
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "test"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0xdf8b38d40dca3e077d0ac520bf56b6d565134d9b5f2eae0d34900524
-        , r = 0xc441ce8e261ded634e4cf84910e4c5d1d22c5cf3b732bb204dbef019
-        , s = 0x902f42847a63bdc5f6046ada114953120f99442d76510150f372a3f4
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "sample"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x103f90ee9dc52e5e7fb5132b7033c63066d194321491862059967c715985d473
-        , r = 0x53b2fff5d1752b2c689df257c04c40a587fababb3f6fc2702f1343af7ca9aa3f
-        , s = 0xb9afb64fdc03dc1a131c7d2386d11e349f070aa432a4acc918bea988bf75c74c
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "test"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x669f4426f2688b8be0db3a6bd1989bdaefff84b649eeb84f3dd26080f667faa7
-        , r = 0xc37edb6f0ae79d47c3c27e962fa269bb4f441770357e114ee511f662ec34a692
-        , s = 0xc820053a05791e521fcaad6042d40aea1d6b1a540138558f47d0719800e18f2d
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "sample"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0xa4e4d2f0e729eb786b31fc20ad5d849e304450e0ae8e3e341134a5c1afa03cab8083ee4e3c45b06a5899ea56c51b5879
-        , r =
-            0x42356e76b55a6d9b4631c865445dbe54e056d3b3431766d0509244793c3f9366450f76ee3de43f5a125333a6be060122
-        , s =
-            0x9da0c81787064021e78df658f2fbb0b042bf304665db721f077a4298b095e4834c082c03d83028efbf93a3c23940ca8d
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "test"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x18fa39db95aa5f561f30fa3591dc59c0fa3653a80daffa0b48d1a4c6dfcbff6e3d33be4dc5eb8886a8ecd093f2935726
-        , r =
-            0xe8c9d0b6ea72a0e7837fea1d14a1a9557f29faa45d3e7ee888fc5bf954b5e62464a9a817c47ff78b8c11066b24080e72
-        , s =
-            0x07041d4a7a0379ac7232ff72e6f77b6ddb8f09b16cce0ec3286b2bd43fa8c6141c53ea5abef0d8231077a04540a96b66
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "sample"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x121415ec2cd7726330a61f7f3fa5de14be9436019c4db8cb4041f3b54cf31be0493ee3f427fb906393d895a19c9523f3a1d54bb8702bd4aa9c99dab2597b92113f3
-        , r =
-            0x1776331cfcdf927d666e032e00cf776187bc9fdd8e69d0dabb4109ffe1b5e2a30715f4cc923a4a5e94d2503e9acfed92857b7f31d7152e0f8c00c15ff3d87e2ed2e
-        , s =
-            0x050cb5265417fe2320bbb5a122b8e1a32bd699089851128e360e620a30c7e17ba41a666af126ce100e5799b153b60528d5300d08489ca9178fb610a2006c254b41f
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "test"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x040d09fcf3c8a5f62cf4fb223cbbb2b9937f6b0577c27020a99602c25a01136987e452988781484edbbcf1c47e554e7fc901bc3085e5206d9f619cff07e73d6f706
-        , r =
-            0x1c7ed902e123e6815546065a2c4af977b22aa8eaddb68b2c1110e7ea44d42086bfe4a34b67ddc0e17e96536e358219b23a706c6a6e16ba77b65e1c595d43cae17fb
-        , s =
-            0x177336676304fcb343ce028b38e7b4fba76c1c1b277da18cad2a8478b2a9a9f5bec0f3ba04f35db3e4263569ec6aade8c92746e4c82f8299ae1b8f1739f8fd519a4
-        }
-    ]
+flatten :: [EntryCurve] -> [Entry]
+flatten hierarchy = do
+    entryCurve <- hierarchy
+    entryMessage <- ecMessages entryCurve
+    entryHash <- emHashes entryMessage
+    pure $ Entry {
+        curveName = ecName entryCurve,
+        privateNumber = ecPrivate entryCurve,
+        publicPoint = ecPublic entryCurve,
+        hashAlgorithm = ehAlgorithm entryHash,
+        message = emMessage entryMessage,
+        nonce = ehK entryHash,
+        signature = Signature (ehR entryHash) (ehS entryHash) }
 
-rfc6979_vectorsSHA256 =
-    [ VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "sample"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x32b1b6d7d42a05cb449065727a84804fb1a3e34d8f261496
-        , r = 0x4b0b8ce98a92866a2820e20aa6b75b56382e0f9bfd5ecb55
-        , s = 0xccdb006926ea9565cbadc840829d8c384e06de1f1e381b85
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "test"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x5c4ce89cf56d9e7c77c8585339b006b97b5f0680b4306c6c
-        , r = 0x3a718bd8b4926c3b52ee6bbe67ef79b18cb6eb62b1ad97ae
-        , s = 0x5662e6848a4a19b1f1ae2f72acd4b8bbe50f1eac65d9124f
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "sample"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0xad3029e0278f80643de33917ce6908c70a8ff50a411f06e41dedfcdc
-        , r = 0x61aa3da010e8e8406c656bc477a7a7189895e7e840cdfe8ff42307ba
-        , s = 0xbc814050dab5d23770879494f9e0a680dc1af7161991bde692b10101
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "test"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0xff86f57924da248d6e44e8154eb69f0ae2aebaee9931d0b5a969f904
-        , r = 0xad04dde87b84747a243a631ea47a1ba6d1faa059149ad2440de6fba6
-        , s = 0x178d49b1ae90e3d8b629be3db5683915f4e8c99fdf6e666cf37adcfd
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "sample"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0xa6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60
-        , r = 0xefd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716
-        , s = 0xf7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "test"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0xd16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0
-        , r = 0xf1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367
-        , s = 0x019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "sample"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x180ae9f9aec5438a44bc159a1fcb277c7be54fa20e7cf404b490650a8acc414e375572342863c899f9f2edf9747a9b60
-        , r =
-            0x21b13d1e013c7fa1392d03c5f99af8b30c570c6f98d4ea8e354b63a21d3daa33bde1e888e63355d92fa2b3c36d8fb2cd
-        , s =
-            0xf3aa443fb107745bf4bd77cb3891674632068a10ca67e3d45db2266fa7d1feebefdc63eccd1ac42ec0cb8668a4fa0ab0
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "test"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x0cfac37587532347dc3389fdc98286bba8c73807285b184c83e62e26c401c0faa48dd070ba79921a3457abff2d630ad7
-        , r =
-            0x6d6defac9ab64dabafe36c6bf510352a4cc27001263638e5b16d9bb51d451559f918eedaf2293be5b475cc8f0188636b
-        , s =
-            0x2d46f3becbcc523d5f1a1256bf0c9b024d879ba9e838144c8ba6baeb4b53b47d51ab373f9845c0514eefb14024787265
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "sample"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x0edf38afcaaecab4383358b34d67c9f2216c8382aaea44a3dad5fdc9c32575761793fef24eb0fc276dfc4f6e3ec476752f043cf01415387470bcbd8678ed2c7e1a0
-        , r =
-            0x1511bb4d675114fe266fc4372b87682baecc01d3cc62cf2303c92b3526012659d16876e25c7c1e57648f23b73564d67f61c6f14d527d54972810421e7d87589e1a7
-        , s =
-            0x04a171143a83163d6df460aaf61522695f207a58b95c0644d87e52aa1a347916e4f7a72930b1bc06dbe22ce3f58264afd23704cbb63b29b931f7de6c9d949a7ecfc
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "test"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x01de74955efaabc4c4f17f8e84d881d1310b5392d7700275f82f145c61e843841af09035bf7a6210f5a431a6a9e81c9323354a9e69135d44ebd2fcaa7731b909258
-        , r =
-            0x00e871c4a14f993c6c7369501900c4bc1e9c7b0b4ba44e04868b30b41d8071042eb28c4c250411d0ce08cd197e4188ea4876f279f90b3d8d74a3c76e6f1e4656aa8
-        , s =
-            0x0cd52dbaa33b063c3a6cd8058a1fb0a46a4754b034fcc644766ca14da8ca5ca9fde00e88c1ad60ccba759025299079d7a427ec3cc5b619bfbc828e7769bcd694e86
-        }
-    ]
+-- taken from RFC 6979
+rfc6979Entries :: [EntryCurve]
+rfc6979Entries = [
+    EntryCurve { ecName = SEC_p192r1,
+        ecPrivate = 0x6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4,
+        ecPublic = Point
+            0xAC2C77F529F91689FEA0EA5EFEC7F210D8EEA0B9E047ED56
+            0x3BC723E57670BD4887EBC732C523063D0A7C957BC97C1C43,
+        ecMessages = [
+            EntryMessage { emMessage = "sample", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x37D7CA00D2C7B0E5E412AC03BD44BA837FDD5B28CD3B0021,
+                    ehR = 0x98C6BD12B23EAF5E2A2045132086BE3EB8EBD62ABF6698FF,
+                    ehS = 0x57A22B07DEA9530F8DE9471B1DC6624472E8E2844BC25B64 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x4381526B3FC1E7128F202E194505592F01D5FF4C5AF015D8,
+                    ehR = 0xA1F00DAD97AEEC91C95585F36200C65F3C01812AA60378F5,
+                    ehS = 0xE07EC1304C7C6C9DEBBE980B9692668F81D4DE7922A0F97A },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x32B1B6D7D42A05CB449065727A84804FB1A3E34D8F261496,
+                    ehR = 0x4B0B8CE98A92866A2820E20AA6B75B56382E0F9BFD5ECB55,
+                    ehS = 0xCCDB006926EA9565CBADC840829D8C384E06DE1F1E381B85 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x4730005C4FCB01834C063A7B6760096DBE284B8252EF4311,
+                    ehR = 0xDA63BF0B9ABCF948FBB1E9167F136145F7A20426DCC287D5,
+                    ehS = 0xC3AA2C960972BD7A2003A57E1C4C77F0578F8AE95E31EC5E },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0xA2AC7AB055E4F20692D49209544C203A7D1F2C0BFBC75DB1,
+                    ehR = 0x4D60C5AB1996BD848343B31C00850205E2EA6922DAC2E4B8,
+                    ehS = 0x3F6E837448F027A1BF4B34E796E32A811CBB4050908D8F67 }] },
+            EntryMessage { emMessage = "test", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0xD9CF9C3D3297D3260773A1DA7418DB5537AB8DD93DE7FA25,
+                    ehR = 0x0F2141A0EBBC44D2E1AF90A50EBCFCE5E197B3B7D4DE036D,
+                    ehS = 0xEB18BC9E1F3D7387500CB99CF5F7C157070A8961E38700B7 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0xF5DC805F76EF851800700CCE82E7B98D8911B7D510059FBE,
+                    ehR = 0x6945A1C1D1B2206B8145548F633BB61CEF04891BAF26ED34,
+                    ehS = 0xB7FB7FDFC339C0B9BD61A9F5A8EAF9BE58FC5CBA2CB15293 },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x5C4CE89CF56D9E7C77C8585339B006B97B5F0680B4306C6C,
+                    ehR = 0x3A718BD8B4926C3B52EE6BBE67EF79B18CB6EB62B1AD97AE,
+                    ehS = 0x5662E6848A4A19B1F1AE2F72ACD4B8BBE50F1EAC65D9124F },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x5AFEFB5D3393261B828DB6C91FBC68C230727B030C975693,
+                    ehR = 0xB234B60B4DB75A733E19280A7A6034BD6B1EE88AF5332367,
+                    ehS = 0x7994090B2D59BB782BE57E74A44C9A1C700413F8ABEFE77A },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x0758753A5254759C7CFBAD2E2D9B0792EEE44136C9480527,
+                    ehR = 0xFE4F4AE86A58B6507946715934FE2D8FF9D95B6B098FE739,
+                    ehS = 0x74CF5605C98FBA0E1EF34D4B5A1577A7DCF59457CAE52290 }] }] },
+    EntryCurve { ecName = SEC_p224r1,
+        ecPrivate = 0xF220266E1105BFE3083E03EC7A3A654651F45E37167E88600BF257C1,
+        ecPublic = Point
+            0x00CF08DA5AD719E42707FA431292DEA11244D64FC51610D94B130D6C
+            0xEEAB6F3DEBE455E3DBF85416F7030CBD94F34F2D6F232C69F3C1385A,
+        ecMessages = [
+            EntryMessage { emMessage = "sample", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x7EEFADD91110D8DE6C2C470831387C50D3357F7F4D477054B8B426BC,
+                    ehR = 0x22226F9D40A96E19C4A301CE5B74B115303C0F3A4FD30FC257FB57AC,
+                    ehS = 0x66D1CDD83E3AF75605DD6E2FEFF196D30AA7ED7A2EDF7AF475403D69 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0xC1D1F2F10881088301880506805FEB4825FE09ACB6816C36991AA06D,
+                    ehR = 0x1CDFE6662DDE1E4A1EC4CDEDF6A1F5A2FB7FBD9145C12113E6ABFD3E,
+                    ehS = 0xA6694FD7718A21053F225D3F46197CA699D45006C06F871808F43EBC },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0xAD3029E0278F80643DE33917CE6908C70A8FF50A411F06E41DEDFCDC,
+                    ehR = 0x61AA3DA010E8E8406C656BC477A7A7189895E7E840CDFE8FF42307BA,
+                    ehS = 0xBC814050DAB5D23770879494F9E0A680DC1AF7161991BDE692B10101 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x52B40F5A9D3D13040F494E83D3906C6079F29981035C7BD51E5CAC40,
+                    ehR = 0x0B115E5E36F0F9EC81F1325A5952878D745E19D7BB3EABFABA77E953,
+                    ehS = 0x830F34CCDFE826CCFDC81EB4129772E20E122348A2BBD889A1B1AF1D },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x9DB103FFEDEDF9CFDBA05184F925400C1653B8501BAB89CEA0FBEC14,
+                    ehR = 0x074BD1D979D5F32BF958DDC61E4FB4872ADCAFEB2256497CDAC30397,
+                    ehS = 0xA4CECA196C3D5A1FF31027B33185DC8EE43F288B21AB342E5D8EB084 }] },
+            EntryMessage { emMessage = "test", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x2519178F82C3F0E4F87ED5883A4E114E5B7A6E374043D8EFD329C253,
+                    ehR = 0xDEAA646EC2AF2EA8AD53ED66B2E2DDAA49A12EFD8356561451F3E21C,
+                    ehS = 0x95987796F6CF2062AB8135271DE56AE55366C045F6D9593F53787BD2 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0xDF8B38D40DCA3E077D0AC520BF56B6D565134D9B5F2EAE0D34900524,
+                    ehR = 0xC441CE8E261DED634E4CF84910E4C5D1D22C5CF3B732BB204DBEF019,
+                    ehS = 0x902F42847A63BDC5F6046ADA114953120F99442D76510150F372A3F4 },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0xFF86F57924DA248D6E44E8154EB69F0AE2AEBAEE9931D0B5A969F904,
+                    ehR = 0xAD04DDE87B84747A243A631EA47A1BA6D1FAA059149AD2440DE6FBA6,
+                    ehS = 0x178D49B1AE90E3D8B629BE3DB5683915F4E8C99FDF6E666CF37ADCFD },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x7046742B839478C1B5BD31DB2E862AD868E1A45C863585B5F22BDC2D,
+                    ehR = 0x389B92682E399B26518A95506B52C03BC9379A9DADF3391A21FB0EA4,
+                    ehS = 0x414A718ED3249FF6DBC5B50C27F71F01F070944DA22AB1F78F559AAB },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0xE39C2AA4EA6BE2306C72126D40ED77BF9739BB4D6EF2BBB1DCB6169D,
+                    ehR = 0x049F050477C5ADD858CAC56208394B5A55BAEBBE887FDF765047C17C,
+                    ehS = 0x077EB13E7005929CEFA3CD0403C7CDCC077ADF4E44F3C41B2F60ECFF }] }] },
+    EntryCurve { ecName = SEC_p256r1,
+        ecPrivate = 0xC9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721,
+        ecPublic = Point
+            0x60FED4BA255A9D31C961EB74C6356D68C049B8923B61FA6CE669622E60F29FB6
+            0x7903FE1008B8BC99A41AE9E95628BC64F2F1B20C2D7E9F5177A3C294D4462299,
+        ecMessages = [
+            EntryMessage { emMessage = "sample", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x882905F1227FD620FBF2ABF21244F0BA83D0DC3A9103DBBEE43A1FB858109DB4,
+                    ehR = 0x61340C88C3AAEBEB4F6D667F672CA9759A6CCAA9FA8811313039EE4A35471D32,
+                    ehS = 0x6D7F147DAC089441BB2E2FE8F7A3FA264B9C475098FDCF6E00D7C996E1B8B7EB },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x103F90EE9DC52E5E7FB5132B7033C63066D194321491862059967C715985D473,
+                    ehR = 0x53B2FFF5D1752B2C689DF257C04C40A587FABABB3F6FC2702F1343AF7CA9AA3F,
+                    ehS = 0xB9AFB64FDC03DC1A131C7D2386D11E349F070AA432A4ACC918BEA988BF75C74C },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0xA6E3C57DD01ABE90086538398355DD4C3B17AA873382B0F24D6129493D8AAD60,
+                    ehR = 0xEFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716,
+                    ehS = 0xF7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x09F634B188CEFD98E7EC88B1AA9852D734D0BC272F7D2A47DECC6EBEB375AAD4,
+                    ehR = 0x0EAFEA039B20E9B42309FB1D89E213057CBF973DC0CFC8F129EDDDC800EF7719,
+                    ehS = 0x4861F0491E6998B9455193E34E7B0D284DDD7149A74B95B9261F13ABDE940954 },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x5FA81C63109BADB88C1F367B47DA606DA28CAD69AA22C4FE6AD7DF73A7173AA5,
+                    ehR = 0x8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00,
+                    ehS = 0x2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE }] },
+            EntryMessage { emMessage = "test", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x8C9520267C55D6B980DF741E56B4ADEE114D84FBFA2E62137954164028632A2E,
+                    ehR = 0x0CBCC86FD6ABD1D99E703E1EC50069EE5C0B4BA4B9AC60E409E8EC5910D81A89,
+                    ehS = 0x01B9D7B73DFAA60D5651EC4591A0136F87653E0FD780C3B1BC872FFDEAE479B1 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x669F4426F2688B8BE0DB3A6BD1989BDAEFFF84B649EEB84F3DD26080F667FAA7,
+                    ehR = 0xC37EDB6F0AE79D47C3C27E962FA269BB4F441770357E114EE511F662EC34A692,
+                    ehS = 0xC820053A05791E521FCAAD6042D40AEA1D6B1A540138558F47D0719800E18F2D },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0xD16B6AE827F17175E040871A1C7EC3500192C4C92677336EC2537ACAEE0008E0,
+                    ehR = 0xF1ABB023518351CD71D881567B1EA663ED3EFCF6C5132B354F28D3B0B7D38367,
+                    ehS = 0x019F4113742A2B14BD25926B49C649155F267E60D3814B4C0CC84250E46F0083 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x16AEFFA357260B04B1DD199693960740066C1A8F3E8EDD79070AA914D361B3B8,
+                    ehR = 0x83910E8B48BB0C74244EBDF7F07A1C5413D61472BD941EF3920E623FBCCEBEB6,
+                    ehS = 0x8DDBEC54CF8CD5874883841D712142A56A8D0F218F5003CB0296B6B509619F2C },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x6915D11632ACA3C40D5D51C08DAF9C555933819548784480E93499000D9F0B7F,
+                    ehR = 0x461D93F31B6540894788FD206C07CFA0CC35F46FA3C91816FFF1040AD1581A04,
+                    ehS = 0x39AF9F15DE0DB8D97E72719C74820D304CE5226E32DEDAE67519E840D1194E55 }] }] },
+    EntryCurve { ecName = SEC_p384r1,
+        ecPrivate = 0x6B9D3DAD2E1B8C1C05B19875B6659F4DE23C3B667BF297BA9AA47740787137D896D5724E4C70A825F872C9EA60D2EDF5,
+        ecPublic = Point
+            0xEC3A4E415B4E19A4568618029F427FA5DA9A8BC4AE92E02E06AAE5286B300C64DEF8F0EA9055866064A254515480BC13
+            0x8015D9B72D7D57244EA8EF9AC0C621896708A59367F9DFB9F54CA84B3F1C9DB1288B231C3AE0D4FE7344FD2533264720,
+        ecMessages = [
+            EntryMessage { emMessage = "sample", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x4471EF7518BB2C7C20F62EAE1C387AD0C5E8E470995DB4ACF694466E6AB096630F29E5938D25106C3C340045A2DB01A7,
+                    ehR = 0xEC748D839243D6FBEF4FC5C4859A7DFFD7F3ABDDF72014540C16D73309834FA37B9BA002899F6FDA3A4A9386790D4EB2,
+                    ehS = 0xA3BCFA947BEEF4732BF247AC17F71676CB31A847B9FF0CBC9C9ED4C1A5B3FACF26F49CA031D4857570CCB5CA4424A443 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0xA4E4D2F0E729EB786B31FC20AD5D849E304450E0AE8E3E341134A5C1AFA03CAB8083EE4E3C45B06A5899EA56C51B5879,
+                    ehR = 0x42356E76B55A6D9B4631C865445DBE54E056D3B3431766D0509244793C3F9366450F76EE3DE43F5A125333A6BE060122,
+                    ehS = 0x9DA0C81787064021E78DF658F2FBB0B042BF304665DB721F077A4298B095E4834C082C03D83028EFBF93A3C23940CA8D },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x180AE9F9AEC5438A44BC159A1FCB277C7BE54FA20E7CF404B490650A8ACC414E375572342863C899F9F2EDF9747A9B60,
+                    ehR = 0x21B13D1E013C7FA1392D03C5F99AF8B30C570C6F98D4EA8E354B63A21D3DAA33BDE1E888E63355D92FA2B3C36D8FB2CD,
+                    ehS = 0xF3AA443FB107745BF4BD77CB3891674632068A10CA67E3D45DB2266FA7D1FEEBEFDC63ECCD1AC42EC0CB8668A4FA0AB0 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x94ED910D1A099DAD3254E9242AE85ABDE4BA15168EAF0CA87A555FD56D10FBCA2907E3E83BA95368623B8C4686915CF9,
+                    ehR = 0x94EDBB92A5ECB8AAD4736E56C691916B3F88140666CE9FA73D64C4EA95AD133C81A648152E44ACF96E36DD1E80FABE46,
+                    ehS = 0x99EF4AEB15F178CEA1FE40DB2603138F130E740A19624526203B6351D0A3A94FA329C145786E679E7B82C71A38628AC8 },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x92FC3C7183A883E24216D1141F1A8976C5B0DD797DFA597E3D7B32198BD35331A4E966532593A52980D0E3AAA5E10EC3,
+                    ehR = 0xED0959D5880AB2D869AE7F6C2915C6D60F96507F9CB3E047C0046861DA4A799CFE30F35CC900056D7C99CD7882433709,
+                    ehS = 0x512C8CCEEE3890A84058CE1E22DBC2198F42323CE8ACA9135329F03C068E5112DC7CC3EF3446DEFCEB01A45C2667FDD5 }] },
+            EntryMessage { emMessage = "test", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x66CC2C8F4D303FC962E5FF6A27BD79F84EC812DDAE58CF5243B64A4AD8094D47EC3727F3A3C186C15054492E30698497,
+                    ehR = 0x4BC35D3A50EF4E30576F58CD96CE6BF638025EE624004A1F7789A8B8E43D0678ACD9D29876DAF46638645F7F404B11C7,
+                    ehS = 0xD5A6326C494ED3FF614703878961C0FDE7B2C278F9A65FD8C4B7186201A2991695BA1C84541327E966FA7B50F7382282 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x18FA39DB95AA5F561F30FA3591DC59C0FA3653A80DAFFA0B48D1A4C6DFCBFF6E3D33BE4DC5EB8886A8ECD093F2935726,
+                    ehR = 0xE8C9D0B6EA72A0E7837FEA1D14A1A9557F29FAA45D3E7EE888FC5BF954B5E62464A9A817C47FF78B8C11066B24080E72,
+                    ehS = 0x07041D4A7A0379AC7232FF72E6F77B6DDB8F09B16CCE0EC3286B2BD43FA8C6141C53EA5ABEF0D8231077A04540A96B66 },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x0CFAC37587532347DC3389FDC98286BBA8C73807285B184C83E62E26C401C0FAA48DD070BA79921A3457ABFF2D630AD7,
+                    ehR = 0x6D6DEFAC9AB64DABAFE36C6BF510352A4CC27001263638E5B16D9BB51D451559F918EEDAF2293BE5B475CC8F0188636B,
+                    ehS = 0x2D46F3BECBCC523D5F1A1256BF0C9B024D879BA9E838144C8BA6BAEB4B53B47D51AB373F9845C0514EEFB14024787265 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x015EE46A5BF88773ED9123A5AB0807962D193719503C527B031B4C2D225092ADA71F4A459BC0DA98ADB95837DB8312EA,
+                    ehR = 0x8203B63D3C853E8D77227FB377BCF7B7B772E97892A80F36AB775D509D7A5FEB0542A7F0812998DA8F1DD3CA3CF023DB,
+                    ehS = 0xDDD0760448D42D8A43AF45AF836FCE4DE8BE06B485E9B61B827C2F13173923E06A739F040649A667BF3B828246BAA5A5 },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x3780C4F67CB15518B6ACAE34C9F83568D2E12E47DEAB6C50A4E4EE5319D1E8CE0E2CC8A136036DC4B9C00E6888F66B6C,
+                    ehR = 0xA0D5D090C9980FAF3C2CE57B7AE951D31977DD11C775D314AF55F76C676447D06FB6495CD21B4B6E340FC236584FB277,
+                    ehS = 0x976984E59B4C77B0E8E4460DCA3D9F20E07B9BB1F63BEEFAF576F6B2E8B224634A2092CD3792E0159AD9CEE37659C736 }] }] },
+    EntryCurve { ecName = SEC_p521r1,
+        ecPrivate = 0x0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538,
+        ecPublic = Point
+            0x1894550D0785932E00EAA23B694F213F8C3121F86DC97A04E5A7167DB4E5BCD371123D46E45DB6B5D5370A7F20FB633155D38FFA16D2BD761DCAC474B9A2F5023A4
+            0x0493101C962CD4D2FDDF782285E64584139C2F91B47F87FF82354D6630F746A28A0DB25741B5B34A828008B22ACC23F924FAAFBD4D33F81EA66956DFEAA2BFDFCF5,
+        ecMessages = [
+            EntryMessage { emMessage = "sample", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x089C071B419E1C2820962321787258469511958E80582E95D8378E0C2CCDB3CB42BEDE42F50E3FA3C71F5A76724281D31D9C89F0F91FC1BE4918DB1C03A5838D0F9,
+                    ehR = 0x0343B6EC45728975EA5CBA6659BBB6062A5FF89EEA58BE3C80B619F322C87910FE092F7D45BB0F8EEE01ED3F20BABEC079D202AE677B243AB40B5431D497C55D75D,
+                    ehS = 0x0E7B0E675A9B24413D448B8CC119D2BF7B2D2DF032741C096634D6D65D0DBE3D5694625FB9E8104D3B842C1B0E2D0B98BEA19341E8676AEF66AE4EBA3D5475D5D16 },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x121415EC2CD7726330A61F7F3FA5DE14BE9436019C4DB8CB4041F3B54CF31BE0493EE3F427FB906393D895A19C9523F3A1D54BB8702BD4AA9C99DAB2597B92113F3,
+                    ehR = 0x1776331CFCDF927D666E032E00CF776187BC9FDD8E69D0DABB4109FFE1B5E2A30715F4CC923A4A5E94D2503E9ACFED92857B7F31D7152E0F8C00C15FF3D87E2ED2E,
+                    ehS = 0x050CB5265417FE2320BBB5A122B8E1A32BD699089851128E360E620A30C7E17BA41A666AF126CE100E5799B153B60528D5300D08489CA9178FB610A2006C254B41F },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x0EDF38AFCAAECAB4383358B34D67C9F2216C8382AAEA44A3DAD5FDC9C32575761793FEF24EB0FC276DFC4F6E3EC476752F043CF01415387470BCBD8678ED2C7E1A0,
+                    ehR = 0x1511BB4D675114FE266FC4372B87682BAECC01D3CC62CF2303C92B3526012659D16876E25C7C1E57648F23B73564D67F61C6F14D527D54972810421E7D87589E1A7,
+                    ehS = 0x04A171143A83163D6DF460AAF61522695F207A58B95C0644D87E52AA1A347916E4F7A72930B1BC06DBE22CE3F58264AFD23704CBB63B29B931F7DE6C9D949A7ECFC },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x1546A108BC23A15D6F21872F7DED661FA8431DDBD922D0DCDB77CC878C8553FFAD064C95A920A750AC9137E527390D2D92F153E66196966EA554D9ADFCB109C4211,
+                    ehR = 0x1EA842A0E17D2DE4F92C15315C63DDF72685C18195C2BB95E572B9C5136CA4B4B576AD712A52BE9730627D16054BA40CC0B8D3FF035B12AE75168397F5D50C67451,
+                    ehS = 0x1F21A3CEE066E1961025FB048BD5FE2B7924D0CD797BABE0A83B66F1E35EEAF5FDE143FA85DC394A7DEE766523393784484BDF3E00114A1C857CDE1AA203DB65D61 },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x1DAE2EA071F8110DC26882D4D5EAE0621A3256FC8847FB9022E2B7D28E6F10198B1574FDD03A9053C08A1854A168AA5A57470EC97DD5CE090124EF52A2F7ECBFFD3,
+                    ehR = 0x0C328FAFCBD79DD77850370C46325D987CB525569FB63C5D3BC53950E6D4C5F174E25A1EE9017B5D450606ADD152B534931D7D4E8455CC91F9B15BF05EC36E377FA,
+                    ehS = 0x0617CCE7CF5064806C467F678D3B4080D6F1CC50AF26CA209417308281B68AF282623EAA63E5B5C0723D8B8C37FF0777B1A20F8CCB1DCCC43997F1EE0E44DA4A67A }] },
+            EntryMessage { emMessage = "test", emHashes = [
+                EntryHash { ehAlgorithm = HashAlg SHA1,
+                    ehK = 0x0BB9F2BF4FE1038CCF4DABD7139A56F6FD8BB1386561BD3C6A4FC818B20DF5DDBA80795A947107A1AB9D12DAA615B1ADE4F7A9DC05E8E6311150F47F5C57CE8B222,
+                    ehR = 0x13BAD9F29ABE20DE37EBEB823C252CA0F63361284015A3BF430A46AAA80B87B0693F0694BD88AFE4E661FC33B094CD3B7963BED5A727ED8BD6A3A202ABE009D0367,
+                    ehS = 0x1E9BB81FF7944CA409AD138DBBEE228E1AFCC0C890FC78EC8604639CB0DBDC90F717A99EAD9D272855D00162EE9527567DD6A92CBD629805C0445282BBC916797FF },
+                EntryHash { ehAlgorithm = HashAlg SHA224,
+                    ehK = 0x040D09FCF3C8A5F62CF4FB223CBBB2B9937F6B0577C27020A99602C25A01136987E452988781484EDBBCF1C47E554E7FC901BC3085E5206D9F619CFF07E73D6F706,
+                    ehR = 0x1C7ED902E123E6815546065A2C4AF977B22AA8EADDB68B2C1110E7EA44D42086BFE4A34B67DDC0E17E96536E358219B23A706C6A6E16BA77B65E1C595D43CAE17FB,
+                    ehS = 0x177336676304FCB343CE028B38E7B4FBA76C1C1B277DA18CAD2A8478B2A9A9F5BEC0F3BA04F35DB3E4263569EC6AADE8C92746E4C82F8299AE1B8F1739F8FD519A4 },
+                EntryHash { ehAlgorithm = HashAlg SHA256,
+                    ehK = 0x01DE74955EFAABC4C4F17F8E84D881D1310B5392D7700275F82F145C61E843841AF09035BF7A6210F5A431A6A9E81C9323354A9E69135D44EBD2FCAA7731B909258,
+                    ehR = 0x00E871C4A14F993C6C7369501900C4BC1E9C7B0B4BA44E04868B30B41D8071042EB28C4C250411D0CE08CD197E4188EA4876F279F90B3D8D74A3C76E6F1E4656AA8,
+                    ehS = 0x0CD52DBAA33B063C3A6CD8058A1FB0A46A4754B034FCC644766CA14DA8CA5CA9FDE00E88C1AD60CCBA759025299079D7A427EC3CC5B619BFBC828E7769BCD694E86 },
+                EntryHash { ehAlgorithm = HashAlg SHA384,
+                    ehK = 0x1F1FC4A349A7DA9A9E116BFDD055DC08E78252FF8E23AC276AC88B1770AE0B5DCEB1ED14A4916B769A523CE1E90BA22846AF11DF8B300C38818F713DADD85DE0C88,
+                    ehR = 0x14BEE21A18B6D8B3C93FAB08D43E739707953244FDBE924FA926D76669E7AC8C89DF62ED8975C2D8397A65A49DCC09F6B0AC62272741924D479354D74FF6075578C,
+                    ehS = 0x133330865C067A0EAF72362A65E2D7BC4E461E8C8995C3B6226A21BD1AA78F0ED94FE536A0DCA35534F0CD1510C41525D163FE9D74D134881E35141ED5E8E95B979 },
+                EntryHash { ehAlgorithm = HashAlg SHA512,
+                    ehK = 0x16200813020EC986863BEDFC1B121F605C1215645018AEA1A7B215A564DE9EB1B38A67AA1128B80CE391C4FB71187654AAA3431027BFC7F395766CA988C964DC56D,
+                    ehR = 0x13E99020ABF5CEE7525D16B69B229652AB6BDF2AFFCAEF38773B4B7D08725F10CDB93482FDCC54EDCEE91ECA4166B2A7C6265EF0CE2BD7051B7CEF945BABD47EE6D,
+                    ehS = 0x1FBD0013C674AA79CB39849527916CE301C66EA7CE8B80682786AD60F98F7E78A19CA69EFF5C57400E3B3A0AD66CE0978214D13BAF4E9AC60752F7B155E2DE4DCE3 }] }] }]
 
-rfc6979_vectorsSHA384 =
-    [ VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "sample"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x4730005c4fcb01834c063a7b6760096dbe284b8252ef4311
-        , r = 0xda63bf0b9abcf948fbb1e9167f136145f7a20426dcc287d5
-        , s = 0xc3aa2c960972bd7a2003a57e1c4c77f0578f8ae95e31ec5e
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "test"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x5afefb5d3393261b828db6c91fbc68c230727b030c975693
-        , r = 0xb234b60b4db75a733e19280a7a6034bd6b1ee88af5332367
-        , s = 0x7994090b2d59bb782be57e74a44c9a1c700413f8abefe77a
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "sample"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0x52b40f5a9d3d13040f494e83d3906c6079f29981035c7bd51e5cac40
-        , r = 0x0b115e5e36f0f9ec81f1325a5952878d745e19d7bb3eabfaba77e953
-        , s = 0x830f34ccdfe826ccfdc81eb4129772e20e122348a2bbd889a1b1af1d
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "test"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0x7046742b839478c1b5bd31db2e862ad868e1a45c863585b5f22bdc2d
-        , r = 0x389b92682e399b26518a95506b52c03bc9379a9dadf3391a21fb0ea4
-        , s = 0x414a718ed3249ff6dbc5b50c27f71f01f070944da22ab1f78f559aab
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "sample"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x09f634b188cefd98e7ec88b1aa9852d734d0bc272f7d2a47decc6ebeb375aad4
-        , r = 0x0eafea039b20e9b42309fb1d89e213057cbf973dc0cfc8f129edddc800ef7719
-        , s = 0x4861f0491e6998b9455193e34e7b0d284ddd7149a74b95b9261f13abde940954
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "test"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x16aeffa357260b04b1dd199693960740066c1a8f3e8edd79070aa914d361b3b8
-        , r = 0x83910e8b48bb0c74244ebdf7f07a1c5413d61472bd941ef3920e623fbccebeb6
-        , s = 0x8ddbec54cf8cd5874883841d712142a56a8d0f218f5003cb0296b6b509619f2c
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "sample"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x94ed910d1a099dad3254e9242ae85abde4ba15168eaf0ca87a555fd56d10fbca2907e3e83ba95368623b8c4686915cf9
-        , r =
-            0x94edbb92a5ecb8aad4736e56c691916b3f88140666ce9fa73d64c4ea95ad133c81a648152e44acf96e36dd1e80fabe46
-        , s =
-            0x99ef4aeb15f178cea1fe40db2603138f130e740a19624526203b6351d0a3a94fa329c145786e679e7b82c71a38628ac8
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "test"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x015ee46a5bf88773ed9123a5ab0807962d193719503c527b031b4c2d225092ada71f4a459bc0da98adb95837db8312ea
-        , r =
-            0x8203b63d3c853e8d77227fb377bcf7b7b772e97892a80f36ab775d509d7a5feb0542a7f0812998da8f1dd3ca3cf023db
-        , s =
-            0xddd0760448d42d8a43af45af836fce4de8be06b485e9b61b827c2f13173923e06a739f040649a667bf3b828246baa5a5
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "sample"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x1546a108bc23a15d6f21872f7ded661fa8431ddbd922d0dcdb77cc878c8553ffad064c95a920a750ac9137e527390d2d92f153e66196966ea554d9adfcb109c4211
-        , r =
-            0x1ea842a0e17d2de4f92c15315c63ddf72685c18195c2bb95e572b9c5136ca4b4b576ad712a52be9730627d16054ba40cc0b8d3ff035b12ae75168397f5d50c67451
-        , s =
-            0x1f21a3cee066e1961025fb048bd5fe2b7924d0cd797babe0a83b66f1e35eeaf5fde143fa85dc394a7dee766523393784484bdf3e00114a1c857cde1aa203db65d61
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "test"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x1f1fc4a349a7da9a9e116bfdd055dc08e78252ff8e23ac276ac88b1770ae0b5dceb1ed14a4916b769a523ce1e90ba22846af11df8b300c38818f713dadd85de0c88
-        , r =
-            0x14bee21a18b6d8b3c93fab08d43e739707953244fdbe924fa926d76669e7ac8c89df62ed8975c2d8397a65a49dcc09f6b0ac62272741924d479354d74ff6075578c
-        , s =
-            0x133330865c067a0eaf72362a65e2d7bc4e461e8c8995c3b6226a21bd1aa78f0ed94fe536a0dca35534f0cd1510c41525d163fe9d74d134881e35141ed5e8e95b979
-        }
-    ]
+testPublic :: PrivateKey -> PublicPoint -> TestTree
+testPublic (PrivateKey curve key) pub = testCase "public" $
+    pub @=? generateQ curve key
 
-rfc6979_vectorsSHA512 =
-    [ VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "sample"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0xa2ac7ab055e4f20692d49209544c203a7d1f2c0bfbc75db1
-        , r = 0x4d60c5ab1996bd848343b31c00850205e2ea6922dac2e4b8
-        , s = 0x3f6e837448f027a1bf4b34e796e32a811cbb4050908d8f67
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p192r1
-        , msg = "test"
-        , d = 0x6fab034934e4c0fc9ae67f5b5659a9d7d1fefd187ee09fd4
-        , q =
-            ECC.Point
-                0xac2c77f529f91689fea0ea5efec7f210d8eea0b9e047ed56
-                0x3bc723e57670bd4887ebc732c523063d0a7c957bc97c1c43
-        , k = 0x0758753a5254759c7cfbad2e2d9b0792eee44136c9480527
-        , r = 0xfe4f4ae86a58b6507946715934fe2d8ff9d95b6b098fe739
-        , s = 0x74cf5605c98fba0e1ef34d4b5a1577a7dcf59457cae52290
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "sample"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0x9db103ffededf9cfdba05184f925400c1653b8501bab89cea0fbec14
-        , r = 0x074bd1d979d5f32bf958ddc61e4fb4872adcafeb2256497cdac30397
-        , s = 0xa4ceca196c3d5a1ff31027b33185dc8ee43f288b21ab342e5d8eb084
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p224r1
-        , msg = "test"
-        , d = 0xf220266e1105bfe3083e03ec7a3a654651f45e37167e88600bf257c1
-        , q =
-            ECC.Point
-                0x00cf08da5ad719e42707fa431292dea11244d64fc51610d94b130d6c
-                0xeeab6f3debe455e3dbf85416f7030cbd94f34f2d6f232c69f3c1385a
-        , k = 0xe39c2aa4ea6be2306c72126d40ed77bf9739bb4d6ef2bbb1dcb6169d
-        , r = 0x049f050477c5add858cac56208394b5a55baebbe887fdf765047c17c
-        , s = 0x077eb13e7005929cefa3cd0403c7cdcc077adf4e44f3c41b2f60ecff
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "sample"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x5fa81c63109badb88c1f367b47da606da28cad69aa22c4fe6ad7df73a7173aa5
-        , r = 0x8496a60b5e9b47c825488827e0495b0e3fa109ec4568fd3f8d1097678eb97f00
-        , s = 0x2362ab1adbe2b8adf9cb9edab740ea6049c028114f2460f96554f61fae3302fe
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p256r1
-        , msg = "test"
-        , d = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721
-        , q =
-            ECC.Point
-                0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6
-                0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299
-        , k = 0x6915d11632aca3c40d5d51c08daf9c555933819548784480e93499000d9f0b7f
-        , r = 0x461d93f31b6540894788fd206c07cfa0cc35f46fa3c91816fff1040ad1581a04
-        , s = 0x39af9f15de0db8d97e72719c74820d304ce5226e32dedae67519e840d1194e55
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "sample"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x92fc3c7183a883e24216d1141f1a8976c5b0dd797dfa597e3d7b32198bd35331a4e966532593a52980d0e3aaa5e10ec3
-        , r =
-            0xed0959d5880ab2d869ae7f6c2915c6d60f96507f9cb3e047c0046861da4a799cfe30f35cc900056d7c99cd7882433709
-        , s =
-            0x512c8cceee3890a84058ce1e22dbc2198f42323ce8aca9135329f03c068e5112dc7cc3ef3446defceb01a45c2667fdd5
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p384r1
-        , msg = "test"
-        , d =
-            0x6b9d3dad2e1b8c1c05b19875b6659f4de23c3b667bf297ba9aa47740787137d896d5724e4c70a825f872c9ea60d2edf5
-        , q =
-            ECC.Point
-                0xec3a4e415b4e19a4568618029f427fa5da9a8bc4ae92e02e06aae5286b300c64def8f0ea9055866064a254515480bc13
-                0x8015d9b72d7d57244ea8ef9ac0c621896708a59367f9dfb9f54ca84b3f1c9db1288b231c3ae0d4fe7344fd2533264720
-        , k =
-            0x3780c4f67cb15518b6acae34c9f83568d2e12e47deab6c50a4e4ee5319d1e8ce0e2cc8a136036dc4b9c00e6888f66b6c
-        , r =
-            0xa0d5d090c9980faf3c2ce57b7ae951d31977dd11c775d314af55f76c676447d06fb6495cd21b4b6e340fc236584fb277
-        , s =
-            0x976984e59b4c77b0e8e4460dca3d9f20e07b9bb1f63beefaf576f6b2e8b224634a2092cd3792e0159ad9cee37659c736
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "sample"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x1dae2ea071f8110dc26882d4d5eae0621a3256fc8847fb9022e2b7d28e6f10198b1574fdd03a9053c08a1854a168aa5a57470ec97dd5ce090124ef52a2f7ecbffd3
-        , r =
-            0x0c328fafcbd79dd77850370c46325d987cb525569fb63c5d3bc53950e6d4c5f174e25a1ee9017b5d450606add152b534931d7d4e8455cc91f9b15bf05ec36e377fa
-        , s =
-            0x0617cce7cf5064806c467f678d3b4080d6f1cc50af26ca209417308281b68af282623eaa63e5b5c0723d8b8c37ff0777b1a20f8ccb1dccc43997f1ee0e44da4a67a
-        }
-    , VectorECDSA
-        { curve = ECC.getCurveByName ECC.SEC_p521r1
-        , msg = "test"
-        , d =
-            0x0fad06daa62ba3b25d2fb40133da757205de67f5bb0018fee8c86e1b68c7e75caa896eb32f1f47c70855836a6d16fcc1466f6d8fbec67db89ec0c08b0e996b83538
-        , q =
-            ECC.Point
-                0x1894550d0785932e00eaa23b694f213f8c3121f86dc97a04e5a7167db4e5bcd371123d46e45db6b5d5370a7f20fb633155d38ffa16d2bd761dcac474b9a2f5023a4
-                0x0493101c962cd4d2fddf782285e64584139c2f91b47f87ff82354d6630f746a28a0db25741b5b34a828008b22acc23f924faafbd4d33f81ea66956dfeaa2bfdfcf5
-        , k =
-            0x16200813020ec986863bedfc1b121f605c1215645018aea1a7b215a564de9eb1b38a67aa1128b80ce391c4fb71187654aaa3431027bfc7f395766ca988c964dc56d
-        , r =
-            0x13e99020abf5cee7525d16b69b229652ab6bdf2affcaef38773b4b7d08725f10cdb93482fdcc54edcee91eca4166b2a7c6265ef0ce2bd7051b7cef945babd47ee6d
-        , s =
-            0x1fbd0013c674aa79cb39849527916ce301c66ea7ce8b80682786ad60f98f7e78a19ca69eff5c57400e3b3a0ad66ce0978214d13baf4e9ac60752f7b155e2de4dce3
-        }
-    ]
+testSignature :: PrivateKey -> HashAlg -> ByteString -> Integer -> Signature -> TestTree
+testSignature key (HashAlg alg) msg nonc sig = testCase "signature" $
+    case signWith nonc key alg msg of
+        Nothing -> assertFailure "could not sign message"
+        Just result -> sig @=? result
 
-vectorToPrivate :: VectorECDSA -> ECDSA.PrivateKey
-vectorToPrivate vector = ECDSA.PrivateKey (curve vector) (d vector)
+testVerify :: PublicKey -> HashAlg -> ByteString -> Signature -> TestTree
+testVerify pub (HashAlg alg) msg sig = testCase "verify" $
+    assertBool "signature verification failed" $ verify alg pub sig msg
 
-vectorToPublic :: VectorECDSA -> ECDSA.PublicKey
-vectorToPublic vector = ECDSA.PublicKey (curve vector) (q vector)
+testEntry :: Entry -> TestTree
+testEntry entry = testGroup (show entry) tests where
+    tests = [
+        testPublic key $ publicPoint entry,
+        testSignature key (hashAlgorithm entry) (message entry) (nonce entry) (signature entry),
+        testVerify pub (hashAlgorithm entry) (message entry) (signature entry)]
+    pub = PublicKey curve $ publicPoint entry
+    key = PrivateKey curve $ privateNumber entry
+    curve = getCurveByName $ curveName entry
 
-doSignatureTest hashAlg i vector = testCase (show i) (expected @=? actual)
-  where
-    expected = Just $ ECDSA.Signature (r vector) (s vector)
-    actual = ECDSA.signWith (k vector) (vectorToPrivate vector) hashAlg (msg vector)
-
-doVerifyTest hashAlg i vector = testCase (show i) (True @=? actual)
-  where
-    actual =
-        ECDSA.verify
-            hashAlg
-            (vectorToPublic vector)
-            (ECDSA.Signature (r vector) (s vector))
-            (msg vector)
-
-ecdsaTests =
-    testGroup
-        "ECDSA"
-        [ testGroup
-            "SHA1"
-            [ testGroup "signature" $ zipWith (doSignatureTest SHA1) [katZero ..] vectorsSHA1
-            , testGroup "verify" $ zipWith (doVerifyTest SHA1) [katZero ..] vectorsSHA1
-            ]
-        , testGroup
-            "SHA224"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA224) [katZero ..] rfc6979_vectorsSHA224
-            , testGroup "verify" $
-                zipWith (doVerifyTest SHA224) [katZero ..] rfc6979_vectorsSHA224
-            ]
-        , testGroup
-            "SHA256"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA256) [katZero ..] rfc6979_vectorsSHA256
-            , testGroup "verify" $
-                zipWith (doVerifyTest SHA256) [katZero ..] rfc6979_vectorsSHA256
-            ]
-        , testGroup
-            "SHA384"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA384) [katZero ..] rfc6979_vectorsSHA384
-            , testGroup "verify" $
-                zipWith (doVerifyTest SHA384) [katZero ..] rfc6979_vectorsSHA384
-            ]
-        , testGroup
-            "SHA512"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA512) [katZero ..] rfc6979_vectorsSHA512
-            , testGroup "verify" $
-                zipWith (doVerifyTest SHA512) [katZero ..] rfc6979_vectorsSHA512
-            ]
-        ]
+ecdsaTests :: TestTree
+ecdsaTests = testGroup "ECDSA" [
+    testGroup "GEC 2" $ testEntry <$> gec2Entries,
+    testGroup "RFC 6979" $ testEntry <$> flatten rfc6979Entries]
