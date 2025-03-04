@@ -24,7 +24,7 @@ module Crypto.Number.F2m (
 ) where
 
 import Crypto.Number.Basic
-import Data.Bits (setBit, shift, testBit, xor)
+import Data.Bits (setBit, shift, testBit, xor, unsafeShiftR)
 import Data.List
 
 -- | Binary Polynomial represented by an integer
@@ -216,10 +216,12 @@ traceF2m fx = foldr addF2m 0 . take (log2 fx) . iterate (squareF2m fx)
 {-# INLINE traceF2m #-}
 
 halfTraceF2m :: BinaryPolynomial -> Integer -> Integer
-halfTraceF2m fx = foldr addF2m 0 . take (1 + log2 fx `div` 2) . iterate (squareF2m fx . squareF2m fx)
+halfTraceF2m fx = foldr addF2m 0 . take (1 + log2 fx `unsafeShiftR` 1) . iterate (squareF2m fx . squareF2m fx)
 {-# INLINE halfTraceF2m #-}
 
 -- | Solve a quadratic equation of the form @x^2 + x = a@ in F₂m.
 quadraticF2m :: BinaryPolynomial -> Integer -> Maybe Integer
-quadraticF2m fx a = if traceF2m fx a == 0 then Just $ halfTraceF2m fx a else Nothing
+quadraticF2m fx a
+    | traceF2m fx a == 0 = Just $ halfTraceF2m fx a
+    | otherwise = Nothing
 {-# INLINABLE quadraticF2m #-}
