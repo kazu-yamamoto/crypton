@@ -28,6 +28,7 @@ module Crypto.PubKey.ECC.ECDSA (
 
 import Control.Monad
 import Data.Data
+import Data.Bits
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
@@ -210,12 +211,12 @@ recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
 
 normalize :: Curve -> Signature -> Signature
 normalize curve (Signature r s)
-    | s <= n `div` 2 = Signature r s
+    | s <= n `unsafeShiftR` 1 = Signature r s
     | otherwise = Signature r (n - s)
     where n = ecc_n $ common_curve curve
 
 normalizeExtended :: Curve -> ExtendedSignature -> ExtendedSignature
 normalizeExtended curve (ExtendedSignature i p (Signature r s))
-    | s <= n `div` 2 = ExtendedSignature i p (Signature r s)
+    | s <= n `unsafeShiftR` 1 = ExtendedSignature i p (Signature r s)
     | otherwise = ExtendedSignature i (not p) (Signature r (n - s))
     where n = ecc_n $ common_curve curve
