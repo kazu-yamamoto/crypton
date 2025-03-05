@@ -5,7 +5,8 @@ module ECDSA (tests) where
 
 import qualified Crypto.ECC as ECDSA
 import Crypto.Error
-import Crypto.Hash.Algorithms
+import Crypto.Hash
+import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.ECDSA as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.ECDSA as ECDSA
@@ -43,16 +44,38 @@ sigECCToECDSA prx (ECC.Signature r s) =
         (throwCryptoError $ ECDSA.scalarFromInteger prx r)
         (throwCryptoError $ ECDSA.scalarFromInteger prx s)
 
-tests =
-    localOption (QuickCheckTests 5) $
+testRecover :: ECC.CurveName -> TestTree
+testRecover name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
+    let curve = ECC.getCurveByName name
+    let n = ECC.ecc_n $ ECC.common_curve curve
+    k <- choose (1, n - 1)
+    d <- choose (1, n - 1)
+    let key = ECC.PrivateKey curve d
+    let digest = hashWith SHA256 msg
+    let pub = ECC.signExtendedDigestWith k key digest >>= \ signature -> ECC.recoverDigest curve signature digest
+    pure $ propertyHold [eqTest "recovery" (Just $ ECC.generateQ curve d) (ECC.public_q <$> pub)]
+
+tests = testGroup "ECDSA"
+    [ localOption (QuickCheckTests 5) $
         testGroup
-            "ECDSA"
+            "verification"
             [ testProperty "SHA1" $ propertyECDSA SHA1
             , testProperty "SHA224" $ propertyECDSA SHA224
             , testProperty "SHA256" $ propertyECDSA SHA256
             , testProperty "SHA384" $ propertyECDSA SHA384
             , testProperty "SHA512" $ propertyECDSA SHA512
             ]
+    , testGroup "recovery"
+        [ localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p128r1
+        , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p128r2
+        , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p256k1
+        , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p256r1
+        , localOption (QuickCheckTests 50) $ testRecover ECC.SEC_t131r1
+        , localOption (QuickCheckTests 50) $ testRecover ECC.SEC_t131r2
+        , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233k1
+        , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233r1
+        ]
+    ]
   where
     propertyECDSA hashAlg (Curve c curve _) (ArbitraryBS0_2901 msg) = do
         d <- arbitraryScalar curve

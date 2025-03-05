@@ -4,6 +4,7 @@
 -- should be safe.
 module Crypto.PubKey.ECC.ECDSA (
     Signature (..),
+    ExtendedSignature (..),
     PublicPoint,
     PublicKey (..),
     PrivateNumber,
@@ -13,10 +14,14 @@ module Crypto.PubKey.ECC.ECDSA (
     toPrivateKey,
     signWith,
     signDigestWith,
+    signExtendedDigestWith,
     sign,
     signDigest,
+    signExtendedDigest,
     verify,
     verifyDigest,
+    recover,
+    recoverDigest,
 ) where
 
 import Control.Monad
@@ -37,6 +42,17 @@ data Signature = Signature
     -- ^ ECDSA r
     , sign_s :: Integer
     -- ^ ECDSA s
+    }
+    deriving (Show, Read, Eq, Data)
+
+-- | ECDSA signature with public key recovery information.
+data ExtendedSignature = ExtendedSignature
+    { index :: Integer
+    -- ^ Index of the X coordinate
+    , parity :: Bool
+    -- ^ Parity of the Y coordinate
+    , signature :: Signature
+    -- ^ Inner signature
     }
     deriving (Show, Read, Eq, Data)
 
@@ -69,6 +85,27 @@ toPrivateKey (KeyPair curve _ priv) = PrivateKey curve priv
 -- | Sign digest using the private key and an explicit k number.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
+signExtendedDigestWith
+    :: HashAlgorithm hash
+    => Integer
+    -- ^ k random number
+    -> PrivateKey
+    -- ^ private key
+    -> Digest hash
+    -- ^ digest to sign
+    -> Maybe ExtendedSignature
+signExtendedDigestWith k (PrivateKey curve d) digest = do
+    let z = dsaTruncHashDigest digest n
+        CurveCommon _ _ g n _ = common_curve curve
+    (i, r, p) <- pointDecompose curve $ pointMul curve k g
+    kInv <- inverse k n
+    let s = kInv * (z + r * d) `mod` n
+    when (r == 0 || s == 0) Nothing
+    return $ ExtendedSignature i p $ Signature r s
+
+-- | Sign digest using the private key and an explicit k number.
+--
+-- /WARNING:/ Vulnerable to timing attacks.
 signDigestWith
     :: HashAlgorithm hash
     => Integer
@@ -78,17 +115,7 @@ signDigestWith
     -> Digest hash
     -- ^ digest to sign
     -> Maybe Signature
-signDigestWith k (PrivateKey curve d) digest = do
-    let z = dsaTruncHashDigest digest n
-        CurveCommon _ _ g n _ = common_curve curve
-    let point = pointMul curve k g
-    r <- case point of
-        PointO -> Nothing
-        Point x _ -> return $ x `mod` n
-    kInv <- inverse k n
-    let s = kInv * (z + r * d) `mod` n
-    when (r == 0 || s == 0) Nothing
-    return $ Signature r s
+signDigestWith k pk digest = signature <$> signExtendedDigestWith k pk digest
 
 -- | Sign message using the private key and an explicit k number.
 --
@@ -109,16 +136,24 @@ signWith k pk hashAlg msg = signDigestWith k pk (hashWith hashAlg msg)
 -- | Sign digest using the private key.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
-signDigest
+signExtendedDigest
     :: (HashAlgorithm hash, MonadRandom m)
-    => PrivateKey -> Digest hash -> m Signature
-signDigest pk digest = do
+    => PrivateKey -> Digest hash -> m ExtendedSignature
+signExtendedDigest pk digest = do
     k <- generateBetween 1 (n - 1)
-    case signDigestWith k pk digest of
-        Nothing -> signDigest pk digest
+    case signExtendedDigestWith k pk digest of
+        Nothing -> signExtendedDigest pk digest
         Just sig -> return sig
   where
     n = ecc_n . common_curve $ private_curve pk
+
+-- | Sign digest using the private key.
+--
+-- /WARNING:/ Vulnerable to timing attacks.
+signDigest
+    :: (HashAlgorithm hash, MonadRandom m)
+    => PrivateKey -> Digest hash -> m Signature
+signDigest pk digest = signature <$> signExtendedDigest pk digest
 
 -- | Sign message using the private key.
 --
@@ -153,3 +188,20 @@ verify
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> PublicKey -> Signature -> msg -> Bool
 verify hashAlg pk sig msg = verifyDigest pk sig (hashWith hashAlg msg)
+
+-- | Recover the public key from an extended signature and a digest.
+recoverDigest
+    :: HashAlgorithm hash
+    => Curve -> ExtendedSignature -> Digest hash -> Maybe PublicKey
+recoverDigest curve (ExtendedSignature i p (Signature r s)) digest = do
+    let CurveCommon _ _ g n _ = common_curve curve
+    let z = dsaTruncHashDigest digest n
+    w <- inverse r n
+    c <- pointCompose curve i r p
+    pure $ PublicKey curve $ pointAddTwoMuls curve (s * w) c (negate $ z * w) g
+
+-- | Recover the public key from an extended signature and a message.
+recover
+    :: (ByteArrayAccess msg, HashAlgorithm hash)
+    => hash -> Curve -> ExtendedSignature -> msg -> Maybe PublicKey
+recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg

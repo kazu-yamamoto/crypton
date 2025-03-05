@@ -9,6 +9,8 @@ module Crypto.PubKey.ECC.Prim (
     pointBaseMul,
     pointMul,
     pointAddTwoMuls,
+    pointDecompose,
+    pointCompose,
     isPointAtInfinity,
     isPointValid,
 ) where
@@ -137,6 +139,38 @@ pointAddTwoMuls c n1 p1 n2 p2
                 (True, False) -> pointAdd c p1 q
                 (False, True) -> pointAdd c p2 q
                 (False, False) -> q
+
+-- | Decompose a point into index, residue, and parity.
+--
+-- Adapted from SEC 1: Elliptic Curve Cryptography, Version 2.0, section 2.3.3.
+pointDecompose :: Curve -> Point -> Maybe (Integer, Integer, Bool)
+pointDecompose _ PointO = Nothing
+pointDecompose curve (Point x y) = do
+    let CurveCommon _ _ _ n _ = common_curve curve
+    let (index, residue) = x `divMod` n
+    parity <- case curve of
+        CurveFP _ -> pure $ odd y
+        CurveF2m _ | x == 0 -> pure False
+        CurveF2m (CurveBinary fx _) -> odd <$> divF2m fx y x
+    pure (index, residue, parity)
+
+-- | Compose a point from index, residue, and parity.
+--
+-- Adapted from SEC 1: Elliptic Curve Cryptography, Version 2.0, section 2.3.4.
+pointCompose :: Curve -> Integer -> Integer -> Bool -> Maybe Point
+pointCompose curve index residue parity = do
+    let CurveCommon a b _ n _ = common_curve curve
+    let x = residue + index * n
+    y <- case curve of
+        CurveFP (CurvePrime p _) -> do
+            z <- squareRoot p $ x ^ (3 :: Int) + a * x + b
+            pure $ if odd z == parity then z else p - z
+        CurveF2m (CurveBinary fx _) | x == 0 -> pure $ sqrtF2m fx b
+        CurveF2m (CurveBinary fx _) -> do
+            c <- divF2m fx b $ squareF2m fx x
+            z <- quadraticF2m fx $ addF2m x $ addF2m a c
+            pure $ mulF2m fx x $ if odd z == parity then z else addF2m 1 z
+    pure $ Point x y
 
 -- | Check if a point is the point at infinity.
 isPointAtInfinity :: Point -> Bool
