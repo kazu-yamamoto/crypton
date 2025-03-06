@@ -11,7 +11,7 @@ import Test.Tasty.HUnit
 import Crypto.Number.Serialize
 import Crypto.Hash
 import Crypto.PubKey.ECC.Types
-import Crypto.PubKey.ECC.ECDSA
+import Crypto.PubKey.ECC.ECDSA (Signature (..), PrivateKey (..), PublicKey (..), signWith, verify)
 import Crypto.PubKey.ECC.Generate
 
 -- existential type allows storing different hash algorithms in the same value
