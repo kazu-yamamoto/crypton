@@ -27,6 +27,7 @@ module Crypto.Cipher.AESGCMSIV (
     decrypt,
 ) where
 
+import Data.Maybe
 import Data.Bits
 import Data.Word
 
@@ -195,4 +196,4 @@ transformTag :: Bytes -> IV AES
 transformTag tag = toIV $ B.copyAndFreeze tag $ \ptr ->
     peekElemOff ptr 15 >>= pokeElemOff ptr 15 . (.|. (0x80 :: Word8))
   where
-    toIV bs = let Just iv = makeIV (bs :: Bytes) in iv
+    toIV bs = fromJust $ makeIV (bs :: Bytes)
