@@ -2,13 +2,12 @@
 
 module KAT_PubKey.RSA (rsaTests) where
 
+import Data.Either
 import Crypto.Hash
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 
 import Imports
-
-import Data.Either (isRight)
 
 data VectorRSA = VectorRSA
     { size :: Int
@@ -24,6 +23,7 @@ data VectorRSA = VectorRSA
     , sig :: Either RSA.Error ByteString
     }
 
+vectorsSHA1 :: [VectorRSA]
 vectorsSHA1 =
     [ VectorRSA
         { size = 2048 `div` 8
@@ -104,16 +104,19 @@ vectorToPublic vector =
 vectorHasSignature :: VectorRSA -> Bool
 vectorHasSignature = isRight . sig
 
+doSignatureTest :: Show a => a -> VectorRSA -> TestTree
 doSignatureTest i vector = testCase (show i) (expected @=? actual)
   where
     expected = sig vector
     actual = RSA.sign Nothing (Just SHA1) (vectorToPrivate vector) (msg vector)
 
+doVerifyTest :: Show a => a -> VectorRSA -> TestTree
 doVerifyTest i vector = testCase (show i) (True @=? actual)
   where
     actual = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector) bs
-    Right bs = sig vector
+    bs = fromRight (error "doVerifyTest") $ sig vector
 
+rsaTests :: TestTree
 rsaTests =
     testGroup
         "RSA"

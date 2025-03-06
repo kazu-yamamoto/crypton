@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Crypto.Cipher.Twofish.Primitive (
     Twofish,
@@ -13,8 +14,8 @@ import Crypto.Internal.ByteArray (ByteArray)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.WordArray
 import Data.Bits
-import Data.List
 import Data.Word
+import Data.List (foldl')
 
 -- Based on the Golang referance implementation
 -- https://github.com/golang/crypto/blob/master/twofish/twofish.go

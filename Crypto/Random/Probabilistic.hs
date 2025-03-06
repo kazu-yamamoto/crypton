@@ -10,7 +10,6 @@ module Crypto.Random.Probabilistic (
 
 import Crypto.Internal.Compat
 import Crypto.Random
-import Crypto.Random.Types
 
 -- | This create a random number generator out of thin air with
 -- the system entropy; don't generally use as the IO is not exposed

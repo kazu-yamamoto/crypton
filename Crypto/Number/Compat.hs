@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE UnboxedTuples #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 
 -- |
 -- Module      : Crypto.Number.Compat

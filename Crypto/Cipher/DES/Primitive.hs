@@ -218,7 +218,7 @@ do_round r (ml, mr) kb = (mr, m')
     comp_kb = compression_permutation kb'
     expa_mr = expansion_permutation mr
     res = comp_kb `desXor` expa_mr
-    res' = tail $ iterate (trans 6) ([], res)
+    res' = drop 1 $ iterate (trans 6) ([], res)
     trans n (_, b) = (take n b, drop n b)
     res_s =
         concat $

@@ -3,6 +3,7 @@
 
 module ECDSA (tests) where
 
+import Data.Maybe
 import qualified Crypto.ECC as ECDSA
 import Crypto.Error
 import Crypto.Hash
@@ -32,6 +33,7 @@ instance Arbitrary Curve where
       where
         makeCurve c name = Curve c (ECC.getCurveByName name) name
 
+arbitraryScalar :: ECC.Curve -> Gen Integer
 arbitraryScalar curve = choose (1, n - 1)
   where
     n = ECC.ecc_n (ECC.common_curve curve)
@@ -55,6 +57,7 @@ testRecover name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
     let pub = ECC.signExtendedDigestWith k key digest >>= \ signature -> ECC.recoverDigest curve signature digest
     pure $ propertyHold [eqTest "recovery" (Just $ ECC.generateQ curve d) (ECC.public_q <$> pub)]
 
+tests :: TestTree
 tests = testGroup "ECDSA"
     [ localOption (QuickCheckTests 5) $
         testGroup
@@ -85,8 +88,8 @@ tests = testGroup "ECDSA"
             kECDSA = throwCryptoError $ ECDSA.scalarFromInteger prx kECC
             privECDSA = throwCryptoError $ ECDSA.scalarFromInteger prx d
             pubECDSA = ECDSA.toPublic prx privECDSA
-            Just sigECC = ECC.signWith kECC privECC hashAlg msg
-            Just sigECDSA = ECDSA.signWith prx kECDSA privECDSA hashAlg msg
+            sigECC = fromJust $ ECC.signWith kECC privECC hashAlg msg
+            sigECDSA = fromJust $ ECDSA.signWith prx kECDSA privECDSA hashAlg msg
             sigECDSA' = sigECCToECDSA prx sigECC
             msg' = msg `B.append` B.singleton 42
         return $
