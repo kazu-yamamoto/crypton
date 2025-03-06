@@ -4,6 +4,8 @@ module KAT_PubKey.ECC (eccTests, eccKatTests) where
 
 import Control.Arrow (second)
 
+import Data.List
+
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 
@@ -58,6 +60,7 @@ data VectorPoint = VectorPoint
     , valid :: Bool
     }
 
+vectorsPoint :: [VectorPoint]
 vectorsPoint =
     [ VectorPoint
         { curve = ECC.getCurveByName ECC.SEC_p192r1
@@ -133,6 +136,7 @@ vectorsPoint =
         }
     ]
 
+doPointValidTest :: Show a => a -> VectorPoint -> TestTree
 doPointValidTest i vector =
     testCase
         (show i)
@@ -147,6 +151,7 @@ arbitraryPoint aCurve =
     n = ECC.ecc_n (ECC.common_curve aCurve)
     pointGen = ECC.pointBaseMul aCurve <$> choose (1, n - 1)
 
+eccTests :: TestTree
 eccTests =
     testGroup
         "ECC"
@@ -182,6 +187,7 @@ eccTests =
                 ]
         ]
 
+eccKatTests :: IO TestTree
 eccKatTests = do
     res <-
         testKatLoad "KATs/ECC-PKV.txt" (map (second (map toVector)) . katLoaderSimple)
@@ -224,6 +230,6 @@ eccKatTests = do
                     undefined
                     (valueHexInteger qx)
                     (valueHexInteger qy)
-                    (head res /= 'F')
+                    ("F" `isPrefixOf` res)
             Just _ -> error ("ERROR: " ++ show kvs)
             Nothing -> error ("ERROR: " ++ show kvs) -- VectorPoint undefined 0 0 True

@@ -56,11 +56,17 @@ totpSHA512Expected =
     , (20000000000, 47863826)
     ]
 
-otpKey = "12345678901234567890" :: ByteString
-totpSHA256Key = "12345678901234567890123456789012" :: ByteString
-totpSHA512Key =
-    "1234567890123456789012345678901234567890123456789012345678901234" :: ByteString
+otpKey :: ByteString
+otpKey = "12345678901234567890"
 
+totpSHA256Key :: ByteString
+totpSHA256Key = "12345678901234567890123456789012"
+
+totpSHA512Key :: ByteString
+totpSHA512Key =
+    "1234567890123456789012345678901234567890123456789012345678901234"
+
+makeKATs :: (Eq a, Show a) => (t -> a) -> [(t, a)] -> [TestTree]
 makeKATs otp expected = concatMap (makeTest otp) (zip3 is counts otps)
   where
     is :: [Int]
@@ -69,20 +75,34 @@ makeKATs otp expected = concatMap (makeTest otp) (zip3 is counts otps)
     counts = map fst expected
     otps = map snd expected
 
+makeTest :: (Eq a1, Show a2, Show a1) => (t -> a1) -> (a2, t, a1) -> [TestTree]
 makeTest otp (i, count, password) =
     [ testCase (show i) (assertEqual "" password (otp count))
     ]
 
-Right totpSHA1Params = mkTOTPParams SHA1 0 30 OTP8 TwoSteps
-Right totpSHA256Params = mkTOTPParams SHA256 0 30 OTP8 TwoSteps
-Right totpSHA512Params = mkTOTPParams SHA512 0 30 OTP8 TwoSteps
+totpSHA1Params :: TOTPParams SHA1
+totpSHA1Params = case mkTOTPParams SHA1 0 30 OTP8 TwoSteps of
+  Right x -> x
+  _ -> error "totpSHA1Params"
+
+totpSHA256Params :: TOTPParams SHA256
+totpSHA256Params = case mkTOTPParams SHA256 0 30 OTP8 TwoSteps of
+  Right x -> x
+  _ -> error "totpSHA256Params"
+
+totpSHA512Params :: TOTPParams SHA512
+totpSHA512Params = case mkTOTPParams SHA512 0 30 OTP8 TwoSteps of
+  Right x -> x
+  _ -> error "totpSHA512Params"
 
 -- resynching with the expected value should just return the current counter + 1
+prop_resyncExpected :: Word64 -> Word16 -> Bool
 prop_resyncExpected ctr window = resynchronize SHA1 OTP6 window key ctr (otp, []) == Just (ctr + 1)
   where
     key = "1234" :: ByteString
     otp = hotp SHA1 OTP6 key ctr
 
+tests :: TestTree
 tests =
     testGroup
         "OTP"

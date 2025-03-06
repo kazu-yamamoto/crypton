@@ -4,6 +4,8 @@
 
 module ECC (tests) where
 
+import Data.Either
+
 import qualified Crypto.ECC as ECC
 import Crypto.Error
 
@@ -50,6 +52,7 @@ data VectorPoint = VectorPoint
     , vpError :: Maybe CryptoError
     }
 
+vectorsPoint :: [VectorPoint]
 vectorsPoint =
     [ VectorPoint
         { vpCurve = Curve ECC.Curve_P256R1
@@ -252,6 +255,7 @@ vectorsPoint =
         }
     ]
 
+vectorsWeakPoint :: [VectorPoint]
 vectorsWeakPoint =
     [ VectorPoint
         { vpCurve = Curve ECC.Curve_X25519
@@ -303,11 +307,12 @@ vectorsWeakPoint =
     ]
 
 vpEncodedPoint :: VectorPoint -> ByteString
-vpEncodedPoint vector = let Right bs = convertFromBase Base16 (vpHex vector) in bs
+vpEncodedPoint vector = fromRight (error "vpEncodedPoint") $ convertFromBase Base16 (vpHex vector)
 
 cryptoError :: CryptoFailable a -> Maybe CryptoError
 cryptoError = onCryptoFailure Just (const Nothing)
 
+doPointDecodeTest :: Show p => p -> VectorPoint -> TestTree
 doPointDecodeTest i vector =
     case vpCurve vector of
         Curve curve ->
@@ -316,15 +321,17 @@ doPointDecodeTest i vector =
                     (show i)
                     (vpError vector @=? cryptoError (ECC.decodePoint prx $ vpEncodedPoint vector))
 
+doWeakPointECDHTest :: Show p => p -> VectorPoint -> TestTree
 doWeakPointECDHTest i vector =
     case vpCurve vector of
         Curve curve -> testCase (show i) $ do
             let prx = Just curve -- using Maybe as Proxy
-                CryptoPassed public = ECC.decodePoint prx $ vpEncodedPoint vector
+                public = throwCryptoError $ ECC.decodePoint prx $ vpEncodedPoint vector
             keyPair <- ECC.curveGenerateKeyPair prx
             vpError vector
                 @=? cryptoError (ECC.ecdh prx (ECC.keypairGetPrivate keyPair) public)
 
+tests :: TestTree
 tests =
     testGroup
         "ECC"
