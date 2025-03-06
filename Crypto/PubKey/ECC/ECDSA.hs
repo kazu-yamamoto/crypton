@@ -209,12 +209,14 @@ recover
     => hash -> Curve -> ExtendedSignature -> msg -> Maybe PublicKey
 recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
 
+-- | Normalize a signature to be in low-S form.
 normalize :: Curve -> Signature -> Signature
 normalize curve (Signature r s)
     | s <= n `unsafeShiftR` 1 = Signature r s
     | otherwise = Signature r (n - s)
     where n = ecc_n $ common_curve curve
 
+-- | Normalize an extended signature to be in low-S form.
 normalizeExtended :: Curve -> ExtendedSignature -> ExtendedSignature
 normalizeExtended curve (ExtendedSignature i p (Signature r s))
     | s <= n `unsafeShiftR` 1 = ExtendedSignature i p (Signature r s)
