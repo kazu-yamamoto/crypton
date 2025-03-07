@@ -22,8 +22,6 @@ module Crypto.PubKey.ECC.ECDSA (
     verifyDigest,
     recover,
     recoverDigest,
-    normalize,
-    normalizeExtended,
 ) where
 
 import Control.Monad
@@ -104,7 +102,9 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ ExtendedSignature i p $ Signature r s
+    return $ if s <= n `unsafeShiftR` 1
+        then ExtendedSignature i p $ Signature r s
+        else ExtendedSignature i (not p) $ Signature r (n - s)
 
 -- | Sign digest using the private key and an explicit k number.
 --
@@ -208,17 +208,3 @@ recover
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> Curve -> ExtendedSignature -> msg -> Maybe PublicKey
 recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
-
--- | Normalize a signature to be in low-S form.
-normalize :: Curve -> Signature -> Signature
-normalize curve (Signature r s)
-    | s <= n `unsafeShiftR` 1 = Signature r s
-    | otherwise = Signature r (n - s)
-    where n = ecc_n $ common_curve curve
-
--- | Normalize an extended signature to be in low-S form.
-normalizeExtended :: Curve -> ExtendedSignature -> ExtendedSignature
-normalizeExtended curve (ExtendedSignature i p (Signature r s))
-    | s <= n `unsafeShiftR` 1 = ExtendedSignature i p (Signature r s)
-    | otherwise = ExtendedSignature i (not p) (Signature r (n - s))
-    where n = ecc_n $ common_curve curve

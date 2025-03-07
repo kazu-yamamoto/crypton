@@ -11,7 +11,6 @@ import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.ECDSA as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.ECDSA as ECDSA
-import Data.Functor
 import qualified Data.ByteString as B
 
 import Imports
@@ -39,13 +38,14 @@ arbitraryScalar curve = choose (1, n - 1)
   where
     n = ECC.ecc_n (ECC.common_curve curve)
 
-sigECCToECDSA
-    :: ECDSA.EllipticCurveECDSA curve
-    => proxy curve -> ECC.Signature -> ECDSA.Signature curve
-sigECCToECDSA prx (ECC.Signature r s) =
-    ECDSA.Signature
-        (throwCryptoError $ ECDSA.scalarFromInteger prx r)
-        (throwCryptoError $ ECDSA.scalarFromInteger prx s)
+sigECDSAtoECC :: ECDSA.EllipticCurveECDSA curve => proxy curve -> ECDSA.Signature curve -> ECC.Signature
+sigECDSAtoECC prx (ECDSA.Signature r s) = ECC.Signature (ECDSA.scalarToInteger prx r) (ECDSA.scalarToInteger prx s)
+
+normalizeECC :: ECC.Curve -> ECC.Signature -> ECC.Signature
+normalizeECC curve (ECC.Signature r s)
+    | s <= n `div` 2 = ECC.Signature r s
+    | otherwise = ECC.Signature r (n - s)
+    where n = ECC.ecc_n $ ECC.common_curve curve
 
 testRecover :: ECC.CurveName -> TestTree
 testRecover name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
@@ -65,18 +65,9 @@ testNormalize name = testProperty (show name) $ \ (ArbitraryBS0_2901 msg) -> do
     k <- choose (1, n - 1)
     d <- choose (1, n - 1)
     let key = ECC.PrivateKey curve d
-    let pub = ECC.PublicKey curve $ ECC.generateQ curve d
     let digest = hashWith SHA256 msg
-    let sig = ECC.signExtendedDigestWith k key digest
-    let sigN = ECC.normalize curve . ECC.signature <$> sig
-    let sigE = ECC.normalizeExtended curve <$> sig
-    let checkN = sigN <&> \ s -> ECC.verifyDigest pub s digest
-    let checkE = sigE <&> \ s -> ECC.verifyDigest pub (ECC.signature s) digest
-    let recover = sigE >>= \ s -> ECC.recoverDigest curve s digest
-    pure $ propertyHold [
-        eqTest "verification" (Just True) checkN,
-        eqTest "verification-extended" (Just True) checkE,
-        eqTest "recovery" (Just $ ECC.public_q pub) (ECC.public_q <$> recover)]
+    let check = ECC.signExtendedDigestWith k key digest >>= \ s -> pure $ ECC.sign_s (ECC.signature s) <= n `div` 2
+    pure $ propertyHold [eqTest "normalized" (Just True) check]
 
 tests :: TestTree
 tests = testGroup "ECDSA"
@@ -104,6 +95,10 @@ tests = testGroup "ECDSA"
         , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p128r2
         , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256k1
         , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256r1
+        , localOption (QuickCheckTests 50) $ testNormalize ECC.SEC_t131r1
+        , localOption (QuickCheckTests 50) $ testNormalize ECC.SEC_t131r2
+        , localOption (QuickCheckTests 20) $ testNormalize ECC.SEC_t233k1
+        , localOption (QuickCheckTests 20) $ testNormalize ECC.SEC_t233r1
         ]
     ]
   where
@@ -117,11 +112,10 @@ tests = testGroup "ECDSA"
             pubECDSA = ECDSA.toPublic prx privECDSA
             sigECC = fromJust $ ECC.signWith kECC privECC hashAlg msg
             sigECDSA = fromJust $ ECDSA.signWith prx kECDSA privECDSA hashAlg msg
-            sigECDSA' = sigECCToECDSA prx sigECC
             msg' = msg `B.append` B.singleton 42
         return $
             propertyHold
-                [ eqTest "signature" sigECDSA sigECDSA'
-                , eqTest "verification" True (ECDSA.verify prx hashAlg pubECDSA sigECDSA' msg)
+                [ eqTest "signature" sigECC $ normalizeECC curve $ sigECDSAtoECC prx sigECDSA
+                , eqTest "verification" True (ECDSA.verify prx hashAlg pubECDSA sigECDSA msg)
                 , eqTest "alteration" False (ECDSA.verify prx hashAlg pubECDSA sigECDSA msg')
                 ]
