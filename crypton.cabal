@@ -276,6 +276,7 @@ library
         Crypto.Random.Entropy.Source
         Crypto.Random.Entropy.Backend
         Crypto.Random.ChaChaDRG
+        Crypto.Random.HmacDRG
         Crypto.Random.SystemDRG
         Crypto.Random.Probabilistic
         Crypto.PubKey.Internal
