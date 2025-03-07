@@ -11,7 +11,7 @@ import Test.Tasty.HUnit
 import Crypto.Number.Serialize
 import Crypto.Hash
 import Crypto.PubKey.ECC.Types
-import Crypto.PubKey.ECC.ECDSA (Signature (..), PrivateKey (..), PublicKey (..), signWith, verify)
+import Crypto.PubKey.ECC.ECDSA (Signature (..), PrivateKey (..), PublicKey (..), signWith, verify, deterministicNonce)
 import Crypto.PubKey.ECC.Generate
 
 -- existential type allows storing different hash algorithms in the same value
@@ -859,6 +859,10 @@ testPublic :: PrivateKey -> PublicPoint -> TestTree
 testPublic (PrivateKey curve key) pub = testCase "public" $
     pub @=? generateQ curve key
 
+testNonce :: PrivateKey -> HashAlg -> ByteString -> Integer -> TestTree
+testNonce key (HashAlg alg) msg nonc = testCase "nonce" $
+    nonc @=? deterministicNonce alg key (hashWith alg msg) Just
+
 testSignature :: PrivateKey -> HashAlg -> ByteString -> Integer -> Signature -> TestTree
 testSignature key (HashAlg alg) msg nonc sig = testCase "signature" $
     case signWith nonc key alg msg of
@@ -879,7 +883,18 @@ testEntry entry = testGroup (show entry) tests where
     key = PrivateKey curve $ privateNumber entry
     curve = getCurveByName $ curveName entry
 
+testEntryNonce :: Entry -> TestTree
+testEntryNonce entry = testGroup (show entry) tests where
+    tests = [
+        testPublic key $ publicPoint entry,
+        testNonce key (hashAlgorithm entry) (message entry) (nonce entry),
+        testSignature key (hashAlgorithm entry) (message entry) (nonce entry) (signature entry),
+        testVerify pub (hashAlgorithm entry) (message entry) (signature entry)]
+    pub = PublicKey curve $ publicPoint entry
+    key = PrivateKey curve $ privateNumber entry
+    curve = getCurveByName $ curveName entry
+
 ecdsaTests :: TestTree
 ecdsaTests = testGroup "ECDSA" [
     testGroup "GEC 2" $ testEntry . normalize <$> gec2Entries,
-    testGroup "RFC 6979" $ testEntry . normalize <$> flatten rfc6979Entries]
+    testGroup "RFC 6979" $ testEntryNonce . normalize <$> flatten rfc6979Entries]
