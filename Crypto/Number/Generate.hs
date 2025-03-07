@@ -7,6 +7,7 @@
 module Crypto.Number.Generate (
     GenTopPolicy (..),
     generateParams,
+    generatePrefix,
     generateMax,
     generateBetween,
 ) where
@@ -18,7 +19,7 @@ import Crypto.Internal.Imports
 import Crypto.Number.Basic
 import Crypto.Number.Serialize
 import Crypto.Random.Types
-import Data.Bits (complement, shiftL, testBit, (.&.), (.|.))
+import Data.Bits (complement, unsafeShiftR, shiftL, testBit, (.&.), (.|.))
 import Foreign.Ptr
 import Foreign.Storable
 
@@ -78,6 +79,18 @@ generateParams bits genTopPolicy generateOdd
     bytes = (bits + 7) `div` 8
     bit = (bits - 1) `mod` 8
     mask = 0xff `shiftL` (bit + 1)
+
+-- | Generate a number for a specific size of bits.
+--
+-- * @'generateParams' n Nothing False@ generates bytes and uses the suffix of @n@ bits
+-- * @'generatePrefix' n@ generates bytes and uses the prefix of @n@ bits
+generatePrefix :: MonadRandom m => Int -> m Integer
+generatePrefix bits
+    | bits <= 0 = return 0
+    | otherwise = do
+        let (count, offset) = (bits + 7) `divMod` 8
+        bytes <- getRandomBytes count
+        return $ os2ip (bytes :: ScrubbedBytes) `unsafeShiftR` (7 - offset)
 
 -- | Generate a positive integer x, s.t. 0 <= x < range
 generateMax
