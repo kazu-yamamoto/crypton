@@ -32,6 +32,13 @@ instance Show Entry where
         (show $ B.take 8 $ message entry)
         (show $ hashAlgorithm entry)
 
+normalize :: Entry -> Entry
+normalize entry
+    | s <= n `div` 2 = entry
+    | otherwise = entry { signature = Signature r (n - s) } where
+    Signature r s = signature entry
+    n = ecc_n $ common_curve $ getCurveByName $ curveName entry
+
 -- taken from GEC 2: Test Vectors for SEC 1
 gec2Entries :: [Entry]
 gec2Entries = [
@@ -874,5 +881,5 @@ testEntry entry = testGroup (show entry) tests where
 
 ecdsaTests :: TestTree
 ecdsaTests = testGroup "ECDSA" [
-    testGroup "GEC 2" $ testEntry <$> gec2Entries,
-    testGroup "RFC 6979" $ testEntry <$> flatten rfc6979Entries]
+    testGroup "GEC 2" $ testEntry . normalize <$> gec2Entries,
+    testGroup "RFC 6979" $ testEntry . normalize <$> flatten rfc6979Entries]

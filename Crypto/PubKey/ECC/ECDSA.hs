@@ -26,6 +26,7 @@ module Crypto.PubKey.ECC.ECDSA (
 
 import Control.Monad
 import Data.Data
+import Data.Bits
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
@@ -101,7 +102,9 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ ExtendedSignature i p $ Signature r s
+    return $ if s <= n `unsafeShiftR` 1
+        then ExtendedSignature i p $ Signature r s
+        else ExtendedSignature i (not p) $ Signature r (n - s)
 
 -- | Sign digest using the private key and an explicit k number.
 --
