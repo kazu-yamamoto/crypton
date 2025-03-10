@@ -22,20 +22,25 @@ module Crypto.PubKey.ECC.ECDSA (
     verifyDigest,
     recover,
     recoverDigest,
+    deterministicNonce,
 ) where
 
 import Control.Monad
 import Data.Data
 import Data.Bits
+import Data.ByteString (ByteString)
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
+import Crypto.Number.Basic
 import Crypto.Number.Generate
+import Crypto.Number.Serialize
 import Crypto.Number.ModArithmetic (inverse)
 import Crypto.PubKey.ECC.Prim
 import Crypto.PubKey.ECC.Types
 import Crypto.PubKey.Internal (dsaTruncHashDigest)
 import Crypto.Random.Types
+import Crypto.Random.HmacDRG
 
 -- | Represent a ECDSA signature namely R and S.
 data Signature = Signature
@@ -208,3 +213,19 @@ recover
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> Curve -> ExtendedSignature -> msg -> Maybe PublicKey
 recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
+
+-- | Deterministic nonce generation according to RFC 6979.
+-- Allows using different hash algorithms for the HMAC-based DRG and the message digest.
+deterministicNonce
+    :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => hashDRG -> PrivateKey -> Digest hashDigest -> (Integer -> Maybe a) -> a
+deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state run where
+    state = update seed $ initial alg where
+        seed = i2ospOf_ bytes key <> i2ospOf_ bytes message :: ByteString
+        message = dsaTruncHashDigest digest n `mod` n
+    run = do
+        k <- generatePrefix bits
+        if 0 < k && k < n then maybe run pure $ go k else run
+    bytes = (bits + 7) `div` 8
+    bits = numBits n
+    n = ecc_n $ common_curve curve
