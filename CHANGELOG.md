@@ -1,3 +1,16 @@
+## 1.0.2
+
+* Deterministic Nonce Generation for ECDSA
+  [#46](https://github.com/kazu-yamamoto/crypton/pull/46)
+* ECDSA Signature Normalization.
+  [#45](https://github.com/kazu-yamamoto/crypton/pull/45)
+* Add Full Test Suite from RFC 6979.
+  [#44](https://github.com/kazu-yamamoto/crypton/pull/44)
+* ECDSA with Public Key Recovery.
+  [#43](https://github.com/kazu-yamamoto/crypton/pull/43)
+* Providing necessary features for HPKE.
+  [#42](https://github.com/kazu-yamamoto/crypton/pull/42)
+
 ## 1.0.1
 
 * Update decaf library.
