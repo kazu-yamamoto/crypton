@@ -20,7 +20,16 @@ import Crypto.Number.Generate (generateMax)
 import Crypto.Number.Serialize (i2ospOf_)
 import Crypto.PubKey.DH (SharedKey (..))
 import Crypto.PubKey.ECC.Prim (pointMul)
-import Crypto.PubKey.ECC.Types (Curve, Point (..), PrivateNumber, PublicPoint, common_curve, curveSizeBits, ecc_g, ecc_n)
+import Crypto.PubKey.ECC.Types (
+    Curve,
+    Point (..),
+    PrivateNumber,
+    PublicPoint,
+    common_curve,
+    curveSizeBits,
+    ecc_g,
+    ecc_n,
+ )
 import Crypto.Random.Types
 
 -- | Generating a private number d.
@@ -42,6 +51,6 @@ getShared :: Curve -> PrivateNumber -> PublicPoint -> SharedKey
 getShared curve db qa = SharedKey $ i2ospOf_ ((nbBits + 7) `div` 8) x
   where
     x = case pointMul curve db qa of
-      Point x' _ -> x'
-      _ -> error "getShared"
+        Point x' _ -> x'
+        _ -> error "getShared"
     nbBits = curveSizeBits curve

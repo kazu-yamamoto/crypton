@@ -136,8 +136,8 @@ expandIPT bytes = expandIPT' bytes ipt
             ( error $
                 "Irreducible binary polynomial not defined against " ++ show nb ++ " bit"
             )
-            id $
-            iPolynomial nb
+            id
+            $ iPolynomial nb
     nb = bytes * 8
 
 -- Expand a tail bit pattern of irreducible binary polynomial
@@ -152,8 +152,8 @@ expandIPT' bytes (Q x y z) =
     reverse . setB x . setB y . setB z . setB 0 $ replicate bytes 0
   where
     setB i ws = case tl of
-      (a:as) -> hd ++ setBit a r : as
-      _ -> error "expandIPT'"
+        (a : as) -> hd ++ setBit a r : as
+        _ -> error "expandIPT'"
       where
         (q, r) = i `quotRem` 8
         (hd, tl) = splitAt q ws

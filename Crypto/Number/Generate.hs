@@ -19,7 +19,7 @@ import Crypto.Internal.Imports
 import Crypto.Number.Basic
 import Crypto.Number.Serialize
 import Crypto.Random.Types
-import Data.Bits (complement, unsafeShiftR, shiftL, testBit, (.&.), (.|.))
+import Data.Bits (complement, shiftL, testBit, unsafeShiftR, (.&.), (.|.))
 import Foreign.Ptr
 import Foreign.Storable
 
@@ -144,7 +144,8 @@ generateMax range
                                 else loopGenerateOver (count - 1)
 
     bits = numBits range
-    canOverGenerate = bits > 3 && not (range `testBit` (bits - 2)) && not (range `testBit` (bits - 3))
+    canOverGenerate =
+        bits > 3 && not (range `testBit` (bits - 2)) && not (range `testBit` (bits - 3))
 
     isValid n = n < range
 

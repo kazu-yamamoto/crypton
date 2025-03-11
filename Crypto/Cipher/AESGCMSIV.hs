@@ -27,8 +27,8 @@ module Crypto.Cipher.AESGCMSIV (
     decrypt,
 ) where
 
-import Data.Maybe
 import Data.Bits
+import Data.Maybe
 import Data.Word
 
 import Foreign.C.String

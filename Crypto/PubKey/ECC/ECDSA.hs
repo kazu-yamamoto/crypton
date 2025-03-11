@@ -26,20 +26,20 @@ module Crypto.PubKey.ECC.ECDSA (
 ) where
 
 import Control.Monad
-import Data.Data
 import Data.Bits
 import Data.ByteArray (ByteArrayAccess, ScrubbedBytes)
+import Data.Data
 
 import Crypto.Hash
 import Crypto.Number.Basic
 import Crypto.Number.Generate
-import Crypto.Number.Serialize
 import Crypto.Number.ModArithmetic (inverse)
+import Crypto.Number.Serialize
 import Crypto.PubKey.ECC.Prim
 import Crypto.PubKey.ECC.Types
 import Crypto.PubKey.Internal (dsaTruncHashDigest)
-import Crypto.Random.Types
 import Crypto.Random.HmacDRG
+import Crypto.Random.Types
 
 -- | Represent a ECDSA signature namely R and S.
 data Signature = Signature
@@ -106,9 +106,10 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     kInv <- inverse k n
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
-    return $ if s <= n `unsafeShiftR` 1
-        then ExtendedSignature i p $ Signature r s
-        else ExtendedSignature i (not p) $ Signature r (n - s)
+    return $
+        if s <= n `unsafeShiftR` 1
+            then ExtendedSignature i p $ Signature r s
+            else ExtendedSignature i (not p) $ Signature r (n - s)
 
 -- | Sign digest using the private key and an explicit k number.
 --
@@ -218,8 +219,10 @@ recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
 deterministicNonce
     :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
     => hashDRG -> PrivateKey -> Digest hashDigest -> (Integer -> Maybe a) -> a
-deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state run where
-    state = update seed $ initial alg where
+deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state run
+  where
+    state = update seed $ initial alg
+      where
         seed = i2ospOf_ bytes key <> i2ospOf_ bytes message :: ScrubbedBytes
         message = dsaTruncHashDigest digest n `mod` n
     run = do

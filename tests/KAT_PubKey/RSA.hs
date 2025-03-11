@@ -2,10 +2,10 @@
 
 module KAT_PubKey.RSA (rsaTests) where
 
-import Data.Either
 import Crypto.Hash
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import Data.Either
 
 import Imports
 

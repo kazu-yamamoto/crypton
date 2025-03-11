@@ -82,18 +82,18 @@ makeTest otp (i, count, password) =
 
 totpSHA1Params :: TOTPParams SHA1
 totpSHA1Params = case mkTOTPParams SHA1 0 30 OTP8 TwoSteps of
-  Right x -> x
-  _ -> error "totpSHA1Params"
+    Right x -> x
+    _ -> error "totpSHA1Params"
 
 totpSHA256Params :: TOTPParams SHA256
 totpSHA256Params = case mkTOTPParams SHA256 0 30 OTP8 TwoSteps of
-  Right x -> x
-  _ -> error "totpSHA256Params"
+    Right x -> x
+    _ -> error "totpSHA256Params"
 
 totpSHA512Params :: TOTPParams SHA512
 totpSHA512Params = case mkTOTPParams SHA512 0 30 OTP8 TwoSteps of
-  Right x -> x
-  _ -> error "totpSHA512Params"
+    Right x -> x
+    _ -> error "totpSHA512Params"
 
 -- resynching with the expected value should just return the current counter + 1
 prop_resyncExpected :: Word64 -> Word16 -> Bool

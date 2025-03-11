@@ -14,8 +14,8 @@ import Crypto.Internal.ByteArray (ByteArray)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.WordArray
 import Data.Bits
-import Data.Word
 import Data.List (foldl')
+import Data.Word
 
 -- Based on the Golang referance implementation
 -- https://github.com/golang/crypto/blob/master/twofish/twofish.go

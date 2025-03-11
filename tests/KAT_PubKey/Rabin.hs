@@ -229,7 +229,10 @@ rabinTests =
         , testGroup
             "RW"
             [ testGroup "encrypt" $
-                zipWith (doRwEncryptTest $ RW.private_pub rwKey) [katZero ..] rwEncryptionVectors
+                zipWith
+                    (doRwEncryptTest $ RW.private_pub rwKey)
+                    [katZero ..]
+                    rwEncryptionVectors
             , testGroup "decrypt" $
                 zipWith (doRwDecryptTest rwKey) [katZero ..] rwEncryptionVectors
             , testGroup "sign" $ zipWith (doRwSignTest rwKey) [katZero ..] rwSignatureVectors

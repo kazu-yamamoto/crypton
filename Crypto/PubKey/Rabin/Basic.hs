@@ -148,8 +148,8 @@ decrypt oaep pk c =
         c' = os2ip c
         solutions = rights $ toList $ mapTuple (unpad oaep k . i2ospOf_ k) $ sqroot' c' p q a b n
      in case solutions of
-       [x] -> Just x
-       _   -> Nothing
+            [x] -> Just x
+            _ -> Nothing
   where
     toList (w, x, y, z) = w : x : y : z : []
     mapTuple f (w, x, y, z) = (f w, f x, f y, f z)

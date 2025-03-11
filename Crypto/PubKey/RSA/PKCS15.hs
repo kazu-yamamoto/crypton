@@ -93,7 +93,22 @@ instance HashAlgorithmASN1 MD5 where
 instance HashAlgorithmASN1 SHA1 where
     hashDigestASN1 =
         addDigestPrefix
-            [0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14]
+            [ 0x30
+            , 0x21
+            , 0x30
+            , 0x09
+            , 0x06
+            , 0x05
+            , 0x2b
+            , 0x0e
+            , 0x03
+            , 0x02
+            , 0x1a
+            , 0x05
+            , 0x00
+            , 0x04
+            , 0x14
+            ]
 instance HashAlgorithmASN1 SHA224 where
     hashDigestASN1 =
         addDigestPrefix
@@ -235,7 +250,22 @@ instance HashAlgorithmASN1 SHA512t_256 where
 instance HashAlgorithmASN1 RIPEMD160 where
     hashDigestASN1 =
         addDigestPrefix
-            [0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x24, 0x03, 0x02, 0x01, 0x05, 0x00, 0x04, 0x14]
+            [ 0x30
+            , 0x21
+            , 0x30
+            , 0x09
+            , 0x06
+            , 0x05
+            , 0x2b
+            , 0x24
+            , 0x03
+            , 0x02
+            , 0x01
+            , 0x05
+            , 0x00
+            , 0x04
+            , 0x14
+            ]
 
 --
 
