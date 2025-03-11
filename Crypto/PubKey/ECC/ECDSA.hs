@@ -28,10 +28,9 @@ module Crypto.PubKey.ECC.ECDSA (
 import Control.Monad
 import Data.Data
 import Data.Bits
-import Data.ByteString (ByteString)
+import Data.ByteArray (ByteArrayAccess, ScrubbedBytes)
 
 import Crypto.Hash
-import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Number.Basic
 import Crypto.Number.Generate
 import Crypto.Number.Serialize
@@ -221,7 +220,7 @@ deterministicNonce
     => hashDRG -> PrivateKey -> Digest hashDigest -> (Integer -> Maybe a) -> a
 deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state run where
     state = update seed $ initial alg where
-        seed = i2ospOf_ bytes key <> i2ospOf_ bytes message :: ByteString
+        seed = i2ospOf_ bytes key <> i2ospOf_ bytes message :: ScrubbedBytes
         message = dsaTruncHashDigest digest n `mod` n
     run = do
         k <- generatePrefix bits
