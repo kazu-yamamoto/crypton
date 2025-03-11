@@ -226,6 +226,6 @@ deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state ru
     run = do
         k <- generatePrefix bits
         if 0 < k && k < n then maybe run pure $ go k else run
-    bytes = (bits + 7) `div` 8
+    bytes = (bits + 7) `unsafeShiftR` 3
     bits = numBits n
     n = ecc_n $ common_curve curve
