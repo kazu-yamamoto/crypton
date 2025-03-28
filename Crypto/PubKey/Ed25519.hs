@@ -29,6 +29,9 @@ module Crypto.PubKey.Ed25519 (
     sign,
     verify,
     generateSecretKey,
+
+    -- * deprecated
+    signUnsafe,
 ) where
 
 import Data.Word
@@ -100,9 +103,12 @@ toPublic (SecretKey sec) = PublicKey
             ccrypton_ed25519_publickey psec result
 {-# NOINLINE toPublic #-}
 
--- | Sign a message using the key pair
+-- | Sign a message using the key pair.
+--   The public key parameter is ignored and its public key
+--   is generated from the secret key parameter to prevent
+--   Double Public Key Signing Function Oracle Attack.
 sign :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
-sign secret public message =
+sign secret _public message =
     Signature $ B.allocAndFreeze signatureSize $ \sig ->
         withByteArray secret $ \sec ->
             withByteArray public $ \pub ->
@@ -110,6 +116,21 @@ sign secret public message =
                     ccrypton_ed25519_sign msg (fromIntegral msgLen) sec pub sig
   where
     !msgLen = B.length message
+    public = toPublic secret
+
+-- | Sign a message using the key pair.  This is old 'sing' which may
+--   be vulnerable to Double Public Key Signing Function Oracle
+--   Attack.
+signUnsafe :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
+signUnsafe secret public message =
+    Signature $ B.allocAndFreeze signatureSize $ \sig ->
+        withByteArray secret $ \sec ->
+            withByteArray public $ \pub ->
+                withByteArray message $ \msg ->
+                    ccrypton_ed25519_sign msg (fromIntegral msgLen) sec pub sig
+  where
+    !msgLen = B.length message
+{-# DEPRECATED signUnsafe "Use 'sign' instead" #-}
 
 -- | Verify a message
 verify :: ByteArrayAccess ba => PublicKey -> ba -> Signature -> Bool
