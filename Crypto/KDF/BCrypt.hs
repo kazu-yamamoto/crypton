@@ -173,7 +173,8 @@ rawHash _ cost salt password = B.take 23 hash -- Another compatibility bug. Igno
     -- Truncate the password if necessary and append a null byte for C compatibility
     key = B.snoc (B.take 72 password) 0
 
-    ctx = expensiveBlowfishContext key salt cost
+    ctx =
+        expensiveBlowfishContext (trace (show (B.convert key :: Bytes)) key) salt cost
 
     -- The BCrypt plaintext: "OrpheanBeholderScryDoubt"
     orpheanBeholder =
