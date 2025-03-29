@@ -13,7 +13,7 @@
 -- Stability   : experimental
 -- Portability : Good
 module Crypto.Cipher.Blowfish.Primitive (
-    Context,
+    Context (..),
     initBlowfish,
     encrypt,
     decrypt,

@@ -15,7 +15,7 @@
 -- The array produced should never be exposed to the user directly.
 module Crypto.Internal.WordArray (
     Array8,
-    Array32,
+    Array32 (..),
     Array64,
     MutableArray32,
     array8,

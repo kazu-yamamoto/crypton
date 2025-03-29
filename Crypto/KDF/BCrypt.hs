@@ -52,7 +52,7 @@ where
 
 import Control.Monad (forM_, unless, when)
 import Crypto.Cipher.Blowfish.Primitive (
-    Context,
+    Context (..),
     createKeySchedule,
     encrypt,
     expandKey,
@@ -70,6 +70,8 @@ import qualified Data.ByteArray as B
 import Data.ByteArray.Encoding
 import Data.Char
 
+import Crypto.Internal.WordArray
+import Data.ByteString.Short
 import Debug.Trace
 
 trc :: Show a => String -> a -> a
@@ -176,13 +178,16 @@ rawHash _ cost salt password = B.take 23 hash -- Another compatibility bug. Igno
         | i < 64 =
             loop
                 (i + 1)
-                (encrypt ctx (trace (show i ++ ": " ++ show (B.convert input :: Bytes)) input))
+                ( encrypt
+                    (trace (show (SBS ba)) ctx)
+                    (trace (show i ++ ": " ++ show (B.convert input :: Bytes)) input)
+                )
         | otherwise = input
 
     -- Truncate the password if necessary and append a null byte for C compatibility
     key = B.snoc (B.take 72 password) 0
 
-    ctx =
+    ctx@(Context (Array32 ba)) =
         expensiveBlowfishContext (trace (show (B.convert key :: Bytes)) key) salt cost
 
     -- The BCrypt plaintext: "OrpheanBeholderScryDoubt"
