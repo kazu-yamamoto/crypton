@@ -142,13 +142,19 @@ validatePassword password bcHash = either (const False) id (validatePasswordEith
 -- As for @validatePassword@ but will provide error information if the hash is invalid or
 -- an unsupported version.
 validatePasswordEither
-    :: (ByteArray password, ByteArray hash) => password -> hash -> Either String Bool
+    :: (ByteArray password, ByteArray hash)
+    => password -> hash -> Either String Bool
 validatePasswordEither password bcHash = do
     BCH version cost salt hash <- parseBCryptHash bcHash
     return $
         ( trc
             "rawHash"
-            (rawHash (trc "ver" version) (trc "cost" cost) (trc "salt" salt) password)
+            ( rawHash
+                (trc "ver" version)
+                (trc "cost" cost)
+                (trc "salt" salt)
+                (trace (show (B.convert password :: Bytes)) password)
+            )
             :: Bytes
         )
             `B.constEq` trc "hash" hash
