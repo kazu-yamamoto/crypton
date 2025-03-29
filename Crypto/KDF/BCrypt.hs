@@ -70,6 +70,11 @@ import qualified Data.ByteArray as B
 import Data.ByteArray.Encoding
 import Data.Char
 
+import Debug.Trace
+
+trc :: Show a => String -> a -> a
+trc tag x = trace (tag ++ ": " ++ show x) x
+
 data BCryptHash = BCH Char Int Bytes Bytes
 
 -- | Create a bcrypt hash for a password with a provided cost value.
@@ -140,7 +145,13 @@ validatePasswordEither
     :: (ByteArray password, ByteArray hash) => password -> hash -> Either String Bool
 validatePasswordEither password bcHash = do
     BCH version cost salt hash <- parseBCryptHash bcHash
-    return $ (rawHash version cost salt password :: Bytes) `B.constEq` hash
+    return $
+        ( trc
+            "rawHash"
+            (rawHash (trc "ver" version) (trc "cost" cost) (trc "salt" salt) password)
+            :: Bytes
+        )
+            `B.constEq` trc "hash" hash
 
 rawHash
     :: (ByteArrayAccess salt, ByteArray password, ByteArray output)
