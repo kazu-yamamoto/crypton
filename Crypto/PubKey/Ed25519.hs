@@ -31,7 +31,7 @@ module Crypto.PubKey.Ed25519 (
     generateSecretKey,
 
     -- * deprecated
-    signUnsafe,
+    unsafeSign,
 ) where
 
 import Data.Word
@@ -123,8 +123,8 @@ sign secret _public message =
 -- not correspond to the secret key. This function is provided for
 -- performance critical applications. To use it safely, applications
 -- must verify or derive the public key.
-signUnsafe :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
-signUnsafe secret public message =
+unsafeSign :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
+unsafeSign secret public message =
     Signature $ B.allocAndFreeze signatureSize $ \sig ->
         withByteArray secret $ \sec ->
             withByteArray public $ \pub ->
