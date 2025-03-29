@@ -164,11 +164,19 @@ rawHash
     => Char -> Int -> salt -> password -> output
 rawHash _ cost salt password = B.take 23 hash -- Another compatibility bug. Ignore last byte of hash
   where
-    hash = loop (0 :: Int) orpheanBeholder
+    hash =
+        loop
+            (0 :: Int)
+            ( trace
+                ("orpheanBeholder: " ++ (show (B.convert orpheanBeholder :: Bytes)))
+                orpheanBeholder
+            )
 
     loop i input
         | i < 64 =
-            loop (i + 1) (encrypt ctx (trace (show (B.convert input :: Bytes)) input))
+            loop
+                (i + 1)
+                (encrypt ctx (trace (show i ++ ": " ++ show (B.convert input :: Bytes)) input))
         | otherwise = input
 
     -- Truncate the password if necessary and append a null byte for C compatibility
