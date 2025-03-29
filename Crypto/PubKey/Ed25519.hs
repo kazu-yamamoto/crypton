@@ -130,7 +130,6 @@ signUnsafe secret public message =
                     ccrypton_ed25519_sign msg (fromIntegral msgLen) sec pub sig
   where
     !msgLen = B.length message
-{-# DEPRECATED signUnsafe "Use 'sign' instead" #-}
 
 -- | Verify a message
 verify :: ByteArrayAccess ba => PublicKey -> ba -> Signature -> Bool
