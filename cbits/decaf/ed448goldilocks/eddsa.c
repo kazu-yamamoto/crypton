@@ -233,12 +233,14 @@ void crypton_decaf_ed448_sign (
     const uint8_t *context,
     uint8_t context_len
 ) {
+    /* rederivation already performed in Crypto.PubKey.Ed448.sign
     uint8_t rederived_pubkey[CRYPTON_DECAF_EDDSA_448_PUBLIC_BYTES];
     crypton_decaf_ed448_derive_public_key(rederived_pubkey, privkey);
     if (CRYPTON_DECAF_TRUE != crypton_decaf_memeq(rederived_pubkey, pubkey, sizeof(rederived_pubkey))) {
         abort();
     }
-    crypton_decaf_ed448_sign_internal(signature,privkey,rederived_pubkey,message,
+    */
+    crypton_decaf_ed448_sign_internal(signature,privkey,/*rederived_*/pubkey,message,
         message_len,prehashed,context,context_len);
 }
 
