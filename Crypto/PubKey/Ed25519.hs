@@ -118,7 +118,7 @@ sign secret _public message =
     !msgLen = B.length message
     public = toPublic secret
 
--- | Sign a message using the key pair.  This is old 'sing' which may
+-- | Sign a message using the key pair.  This is old 'sign' which may
 --   be vulnerable to Double Public Key Signing Function Oracle
 --   Attack.
 signUnsafe :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
