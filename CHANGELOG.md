@@ -1,3 +1,11 @@
+## 1.0.3
+
+* Make sign of Ed25519/Ed448 safer. The public key parameter is
+  ignored and its public key is generated from the secret key
+  parameter to prevent Double Public Key Signing Function Oracle
+  Attack.
+  [#47](https://github.com/kazu-yamamoto/crypton/pull/47)
+
 ## 1.0.2
 
 * Deterministic Nonce Generation for ECDSA
