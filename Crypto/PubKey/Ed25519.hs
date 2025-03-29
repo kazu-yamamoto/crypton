@@ -118,9 +118,11 @@ sign secret _public message =
     !msgLen = B.length message
     public = toPublic secret
 
--- | Sign a message using the key pair.  This is old 'sign' which may
---   be vulnerable to Double Public Key Signing Function Oracle
---   Attack.
+-- | Sign a message using the key pair.  This is old `sign`, which is
+-- vulnerable to private key compromise if the given public key does
+-- not correspond to the secret key. This function is provided for
+-- performance critical applications. To use it safely, applications
+-- must verify or derive the public key.
 signUnsafe :: ByteArrayAccess ba => SecretKey -> PublicKey -> ba -> Signature
 signUnsafe secret public message =
     Signature $ B.allocAndFreeze signatureSize $ \sig ->
