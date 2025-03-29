@@ -167,7 +167,8 @@ rawHash _ cost salt password = B.take 23 hash -- Another compatibility bug. Igno
     hash = loop (0 :: Int) orpheanBeholder
 
     loop i input
-        | i < 64 = loop (i + 1) (encrypt ctx input)
+        | i < 64 =
+            loop (i + 1) (encrypt ctx (trace (show (B.convert input :: Bytes)) input))
         | otherwise = input
 
     -- Truncate the password if necessary and append a null byte for C compatibility
