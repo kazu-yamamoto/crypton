@@ -27,11 +27,9 @@ module Crypto.PubKey.Ed25519 (
     -- * Methods
     toPublic,
     sign,
+    unsafeSign,
     verify,
     generateSecretKey,
-
-    -- * deprecated
-    unsafeSign,
 ) where
 
 import Data.Word
