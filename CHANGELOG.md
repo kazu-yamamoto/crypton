@@ -1,3 +1,8 @@
+## 1.0.4
+
+* Ed448.sign: avoid extra re-derive of public key.
+  [#48](https://github.com/kazu-yamamoto/crypton/pull/48)
+
 ## 1.0.3
 
 * Make sign of Ed25519/Ed448 safer. The public key parameter is
