@@ -421,7 +421,9 @@ verify
     => Maybe hashAlg
     -> PublicKey
     -> ByteString
+    -- ^ Message
     -> ByteString
+    -- ^ Signature
     -> Bool
 verify hashAlg pk m sm =
     case makeSignature hashAlg (public_size pk) m of
