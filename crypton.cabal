@@ -121,6 +121,7 @@ flag use_target_attributes
     manual:      True
 
 library
+    -- cabal-fmt: expand . -CHANGELOG -CONTRIBUTING -Crypto.Math.Polynomial -Crypto.Random.Entropy.RDRand -Crypto.Random.Entropy.Unix -Crypto.Random.Entropy.Windows -LICENSE -Makefile -QA -README -Setup -Crypto.Cipher.Blowfish.Box -Crypto.Cipher.Blowfish.Primitive -Crypto.Cipher.CAST5.Primitive -Crypto.Cipher.Camellia.Primitive -Crypto.Cipher.DES.Primitive -Crypto.Cipher.Twofish.Primitive -Crypto.Cipher.Types.AEAD -Crypto.Cipher.Types.Base -Crypto.Cipher.Types.Block -Crypto.Cipher.Types.GF -Crypto.Cipher.Types.Stream -Crypto.Cipher.Types.Utils -Crypto.ECC.Simple.Prim -Crypto.ECC.Simple.Types -Crypto.Error.Types -Crypto.Hash.Blake2 -Crypto.Hash.Blake2b -Crypto.Hash.Blake2bp -Crypto.Hash.Blake2s -Crypto.Hash.Blake2sp -Crypto.Hash.Keccak -Crypto.Hash.MD2 -Crypto.Hash.MD4 -Crypto.Hash.MD5 -Crypto.Hash.RIPEMD160 -Crypto.Hash.SHA1 -Crypto.Hash.SHA224 -Crypto.Hash.SHA256 -Crypto.Hash.SHA3 -Crypto.Hash.SHA384 -Crypto.Hash.SHA512 -Crypto.Hash.SHA512t -Crypto.Hash.SHAKE -Crypto.Hash.Skein256 -Crypto.Hash.Skein512 -Crypto.Hash.Tiger -Crypto.Hash.Types -Crypto.Hash.Whirlpool -Crypto.Internal.Builder -Crypto.Internal.ByteArray -Crypto.Internal.Compat -Crypto.Internal.CompatPrim -Crypto.Internal.DeepSeq -Crypto.Internal.Endian -Crypto.Internal.Imports -Crypto.Internal.Nat -Crypto.Internal.WordArray -Crypto.Internal.Words -Crypto.Number.Compat -Crypto.PubKey.ElGamal -Crypto.PubKey.Internal -Crypto.Random.ChaChaDRG -Crypto.Random.Entropy.Backend -Crypto.Random.Entropy.Source -Crypto.Random.HmacDRG -Crypto.Random.Probabilistic -Crypto.Random.SystemDRG -Crypto.Cipher.AES.Primitive
     exposed-modules:
         Crypto.Cipher.AES
         Crypto.Cipher.AESGCMSIV
@@ -203,37 +204,6 @@ library
         Crypto.System.CPU
         Crypto.Tutorial
 
-    cc-options:       -std=gnu99
-    c-sources:
-        cbits/argon2/argon2.c
-        cbits/crypton_blake2b.c
-        cbits/crypton_blake2bp.c
-        cbits/crypton_blake2s.c
-        cbits/crypton_blake2sp.c
-        cbits/crypton_chacha.c
-        cbits/crypton_cpu.c
-        cbits/crypton_md2.c
-        cbits/crypton_md4.c
-        cbits/crypton_md5.c
-        cbits/crypton_pbkdf2.c
-        cbits/crypton_poly1305.c
-        cbits/crypton_rc4.c
-        cbits/crypton_ripemd.c
-        cbits/crypton_salsa.c
-        cbits/crypton_scrypt.c
-        cbits/crypton_sha1.c
-        cbits/crypton_sha256.c
-        cbits/crypton_sha3.c
-        cbits/crypton_sha512.c
-        cbits/crypton_skein256.c
-        cbits/crypton_skein512.c
-        cbits/crypton_tiger.c
-        cbits/crypton_whirlpool.c
-        cbits/crypton_xsalsa.c
-        cbits/ed25519/ed25519.c
-        cbits/p256/p256.c
-        cbits/p256/p256_ec.c
-
     other-modules:
         Crypto.Cipher.AES.Primitive
         Crypto.Cipher.Blowfish.Box
@@ -279,6 +249,7 @@ library
         Crypto.Internal.Compat
         Crypto.Internal.CompatPrim
         Crypto.Internal.DeepSeq
+        Crypto.Internal.Endian
         Crypto.Internal.Imports
         Crypto.Internal.Nat
         Crypto.Internal.WordArray
@@ -292,6 +263,37 @@ library
         Crypto.Random.HmacDRG
         Crypto.Random.Probabilistic
         Crypto.Random.SystemDRG
+
+    cc-options:       -std=gnu99
+    c-sources:
+        cbits/argon2/argon2.c
+        cbits/crypton_blake2b.c
+        cbits/crypton_blake2bp.c
+        cbits/crypton_blake2s.c
+        cbits/crypton_blake2sp.c
+        cbits/crypton_chacha.c
+        cbits/crypton_cpu.c
+        cbits/crypton_md2.c
+        cbits/crypton_md4.c
+        cbits/crypton_md5.c
+        cbits/crypton_pbkdf2.c
+        cbits/crypton_poly1305.c
+        cbits/crypton_rc4.c
+        cbits/crypton_ripemd.c
+        cbits/crypton_salsa.c
+        cbits/crypton_scrypt.c
+        cbits/crypton_sha1.c
+        cbits/crypton_sha256.c
+        cbits/crypton_sha3.c
+        cbits/crypton_sha512.c
+        cbits/crypton_skein256.c
+        cbits/crypton_skein512.c
+        cbits/crypton_tiger.c
+        cbits/crypton_whirlpool.c
+        cbits/crypton_xsalsa.c
+        cbits/ed25519/ed25519.c
+        cbits/p256/p256.c
+        cbits/p256/p256_ec.c
 
     default-language: Haskell2010
     include-dirs:
@@ -432,6 +434,8 @@ test-suite test-crypton
     type:             exitcode-stdio-1.0
     main-is:          Tests.hs
     hs-source-dirs:   tests
+
+    -- cabal-fmt: expand tests -Tests
     other-modules:
         BCrypt
         BCryptPBKDF
