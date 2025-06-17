@@ -520,3 +520,5 @@ benchmark bench-crypton
         gauge,
         random,
         crypton
+
+-- cabal-fmt: indent 4
