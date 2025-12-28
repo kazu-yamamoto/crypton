@@ -38,8 +38,7 @@ import Crypto.Internal.Compat
 import Crypto.Internal.CompatPrim
 import Data.Bits (xor)
 import Data.Word
-import GHC.Prim
-import GHC.Types
+import GHC.Base
 import GHC.Word
 
 -- | Array of Word8
