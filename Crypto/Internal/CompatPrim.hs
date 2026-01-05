@@ -28,9 +28,9 @@ import Data.Memory.Endian (getSystemEndianness, Endianness(..))
 #endif
 
 #if __GLASGOW_HASKELL__ >= 902
-import GHC.Prim
+import GHC.Exts
 #else
-import GHC.Prim hiding (Word32#)
+import GHC.Exts hiding (Word32#)
 type Word32# = Word#
 #endif
 
