@@ -34,7 +34,7 @@ expected =
           \\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\
           \\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\
           \\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\
-          \\x00\x01\x02\x03\x04\x05" -- chars after 72 are ignored as usual
+          \chars after 72 are ignored as usual"
         )
     ,
         ( "$2a$05$/OK.fbVrR/bpIqNJ5ianF.R9xrDjiycxMbQE2bp.vgqlYpW5wx2yy"
