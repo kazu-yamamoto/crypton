@@ -260,9 +260,12 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 	for (; bytes >= 64; bytes -= 64, src += 64, dst += 64) {
 		/* generate new chunk and update state */
 		chacha_core(ctx->nb_rounds, &out, st);
-		st->d[12] += 1;
-		if (st->d[12] == 0)
-			st->d[13] += 1;
+		uint32_t t0 = le32_to_cpu(st->d[12]);
+		st->d[12] = cpu_to_le32(t0 + 1);
+		if (st->d[12] == 0) {
+			uint32_t t1 = le32_to_cpu(st->d[13]);
+			st->d[13] = cpu_to_le32(t1 + 1);
+		}
 
 		for (i = 0; i < 64; ++i)
 			dst[i] = src[i] ^ out.b[i];
@@ -271,14 +274,17 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 	if (bytes > 0) {
 		/* generate new chunk and update state */
 		chacha_core(ctx->nb_rounds, &out, st);
-		st->d[12] += 1;
-		if (st->d[12] == 0)
-			st->d[13] += 1;
+		uint32_t t0 = le32_to_cpu(st->d[12]);
+		st->d[12] = cpu_to_le32(t0 + 1);
+		if (st->d[12] == 0) {
+			uint32_t t1 = le32_to_cpu(st->d[13]);
+			st->d[13] = cpu_to_le32(t1 + 1);
+		}
 
 		/* xor as much as needed */
 		for (i = 0; i < bytes; i++)
 			dst[i] = src[i] ^ out.b[i];
-		
+
 		/* copy the left over in the buffer */
 		ctx->prev_len = 64 - bytes;
 		ctx->prev_ofs = i;
@@ -286,6 +292,26 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 			ctx->prev[i] = out.b[i];
 		}
 	}
+}
+
+uint64_t crypton_chacha_counter(crypton_chacha_state *st)
+{
+	uint64_t result = ((uint64_t) le32_to_cpu(st->d[12]))
+		| (((uint64_t) le32_to_cpu(st->d[13])) << 32);
+	return result;
+}
+
+void crypton_chacha_set_counter(crypton_chacha_state *st, uint64_t block_counter)
+{
+	uint64_t current_counter;
+	current_counter = ((uint64_t) le32_to_cpu(st->d[12]))
+		| (((uint64_t) le32_to_cpu(st->d[13])) << 32);
+
+	if (current_counter == block_counter)
+		return;
+
+	st->d[12] = cpu_to_le32((uint32_t) block_counter);
+	st->d[13] = cpu_to_le32((uint32_t) (block_counter >> 32));
 }
 
 void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t bytes)
@@ -319,18 +345,24 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 		for (; bytes >= 64; bytes -= 64, dst += 64) {
 			/* generate new chunk and update state */
 			chacha_core(ctx->nb_rounds, (block *) dst, st);
-			st->d[12] += 1;
-			if (st->d[12] == 0)
-				st->d[13] += 1;
+			uint32_t t0 = le32_to_cpu(st->d[12]);
+			st->d[12] = cpu_to_le32(t0 + 1);
+			if (st->d[12] == 0) {
+				uint32_t t1 = le32_to_cpu(st->d[13]);
+				st->d[13] = cpu_to_le32(t1 + 1);
+			}
 		}
 	} else {
 		/* xor new 64-bytes chunks and store the left over if any */
 		for (; bytes >= 64; bytes -= 64, dst += 64) {
 			/* generate new chunk and update state */
 			chacha_core(ctx->nb_rounds, &out, st);
-			st->d[12] += 1;
-			if (st->d[12] == 0)
-				st->d[13] += 1;
+			uint32_t t0 = le32_to_cpu(st->d[12]);
+			st->d[12] = cpu_to_le32(t0 + 1);
+			if (st->d[12] == 0) {
+				uint32_t t1 = le32_to_cpu(st->d[13]);
+				st->d[13] = cpu_to_le32(t1 + 1);
+			}
 
 			for (i = 0; i < 64; ++i)
 				dst[i] = out.b[i];
@@ -340,19 +372,43 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 	if (bytes > 0) {
 		/* generate new chunk and update state */
 		chacha_core(ctx->nb_rounds, &out, st);
-		st->d[12] += 1;
-		if (st->d[12] == 0)
-			st->d[13] += 1;
+		uint32_t t0 = le32_to_cpu(st->d[12]);
+		st->d[12] = cpu_to_le32(t0 + 1);
+		if (st->d[12] == 0) {
+			uint32_t t1 = le32_to_cpu(st->d[13]);
+			st->d[13] = cpu_to_le32(t1 + 1);
+		}
 
 		/* xor as much as needed */
 		for (i = 0; i < bytes; i++)
 			dst[i] = out.b[i];
-		
+
 		/* copy the left over in the buffer */
 		ctx->prev_len = 64 - bytes;
 		ctx->prev_ofs = i;
 		for (; i < 64; i++)
 			ctx->prev[i] = out.b[i];
+	}
+}
+
+void crypton_chacha_generate_simple_block(uint8_t *dst, crypton_chacha_state *st, uint8_t rounds)
+{
+	if (ALIGNED64(dst)) {
+		chacha_core(rounds, (block *) dst, st);
+	} else {
+		block out;
+		int i;
+		chacha_core(rounds, &out, st);
+		for (i = 0; i < 64; ++i) {
+			dst[i] = out.b[i];
+		}
+	}
+
+	uint32_t t0 = le32_to_cpu(st->d[12]);
+	st->d[12] = cpu_to_le32(t0 + 1);
+	if (st->d[12] == 0) {
+		uint32_t t1 = le32_to_cpu(st->d[13]);
+		st->d[13] = cpu_to_le32(t1 + 1);
 	}
 }
 
