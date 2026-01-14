@@ -46,14 +46,20 @@ newtype StateSimple = StateSimple ScrubbedBytes -- just ChaCha's state
 class ChaChaState a where
     getCounter :: a -> Word64
     setCounter :: Word64 -> a -> a
+    getCounter32 :: a -> Word32
+    setCounter32 :: Word32 -> a -> a
 
 instance ChaChaState State where
     getCounter = \(State st) -> getCounter' st
     setCounter = \n (State st) -> State $ setCounter' n st
+    getCounter32 = \(State st) -> getCounter32' st
+    setCounter32 = \n (State st) -> State $ setCounter32' n st
 
 instance ChaChaState StateSimple where
     getCounter = \(StateSimple st) -> getCounter' st
     setCounter = \n (StateSimple st) -> StateSimple $ setCounter' n st
+    getCounter32 = \(StateSimple st) -> getCounter32' st
+    setCounter32 = \n (StateSimple st) -> StateSimple $ setCounter32' n st
 
 getCounter' :: ScrubbedBytes -> Word64
 getCounter' currSt =
@@ -61,12 +67,26 @@ getCounter' currSt =
         B.withByteArray currSt $ \stPtr ->
             ccrypton_chacha_counter stPtr
 
+getCounter32' :: ScrubbedBytes -> Word32
+getCounter32' currSt =
+    unsafeDoIO $ do
+        B.withByteArray currSt $ \stPtr ->
+            ccrypton_chacha_counter32 stPtr
+
 setCounter' :: Word64 -> ScrubbedBytes -> ScrubbedBytes
 setCounter' newCounter prevSt =
     unsafeDoIO $ do
         newSt <- B.copy prevSt (\_ -> return ())
         B.withByteArray newSt $ \stPtr ->
             ccrypton_chacha_set_counter stPtr newCounter
+        return newSt
+
+setCounter32' :: Word32 -> ScrubbedBytes -> ScrubbedBytes
+setCounter32' newCounter prevSt =
+    unsafeDoIO $ do
+        newSt <- B.copy prevSt (\_ -> return ())
+        B.withByteArray newSt $ \stPtr ->
+            ccrypton_chacha_set_counter32 stPtr newCounter
         return newSt
 
 -- | Initialize a new ChaCha context with the number of rounds,
@@ -234,6 +254,12 @@ foreign import ccall "crypton_chacha_counter"
 
 foreign import ccall "crypton_chacha_set_counter"
     ccrypton_chacha_set_counter :: Ptr StateSimple -> Word64 -> IO ()
+
+foreign import ccall "crypton_chacha_counter32"
+    ccrypton_chacha_counter32 :: Ptr StateSimple -> IO Word32
+
+foreign import ccall "crypton_chacha_set_counter32"
+    ccrypton_chacha_set_counter32 :: Ptr StateSimple -> Word32 -> IO ()
 
 foreign import ccall "crypton_chacha_generate_simple_block"
     ccrypton_chacha_generate_simple_block
