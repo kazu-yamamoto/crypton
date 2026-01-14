@@ -170,28 +170,29 @@ generateSimple (StateSimple prevSt) nbBytes = unsafeDoIO $ do
 
 getCounter :: StateSimple -> Word64
 getCounter (StateSimple currSt) =
-  unsafeDoIO $ do
-    B.withByteArray currSt $ \stPtr ->
-      ccrypton_chacha_counter stPtr
+    unsafeDoIO $ do
+        B.withByteArray currSt $ \stPtr ->
+            ccrypton_chacha_counter stPtr
 
 setCounter :: Word64 -> StateSimple -> StateSimple
 setCounter newCounter (StateSimple prevSt) =
     unsafeDoIO $ do
-        newSt  <- B.copy prevSt (\_ -> return ())
+        newSt <- B.copy prevSt (\_ -> return ())
         B.withByteArray newSt $ \stPtr ->
             ccrypton_chacha_set_counter stPtr newCounter
         return (StateSimple newSt)
 
 -- | similar to 'generate' but accepts a number of rounds, and always generates
 --   64 bytes (a single block)
-generateSimpleBlock :: ByteArray ba
-                    => Word8
-                    -> StateSimple
-                    -> (ba, StateSimple)
+generateSimpleBlock
+    :: ByteArray ba
+    => Word8
+    -> StateSimple
+    -> (ba, StateSimple)
 generateSimpleBlock nbRounds (StateSimple prevSt)
-    | nbRounds `notElem` [8,12,20]    = error "ChaCha: rounds should be 8, 12 or 20"
+    | nbRounds `notElem` [8, 12, 20] = error "ChaCha: rounds should be 8, 12 or 20"
     | otherwise = unsafeDoIO $ do
-        newSt  <- B.copy prevSt (\_ -> return ())
+        newSt <- B.copy prevSt (\_ -> return ())
         output <- B.alloc 64 $ \dstPtr ->
             B.withByteArray newSt $ \stPtr ->
                 ccrypton_chacha_generate_simple_block dstPtr stPtr nbRounds
@@ -224,4 +225,5 @@ foreign import ccall "crypton_chacha_set_counter"
     ccrypton_chacha_set_counter :: Ptr StateSimple -> Word64 -> IO ()
 
 foreign import ccall "crypton_chacha_generate_simple_block"
-    ccrypton_chacha_generate_simple_block :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
+    ccrypton_chacha_generate_simple_block
+        :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
