@@ -20,9 +20,8 @@ module Crypto.Cipher.ChaCha (
     StateSimple,
 
     -- * Seeking and cursor for DRG purposes
-    getCounter,
-    setCounter,
     generateSimpleBlock,
+    ChaChaState (..),
 ) where
 
 import Crypto.Internal.ByteArray (
@@ -43,6 +42,32 @@ newtype State = State ScrubbedBytes
 -- | ChaCha context for DRG purpose (see Crypto.Random.ChaChaDRG)
 newtype StateSimple = StateSimple ScrubbedBytes -- just ChaCha's state
     deriving (NFData)
+
+class ChaChaState a where
+    getCounter :: a -> Word64
+    setCounter :: Word64 -> a -> a
+
+instance ChaChaState State where
+    getCounter = \(State st) -> getCounter' st
+    setCounter = \n (State st) -> State $ setCounter' n st
+
+instance ChaChaState StateSimple where
+    getCounter = \(StateSimple st) -> getCounter' st
+    setCounter = \n (StateSimple st) -> StateSimple $ setCounter' n st
+
+getCounter' :: ScrubbedBytes -> Word64
+getCounter' currSt =
+    unsafeDoIO $ do
+        B.withByteArray currSt $ \stPtr ->
+            ccrypton_chacha_counter stPtr
+
+setCounter' :: Word64 -> ScrubbedBytes -> ScrubbedBytes
+setCounter' newCounter prevSt =
+    unsafeDoIO $ do
+        newSt <- B.copy prevSt (\_ -> return ())
+        B.withByteArray newSt $ \stPtr ->
+            ccrypton_chacha_set_counter stPtr newCounter
+        return newSt
 
 -- | Initialize a new ChaCha context with the number of rounds,
 -- the key and the nonce associated.
@@ -167,20 +192,6 @@ generateSimple (StateSimple prevSt) nbBytes = unsafeDoIO $ do
         B.withByteArray newSt $ \stPtr ->
             ccrypton_chacha_random 8 dstPtr stPtr (fromIntegral nbBytes)
     return (output, StateSimple newSt)
-
-getCounter :: StateSimple -> Word64
-getCounter (StateSimple currSt) =
-    unsafeDoIO $ do
-        B.withByteArray currSt $ \stPtr ->
-            ccrypton_chacha_counter stPtr
-
-setCounter :: Word64 -> StateSimple -> StateSimple
-setCounter newCounter (StateSimple prevSt) =
-    unsafeDoIO $ do
-        newSt <- B.copy prevSt (\_ -> return ())
-        B.withByteArray newSt $ \stPtr ->
-            ccrypton_chacha_set_counter stPtr newCounter
-        return (StateSimple newSt)
 
 -- | similar to 'generate' but accepts a number of rounds, and always generates
 --   64 bytes (a single block)
