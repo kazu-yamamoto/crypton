@@ -232,15 +232,15 @@ generateSimpleBlock nbRounds (StateSimple prevSt)
                 ccrypton_chacha_generate_simple_block dstPtr stPtr nbRounds
         return (output, StateSimple newSt)
 
-foreign import ccall "crypton_chacha_init_core"
+foreign import ccall unsafe "crypton_chacha_init_core"
     ccrypton_chacha_init_core
         :: Ptr StateSimple -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "crypton_chacha_init"
+foreign import ccall unsafe "crypton_chacha_init"
     ccrypton_chacha_init
         :: Ptr State -> Int -> Int -> Ptr Word8 -> Int -> Ptr Word8 -> IO ()
 
-foreign import ccall "crypton_xchacha_init"
+foreign import ccall unsafe "crypton_xchacha_init"
     ccrypton_xchacha_init :: Ptr State -> Int -> Ptr Word8 -> Ptr Word8 -> IO ()
 
 foreign import ccall "crypton_chacha_combine"
@@ -252,19 +252,19 @@ foreign import ccall "crypton_chacha_generate"
 foreign import ccall "crypton_chacha_random"
     ccrypton_chacha_random :: Int -> Ptr Word8 -> Ptr StateSimple -> CUInt -> IO ()
 
-foreign import ccall "crypton_chacha_counter64"
+foreign import ccall unsafe "crypton_chacha_counter64"
     ccrypton_chacha_counter64 :: Ptr StateSimple -> IO Word64
 
-foreign import ccall "crypton_chacha_set_counter64"
+foreign import ccall unsafe "crypton_chacha_set_counter64"
     ccrypton_chacha_set_counter64 :: Ptr StateSimple -> Word64 -> IO ()
 
-foreign import ccall "crypton_chacha_counter32"
+foreign import ccall unsafe "crypton_chacha_counter32"
     ccrypton_chacha_counter32 :: Ptr StateSimple -> IO Word32
 
-foreign import ccall "crypton_chacha_set_counter32"
+foreign import ccall unsafe "crypton_chacha_set_counter32"
     ccrypton_chacha_set_counter32 :: Ptr StateSimple -> Word32 -> IO ()
 
-foreign import ccall "crypton_chacha_generate_simple_block"
+foreign import ccall unsafe "crypton_chacha_generate_simple_block"
     ccrypton_chacha_generate_simple_block
         :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
 
