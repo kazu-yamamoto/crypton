@@ -51,16 +51,16 @@ class ChaChaState a where
     setCounter32 :: Word32 -> a -> a
 
 instance ChaChaState State where
-    getCounter64 = \(State st) -> getCounter64' st ccrypton_chacha_get_state
-    setCounter64 = \n (State st) -> State $ setCounter64' n st ccrypton_chacha_get_state
-    getCounter32 = \(State st) -> getCounter32' st ccrypton_chacha_get_state
-    setCounter32 = \n (State st) -> State $ setCounter32' n st ccrypton_chacha_get_state
+    getCounter64 (State st) = getCounter64' st ccrypton_chacha_get_state
+    setCounter64 n (State st) = State $ setCounter64' n st ccrypton_chacha_get_state
+    getCounter32 (State st) = getCounter32' st ccrypton_chacha_get_state
+    setCounter32 n (State st) = State $ setCounter32' n st ccrypton_chacha_get_state
 
 instance ChaChaState StateSimple where
-    getCounter64 = \(StateSimple st) -> getCounter64' st id
-    setCounter64 = \n (StateSimple st) -> StateSimple $ setCounter64' n st id
-    getCounter32 = \(StateSimple st) -> getCounter32' st id
-    setCounter32 = \n (StateSimple st) -> StateSimple $ setCounter32' n st id
+    getCounter64 (StateSimple st) = getCounter64' st id
+    setCounter64 n (StateSimple st) = StateSimple $ setCounter64' n st id
+    getCounter32 (StateSimple st) = getCounter32' st id
+    setCounter32 n (StateSimple st) = StateSimple $ setCounter32' n st id
 
 getCounter64' :: ScrubbedBytes -> (Ptr a -> Ptr StateSimple) -> Word64
 getCounter64' currSt conv =
