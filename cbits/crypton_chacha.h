@@ -51,9 +51,9 @@ void crypton_chacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds, uint32_
 void crypton_xchacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds, const uint8_t *key, const uint8_t *iv);
 void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *st, const uint8_t *src, uint32_t bytes);
 void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *st, uint32_t bytes);
-uint64_t crypton_chacha_counter(crypton_chacha_state *st);
+uint64_t crypton_chacha_counter64(crypton_chacha_state *st);
 uint32_t crypton_chacha_counter32(crypton_chacha_state *st);
-void crypton_chacha_set_counter(crypton_chacha_state *st, uint64_t block_counter);
+void crypton_chacha_set_counter64(crypton_chacha_state *st, uint64_t block_counter);
 void crypton_chacha_set_counter32(crypton_chacha_state *st, uint32_t block_counter);
 void crypton_chacha_generate_simple_block(uint8_t *dst, crypton_chacha_state *st, uint8_t rounds);
 

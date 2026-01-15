@@ -44,28 +44,28 @@ newtype StateSimple = StateSimple ScrubbedBytes -- just ChaCha's state
     deriving (NFData)
 
 class ChaChaState a where
-    getCounter :: a -> Word64
-    setCounter :: Word64 -> a -> a
+    getCounter64 :: a -> Word64
+    setCounter64 :: Word64 -> a -> a
     getCounter32 :: a -> Word32
     setCounter32 :: Word32 -> a -> a
 
 instance ChaChaState State where
-    getCounter = \(State st) -> getCounter' st
-    setCounter = \n (State st) -> State $ setCounter' n st
+    getCounter64 = \(State st) -> getCounter64' st
+    setCounter64 = \n (State st) -> State $ setCounter64' n st
     getCounter32 = \(State st) -> getCounter32' st
     setCounter32 = \n (State st) -> State $ setCounter32' n st
 
 instance ChaChaState StateSimple where
-    getCounter = \(StateSimple st) -> getCounter' st
-    setCounter = \n (StateSimple st) -> StateSimple $ setCounter' n st
+    getCounter64 = \(StateSimple st) -> getCounter64' st
+    setCounter64 = \n (StateSimple st) -> StateSimple $ setCounter64' n st
     getCounter32 = \(StateSimple st) -> getCounter32' st
     setCounter32 = \n (StateSimple st) -> StateSimple $ setCounter32' n st
 
-getCounter' :: ScrubbedBytes -> Word64
-getCounter' currSt =
+getCounter64' :: ScrubbedBytes -> Word64
+getCounter64' currSt =
     unsafeDoIO $ do
         B.withByteArray currSt $ \stPtr ->
-            ccrypton_chacha_counter stPtr
+            ccrypton_chacha_counter64 stPtr
 
 getCounter32' :: ScrubbedBytes -> Word32
 getCounter32' currSt =
@@ -73,12 +73,12 @@ getCounter32' currSt =
         B.withByteArray currSt $ \stPtr ->
             ccrypton_chacha_counter32 stPtr
 
-setCounter' :: Word64 -> ScrubbedBytes -> ScrubbedBytes
-setCounter' newCounter prevSt =
+setCounter64' :: Word64 -> ScrubbedBytes -> ScrubbedBytes
+setCounter64' newCounter prevSt =
     unsafeDoIO $ do
         newSt <- B.copy prevSt (\_ -> return ())
         B.withByteArray newSt $ \stPtr ->
-            ccrypton_chacha_set_counter stPtr newCounter
+            ccrypton_chacha_set_counter64 stPtr newCounter
         return newSt
 
 setCounter32' :: Word32 -> ScrubbedBytes -> ScrubbedBytes
@@ -249,11 +249,11 @@ foreign import ccall "crypton_chacha_generate"
 foreign import ccall "crypton_chacha_random"
     ccrypton_chacha_random :: Int -> Ptr Word8 -> Ptr StateSimple -> CUInt -> IO ()
 
-foreign import ccall "crypton_chacha_counter"
-    ccrypton_chacha_counter :: Ptr StateSimple -> IO Word64
+foreign import ccall "crypton_chacha_counter64"
+    ccrypton_chacha_counter64 :: Ptr StateSimple -> IO Word64
 
-foreign import ccall "crypton_chacha_set_counter"
-    ccrypton_chacha_set_counter :: Ptr StateSimple -> Word64 -> IO ()
+foreign import ccall "crypton_chacha_set_counter64"
+    ccrypton_chacha_set_counter64 :: Ptr StateSimple -> Word64 -> IO ()
 
 foreign import ccall "crypton_chacha_counter32"
     ccrypton_chacha_counter32 :: Ptr StateSimple -> IO Word32

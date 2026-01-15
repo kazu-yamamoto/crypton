@@ -294,7 +294,7 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 	}
 }
 
-uint64_t crypton_chacha_counter(crypton_chacha_state *st)
+uint64_t crypton_chacha_counter64(crypton_chacha_state *st)
 {
 	uint64_t result = ((uint64_t) le32_to_cpu(st->d[12]))
 		| (((uint64_t) le32_to_cpu(st->d[13])) << 32);
@@ -306,7 +306,7 @@ uint32_t crypton_chacha_counter32(crypton_chacha_state *st)
 	return le32_to_cpu(st->d[12]);
 }
 
-void crypton_chacha_set_counter(crypton_chacha_state *st, uint64_t block_counter)
+void crypton_chacha_set_counter64(crypton_chacha_state *st, uint64_t block_counter)
 {
 	uint64_t current_counter;
 	current_counter = ((uint64_t) le32_to_cpu(st->d[12]))
