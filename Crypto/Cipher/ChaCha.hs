@@ -1,3 +1,4 @@
+{-# LANGUAGE CApiFFI #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -263,9 +264,11 @@ foreign import ccall "crypton_chacha_counter32"
 foreign import ccall "crypton_chacha_set_counter32"
     ccrypton_chacha_set_counter32 :: Ptr StateSimple -> Word32 -> IO ()
 
-foreign import ccall "crypton_chacha_get_state"
-    ccrypton_chacha_get_state :: Ptr State -> Ptr StateSimple
-
 foreign import ccall "crypton_chacha_generate_simple_block"
     ccrypton_chacha_generate_simple_block
         :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
+
+foreign import capi "crypton_chacha.h"
+    crypton_chacha_get_state :: Ptr State -> Ptr StateSimple
+ccrypton_chacha_get_state :: Ptr State -> Ptr StateSimple
+ccrypton_chacha_get_state = crypton_chacha_get_state

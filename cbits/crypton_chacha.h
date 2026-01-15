@@ -56,5 +56,5 @@ uint32_t crypton_chacha_counter32(crypton_chacha_state *st);
 void crypton_chacha_set_counter64(crypton_chacha_state *st, uint64_t block_counter);
 void crypton_chacha_set_counter32(crypton_chacha_state *st, uint32_t block_counter);
 void crypton_chacha_generate_simple_block(uint8_t *dst, crypton_chacha_state *st, uint8_t rounds);
-crypton_chacha_state *crypton_chacha_get_state(crypton_chacha_context *);
+#define crypton_chacha_get_state(context) (&((crypton_chacha_context *) context)->st)
 #endif
