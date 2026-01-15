@@ -268,7 +268,5 @@ foreign import ccall unsafe "crypton_chacha_generate_simple_block"
     ccrypton_chacha_generate_simple_block
         :: Ptr Word8 -> Ptr StateSimple -> Word8 -> IO ()
 
-foreign import capi "crypton_chacha.h"
-    crypton_chacha_get_state :: Ptr State -> Ptr StateSimple
-ccrypton_chacha_get_state :: Ptr State -> Ptr StateSimple
-ccrypton_chacha_get_state = crypton_chacha_get_state
+foreign import capi unsafe "crypton_chacha.h crypton_chacha_get_state"
+    ccrypton_chacha_get_state :: Ptr State -> Ptr StateSimple
