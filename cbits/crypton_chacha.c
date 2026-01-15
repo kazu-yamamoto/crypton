@@ -444,3 +444,7 @@ void crypton_chacha_random(uint32_t rounds, uint8_t *dst, crypton_chacha_state *
 		crypton_chacha_init_core(st, 32, out.b, 8, out.b + 32);
 	}
 }
+
+crypton_chacha_state *crypton_chacha_get_state(crypton_chacha_context *context) {
+  return (&context->st);
+}

@@ -50,43 +50,45 @@ class ChaChaState a where
     setCounter32 :: Word32 -> a -> a
 
 instance ChaChaState State where
-    getCounter64 = \(State st) -> getCounter64' st
-    setCounter64 = \n (State st) -> State $ setCounter64' n st
-    getCounter32 = \(State st) -> getCounter32' st
-    setCounter32 = \n (State st) -> State $ setCounter32' n st
+    getCounter64 = \(State st) -> getCounter64' st ccrypton_chacha_get_state
+    setCounter64 = \n (State st) -> State $ setCounter64' n st ccrypton_chacha_get_state
+    getCounter32 = \(State st) -> getCounter32' st ccrypton_chacha_get_state
+    setCounter32 = \n (State st) -> State $ setCounter32' n st ccrypton_chacha_get_state
 
 instance ChaChaState StateSimple where
-    getCounter64 = \(StateSimple st) -> getCounter64' st
-    setCounter64 = \n (StateSimple st) -> StateSimple $ setCounter64' n st
-    getCounter32 = \(StateSimple st) -> getCounter32' st
-    setCounter32 = \n (StateSimple st) -> StateSimple $ setCounter32' n st
+    getCounter64 = \(StateSimple st) -> getCounter64' st id
+    setCounter64 = \n (StateSimple st) -> StateSimple $ setCounter64' n st id
+    getCounter32 = \(StateSimple st) -> getCounter32' st id
+    setCounter32 = \n (StateSimple st) -> StateSimple $ setCounter32' n st id
 
-getCounter64' :: ScrubbedBytes -> Word64
-getCounter64' currSt =
+getCounter64' :: ScrubbedBytes -> (Ptr a -> Ptr StateSimple) -> Word64
+getCounter64' currSt conv =
     unsafeDoIO $ do
         B.withByteArray currSt $ \stPtr ->
-            ccrypton_chacha_counter64 stPtr
+            ccrypton_chacha_counter64 $ conv stPtr
 
-getCounter32' :: ScrubbedBytes -> Word32
-getCounter32' currSt =
+getCounter32' :: ScrubbedBytes -> (Ptr a -> Ptr StateSimple) -> Word32
+getCounter32' currSt conv =
     unsafeDoIO $ do
         B.withByteArray currSt $ \stPtr ->
-            ccrypton_chacha_counter32 stPtr
+            ccrypton_chacha_counter32 $ conv stPtr
 
-setCounter64' :: Word64 -> ScrubbedBytes -> ScrubbedBytes
-setCounter64' newCounter prevSt =
+setCounter64'
+    :: Word64 -> ScrubbedBytes -> (Ptr a -> Ptr StateSimple) -> ScrubbedBytes
+setCounter64' newCounter prevSt conv =
     unsafeDoIO $ do
         newSt <- B.copy prevSt (\_ -> return ())
         B.withByteArray newSt $ \stPtr ->
-            ccrypton_chacha_set_counter64 stPtr newCounter
+            ccrypton_chacha_set_counter64 (conv stPtr) newCounter
         return newSt
 
-setCounter32' :: Word32 -> ScrubbedBytes -> ScrubbedBytes
-setCounter32' newCounter prevSt =
+setCounter32'
+    :: Word32 -> ScrubbedBytes -> (Ptr a -> Ptr StateSimple) -> ScrubbedBytes
+setCounter32' newCounter prevSt conv =
     unsafeDoIO $ do
         newSt <- B.copy prevSt (\_ -> return ())
         B.withByteArray newSt $ \stPtr ->
-            ccrypton_chacha_set_counter32 stPtr newCounter
+            ccrypton_chacha_set_counter32 (conv stPtr) newCounter
         return newSt
 
 -- | Initialize a new ChaCha context with the number of rounds,
@@ -260,6 +262,9 @@ foreign import ccall "crypton_chacha_counter32"
 
 foreign import ccall "crypton_chacha_set_counter32"
     ccrypton_chacha_set_counter32 :: Ptr StateSimple -> Word32 -> IO ()
+
+foreign import ccall "crypton_chacha_get_state"
+    ccrypton_chacha_get_state :: Ptr State -> Ptr StateSimple
 
 foreign import ccall "crypton_chacha_generate_simple_block"
     ccrypton_chacha_generate_simple_block
