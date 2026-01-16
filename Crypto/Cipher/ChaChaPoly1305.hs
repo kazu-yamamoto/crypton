@@ -6,7 +6,7 @@
 -- Portability : good
 --
 -- A simple AEAD scheme using ChaCha20 and Poly1305. See
--- <https://tools.ietf.org/html/rfc7539 RFC 7539>.
+-- <https://tools.ietf.org/html/rfc8439 RFC 8439>.
 --
 -- The State is not modified in place, so each function changing the State,
 -- returns a new State.
@@ -38,6 +38,8 @@ module Crypto.Cipher.ChaChaPoly1305 (
     -- * AEAD
     ChaCha20Poly1305,
     aeadChacha20poly1305Init,
+    chacha20poly1305Encrypt,
+    chacha20poly1305Decrypt,
 
     -- * Low level
     State,
@@ -65,9 +67,11 @@ import Crypto.Internal.ByteArray (
     ByteArrayAccess,
     Bytes,
     ScrubbedBytes,
+    convert,
  )
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
+import Crypto.MAC.Poly1305 (Auth)
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray.Pack as P
 import Data.Memory.Endian
@@ -274,3 +278,54 @@ aeadChacha20poly1305Init key nonce = do
             , aeadImplDecrypt = \st cipher -> decrypt cipher st
             , aeadImplFinalize = \st _ -> let Poly1305.Auth tag = finalize st in AuthTag tag
             }
+
+-- | Chacha20Poly1305 encryption.
+chacha20poly1305Encrypt
+    :: (ByteArrayAccess key, ByteArrayAccess iv, ByteArray p, ByteArrayAccess a)
+    => key
+    -- ^ 256-bits key
+    -> iv
+    -- ^ 96-bits nonce
+    -> p
+    -- ^ Plaintext
+    -> a
+    -- ^ AAD
+    -> Maybe (p, Auth)
+    -- ^ Ciphertext and 128-bits tag
+chacha20poly1305Encrypt key nonce plaintext ad =
+    case nonce12 nonce of
+        CryptoFailed _ -> Nothing
+        CryptoPassed chachaNonce -> case initialize key chachaNonce of
+            CryptoFailed _ -> Nothing
+            CryptoPassed st0 ->
+                let st1 = finalizeAAD (appendAAD ad st0)
+                    (ciphertext, st2) = encrypt plaintext st1
+                    authTag = finalize st2
+                 in Just (ciphertext, authTag)
+
+-- | Chacha20Poly1305 decryption.
+chacha20poly1305Decrypt
+    :: (ByteArrayAccess key, ByteArrayAccess iv, ByteArray p, ByteArrayAccess a)
+    => key
+    -- ^ 256-bits key
+    -> iv
+    -- ^ 96-bits nonce
+    -> p
+    -- ^ Ciphertext + 128-bits tag
+    -> a
+    -- ^ AAD
+    -> Maybe p
+    -- ^ Plaintext
+chacha20poly1305Decrypt key nonce ciphertag ad =
+    case nonce12 nonce of
+        CryptoFailed _ -> Nothing
+        CryptoPassed chachaNonce -> case initialize key chachaNonce of
+            CryptoFailed _ -> Nothing
+            CryptoPassed st0 ->
+                let (ciphertext, expectedTag) = B.splitAt (B.length ciphertag - 16) ciphertag
+                    st1 = finalizeAAD (appendAAD ad st0)
+                    (plaintext, st2) = decrypt ciphertext st1
+                    actualTag = finalize st2
+                 in if convert actualTag == expectedTag
+                        then Just plaintext
+                        else Nothing
