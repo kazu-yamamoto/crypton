@@ -6,7 +6,7 @@
 -- Portability : good
 --
 -- A simple AEAD scheme using ChaCha20 and Poly1305. See
--- <https://tools.ietf.org/html/rfc7539 RFC 7539>.
+-- <https://tools.ietf.org/html/rfc8439 RFC 8439>.
 --
 -- The State is not modified in place, so each function changing the State,
 -- returns a new State.

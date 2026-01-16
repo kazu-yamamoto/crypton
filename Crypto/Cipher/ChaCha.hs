@@ -94,6 +94,7 @@ setCounter32' newCounter prevSt conv =
 
 -- | Initialize a new ChaCha context with the number of rounds,
 -- the key and the nonce associated.
+-- To use ChaCha20 defined in RFC 8439, 20, 256bits-key and 96-bits nonce must be used.
 initialize
     :: (ByteArrayAccess key, ByteArrayAccess nonce)
     => Int
