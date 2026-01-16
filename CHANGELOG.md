@@ -1,3 +1,14 @@
+# CHANGELOG for crypton
+
+## 1.0.5
+
+* Setter/Getter for ChaCha counter.
+  [#63](https://github.com/kazu-yamamoto/crypton/pull/63)
+* Add simple interface to generate full blocks
+  [#60](https://github.com/kazu-yamamoto/crypton/pull/60)
+* Avoid `ghc-prim` dependency.
+  [#61](https://github.com/kazu-yamamoto/crypton/pull/61)
+
 ## 1.0.4
 
 * Ed448.sign: avoid extra re-derive of public key.
