@@ -19,42 +19,46 @@ import Crypto.Internal.Imports
 -- | AEAD Implementation
 data AEADModeImpl st = AEADModeImpl
     { aeadImplAppendHeader :: forall ba. ByteArrayAccess ba => st -> ba -> st
+    -- ^ Adding associated\/additional data to the AEAD context.
     , aeadImplEncrypt :: forall ba. ByteArray ba => st -> ba -> (ba, st)
+    -- ^ Encrypiting plaintext and update the AEAD context.
     , aeadImplDecrypt :: forall ba. ByteArray ba => st -> ba -> (ba, st)
+    -- ^ Decrypting ciphertext and update the AEAD context.
     , aeadImplFinalize :: st -> Int -> AuthTag
+    -- ^ Finalizing the AEAD context and returning the authentication tag.
     }
 
--- | Authenticated Encryption with Associated Data algorithms
+-- | Algorithm and context for AEAD(Authenticated Encryption with Associated\/Additional Data)
 data AEAD cipher = forall st. AEAD
     { aeadModeImpl :: AEADModeImpl st
     , aeadState :: !st
     }
 
--- | Append some header information to an AEAD context
+-- | Adding associated\/additional data to the AEAD context.
 aeadAppendHeader :: ByteArrayAccess aad => AEAD cipher -> aad -> AEAD cipher
 aeadAppendHeader (AEAD impl st) aad = AEAD impl $ aeadImplAppendHeader impl st aad
 
--- | Encrypt some data and update the AEAD context
+-- | Encrypting plaintext  and update the AEAD context.
 aeadEncrypt :: ByteArray ba => AEAD cipher -> ba -> (ba, AEAD cipher)
 aeadEncrypt (AEAD impl st) ba = second (AEAD impl) $ aeadImplEncrypt impl st ba
 
--- | Decrypt some data and update the AEAD context
+-- | Decrypting ciphertext and update the AEAD context.
 aeadDecrypt :: ByteArray ba => AEAD cipher -> ba -> (ba, AEAD cipher)
 aeadDecrypt (AEAD impl st) ba = second (AEAD impl) $ aeadImplDecrypt impl st ba
 
--- | Finalize the AEAD context and return the authentication tag
+-- | Finalizing the AEAD context and returning the authentication tag.
 aeadFinalize :: AEAD cipher -> Int -> AuthTag
 aeadFinalize (AEAD impl st) = aeadImplFinalize impl st
 
--- | Simple AEAD encryption
+-- | Simple AEAD encryption.
 aeadSimpleEncrypt
     :: (ByteArrayAccess aad, ByteArray ba)
     => AEAD a
-    -- ^ A new AEAD Context
+    -- ^ An AEAD Context
     -> aad
-    -- ^ Optional Authentication data header
+    -- ^ Associated\/additional data
     -> ba
-    -- ^ Optional Plaintext
+    -- ^ Plaintext
     -> Int
     -- ^ Tag length
     -> (AuthTag, ba)
@@ -65,13 +69,13 @@ aeadSimpleEncrypt aeadIni header input taglen = (tag, output)
     (output, aeadFinal) = aeadEncrypt aead input
     tag = aeadFinalize aeadFinal taglen
 
--- | Simple AEAD decryption
+-- | Simple AEAD decryptio.
 aeadSimpleDecrypt
     :: (ByteArrayAccess aad, ByteArray ba)
     => AEAD a
-    -- ^ A new AEAD Context
+    -- ^ An AEAD Context
     -> aad
-    -- ^ Optional Authentication data header
+    -- ^ Associated\/additional data
     -> ba
     -- ^ Ciphertext
     -> AuthTag
