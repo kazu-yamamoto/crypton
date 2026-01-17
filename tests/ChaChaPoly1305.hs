@@ -2,7 +2,8 @@
 
 module ChaChaPoly1305 where
 
-import qualified Crypto.Cipher.ChaChaPoly1305 as AEAD
+import qualified Crypto.Cipher.ChaChaPoly1305 as CP
+import Crypto.Cipher.Types
 import Crypto.Error
 import Imports
 import Poly1305 ()
@@ -76,13 +77,17 @@ a5plain =
 a5tag :: ByteString
 a5tag = "\xee\xad\x9d\x67\x89\x0c\xbb\x22\x39\x23\x36\xfe\xa1\x85\x1f\x38"
 
-rfc8439encrypt = Just a5cipher @=? (fst <$> mct)
+rfc8439encrypt = a5cipher @=? ct
   where
-    mct = AEAD.chacha20poly1305Encrypt a5key a5nonce a5plain a5aad
+    ct = case CP.aeadChacha20poly1305Init a5key a5nonce of
+        CryptoPassed st -> snd $ aeadSimpleEncrypt st a5aad a5plain 16
+        _ -> "dummy"
 
-rfc8439decrypt = Just a5plain @=? mp
+rfc8439decrypt = Just a5plain @=? mpt
   where
-    mp = AEAD.chacha20poly1305Decrypt a5key a5nonce (a5cipher <> a5tag) a5aad
+    mpt = case CP.aeadChacha20poly1305Init a5key a5nonce of
+        CryptoPassed st -> aeadSimpleDecrypt st a5aad a5cipher (AuthTag $ B.convert a5tag)
+        _ -> Nothing
 
 tests =
     testGroup
@@ -99,20 +104,20 @@ tests =
     runEncrypt =
         let ini =
                 throwCryptoError $
-                    AEAD.initialize key (throwCryptoError $ AEAD.nonce8 constant iv)
-            afterAAD = AEAD.finalizeAAD (AEAD.appendAAD aad ini)
-            (out, afterEncrypt) = AEAD.encrypt plaintext afterAAD
-            outtag = AEAD.finalize afterEncrypt
+                    CP.initialize key (throwCryptoError $ CP.nonce8 constant iv)
+            afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
+            (out, afterEncrypt) = CP.encrypt plaintext afterAAD
+            outtag = CP.finalize afterEncrypt
          in propertyHoldCase
                 [ eqTest "ciphertext" ciphertext out
                 , eqTest "tag" tag (B.convert outtag)
                 ]
     runEncryptX =
         let ini =
-                throwCryptoError $ AEAD.initializeX key (throwCryptoError $ AEAD.nonce24 ivX)
-            afterAAD = AEAD.finalizeAAD (AEAD.appendAAD aad ini)
-            (out, afterEncrypt) = AEAD.encrypt plaintext afterAAD
-            outtag = AEAD.finalize afterEncrypt
+                throwCryptoError $ CP.initializeX key (throwCryptoError $ CP.nonce24 ivX)
+            afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
+            (out, afterEncrypt) = CP.encrypt plaintext afterAAD
+            outtag = CP.finalize afterEncrypt
          in propertyHoldCase
                 [ eqTest "ciphertext" ciphertextX out
                 , eqTest "tag" tagX (B.convert outtag)
@@ -121,10 +126,10 @@ tests =
     runDecrypt =
         let ini =
                 throwCryptoError $
-                    AEAD.initialize key (throwCryptoError $ AEAD.nonce8 constant iv)
-            afterAAD = AEAD.finalizeAAD (AEAD.appendAAD aad ini)
-            (out, afterDecrypt) = AEAD.decrypt ciphertext afterAAD
-            outtag = AEAD.finalize afterDecrypt
+                    CP.initialize key (throwCryptoError $ CP.nonce8 constant iv)
+            afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
+            (out, afterDecrypt) = CP.decrypt ciphertext afterAAD
+            outtag = CP.finalize afterDecrypt
          in propertyHoldCase
                 [ eqTest "plaintext" plaintext out
                 , eqTest "tag" tag (B.convert outtag)
@@ -132,33 +137,33 @@ tests =
 
     runDecryptX =
         let ini =
-                throwCryptoError $ AEAD.initializeX key (throwCryptoError $ AEAD.nonce24 ivX)
-            afterAAD = AEAD.finalizeAAD (AEAD.appendAAD aad ini)
-            (out, afterDecrypt) = AEAD.decrypt ciphertextX afterAAD
-            outtag = AEAD.finalize afterDecrypt
+                throwCryptoError $ CP.initializeX key (throwCryptoError $ CP.nonce24 ivX)
+            afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
+            (out, afterDecrypt) = CP.decrypt ciphertextX afterAAD
+            outtag = CP.finalize afterDecrypt
          in propertyHoldCase
                 [ eqTest "plaintext" plaintext out
                 , eqTest "tag" tagX (B.convert outtag)
                 ]
 
     runNonceInc =
-        let n1 = throwCryptoError . AEAD.nonce12 $ nonce1
-            n3 = throwCryptoError . AEAD.nonce12 $ nonce3
-            n5 = throwCryptoError . AEAD.nonce12 $ nonce5
-            n6 = throwCryptoError . AEAD.nonce8 constant $ nonce6
-            n8 = throwCryptoError . AEAD.nonce8 constant $ nonce8
-            n10 = throwCryptoError . AEAD.nonce8 constant $ nonce10
+        let n1 = throwCryptoError . CP.nonce12 $ nonce1
+            n3 = throwCryptoError . CP.nonce12 $ nonce3
+            n5 = throwCryptoError . CP.nonce12 $ nonce5
+            n6 = throwCryptoError . CP.nonce8 constant $ nonce6
+            n8 = throwCryptoError . CP.nonce8 constant $ nonce8
+            n10 = throwCryptoError . CP.nonce8 constant $ nonce10
          in propertyHoldCase
-                [ eqTest "nonce12a" nonce2 $ B.convert . AEAD.incrementNonce $ n1
-                , eqTest "nonce12b" nonce4 $ B.convert . AEAD.incrementNonce $ n3
-                , eqTest "nonce12c" nonce1 $ B.convert . AEAD.incrementNonce $ n5
+                [ eqTest "nonce12a" nonce2 $ B.convert . CP.incrementNonce $ n1
+                , eqTest "nonce12b" nonce4 $ B.convert . CP.incrementNonce $ n3
+                , eqTest "nonce12c" nonce1 $ B.convert . CP.incrementNonce $ n5
                 , eqTest "nonce8a" (B.concat [constant, nonce7]) $
-                    B.convert . AEAD.incrementNonce $
+                    B.convert . CP.incrementNonce $
                         n6
                 , eqTest "nonce8b" (B.concat [constant, nonce9]) $
-                    B.convert . AEAD.incrementNonce $
+                    B.convert . CP.incrementNonce $
                         n8
                 , eqTest "nonce8c" (B.concat [constant, nonce6]) $
-                    B.convert . AEAD.incrementNonce $
+                    B.convert . CP.incrementNonce $
                         n10
                 ]
