@@ -79,13 +79,15 @@ a5tag = "\xee\xad\x9d\x67\x89\x0c\xbb\x22\x39\x23\x36\xfe\xa1\x85\x1f\x38"
 
 rfc8439encrypt = a5cipher @=? ct
   where
-    CryptoPassed st = CP.aeadChacha20poly1305Init a5key a5nonce
-    (_tag, ct) = aeadSimpleEncrypt st a5aad a5plain 16
+    ct = case CP.aeadChacha20poly1305Init a5key a5nonce of
+        CryptoPassed st -> snd $ aeadSimpleEncrypt st a5aad a5plain 16
+        _ -> "dummy"
 
 rfc8439decrypt = Just a5plain @=? mpt
   where
-    CryptoPassed st = CP.aeadChacha20poly1305Init a5key a5nonce
-    mpt = aeadSimpleDecrypt st a5aad a5cipher (AuthTag $ B.convert a5tag)
+    mpt = case CP.aeadChacha20poly1305Init a5key a5nonce of
+        CryptoPassed st -> aeadSimpleDecrypt st a5aad a5cipher (AuthTag $ B.convert a5tag)
+        _ -> Nothing
 
 tests =
     testGroup
