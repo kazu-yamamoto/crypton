@@ -1,5 +1,10 @@
 # CHANGELOG for crypton
 
+## 1.0.6
+
+* Fix test failures on less common 64-bit arches.
+  [#65](https://github.com/kazu-yamamoto/crypton/pull/65)
+
 ## 1.0.5
 
 * Setter/Getter for ChaCha counter.
