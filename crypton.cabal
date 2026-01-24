@@ -310,13 +310,13 @@ library
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
 
-    if (arch(x86_64) || arch(aarch64) || arch(loong64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
         include-dirs: cbits/include64
 
     else
         include-dirs: cbits/include32
 
-    if (arch(x86_64) || arch(aarch64) || arch(loong64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
         c-sources:
             cbits/decaf/ed448goldilocks/decaf_all.c
             cbits/decaf/ed448goldilocks/eddsa.c
@@ -340,13 +340,13 @@ library
 
         include-dirs: cbits/decaf/include/arch_32 cbits/decaf/p448/arch_32
 
-    if (arch(x86_64) || arch(aarch64) || arch(loong64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
         c-sources: cbits/curve25519/curve25519-donna-c64.c
 
     else
         c-sources: cbits/curve25519/curve25519-donna.c
 
-    if (arch(i386) || arch(x86_64) || arch(loong64) || arch(ppc64le) || arch(riscv64) || arch(alpha))
+    if (arch(i386) || arch(x86_64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(alpha))
         cpp-options: -DARCH_IS_LITTLE_ENDIAN
 
     if arch(i386)
