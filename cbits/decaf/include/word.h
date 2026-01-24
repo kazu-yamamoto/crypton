@@ -151,7 +151,7 @@ CRYPTON_DECAF_INLINE mask_t bit_to_mask(uint8_t bit) {
     br_set_to_mask(mask_t x) {
         return vdupq_n_u32(x);
     }
-#elif __amd64__ || __X86_64__ || __aarch64__ /* || _WIN64 -> WIN64 does not support int128 so force the build on arch32 default so do not use this define for _WIN64*/
+#elif __amd64__ || __X86_64__ || __aarch64__ || __loongarch_lp64 || __PPC64__ || __riscv ||  __s390x__ || __alpha__ || __powerpc64__ || (__sparc__ && __arch64__) /* || _WIN64 -> WIN64 does not support int128 so force the build on arch32 default so do not use this define for _WIN64*/
     #define VECTOR_ALIGNED __attribute__((aligned(8)))
     typedef uint64_t big_register_t, uint64xn_t;
 
