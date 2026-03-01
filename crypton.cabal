@@ -303,8 +303,12 @@ library
     ghc-options:      -Wall -fwarn-tabs -optc-O3
     build-depends:
           base        >=4.13    && <5
-        , basement    >=0.0.6
         , bytestring
+        , primitive
+        , deepseq
+        , base16
+        , bytestring
+        , text
         , memory      >=0.14.18
 
     if flag(old_toolchain_inliner)
