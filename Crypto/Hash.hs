@@ -47,18 +47,14 @@ module Crypto.Hash (
     module Crypto.Hash.Algorithms,
 ) where
 
-import Basement.Block (Block, unsafeFreeze)
-import Basement.Block.Mutable (copyFromPtr, new)
-import Basement.Types.OffsetSize (CountOf (..))
 import Crypto.Hash.Algorithms
 import Crypto.Hash.Types
-import Crypto.Internal.ByteArray (ByteArrayAccess)
+import Crypto.Internal.ByteArray (ByteArrayAccess, allocAndFreezePrim)
 import qualified Crypto.Internal.ByteArray as B
-import Crypto.Internal.Compat (unsafeDoIO)
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int32)
-import Data.Word (Word8)
-import Foreign.Ptr (Ptr, plusPtr)
+import qualified Foreign.Marshal.Utils as FMU
+import Foreign.Ptr (Ptr, castPtr, plusPtr)
 
 -- | Hash a strict bytestring into a digest.
 hash :: (ByteArrayAccess ba, HashAlgorithm a) => ba -> Digest a
@@ -117,8 +113,8 @@ hashFinalize
      . HashAlgorithm a
     => Context a
     -> Digest a
-hashFinalize !c =
-    Digest $ B.allocAndFreeze (hashDigestSize (undefined :: a)) $ \(dig :: Ptr (Digest a)) -> do
+hashFinalize !c = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+    \(dig :: Ptr (Digest a)) -> do
         ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
         return ()
 
@@ -135,8 +131,8 @@ hashFinalizePrefix
     -> ba
     -> Int
     -> Digest a
-hashFinalizePrefix !c b len =
-    Digest $ B.allocAndFreeze (hashDigestSize (undefined :: a)) $ \(dig :: Ptr (Digest a)) -> do
+hashFinalizePrefix !c b len = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+    \(dig :: Ptr (Digest a)) -> do
         ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) ->
             B.withByteArray b $ \d ->
                 hashInternalFinalizePrefix
@@ -171,13 +167,9 @@ digestFromByteString = from undefined
     from :: a -> ba -> Maybe (Digest a)
     from alg bs
         | B.length bs == (hashDigestSize alg) =
-            Just $ Digest $ unsafeDoIO $ copyBytes bs
+            Just $ Digest $ copyByteArray bs
         | otherwise = Nothing
 
-    copyBytes :: ba -> IO (Block Word8)
-    copyBytes ba = do
-        muArray <- new count
-        B.withByteArray ba $ \ptr -> copyFromPtr ptr muArray 0 count
-        unsafeFreeze muArray
-      where
-        count = CountOf (B.length ba)
+    copyByteArray ba = allocAndFreezePrim (B.length ba) $ \dst ->
+        B.withByteArray ba $ \src ->
+            FMU.copyBytes dst (castPtr src) (B.length ba)

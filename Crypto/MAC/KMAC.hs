@@ -29,6 +29,7 @@ import Crypto.Hash.SHAKE (HashSHAKE (..))
 import Crypto.Hash.Types (Digest (..), HashAlgorithm (..))
 import qualified Crypto.Hash.Types as H
 import Crypto.Internal.Builder
+import Crypto.Internal.ByteArray (allocAndFreezePrim)
 import Crypto.Internal.Imports
 import Data.Bits (shiftR)
 import Data.ByteArray (ByteArrayAccess)
@@ -69,8 +70,8 @@ cshakeFinalize
     :: forall a suffix
      . (HashSHAKE a, ByteArrayAccess suffix)
     => H.Context a -> suffix -> Digest a
-cshakeFinalize !c s =
-    Digest $ B.allocAndFreeze (hashDigestSize (undefined :: a)) $ \dig -> do
+cshakeFinalize !c s = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+    \(dig :: Ptr (Digest a)) -> do
         ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (H.Context a)) -> do
             B.withByteArray s $ \d ->
                 hashInternalUpdate ctx d (fromIntegral $ B.length s)
