@@ -309,7 +309,7 @@ library
         , base16
         , bytestring
         , text
-        , ram >=0.20 && < 0.21
+        , ram >=0.20.1 && < 0.21
 
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
@@ -506,7 +506,7 @@ test-suite test-crypton
           base              >=4.13 && <5
         , bytestring
         , crypton
-        , memory
+        , ram
         , tasty
         , tasty-hunit
         , tasty-kat
@@ -525,7 +525,7 @@ benchmark bench-crypton
         , crypton
         , deepseq
         , gauge
-        , memory
+        , ram
         , random
 
 -- cabal-fmt: indent 4

@@ -17,7 +17,6 @@ module Crypto.MAC.CMAC (
 ) where
 
 import Data.Bits (setBit, shiftL, testBit)
-import Data.List (foldl')
 import Data.Word
 
 import Crypto.Cipher.Types

@@ -12,7 +12,6 @@ module Crypto.PubKey.Internal (
 ) where
 
 import Data.Bits (shiftR)
-import Data.List (foldl')
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)

@@ -56,7 +56,6 @@ import Crypto.ECC
 import qualified Crypto.ECC.Simple.Types as Simple
 import Crypto.Error
 import Crypto.Hash
-import Crypto.Hash.Types
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.ModArithmetic (inverseFermat)
