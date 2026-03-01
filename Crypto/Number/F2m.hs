@@ -25,6 +25,7 @@ module Crypto.Number.F2m (
 
 import Crypto.Number.Basic
 import Data.Bits (setBit, shift, testBit, unsafeShiftR, xor)
+import Data.List (foldl')
 
 -- | Binary Polynomial represented by an integer
 type BinaryPolynomial = Integer

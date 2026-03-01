@@ -15,6 +15,8 @@ module Crypto.ConstructHash.MiyaguchiPreneel (
     MiyaguchiPreneel,
 ) where
 
+import Data.List (foldl')
+
 import Crypto.Cipher.Types
 import Crypto.Data.Padding (Format (ZERO), pad)
 import Crypto.Error (throwCryptoError)
