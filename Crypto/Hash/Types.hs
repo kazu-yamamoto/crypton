@@ -20,20 +20,20 @@ module Crypto.Hash.Types (
     Digest (..),
 ) where
 
-import Data.Primitive.ByteArray(ByteArray, MutableByteArray, writeByteArray, newByteArray, unsafeFreezeByteArray )
-import Control.Monad.Primitive(PrimMonad(..))
-import Control.DeepSeq(deepseq)
+import Data.Primitive.ByteArray (ByteArray, MutableByteArray, writeByteArray, newPinnedByteArray, sizeofByteArray, unsafeFreezeByteArray, withByteArrayContents)
+import Control.Monad.Primitive (PrimMonad (..))
+import Control.DeepSeq (deepseq)
 import Control.Monad.ST
-import Crypto.Internal.ByteArray (ByteArrayAccess, Bytes)
+import Crypto.Internal.ByteArray (ByteArrayAccess (..), Bytes)
 import Crypto.Internal.Imports
 import Data.Char (digitToInt, isHexDigit)
 import Data.Data (Data)
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, castPtr)
 import GHC.TypeLits (Nat)
-import Data.Base16.Types(extractBase16)
-import Data.ByteString.Base16(encodeBase16)
+import Data.Base16.Types (extractBase16)
+import Data.ByteString.Base16 (encodeBase16)
 import qualified Data.ByteString.Short as BSS
-import Data.Coerce(coerce)
+import Data.Coerce (coerce)
 import qualified Data.Text as Text
 
 -- | Class representing hashing algorithms.
@@ -115,13 +115,17 @@ type role Digest nominal
 instance NFData (Digest a) where
     rnf (Digest u) = u `deepseq` ()
 
+instance ByteArrayAccess (Digest a) where
+    length (Digest ba) = sizeofByteArray ba
+    withByteArray (Digest ba) f = withByteArrayContents ba (f . castPtr)
+
 instance Show (Digest a) where
     show (Digest bs) =
             Text.unpack (extractBase16 $ encodeBase16 $ BSS.fromShort $ coerce bs)
 
 instance HashAlgorithm a => Read (Digest a) where
     readsPrec _ str = runST $ do
-        mut <- newByteArray len
+        mut <- newPinnedByteArray len
         loop len mut len str
       where
         len = hashDigestSize (undefined :: a)

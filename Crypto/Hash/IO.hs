@@ -21,6 +21,7 @@ module Crypto.Hash.IO (
 
 import Crypto.Hash.Types
 import qualified Crypto.Internal.ByteArray as B
+import Data.Primitive.ByteArray (newPinnedByteArray, mutableByteArrayContents, unsafeFreezeByteArray)
 import Foreign.Ptr
 
 -- | A Mutable hash context
@@ -66,8 +67,11 @@ hashMutableUpdate mc dat = doUpdate mc (B.withByteArray mc)
 hashMutableFinalize
     :: forall a. HashAlgorithm a => MutableContext a -> IO (Digest a)
 hashMutableFinalize mc = do
-    b <- B.alloc (hashDigestSize (undefined :: a)) $ \dig -> B.withByteArray mc $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
-    return $ Digest b
+    let sz = hashDigestSize (undefined :: a)
+    muArray <- newPinnedByteArray sz
+    let dig = castPtr (mutableByteArrayContents muArray) :: Ptr (Digest a)
+    B.withByteArray mc $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
+    Digest <$> unsafeFreezeByteArray muArray
 
 -- | Reset the mutable context to the initial state of the hash
 hashMutableReset :: HashAlgorithm a => MutableContext a -> IO ()
