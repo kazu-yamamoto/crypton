@@ -309,7 +309,7 @@ library
         , base16
         , bytestring
         , text
-        , memory      >=0.14.18
+        , ram >=0.20 && < 0.21
 
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
