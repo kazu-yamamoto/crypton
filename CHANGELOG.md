@@ -1,8 +1,15 @@
 # CHANGELOG for crypton
 
+## 1.1.0
+
+* Removing "basement" and "memory".
+  [#67](https://github.com/kazu-yamamoto/crypton/pull/67)
+
+
 ## 1.0.7
-+ Stop depending on basement, use upstream dependencies instead
-+ Stop transitively depending on basement by depending on ram.
+
+* Stop depending on basement, use upstream dependencies instead
+* Stop transitively depending on basement by depending on ram.
 
 ## 1.0.6
 
