@@ -20,18 +20,21 @@ module Crypto.Hash.Types (
     Digest (..),
 ) where
 
-import Basement.Block (Block, unsafeFreeze)
-import Basement.Block.Mutable (MutableBlock, new, unsafeWrite)
-import Basement.NormalForm (deepseq)
-import Basement.Types.OffsetSize (CountOf (..), Offset (..))
+import Data.Primitive.ByteArray (ByteArray, MutableByteArray, writeByteArray, newPinnedByteArray, sizeofByteArray, unsafeFreezeByteArray, withByteArrayContents)
+import Control.Monad.Primitive (PrimMonad (..))
+import Control.DeepSeq (deepseq)
 import Control.Monad.ST
-import Crypto.Internal.ByteArray (ByteArrayAccess, Bytes)
+import Crypto.Internal.ByteArray (ByteArrayAccess (..), Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
 import Data.Char (digitToInt, isHexDigit)
 import Data.Data (Data)
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, castPtr)
 import GHC.TypeLits (Nat)
+import Data.Base16.Types (extractBase16)
+import Data.ByteString (ByteString)
+import Data.ByteString.Base16 (encodeBase16)
+import qualified Data.Text as Text
 
 -- | Class representing hashing algorithms.
 --
@@ -104,34 +107,38 @@ newtype Context a = Context Bytes
 --
 -- Creating a digest from a bytearray is also possible with function
 -- 'Crypto.Hash.digestFromByteString'.
-newtype Digest a = Digest (Block Word8)
-    deriving (Eq, Ord, ByteArrayAccess, Data)
+newtype Digest a = Digest ByteArray
+    deriving (Eq, Ord, Data)
 
 type role Digest nominal
 
 instance NFData (Digest a) where
     rnf (Digest u) = u `deepseq` ()
 
+instance ByteArrayAccess (Digest a) where
+    length (Digest ba) = sizeofByteArray ba
+    withByteArray (Digest ba) f = withByteArrayContents ba (f . castPtr)
+
 instance Show (Digest a) where
-    show (Digest bs) =
-        map (toEnum . fromIntegral) $
-            B.unpack (B.convertToBase B.Base16 bs :: Bytes)
+    show d =
+            Text.unpack (extractBase16 $ encodeBase16 (B.convert d :: ByteString))
 
 instance HashAlgorithm a => Read (Digest a) where
     readsPrec _ str = runST $ do
-        mut <- new (CountOf len)
-        loop mut len str
+        mut <- newPinnedByteArray len
+        loop len mut len str
       where
         len = hashDigestSize (undefined :: a)
 
-        loop :: MutableBlock Word8 s -> Int -> String -> ST s [(Digest a, String)]
-        loop mut 0 cs = (\b -> [(Digest b, cs)]) <$> unsafeFreeze mut
-        loop _ _ [] = return []
-        loop _ _ [_] = return []
-        loop mut n (c : (d : ds))
+loop :: Int -> MutableByteArray (PrimState (ST s)) -> Int -> String -> ST s [(Digest a, String)]
+loop _ mut 0 cs = (\b -> [(Digest b, cs)]) <$> unsafeFreezeByteArray mut
+loop _ _ _ [] = return []
+loop _ _ _ [_] = return []
+loop len mut n (c : (d : ds))
             | not (isHexDigit c) = return []
             | not (isHexDigit d) = return []
             | otherwise = do
-                let w8 = fromIntegral $ digitToInt c * 16 + digitToInt d
-                unsafeWrite mut (Offset $ len - n) w8
-                loop mut (n - 1) ds
+                let  w8 :: Word8
+                     w8 = fromIntegral $ digitToInt c * 16 + digitToInt d
+                writeByteArray mut (len - n) w8
+                loop len mut (n - 1) ds

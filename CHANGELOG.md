@@ -1,5 +1,9 @@
 # CHANGELOG for crypton
 
+## 1.0.7
++ Stop depending on basement, use upstream dependencies instead
++ Stop transitively depending on basement by depending on ram.
+
 ## 1.0.6
 
 * Fix test failures on less common 64-bit arches.

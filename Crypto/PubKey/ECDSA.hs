@@ -261,8 +261,9 @@ verify prx hashAlg q sig msg = verifyDigest prx q sig (hashWith hashAlg msg)
 tHashDigest
     :: (EllipticCurveECDSA curve, HashAlgorithm hash)
     => proxy curve -> Digest hash -> Scalar curve
-tHashDigest prx (Digest digest) = throwCryptoError $ decodeScalar prx encoded
+tHashDigest prx dig = throwCryptoError $ decodeScalar prx encoded
   where
+    digest = B.convert dig :: B.Bytes
     m = curveOrderBits prx
     d = m - B.length digest * 8
     (n, r) = m `divMod` 8

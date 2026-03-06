@@ -1,13 +1,13 @@
 cabal-version:      1.18
 name:               crypton
-version:            1.0.6
+version:            1.0.7
 license:            BSD3
 license-file:       LICENSE
 copyright:          Vincent Hanquez <vincent@snarc.org>
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
 author:             Vincent Hanquez <vincent@snarc.org>
 stability:          experimental
-tested-with:        GHC ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.2
+tested-with:        GHC ==9.2.8 || ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.1
 homepage:           https://github.com/kazu-yamamoto/crypton
 bug-reports:        https://github.com/kazu-yamamoto/crypton/issues
 synopsis:           Cryptography Primitives sink
@@ -303,9 +303,13 @@ library
     ghc-options:      -Wall -fwarn-tabs -optc-O3
     build-depends:
           base        >=4.13    && <5
-        , basement    >=0.0.6
         , bytestring
-        , memory      >=0.14.18
+        , primitive   >=0.9
+        , deepseq
+        , base16      >=1.0
+        , bytestring
+        , text
+        , ram >=0.20.1 && < 0.22
 
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
@@ -502,7 +506,7 @@ test-suite test-crypton
           base              >=4.13 && <5
         , bytestring
         , crypton
-        , memory
+        , ram
         , tasty
         , tasty-hunit
         , tasty-kat
@@ -521,7 +525,7 @@ benchmark bench-crypton
         , crypton
         , deepseq
         , gauge
-        , memory
+        , ram
         , random
 
 -- cabal-fmt: indent 4

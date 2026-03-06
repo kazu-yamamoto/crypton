@@ -22,7 +22,6 @@ module Crypto.Error.Types (
 import qualified Control.Exception as E
 import Data.Data
 
-import Basement.Monad (MonadFailure (..))
 
 -- | Enumeration of all possible errors that can be found in this library
 data CryptoError
@@ -86,10 +85,6 @@ instance Monad CryptoFailable where
         case m1 of
             CryptoPassed a -> m2 a
             CryptoFailed e -> CryptoFailed e
-
-instance MonadFailure CryptoFailable where
-    type Failure CryptoFailable = CryptoError
-    mFail = CryptoFailed
 
 -- | Throw an CryptoError as exception on CryptoFailed result,
 -- otherwise return the computed value
