@@ -25,15 +25,15 @@ import Control.Monad.Primitive (PrimMonad (..))
 import Control.DeepSeq (deepseq)
 import Control.Monad.ST
 import Crypto.Internal.ByteArray (ByteArrayAccess (..), Bytes)
+import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
 import Data.Char (digitToInt, isHexDigit)
 import Data.Data (Data)
 import Foreign.Ptr (Ptr, castPtr)
 import GHC.TypeLits (Nat)
 import Data.Base16.Types (extractBase16)
+import Data.ByteString (ByteString)
 import Data.ByteString.Base16 (encodeBase16)
-import qualified Data.ByteString.Short as BSS
-import Data.Coerce (coerce)
 import qualified Data.Text as Text
 
 -- | Class representing hashing algorithms.
@@ -120,8 +120,8 @@ instance ByteArrayAccess (Digest a) where
     withByteArray (Digest ba) f = withByteArrayContents ba (f . castPtr)
 
 instance Show (Digest a) where
-    show (Digest bs) =
-            Text.unpack (extractBase16 $ encodeBase16 $ BSS.fromShort $ coerce bs)
+    show d =
+            Text.unpack (extractBase16 $ encodeBase16 (B.convert d :: ByteString))
 
 instance HashAlgorithm a => Read (Digest a) where
     readsPrec _ str = runST $ do

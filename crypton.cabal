@@ -7,7 +7,7 @@ copyright:          Vincent Hanquez <vincent@snarc.org>
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
 author:             Vincent Hanquez <vincent@snarc.org>
 stability:          experimental
-tested-with:        GHC ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.2
+tested-with:        GHC ==9.2.8 || ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.1
 homepage:           https://github.com/kazu-yamamoto/crypton
 bug-reports:        https://github.com/kazu-yamamoto/crypton/issues
 synopsis:           Cryptography Primitives sink
@@ -304,9 +304,9 @@ library
     build-depends:
           base        >=4.13    && <5
         , bytestring
-        , primitive
+        , primitive   >=0.9
         , deepseq
-        , base16
+        , base16      >=1.0
         , bytestring
         , text
         , ram >=0.20.1 && < 0.22
