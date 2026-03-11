@@ -7,7 +7,9 @@ copyright:          Vincent Hanquez <vincent@snarc.org>
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
 author:             Vincent Hanquez <vincent@snarc.org>
 stability:          experimental
-tested-with:        GHC ==9.2.8 || ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.1
+tested-with:
+    ghc ==9.2.8 || ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.1
+
 homepage:           https://github.com/kazu-yamamoto/crypton
 bug-reports:        https://github.com/kazu-yamamoto/crypton/issues
 synopsis:           Cryptography Primitives sink
@@ -121,7 +123,6 @@ flag use_target_attributes
     manual:      True
 
 library
-    -- cabal-fmt: expand . -CHANGELOG -CONTRIBUTING -Crypto.Math.Polynomial -Crypto.Random.Entropy.RDRand -Crypto.Random.Entropy.Unix -Crypto.Random.Entropy.Windows -LICENSE -Makefile -QA -README -Setup -Crypto.Cipher.Blowfish.Box -Crypto.Cipher.Blowfish.Primitive -Crypto.Cipher.CAST5.Primitive -Crypto.Cipher.Camellia.Primitive -Crypto.Cipher.DES.Primitive -Crypto.Cipher.Twofish.Primitive -Crypto.Cipher.Types.AEAD -Crypto.Cipher.Types.Base -Crypto.Cipher.Types.Block -Crypto.Cipher.Types.GF -Crypto.Cipher.Types.Stream -Crypto.Cipher.Types.Utils -Crypto.ECC.Simple.Prim -Crypto.ECC.Simple.Types -Crypto.Error.Types -Crypto.Hash.Blake2 -Crypto.Hash.Blake2b -Crypto.Hash.Blake2bp -Crypto.Hash.Blake2s -Crypto.Hash.Blake2sp -Crypto.Hash.Keccak -Crypto.Hash.MD2 -Crypto.Hash.MD4 -Crypto.Hash.MD5 -Crypto.Hash.RIPEMD160 -Crypto.Hash.SHA1 -Crypto.Hash.SHA224 -Crypto.Hash.SHA256 -Crypto.Hash.SHA3 -Crypto.Hash.SHA384 -Crypto.Hash.SHA512 -Crypto.Hash.SHA512t -Crypto.Hash.SHAKE -Crypto.Hash.Skein256 -Crypto.Hash.Skein512 -Crypto.Hash.Tiger -Crypto.Hash.Types -Crypto.Hash.Whirlpool -Crypto.Internal.Builder -Crypto.Internal.ByteArray -Crypto.Internal.Compat -Crypto.Internal.CompatPrim -Crypto.Internal.DeepSeq -Crypto.Internal.Endian -Crypto.Internal.Imports -Crypto.Internal.Nat -Crypto.Internal.WordArray -Crypto.Internal.Words -Crypto.Number.Compat -Crypto.PubKey.ElGamal -Crypto.PubKey.Internal -Crypto.Random.ChaChaDRG -Crypto.Random.Entropy.Backend -Crypto.Random.Entropy.Source -Crypto.Random.HmacDRG -Crypto.Random.Probabilistic -Crypto.Random.SystemDRG -Crypto.Cipher.AES.Primitive
     exposed-modules:
         Crypto.Cipher.AES
         Crypto.Cipher.AESGCMSIV
@@ -204,6 +205,37 @@ library
         Crypto.System.CPU
         Crypto.Tutorial
 
+    cc-options:       -std=gnu99
+    c-sources:
+        cbits/argon2/argon2.c
+        cbits/crypton_blake2b.c
+        cbits/crypton_blake2bp.c
+        cbits/crypton_blake2s.c
+        cbits/crypton_blake2sp.c
+        cbits/crypton_chacha.c
+        cbits/crypton_cpu.c
+        cbits/crypton_md2.c
+        cbits/crypton_md4.c
+        cbits/crypton_md5.c
+        cbits/crypton_pbkdf2.c
+        cbits/crypton_poly1305.c
+        cbits/crypton_rc4.c
+        cbits/crypton_ripemd.c
+        cbits/crypton_salsa.c
+        cbits/crypton_scrypt.c
+        cbits/crypton_sha1.c
+        cbits/crypton_sha256.c
+        cbits/crypton_sha3.c
+        cbits/crypton_sha512.c
+        cbits/crypton_skein256.c
+        cbits/crypton_skein512.c
+        cbits/crypton_tiger.c
+        cbits/crypton_whirlpool.c
+        cbits/crypton_xsalsa.c
+        cbits/ed25519/ed25519.c
+        cbits/p256/p256.c
+        cbits/p256/p256_ec.c
+
     other-modules:
         Crypto.Cipher.AES.Primitive
         Crypto.Cipher.Blowfish.Box
@@ -264,37 +296,6 @@ library
         Crypto.Random.Probabilistic
         Crypto.Random.SystemDRG
 
-    cc-options:       -std=gnu99
-    c-sources:
-        cbits/argon2/argon2.c
-        cbits/crypton_blake2b.c
-        cbits/crypton_blake2bp.c
-        cbits/crypton_blake2s.c
-        cbits/crypton_blake2sp.c
-        cbits/crypton_chacha.c
-        cbits/crypton_cpu.c
-        cbits/crypton_md2.c
-        cbits/crypton_md4.c
-        cbits/crypton_md5.c
-        cbits/crypton_pbkdf2.c
-        cbits/crypton_poly1305.c
-        cbits/crypton_rc4.c
-        cbits/crypton_ripemd.c
-        cbits/crypton_salsa.c
-        cbits/crypton_scrypt.c
-        cbits/crypton_sha1.c
-        cbits/crypton_sha256.c
-        cbits/crypton_sha3.c
-        cbits/crypton_sha512.c
-        cbits/crypton_skein256.c
-        cbits/crypton_skein512.c
-        cbits/crypton_tiger.c
-        cbits/crypton_whirlpool.c
-        cbits/crypton_xsalsa.c
-        cbits/ed25519/ed25519.c
-        cbits/p256/p256.c
-        cbits/p256/p256_ec.c
-
     default-language: Haskell2010
     include-dirs:
         cbits cbits/ed25519 cbits/decaf/include cbits/decaf/p448
@@ -302,25 +303,25 @@ library
 
     ghc-options:      -Wall -fwarn-tabs -optc-O3
     build-depends:
-          base        >=4.13    && <5
-        , bytestring
-        , primitive   >=0.9
-        , deepseq
-        , base16      >=1.0
-        , bytestring
-        , text
-        , ram >=0.20.1 && < 0.22
+        base >=4.13 && <5,
+        bytestring,
+        primitive >=0.9,
+        deepseq,
+        base16 >=1.0,
+        bytestring,
+        text,
+        ram >=0.20.1 && <0.22
 
     if flag(old_toolchain_inliner)
         cc-options: -fgnu89-inline
 
-    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if ((((((((arch(x86_64) || arch(aarch64)) || arch(loongarch64)) || arch(ppc64le)) || arch(riscv64)) || arch(s390x)) || arch(alpha)) || arch(ppc64)) || arch(sparc64))
         include-dirs: cbits/include64
 
     else
         include-dirs: cbits/include32
 
-    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if ((((((((arch(x86_64) || arch(aarch64)) || arch(loongarch64)) || arch(ppc64le)) || arch(riscv64)) || arch(s390x)) || arch(alpha)) || arch(ppc64)) || arch(sparc64))
         c-sources:
             cbits/decaf/ed448goldilocks/decaf_all.c
             cbits/decaf/ed448goldilocks/eddsa.c
@@ -344,13 +345,13 @@ library
 
         include-dirs: cbits/decaf/include/arch_32 cbits/decaf/p448/arch_32
 
-    if (arch(x86_64) || arch(aarch64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(s390x) || arch(alpha) || arch(ppc64) || arch(sparc64))
+    if ((((((((arch(x86_64) || arch(aarch64)) || arch(loongarch64)) || arch(ppc64le)) || arch(riscv64)) || arch(s390x)) || arch(alpha)) || arch(ppc64)) || arch(sparc64))
         c-sources: cbits/curve25519/curve25519-donna-c64.c
 
     else
         c-sources: cbits/curve25519/curve25519-donna.c
 
-    if (arch(i386) || arch(x86_64) || arch(loongarch64) || arch(ppc64le) || arch(riscv64) || arch(alpha))
+    if (((((arch(i386) || arch(x86_64)) || arch(loongarch64)) || arch(ppc64le)) || arch(riscv64)) || arch(alpha))
         cpp-options: -DARCH_IS_LITTLE_ENDIAN
 
     if arch(i386)
@@ -420,7 +421,7 @@ library
     else
         other-modules: Crypto.Random.Entropy.Unix
 
-    if (impl(ghc) && flag(integer-gmp))
+    if (impl(ghc >=0) && flag(integer-gmp))
         build-depends: integer-gmp
 
     if flag(support_deepseq)
@@ -437,8 +438,6 @@ test-suite test-crypton
     type:             exitcode-stdio-1.0
     main-is:          Tests.hs
     hs-source-dirs:   tests
-
-    -- cabal-fmt: expand tests -Tests
     other-modules:
         BCrypt
         BCryptPBKDF
@@ -503,14 +502,14 @@ test-suite test-crypton
         -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
 
     build-depends:
-          base              >=4.13 && <5
-        , bytestring
-        , crypton
-        , ram
-        , tasty
-        , tasty-hunit
-        , tasty-kat
-        , tasty-quickcheck
+        base >=4.13 && <5,
+        bytestring,
+        crypton,
+        ram,
+        tasty,
+        tasty-hunit,
+        tasty-kat,
+        tasty-quickcheck
 
 benchmark bench-crypton
     type:             exitcode-stdio-1.0
@@ -520,12 +519,10 @@ benchmark bench-crypton
     default-language: Haskell2010
     ghc-options:      -Wall -fno-warn-missing-signatures
     build-depends:
-          base        >=4.13 && <5
-        , bytestring
-        , crypton
-        , deepseq
-        , gauge
-        , ram
-        , random
-
--- cabal-fmt: indent 4
+        base >=4.13 && <5,
+        bytestring,
+        crypton,
+        deepseq,
+        gauge,
+        ram,
+        random
