@@ -434,6 +434,9 @@ library
     if flag(use_target_attributes)
         cc-options: -DWITH_TARGET_ATTRIBUTES
 
+    if os(ios)
+        cpp-options: -DINSECURE_ENTROPY
+
 test-suite test-crypton
     type:             exitcode-stdio-1.0
     main-is:          Tests.hs
