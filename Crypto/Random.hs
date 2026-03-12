@@ -46,6 +46,7 @@ import qualified Crypto.Number.Serialize as Serialize
 #ifdef INSECURE_ENTROPY
 import Crypto.Hash (SHA512, Context)
 import Crypto.Hash.IO
+import Data.Memory.PtrMethods (memSet)
 import Foreign.Ptr (Ptr, castPtr)
 #endif
 
@@ -75,8 +76,9 @@ scrubbedHash512 = B.take seedLength . hash512
     hashIO ba ptr = do
         ctx <- hashMutableInit
         hashMutableUpdate (ctx :: MutableContext SHA512) ba
-        B.withByteArray ctx $ \pctx ->
+        B.withByteArray ctx $ \pctx -> do
             hashInternalFinalize (castPtr pctx :: Ptr (Context SHA512)) ptr
+            memSet pctx 0 $ hashInternalContextSize (undefined :: SHA512)
 #else
 seedNew = Seed `fmap` getRandomBytes seedLength
 #endif
