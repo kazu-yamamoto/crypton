@@ -34,7 +34,6 @@ module Crypto.Random (
 ) where
 
 import Crypto.Error
-import Crypto.Hash (Digest, SHA512, hash)
 import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
 import Crypto.Random.SystemDRG
@@ -43,6 +42,12 @@ import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 import qualified Data.ByteArray as B
 
 import qualified Crypto.Number.Serialize as Serialize
+
+#ifdef INSECURE_ENTROPY
+import Crypto.Hash (SHA512, Context)
+import Crypto.Hash.IO
+import Foreign.Ptr (Ptr, castPtr)
+#endif
 
 newtype Seed = Seed ScrubbedBytes
     deriving (ByteArrayAccess)
@@ -61,9 +66,17 @@ seedNew :: MonadRandom randomly => randomly Seed
 -- potentially comprisable sources. Hashing of entropy before using
 -- it as a seed is a common mitigation for attacks via RNG/entropy
 -- source.
-seedNew =
-    (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512))
-        `fmap` getRandomBytes 64
+seedNew = (Seed . scrubbedHash512) `fmap` getRandomBytes 64
+
+scrubbedHash512 :: ScrubbedBytes -> ScrubbedBytes
+scrubbedHash512 = B.take seedLength . hash512
+  where
+    hash512 ba = B.unsafeCreate (hashDigestSize (undefined :: SHA512)) $ hashIO ba
+    hashIO ba ptr = do
+        ctx <- hashMutableInit
+        hashMutableUpdate (ctx :: MutableContext SHA512) ba
+        B.withByteArray ctx $ \pctx ->
+            hashInternalFinalize (castPtr pctx :: Ptr (Context SHA512)) ptr
 #else
 seedNew = Seed `fmap` getRandomBytes seedLength
 #endif
