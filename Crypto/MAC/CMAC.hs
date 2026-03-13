@@ -19,6 +19,7 @@ module Crypto.MAC.CMAC (
 import Data.Bits (setBit, shiftL, testBit)
 import Data.List (foldl')
 import Data.Word
+import Prelude hiding (foldl')
 
 import Crypto.Cipher.Types
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
