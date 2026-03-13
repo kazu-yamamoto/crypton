@@ -1,5 +1,11 @@
 # CHANGELOG for crypton
 
+## 1.1.1
+
+* On iOS, ScrubbedBytes based hashing is used for seedNew. On other
+  plateforms, entropy is used directly as used to be.
+  [#71](https://github.com/kazu-yamamoto/crypton/pull/71)
+
 ## 1.1.0
 
 * Removing "basement" and "memory".
