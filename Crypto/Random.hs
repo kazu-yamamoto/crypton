@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
@@ -33,7 +34,6 @@ module Crypto.Random (
 ) where
 
 import Crypto.Error
-import Crypto.Hash (Digest, SHA512, hash)
 import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
 import Crypto.Random.SystemDRG
@@ -42,6 +42,13 @@ import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 import qualified Data.ByteArray as B
 
 import qualified Crypto.Number.Serialize as Serialize
+
+#ifdef INSECURE_ENTROPY
+import Crypto.Hash (SHA512, Context)
+import Crypto.Hash.IO
+import Data.Memory.PtrMethods (memSet)
+import Foreign.Ptr (Ptr, castPtr)
+#endif
 
 newtype Seed = Seed ScrubbedBytes
     deriving (ByteArrayAccess)
@@ -52,15 +59,29 @@ seedLength = 40
 
 -- | Create a new Seed from system entropy
 seedNew :: MonadRandom randomly => randomly Seed
+
+#ifdef INSECURE_ENTROPY
 -- The degree of its randomness depends on the source, e.g. for iOS we
 -- have to compile with DoNotUseEntropy flag, as iOS doesn't allow
 -- using getentropy, and on some other systems it can be also
 -- potentially comprisable sources. Hashing of entropy before using
 -- it as a seed is a common mitigation for attacks via RNG/entropy
 -- source.
-seedNew =
-    (Seed . B.take seedLength . B.convert . (hash :: ScrubbedBytes -> Digest SHA512))
-        `fmap` getRandomBytes 64
+seedNew = (Seed . scrubbedHash512) `fmap` getRandomBytes 64
+
+scrubbedHash512 :: ScrubbedBytes -> ScrubbedBytes
+scrubbedHash512 = B.take seedLength . hash512
+  where
+    hash512 ba = B.unsafeCreate (hashDigestSize (undefined :: SHA512)) $ hashIO ba
+    hashIO ba ptr = do
+        ctx <- hashMutableInit
+        hashMutableUpdate (ctx :: MutableContext SHA512) ba
+        B.withByteArray ctx $ \pctx -> do
+            hashInternalFinalize (castPtr pctx :: Ptr (Context SHA512)) ptr
+            memSet pctx 0 $ hashInternalContextSize (undefined :: SHA512)
+#else
+seedNew = Seed `fmap` getRandomBytes seedLength
+#endif
 
 -- | Convert a Seed to an integer
 seedToInteger :: Seed -> Integer
