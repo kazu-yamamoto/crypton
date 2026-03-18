@@ -20,21 +20,29 @@ module Crypto.Hash.Types (
     Digest (..),
 ) where
 
-import Data.Primitive.ByteArray (ByteArray, MutableByteArray, writeByteArray, newPinnedByteArray, sizeofByteArray, unsafeFreezeByteArray, withByteArrayContents)
-import Control.Monad.Primitive (PrimMonad (..))
 import Control.DeepSeq (deepseq)
+import Control.Monad.Primitive (PrimMonad (..))
 import Control.Monad.ST
 import Crypto.Internal.ByteArray (ByteArrayAccess (..), Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
-import Data.Char (digitToInt, isHexDigit)
-import Data.Data (Data)
-import Foreign.Ptr (Ptr, castPtr)
-import GHC.TypeLits (Nat)
 import Data.Base16.Types (extractBase16)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 (encodeBase16)
+import Data.Char (digitToInt, isHexDigit)
+import Data.Data (Data)
+import Data.Primitive.ByteArray (
+    ByteArray,
+    MutableByteArray,
+    newPinnedByteArray,
+    sizeofByteArray,
+    unsafeFreezeByteArray,
+    withByteArrayContents,
+    writeByteArray,
+ )
 import qualified Data.Text as Text
+import Foreign.Ptr (Ptr, castPtr)
+import GHC.TypeLits (Nat)
 
 -- | Class representing hashing algorithms.
 --
@@ -121,7 +129,7 @@ instance ByteArrayAccess (Digest a) where
 
 instance Show (Digest a) where
     show d =
-            Text.unpack (extractBase16 $ encodeBase16 (B.convert d :: ByteString))
+        Text.unpack (extractBase16 $ encodeBase16 (B.convert d :: ByteString))
 
 instance HashAlgorithm a => Read (Digest a) where
     readsPrec _ str = runST $ do
@@ -130,15 +138,20 @@ instance HashAlgorithm a => Read (Digest a) where
       where
         len = hashDigestSize (undefined :: a)
 
-loop :: Int -> MutableByteArray (PrimState (ST s)) -> Int -> String -> ST s [(Digest a, String)]
+loop
+    :: Int
+    -> MutableByteArray (PrimState (ST s))
+    -> Int
+    -> String
+    -> ST s [(Digest a, String)]
 loop _ mut 0 cs = (\b -> [(Digest b, cs)]) <$> unsafeFreezeByteArray mut
 loop _ _ _ [] = return []
 loop _ _ _ [_] = return []
 loop len mut n (c : (d : ds))
-            | not (isHexDigit c) = return []
-            | not (isHexDigit d) = return []
-            | otherwise = do
-                let  w8 :: Word8
-                     w8 = fromIntegral $ digitToInt c * 16 + digitToInt d
-                writeByteArray mut (len - n) w8
-                loop len mut (n - 1) ds
+    | not (isHexDigit c) = return []
+    | not (isHexDigit d) = return []
+    | otherwise = do
+        let w8 :: Word8
+            w8 = fromIntegral $ digitToInt c * 16 + digitToInt d
+        writeByteArray mut (len - n) w8
+        loop len mut (n - 1) ds

@@ -23,10 +23,10 @@ import Data.ByteArray.Encoding
 import Data.ByteArray.Mapping
 
 import Data.Bits ((.|.))
+import qualified Data.Primitive.ByteArray as Prim
 import Data.Word (Word8)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.Storable (peekByteOff)
-import qualified Data.Primitive.ByteArray as Prim
 
 import Crypto.Internal.Compat (unsafeDoIO)
 

@@ -22,7 +22,6 @@ module Crypto.Error.Types (
 import qualified Control.Exception as E
 import Data.Data
 
-
 -- | Enumeration of all possible errors that can be found in this library
 data CryptoError
     = -- symmetric cipher errors

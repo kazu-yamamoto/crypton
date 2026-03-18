@@ -113,10 +113,11 @@ hashFinalize
      . HashAlgorithm a
     => Context a
     -> Digest a
-hashFinalize !c = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
-    \(dig :: Ptr (Digest a)) -> do
-        ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
-        return ()
+hashFinalize !c = Digest $
+    allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+        \(dig :: Ptr (Digest a)) -> do
+            ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) -> hashInternalFinalize ctx dig
+            return ()
 
 -- | Update the context with the first N bytes of a bytestring and return the
 -- digest.  The code path is independent from N but much slower than a normal
@@ -131,17 +132,18 @@ hashFinalizePrefix
     -> ba
     -> Int
     -> Digest a
-hashFinalizePrefix !c b len = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
-    \(dig :: Ptr (Digest a)) -> do
-        ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) ->
-            B.withByteArray b $ \d ->
-                hashInternalFinalizePrefix
-                    ctx
-                    d
-                    (fromIntegral $ B.length b)
-                    (fromIntegral len)
-                    dig
-        return ()
+hashFinalizePrefix !c b len = Digest $
+    allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+        \(dig :: Ptr (Digest a)) -> do
+            ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) ->
+                B.withByteArray b $ \d ->
+                    hashInternalFinalizePrefix
+                        ctx
+                        d
+                        (fromIntegral $ B.length b)
+                        (fromIntegral len)
+                        dig
+            return ()
 
 -- | Initialize a new context for a specified hash algorithm
 hashInitWith :: HashAlgorithm alg => alg -> Context alg

@@ -70,13 +70,14 @@ cshakeFinalize
     :: forall a suffix
      . (HashSHAKE a, ByteArrayAccess suffix)
     => H.Context a -> suffix -> Digest a
-cshakeFinalize !c s = Digest $ allocAndFreezePrim (hashDigestSize (undefined :: a)) $
-    \(dig :: Ptr (Digest a)) -> do
-        ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (H.Context a)) -> do
-            B.withByteArray s $ \d ->
-                hashInternalUpdate ctx d (fromIntegral $ B.length s)
-            cshakeInternalFinalize ctx dig
-        return ()
+cshakeFinalize !c s = Digest $
+    allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+        \(dig :: Ptr (Digest a)) -> do
+            ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (H.Context a)) -> do
+                B.withByteArray s $ \d ->
+                    hashInternalUpdate ctx d (fromIntegral $ B.length s)
+                cshakeInternalFinalize ctx dig
+            return ()
 
 -- KMAC
 
