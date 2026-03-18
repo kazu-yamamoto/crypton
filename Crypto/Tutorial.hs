@@ -16,7 +16,7 @@ module Crypto.Tutorial (
 -- $api_design
 --
 -- APIs in crypton are often based on type classes from package
--- <https://hackage.haskell.org/package/memory memory>, notably
+-- <https://hackage.haskell.org/package/ram ram>, notably
 -- 'Data.ByteArray.ByteArrayAccess' and 'Data.ByteArray.ByteArray'.
 -- Module "Data.ByteArray" provides many primitives that are useful to
 -- work with crypton types.  For example function 'Data.ByteArray.convert'

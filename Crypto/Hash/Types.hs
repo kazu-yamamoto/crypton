@@ -109,7 +109,7 @@ newtype Context a = Context Bytes
 -- | Represent a digest for a given hash algorithm.
 --
 -- This type is an instance of 'ByteArrayAccess' from package
--- <https://hackage.haskell.org/package/memory memory>.
+-- <https://hackage.haskell.org/package/ram ram>.
 -- Module "Data.ByteArray" provides many primitives to work with those values
 -- including conversion to other types.
 --
