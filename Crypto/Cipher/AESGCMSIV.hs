@@ -36,7 +36,7 @@ import Foreign.C.Types
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekElemOff, poke, pokeElemOff)
 
-import Data.ByteArray
+import Data.ByteArray (ByteArray, ByteArrayAccess, Bytes, ScrubbedBytes)
 import qualified Data.ByteArray as B
 import Data.Memory.Endian (toLE)
 import Data.Memory.PtrMethods (memXor)
@@ -96,7 +96,7 @@ foreign import ccall unsafe "crypton_aes.h crypton_aes_polyval_finalize"
 le32iv :: Word32 -> Nonce -> Bytes
 le32iv n (Nonce iv) = B.allocAndFreeze 16 $ \ptr -> do
     poke ptr (toLE n)
-    copyByteArrayToPtr iv (ptr `plusPtr` 4)
+    B.copyByteArrayToPtr iv (ptr `plusPtr` 4)
 
 deriveKeys :: BlockCipher128 aes => aes -> Nonce -> (ScrubbedBytes, AES)
 deriveKeys aes iv =
@@ -109,7 +109,7 @@ deriveKeys aes iv =
                  in (mak, mek)
         _ -> error "AESGCMSIV: invalid cipher"
   where
-    idx n = ecbEncrypt aes (le32iv n iv) `takeView` 8
+    idx n = ecbEncrypt aes (le32iv n iv) `B.takeView` 8
     buildKey = B.concat . map idx
 
 -- Encryption and decryption
@@ -152,7 +152,7 @@ decrypt
 decrypt aes iv aad ciphertext (AuthTag tag)
     | lengthInvalid aad = error "AESGCMSIV: aad is too large"
     | lengthInvalid ciphertext = error "AESGCMSIV: ciphertext is too large"
-    | tag `constEq` buildTag mek ss iv = Just plaintext
+    | tag `B.constEq` buildTag mek ss iv = Just plaintext
     | otherwise = Nothing
   where
     (mak, mek) = deriveKeys aes iv
