@@ -347,25 +347,27 @@ unpad packed
 --
 -- The message is returned un-padded.
 decrypt
-    :: Maybe Blinder
+    :: ByteArray ba
+    => Maybe Blinder
     -- ^ optional blinder
     -> PrivateKey
     -- ^ RSA private key
     -> ByteString
     -- ^ cipher text
-    -> Either Error ByteString
+    -> Either Error ba
 decrypt blinder pk c
     | B.length c /= (private_size pk) = Left MessageSizeIncorrect
-    | otherwise = unpad $ dp blinder pk c
+    -- "convert" must be apply to "c".
+    | otherwise = unpad $ dp blinder pk $ B.convert c
 
 -- | decrypt message using the private key and by automatically generating a blinder.
 decryptSafer
-    :: MonadRandom m
+    :: (MonadRandom m, ByteArray ba)
     => PrivateKey
     -- ^ RSA private key
     -> ByteString
     -- ^ cipher text
-    -> m (Either Error ByteString)
+    -> m (Either Error ba)
 decryptSafer pk b = do
     blinder <- generateBlinder (private_n pk)
     return (decrypt (Just blinder) pk b)
@@ -375,12 +377,12 @@ decryptSafer pk b = do
 -- The message needs to be smaller than the key size - 11.
 -- The message should not be padded.
 encrypt
-    :: MonadRandom m => PublicKey -> ByteString -> m (Either Error ByteString)
+    :: (MonadRandom m, ByteArray ba) => PublicKey -> ba -> m (Either Error ByteString)
 encrypt pk m = do
     r <- pad (public_size pk) m
     case r of
         Left err -> return $ Left err
-        Right em -> return $ Right (ep pk em)
+        Right em -> return $ Right (B.convert $ ep pk em)
 
 -- | sign message using private key, a hash and its ASN1 description
 --
