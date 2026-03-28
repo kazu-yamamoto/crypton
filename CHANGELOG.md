@@ -1,5 +1,10 @@
 # CHANGELOG for crypton
 
+## 1.1.2
+
+* Preparing `ram` v0.22.
+* Generalizing RSA encrypt/decrypt to manipulate ScrubbedBytes directly.
+
 ## 1.1.1
 
 * On iOS, ScrubbedBytes based hashing is used for seedNew. On other
