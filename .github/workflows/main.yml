@@ -23,7 +23,7 @@ jobs:
     steps:
     - run: git config --global core.autocrlf false
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: haskell-actions/setup@v2
       with:
@@ -40,7 +40,7 @@ jobs:
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
 
     - name: Restore Cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       if: ${{ github.ref_name != 'ci-uc' }}
       with:
         path: ~/.cabal
@@ -59,7 +59,7 @@ jobs:
         fi
 
     - name: Save Cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       if: ${{ steps.inst-dep.outputs.installed == 'true' || steps.doctest-dep.outputs.installed == 'true' }}
       with:
         path: ~/.cabal
