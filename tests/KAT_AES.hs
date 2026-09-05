@@ -5,6 +5,8 @@ module KAT_AES (tests) where
 import BlockCipher
 import qualified Crypto.Cipher.AES as AES
 import Crypto.Cipher.Types
+import Crypto.Error
+import qualified Data.ByteArray as BA
 import qualified Data.ByteString as B
 import Data.Maybe
 import Imports
@@ -113,12 +115,35 @@ kats256 =
         , kat_AEAD = map toKatGCM KATGCM.vectors_aes256_enc
         }
 
+aeadTagLengthTests :: TestTree
+aeadTagLengthTests =
+    testGroup
+        "AEAD tag length"
+        [ testCase "full tag verifies" $ Just message @=? openWith fullTag
+        , testCase "empty tag rejected" $ Nothing @=? openWith B.empty
+        , testCase "1-byte tag rejected" $ Nothing @=? openWith (B.take 1 fullTag)
+        , testCase "3-byte tag rejected" $ Nothing @=? openWith (B.take 3 fullTag)
+        , testCase "wrong tag rejected" $
+            Nothing @=? openWith (B.map (+ 1) fullTag)
+        ]
+  where
+    key = B.replicate 16 0
+    iv = B.replicate 12 0
+    aad = "additional data" :: ByteString
+    message = "authenticated message" :: ByteString
+    ctx = throwCryptoError (cipherInit key) :: AES.AES128
+    aead = throwCryptoError (aeadInit AEAD_GCM ctx iv)
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead aad message 16
+    fullTag = BA.convert tag :: ByteString
+    openWith t = aeadSimpleDecrypt aead aad ciphertext (AuthTag (BA.convert t))
+
 tests =
     testGroup
         "AES"
         [ testBlockCipher kats128 (undefined :: AES.AES128)
         , testBlockCipher kats192 (undefined :: AES.AES192)
         , testBlockCipher kats256 (undefined :: AES.AES256)
+        , aeadTagLengthTests
         {-
             , testProperty "genCtr" $ \(key, iv1) ->
                 let (bs1, iv2)    = AES.genCounter key iv1 32
