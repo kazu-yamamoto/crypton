@@ -5,6 +5,7 @@ module KAT_AES (tests) where
 import BlockCipher
 import qualified Crypto.Cipher.AES as AES
 import Crypto.Cipher.Types
+import Crypto.Error
 import qualified Data.ByteString as B
 import Data.Maybe
 import Imports
@@ -113,12 +114,32 @@ kats256 =
         , kat_AEAD = map toKatGCM KATGCM.vectors_aes256_enc
         }
 
+-- SP 800-38D 5.2.1.1: 1 <= len(IV) <= 2^64 - 1.  A zero-length IV makes
+-- J0 the GHASH of the empty string, which leaks the authentication key.
+aeadIVLengthTests :: TestTree
+aeadIVLengthTests =
+    testGroup
+        "AEAD IV length"
+        [ testCase "96-bit IV accepted" $
+            True @=? isRight (initWith (B.replicate 12 0))
+        , testCase "8-bit IV accepted" $
+            True @=? isRight (initWith (B.replicate 1 0))
+        , testCase "empty IV rejected" $
+            Left CryptoError_IvSizeInvalid @=? initWith B.empty
+        ]
+  where
+    ctx = throwCryptoError (cipherInit (B.replicate 16 0)) :: AES.AES128
+    initWith iv =
+        eitherCryptoError (() <$ aeadInit AEAD_GCM ctx (iv :: ByteString))
+    isRight = either (const False) (const True)
+
 tests =
     testGroup
         "AES"
         [ testBlockCipher kats128 (undefined :: AES.AES128)
         , testBlockCipher kats192 (undefined :: AES.AES192)
         , testBlockCipher kats256 (undefined :: AES.AES256)
+        , aeadIVLengthTests
         {-
             , testProperty "genCtr" $ \(key, iv1) ->
                 let (bs1, iv2)    = AES.genCounter key iv1 32
