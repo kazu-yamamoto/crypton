@@ -42,6 +42,7 @@ module Crypto.Cipher.AES.Primitive (
     -- * Incremental GCM
     gcmMode,
     gcmInit,
+    gcmAeadInit,
 
     -- * Incremental OCB
     ocbMode,
@@ -84,13 +85,22 @@ instance BlockCipher AES where
     cbcEncrypt = encryptCBC
     cbcDecrypt = decryptCBC
     ctrCombine = encryptCTR
-    aeadInit AEAD_GCM aes iv = CryptoPassed $ AEAD (gcmMode aes) (gcmInit aes iv)
+    aeadInit AEAD_GCM aes iv = gcmAeadInit aes iv
     aeadInit AEAD_OCB aes iv = CryptoPassed $ AEAD (ocbMode aes) (ocbInit aes iv)
     aeadInit (AEAD_CCM n m l) aes iv = AEAD (ccmMode aes) <$> ccmInit aes iv n m l
     aeadInit _ _ _ = CryptoFailed CryptoError_AEADModeNotSupported
 instance BlockCipher128 AES where
     xtsEncrypt = encryptXTS
     xtsDecrypt = decryptXTS
+
+-- | Create an AES AEAD context for GCM, refusing the zero-length IV that
+-- SP 800-38D 5.2.1.1 forbids: any length other than 96 bits is fed to
+-- GHASH, and for the empty IV that makes J0 the GHASH of the empty
+-- string, which leaks the authentication key.
+gcmAeadInit :: ByteArrayAccess iv => AES -> iv -> CryptoFailable (AEAD c)
+gcmAeadInit aes iv
+    | B.length iv == 0 = CryptoFailed CryptoError_IvSizeInvalid
+    | otherwise = CryptoPassed $ AEAD (gcmMode aes) (gcmInit aes iv)
 
 -- | Create an AES AEAD implementation for GCM
 gcmMode :: AES -> AEADModeImpl AESGCM
