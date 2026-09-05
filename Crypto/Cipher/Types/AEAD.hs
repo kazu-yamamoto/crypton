@@ -69,7 +69,22 @@ aeadSimpleEncrypt aeadIni header input taglen = (tag, output)
     (output, aeadFinal) = aeadEncrypt aead input
     tag = aeadFinalize aeadFinal taglen
 
+-- | The shortest authentication tag any mode here produces, four bytes
+-- (@CCM_M4@).  Modes that truncate their tag -- GCM and OCB3 -- will
+-- compute one of whatever length they are asked for, down to nothing, so
+-- 'aeadSimpleDecrypt' refuses a shorter tag than this rather than
+-- authenticate fewer bytes than any supported mode ever emits.
+minimumTagLength :: Int
+minimumTagLength = 4
+
 -- | Simple AEAD decryptio.
+--
+-- The number of bytes compared is the length of @authTag@.  That is the
+-- caller's choice of tag length, so a caller reading a tag off the wire
+-- must check its length against the one it expects: passing an
+-- attacker-supplied tag straight in lets the attacker pick how much of it
+-- is verified.  Tags shorter than 'minimumTagLength' are rejected
+-- outright.
 aeadSimpleDecrypt
     :: (ByteArrayAccess aad, ByteArray ba)
     => AEAD a
@@ -83,6 +98,7 @@ aeadSimpleDecrypt
     -> Maybe ba
     -- ^ Plaintext
 aeadSimpleDecrypt aeadIni header input authTag
+    | B.length authTag < minimumTagLength = Nothing
     | tag == authTag = Just output
     | otherwise = Nothing
   where
