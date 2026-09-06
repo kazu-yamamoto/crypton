@@ -2,7 +2,9 @@
 
 module KAT_HKDF (tests) where
 
-import Crypto.Hash (HashAlgorithm, SHA256 (..))
+import Control.Exception (evaluate, try)
+import Crypto.Error (CryptoError (..))
+import Crypto.Hash (HashAlgorithm, SHA1, SHA256, SHA384, SHA512)
 import qualified Crypto.KDF.HKDF as HKDF
 import qualified Data.ByteString as B
 
@@ -380,8 +382,34 @@ kdfTests =
     is :: [Int]
     is = [1 ..]
 
+boundTests :: [TestTree]
+boundTests =
+    [ boundTest "SHA-1" (HKDF.extract salt ikm :: HKDF.PRK SHA1) 20
+    , boundTest "SHA-256" (HKDF.extract salt ikm :: HKDF.PRK SHA256) 32
+    , boundTest "SHA-384" (HKDF.extract salt ikm :: HKDF.PRK SHA384) 48
+    , boundTest "SHA-512" (HKDF.extract salt ikm :: HKDF.PRK SHA512) 64
+    ]
+  where
+    salt = "salt" :: ByteString
+    ikm = "input key material" :: ByteString
+    info = "info" :: ByteString
+    boundTest name prk hashLen =
+        testGroup
+            name
+            [ testCase "maximum length" $
+                maxLen @=? B.length (HKDF.expand prk info maxLen :: ByteString)
+            , testCase "one byte past the maximum" $ do
+                result <-
+                    try (evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString)))
+                        :: IO (Either CryptoError Int)
+                Left CryptoError_OutputLengthTooBig @=? result
+            ]
+      where
+        maxLen = 255 * hashLen
+
 tests =
     testGroup
         "HKDF"
         [ testGroup "KATs" kdfTests
+        , testGroup "output bound" boundTests
         ]
