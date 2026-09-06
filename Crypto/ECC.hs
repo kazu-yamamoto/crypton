@@ -204,7 +204,16 @@ instance EllipticCurveArith Curve_P256R1 where
 
 instance EllipticCurveDH Curve_P256R1 where
     ecdhRaw _ s p = SharedSecret $ P256.pointDh s p
-    ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
+
+    -- An all-zero x-coordinate can be valid. Since P-256's group has prime
+    -- order n, s * P is the identity only when P is the identity or the
+    -- 256-bit scalar s is zero or n.
+    ecdh _ s p
+        | P256.pointIsAtInfinity p
+            || P256.scalarIsZero s
+            || P256.scalarCmp s P256.scalarN == EQ =
+            CryptoFailed CryptoError_ScalarMultiplicationInvalid
+        | otherwise = CryptoPassed $ SharedSecret $ P256.pointDh s p
 
 instance EllipticCurveBasepointArith Curve_P256R1 where
     curveOrderBits _ = 256
