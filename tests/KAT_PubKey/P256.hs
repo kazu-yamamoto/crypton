@@ -81,6 +81,15 @@ yU = 0x7d12de58d54423eb85ae8d157ae416fb004a7eb522ac1b67047ef3cdf9acdc3f
 xV = 0x8000003ffffff0000007fffffe000000ffffffc000001ffffff8000003fffffc
 yV = 0x0c3527bd081c1c07b313bc1a0c3f845fb2fe22557699ccc8f1354e61a27b7f88
 
+validPointEdgeCases :: [(String, (Integer, Integer))]
+validPointEdgeCases =
+    [ ("x-zero-1", (0, 0x66485c780e2f83d72433bd5d84a06bb6541c2af31dae871728bf856a174f93f4))
+    , ("x-zero-2", (0, 0x99b7a386f1d07c29dbcc42a27b5f9449abe3d50de25178e8d7407a95e8b06c0b))
+    , ("y-one-1", (0x09e78d4ef60d05f750f6636209092bc43cbdd6b47e11a9de20a9feb2a50bb96c, 1))
+    , ("y-one-2", (0x8d0177ebab9c6e9e10db6dd095dbac0d6375e8a97b70f611875d877f0069d2c7, 1))
+    , ("y-one-3", (0x6916fac45e568b6b9e2e2ecd611b282e5fcc40a3067d601057f879ce5a8a73cc, 1))
+    ]
+
 tests =
     testGroup
         "P256"
@@ -156,6 +165,8 @@ tests =
               -- being corrected.  Both points below are on the curve.
               testCase "valid-point-reduction-1" $ casePointIsValid (xU, yU)
             , testCase "valid-point-reduction-2" $ casePointIsValid (xV, yV)
+            , testGroup "valid-point-edge-cases" $
+                map (\(name, point) -> testCase name $ casePointIsValid point) validPointEdgeCases
             , testCase "point-add-1" $
                 let s = P256.pointFromIntegers (xS, yS)
                     t = P256.pointFromIntegers (xT, yT)
