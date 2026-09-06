@@ -352,13 +352,12 @@ void crypton_p256_mod(const crypton_p256_int* MOD,
 }
 
 // Verify y^2 == x^3 - 3x + b mod p
-// and 0 < x < p and 0 < y < p
+// and 0 <= x < p and 0 < y < p
 int crypton_p256_is_valid_point(const crypton_p256_int* x, const crypton_p256_int* y) {
   crypton_p256_int y2, x3;
 
   if (crypton_p256_cmp(&crypton_SECP256r1_p, x) <= 0 ||
       crypton_p256_cmp(&crypton_SECP256r1_p, y) <= 0 ||
-      crypton_p256_is_zero(x) ||
       crypton_p256_is_zero(y)) return 0;
 
   crypton_p256_modmul(&crypton_SECP256r1_p, y, 0, y, &y2);  // y^2
@@ -370,6 +369,7 @@ int crypton_p256_is_valid_point(const crypton_p256_int* x, const crypton_p256_in
   if (crypton_p256_sub(&x3, x, &x3)) crypton_p256_add(&x3, &crypton_SECP256r1_p, &x3);  // x^3 - 3x
   if (crypton_p256_add(&x3, &crypton_SECP256r1_b, &x3))  // x^3 - 3x + b
     crypton_p256_sub(&x3, &crypton_SECP256r1_p, &x3);
+  crypton_p256_mod(&crypton_SECP256r1_p, &x3, &x3);
 
   return crypton_p256_cmp(&y2, &x3) == 0;
 }
