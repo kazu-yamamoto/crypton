@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      : Crypto.KDF.HKDF
@@ -18,6 +19,7 @@ module Crypto.KDF.HKDF (
     toPRK,
 ) where
 
+import Crypto.Error
 import Crypto.Hash
 import Crypto.Internal.ByteArray (
     ByteArray,
@@ -60,8 +62,12 @@ extractSkip
 extractSkip ikm = PRK_NoExpand $ B.convert ikm
 
 -- | Expand key material of specific length out of the parameters
+--
+-- Requests exceeding the RFC 5869 limit of @255 * HashLen@ raise
+-- 'CryptoError_OutputLengthTooBig'.
 expand
-    :: (HashAlgorithm a, ByteArrayAccess info, ByteArray out)
+    :: forall a info out
+     . (HashAlgorithm a, ByteArrayAccess info, ByteArray out)
     => PRK a
     -- ^ Pseudo Random Key
     -> info
@@ -70,9 +76,12 @@ expand
     -- ^ Output length in bytes
     -> out
     -- ^ Output data
-expand prkAt infoAt outputLength =
-    let hF = hFGet prkAt
-     in B.concat $ loop hF B.empty outputLength 1
+expand prkAt infoAt outputLength
+    | outputLength > 255 * hashDigestSize (undefined :: a) =
+        throwCryptoError (CryptoFailed CryptoError_OutputLengthTooBig)
+    | otherwise =
+        let hF = hFGet prkAt
+         in B.concat $ loop hF B.empty outputLength 1
   where
     hFGet :: (HashAlgorithm a, ByteArrayAccess b) => PRK a -> (b -> HMAC a)
     hFGet prk = case prk of
