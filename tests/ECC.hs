@@ -9,6 +9,7 @@ import Data.Either
 import qualified Crypto.ECC as ECC
 import Crypto.Error
 
+import Data.ByteArray (convert)
 import Data.ByteArray.Encoding
 
 import Imports
@@ -309,6 +310,32 @@ vectorsWeakPoint =
 vpEncodedPoint :: VectorPoint -> ByteString
 vpEncodedPoint vector = fromRight (error "vpEncodedPoint") $ convertFromBase Base16 (vpHex vector)
 
+-- Wycheproof ecdh_secp256r1_ecpoint_test.json, tcIds 1 and 3.
+vectorsECDH :: [(ByteString, ByteString, ByteString)]
+vectorsECDH =
+    [
+        ( "0612465c89a023ab17855b0a6bcebfd3febb53aef84138647b5352e02c10c346"
+        , "0462d5bd3372af75fe85a040715d0f502428e07046868b0bfdfa61d731afe44f26ac333a93a9e70a81cd5a95b5bf8d13990eb741c8c38872b4a07d275a014e30cf"
+        , "53020d908b0219328b658b525f26780e3ae12bcd952bb25a93bc0895e1714285"
+        )
+    ,
+        ( "0a0d622a47e48f6bc1038ace438c6f528aa00ad2bd1da5f13ee46bf5f633d71a"
+        , "0458fd4168a87795603e2b04390285bdca6e57de6027fe211dd9d25e2212d29e62080d36bd224d7405509295eed02a17150e03b314f96da37445b0d1d29377d12c"
+        , "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+    ]
+
+unhex :: ByteString -> ByteString
+unhex = fromRight (error "unhex") . convertFromBase Base16
+
+doECDHTest :: Show p => p -> (ByteString, ByteString, ByteString) -> TestTree
+doECDHTest i (priv, pub, shared) = testCase (show i) $
+    CryptoPassed (unhex shared) @=? (convert <$> ECC.ecdh prx sk pk)
+  where
+    prx = Just ECC.Curve_P256R1
+    sk = throwCryptoError $ ECC.decodeScalar prx (unhex priv)
+    pk = throwCryptoError $ ECC.decodePoint prx (unhex pub)
+
 cryptoError :: CryptoFailable a -> Maybe CryptoError
 cryptoError = onCryptoFailure Just (const Nothing)
 
@@ -336,6 +363,7 @@ tests =
     testGroup
         "ECC"
         [ testGroup "decodePoint" $ zipWith doPointDecodeTest [katZero ..] vectorsPoint
+        , testGroup "ECDH KATs" $ zipWith doECDHTest [katZero ..] vectorsECDH
         , testGroup "ECDH weak points" $
             zipWith doWeakPointECDHTest [katZero ..] vectorsWeakPoint
         , testGroup
