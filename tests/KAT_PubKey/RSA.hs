@@ -3,8 +3,10 @@
 module KAT_PubKey.RSA (rsaTests) where
 
 import Crypto.Hash
+import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import qualified Data.ByteString as B
 import Data.Either
 
 import Imports
@@ -116,6 +118,32 @@ doVerifyTest i vector = testCase (show i) (True @=? actual)
     actual = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector) bs
     bs = fromRight (error "doVerifyTest") $ sig vector
 
+-- | RFC 8017 section 8.2.2 step 1 requires a signature that is not exactly k
+-- octets long, k being the modulus length, to be rejected, and RSAVP1 (section
+-- 5.2.2 step 1) requires the same of a signature representative outside
+-- [0, n-1].  Verification here re-encodes the expected signature and compares
+-- it against the result of the public-key operation, which normalises both the
+-- length and the range away: without those two checks a zero-padded signature
+-- and @s + n@ verify just as well as @s@ itself.
+doMalleabilityTest :: Show a => a -> VectorRSA -> TestTree
+doMalleabilityTest i vector =
+    testGroup
+        (show i)
+        [ testCase "the signature itself verifies" $
+            True @=? verify' s
+        , testCase "a leading zero octet is rejected" $
+            False @=? verify' (B.cons 0 s)
+        , testCase "a trailing zero octet is rejected" $
+            False @=? verify' (B.snoc s 0)
+        , testCase "s + n is rejected" $
+            False @=? verify' (i2osp (os2ip s + n vector))
+        , testCase "an empty signature is rejected" $
+            False @=? verify' B.empty
+        ]
+  where
+    s = fromRight (error "doMalleabilityTest") $ sig vector
+    verify' = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector)
+
 rsaTests :: TestTree
 rsaTests =
     testGroup
@@ -125,6 +153,9 @@ rsaTests =
             [ testGroup "signature" $ zipWith doSignatureTest [katZero ..] vectorsSHA1
             , testGroup "verify" $
                 zipWith doVerifyTest [katZero ..] $
+                    filter vectorHasSignature vectorsSHA1
+            , testGroup "malleability" $
+                zipWith doMalleabilityTest [katZero ..] $
                     filter vectorHasSignature vectorsSHA1
             ]
         ]
