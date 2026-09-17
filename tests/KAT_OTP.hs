@@ -15,6 +15,7 @@ import Crypto.Hash.Algorithms (
     SHA512 (..),
  )
 import Crypto.OTP
+import qualified Crypto.OTP as TOTP
 import Data.Either (isLeft)
 import Imports
 
@@ -143,6 +144,41 @@ evaluated = try . evaluate
 evaluated' :: Maybe Word64 -> IO (Either ErrorCall (Maybe Word64))
 evaluated' = try . evaluate
 
+-- | totpVerify accepts a value from any step within the skew window and
+-- nothing else.  It compares a submitted value against secret-derived ones, so
+-- pin the accepted and rejected cases down before that comparison is rewritten.
+verifyTests :: [TestTree]
+verifyTests =
+    [ testCase "the value for the current step is accepted" $
+        assertBool "expected acceptance" (verifyAt 0)
+    , testCase "every step within the window is accepted" $
+        assertBool "expected acceptance" (all verifyAt [-2 .. 2])
+    , testCase "the step just outside the window is refused" $
+        assertBool "expected refusal" (not (any verifyAt [-3, 3]))
+    , testCase "a value no step produces is refused" $
+        assertBool "expected refusal" $
+            not (totpVerify params otpKey now (totp params otpKey now + 1))
+    , testCase "a window of no skew accepts only the current step" $
+        assertBool "expected only the current step" $
+            let noSkew = TOTP.mkTOTPParams SHA1 0 30 OTP6 NoSkew
+             in case noSkew of
+                    Left e -> error e
+                    Right ps ->
+                        totpVerify ps otpKey now (totp ps otpKey now)
+                            && not (totpVerify ps otpKey now (totp ps otpKey (now + 30)))
+    ]
+  where
+    params = defaultTOTPParams
+    now = 1111111109
+
+    -- one step is 30 seconds under defaultTOTPParams.  The offset is taken as
+    -- an Integer so a step before the current one is an actual subtraction
+    -- rather than a wrap around OTPTime, which is a Word64.
+    verifyAt :: Integer -> Bool
+    verifyAt steps =
+        totpVerify params otpKey now (totp params otpKey (at steps))
+    at steps = fromInteger (toInteger now + 30 * steps)
+
 tests :: TestTree
 tests =
     testGroup
@@ -168,5 +204,6 @@ tests =
                     "SHA512"
                     (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
                 ]
+            , testGroup "verify" verifyTests
             ]
         ]
