@@ -105,3 +105,37 @@ aeadSimpleDecrypt aeadIni header input authTag
     aead = aeadAppendHeader aeadIni header
     (output, aeadFinal) = aeadDecrypt aead input
     tag = aeadFinalize aeadFinal (B.length authTag)
+
+-- | Simple AEAD decryption with the tag length given by the caller.
+--
+-- 'aeadSimpleDecrypt' authenticates as many octets as the tag it is handed is
+-- long.  That is the caller's choice only for as long as the tag is: one read
+-- off the wire is the peer's, and an attacker who truncates it picks how much
+-- of it gets verified, down to 'minimumTagLength'.
+--
+-- Here the length is a separate argument and a tag that is not exactly that
+-- long is refused before anything is compared, so the peer cannot weaken the
+-- check.  Prefer this wherever the tag is attacker reachable.
+aeadSimpleDecrypt'
+    :: (ByteArrayAccess aad, ByteArray ba)
+    => AEAD a
+    -- ^ An AEAD Context
+    -> aad
+    -- ^ Associated\/additional data
+    -> ba
+    -- ^ Ciphertext
+    -> Int
+    -- ^ The tag length to authenticate, which the tag must match
+    -> AuthTag
+    -- ^ The authentication tag
+    -> Maybe ba
+    -- ^ Plaintext
+aeadSimpleDecrypt' aeadIni header input taglen authTag
+    | taglen < minimumTagLength = Nothing
+    | B.length authTag /= taglen = Nothing
+    | tag == authTag = Just output
+    | otherwise = Nothing
+  where
+    aead = aeadAppendHeader aeadIni header
+    (output, aeadFinal) = aeadDecrypt aead input
+    tag = aeadFinalize aeadFinal taglen
