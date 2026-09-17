@@ -34,7 +34,6 @@ module Crypto.PubKey.DSA (
 ) where
 
 import Data.Data
-import Data.Maybe
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
@@ -139,18 +138,18 @@ signWith
     -> msg
     -- ^ message to sign
     -> Maybe Signature
-signWith k pk hashAlg msg
-    | r == 0 || s == 0 = Nothing
-    | otherwise = Just $ Signature r s
+signWith k pk hashAlg msg = do
+    -- k comes from the caller and is only invertible when it is coprime with
+    -- q, which the caller cannot check without knowing q is prime
+    kInv <- inverse k q
+    let hm = dsaTruncHash hashAlg msg q
+        r = expSafe g k p `mod` q
+        s = (kInv * (hm + x * r)) `mod` q
+    if r == 0 || s == 0 then Nothing else Just $ Signature r s
   where
     -- parameters
     (Params p g q) = private_params pk
     x = private_x pk
-    -- compute r,s
-    kInv = fromJust $ inverse k q
-    hm = dsaTruncHash hashAlg msg q
-    r = expSafe g k p `mod` q
-    s = (kInv * (hm + x * r)) `mod` q
 
 -- | sign message using the private key.
 sign
@@ -171,12 +170,15 @@ verify
 verify hashAlg pk (Signature r s) m
     -- Reject the signature if either 0 < r < q or 0 < s < q is not satisfied.
     | r <= 0 || r >= q || s <= 0 || s >= q = False
-    | otherwise = v == r
+    -- s is invertible for every 0 < s < q when q is prime, but the parameters
+    -- arrive with the public key and a composite q admits an s that is not
+    | otherwise = maybe False (r ==) v
   where
     (Params p g q) = public_params pk
     y = public_y pk
     hm = dsaTruncHash hashAlg m q
-    w = fromJust $ inverse s q
-    u1 = (hm * w) `mod` q
-    u2 = (r * w) `mod` q
-    v = ((expFast g u1 p) * (expFast y u2 p)) `mod` p `mod` q
+    v = do
+        w <- inverse s q
+        let u1 = (hm * w) `mod` q
+            u2 = (r * w) `mod` q
+        return $ ((expFast g u1 p) * (expFast y u2 p)) `mod` p `mod` q
