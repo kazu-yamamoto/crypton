@@ -29,6 +29,7 @@ module Crypto.OTP (
     OTP,
     OTPDigits (..),
     OTPTime,
+    minimumDigestSize,
     hotp,
     resynchronize,
     totp,
@@ -41,7 +42,7 @@ module Crypto.OTP (
 where
 
 import Control.Monad (unless)
-import Crypto.Hash (HashAlgorithm, SHA1 (..))
+import Crypto.Hash (HashAlgorithm, SHA1 (..), hashDigestSize)
 import Crypto.Internal.ByteArray (ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.MAC.HMAC
@@ -60,6 +61,21 @@ data OTPDigits = OTP4 | OTP5 | OTP6 | OTP7 | OTP8 | OTP9 deriving (Show)
 -- | An integral time value in seconds.
 type OTPTime = Word64
 
+-- | The smallest hash digest 'hotp' can be used with, in bytes.
+--
+-- RFC 4226 section 5.3 defines dynamic truncation over the 20-byte HMAC-SHA-1
+-- output: the offset is the low four bits of the last byte, so it selects any
+-- of the first 16 bytes, and four bytes are then read starting there.  The
+-- highest byte that can be reached is therefore byte 18, and a shorter digest
+-- would make that read run off the end of the MAC.
+minimumDigestSize :: Int
+minimumDigestSize = 20
+
+-- | Calculate an HOTP value as defined by RFC 4226.
+--
+-- The hash must produce a digest of at least 'minimumDigestSize' bytes, which
+-- is what the dynamic truncation step is defined over; 'error' is raised
+-- otherwise.
 hotp
     :: forall hash key
      . (HashAlgorithm hash, ByteArrayAccess key)
@@ -72,10 +88,19 @@ hotp
     -- ^ Counter value synchronized between the client and server
     -> OTP
     -- ^ The HOTP value
-hotp _ d k c = dt `mod` digitsPower d
+hotp _ d k c
+    | macLen < minimumDigestSize =
+        error $
+            "Crypto.OTP.hotp: hash digest is "
+                ++ show macLen
+                ++ " bytes, but at least "
+                ++ show minimumDigestSize
+                ++ " are required"
+    | otherwise = dt `mod` digitsPower d
   where
     mac = hmac k (fromW64BE c :: Bytes) :: HMAC hash
-    offset = fromIntegral (B.index mac (B.length mac - 1) .&. 0xf)
+    macLen = B.length mac
+    offset = fromIntegral (B.index mac (macLen - 1) .&. 0xf)
     dt =
         (fromIntegral (B.index mac offset .&. 0x7f) `shiftL` 24)
             .|. (fromIntegral (B.index mac (offset + 1) .&. 0xff) `shiftL` 16)
@@ -148,6 +173,13 @@ mkTOTPParams
 mkTOTPParams h t0 x d skew = do
     unless (x > 0) (Left "Time step must be greater than zero")
     unless (x <= 300) (Left "Time step cannot be greater than 300 seconds")
+    unless
+        (hashDigestSize h >= minimumDigestSize)
+        ( Left $
+            "Hash digest must be at least "
+                ++ show minimumDigestSize
+                ++ " bytes"
+        )
     return (TP h t0 x d skew)
 
 -- | Calculate a totp value for the given time.

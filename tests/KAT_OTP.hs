@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module KAT_OTP (
@@ -5,8 +6,16 @@ module KAT_OTP (
 )
 where
 
-import Crypto.Hash.Algorithms (SHA1 (..), SHA256 (..), SHA512 (..))
+import Control.Exception (ErrorCall, evaluate, try)
+import Crypto.Hash.Algorithms (
+    Blake2b (..),
+    MD5 (..),
+    SHA1 (..),
+    SHA256 (..),
+    SHA512 (..),
+ )
 import Crypto.OTP
+import Data.Either (isLeft)
 import Imports
 
 -- | Test values from Appendix D of http://tools.ietf.org/html/rfc4226
@@ -102,6 +111,38 @@ prop_resyncExpected ctr window = resynchronize SHA1 OTP6 window key ctr (otp, []
     key = "1234" :: ByteString
     otp = hotp SHA1 OTP6 key ctr
 
+-- | RFC 4226 dynamic truncation reads the offset from the low four bits of
+-- the MAC's last byte, so the offset can be any of 0..15, and then reads four
+-- bytes starting there -- reaching byte 18.  A digest shorter than that leaves
+-- 'hotp' indexing past the end of the MAC, and 'Data.ByteArray.index' does not
+-- bounds check, so the OTP is built from whatever happens to follow the MAC in
+-- memory.  Such a digest must be refused instead.
+digestSizeTests :: [TestTree]
+digestSizeTests =
+    [ testCase "SHA-1 (20 bytes) is accepted" $ do
+        result <- evaluated (hotp SHA1 OTP6 otpKey 1)
+        Right 287082 @=? result
+    , rejects "MD5 (16 bytes)" (hotp MD5 OTP6 otpKey 1)
+    , rejects "Blake2b-64 (8 bytes)" (hotp (Blake2b :: Blake2b 64) OTP6 otpKey 1)
+    , testCase "resynchronize with a short digest is rejected" $ do
+        result <- evaluated' (resynchronize MD5 OTP6 10 otpKey 0 (0, []))
+        assertBool "expected an error" (isLeft result)
+    , testCase "mkTOTPParams rejects a short digest" $
+        assertBool
+            "expected Left"
+            (isLeft (mkTOTPParams MD5 0 30 OTP6 TwoSteps))
+    ]
+  where
+    rejects name otp = testCase (name ++ " is rejected") $ do
+        result <- evaluated otp
+        assertBool ("expected an error, got " ++ show result) (isLeft result)
+
+evaluated :: OTP -> IO (Either ErrorCall OTP)
+evaluated = try . evaluate
+
+evaluated' :: Maybe Word64 -> IO (Either ErrorCall (Maybe Word64))
+evaluated' = try . evaluate
+
 tests :: TestTree
 tests =
     testGroup
@@ -109,6 +150,7 @@ tests =
         [ testGroup
             "HOTP"
             [ testGroup "KATs" (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
+            , testGroup "digest size" digestSizeTests
             , testGroup
                 "properties"
                 [ testProperty "resync-expected" prop_resyncExpected
