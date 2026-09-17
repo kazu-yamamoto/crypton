@@ -50,5 +50,42 @@ ecdhTests =
     da = 0x2eb7ef8e5dcbd0f0fbf70b5d4d43ea0b5f0dbcb45a3e3d8b3f1eaf7a35b1fb31
     db = 0x6c2f5e5b1e9a8d4c3b2a190807f6e5d4c3b2a1908f7e6d5c4b3a29180706f5e4d
 
+-- | RFC 7919 section 5.1 requires the peer's public value y to satisfy
+-- 1 < y < p-1.  The excluded values generate the subgroup {1} or {1, p-1}, so
+-- the shared secret they produce is one of a handful of constants and carries
+-- none of our private number's secrecy.
+--
+-- 'Params' also carries the size of p separately from p itself, and only p and
+-- g travel on the wire, so the two can disagree; the shared secret must still
+-- be the size p calls for rather than raising from i2ospOf_.
+ffdhTests :: TestTree
+ffdhTests =
+    testGroup
+        "finite field"
+        [ testCase "a valid exchange agrees" $ do
+            let ya = DH.calculatePublic params xa
+                yb = DH.calculatePublic params xb
+            DH.getShared params xa yb @=? DH.getShared params xb ya
+        , rejected "y = 0 is refused" $ DH.getShared params xa 0
+        , rejected "y = 1 is refused" $ DH.getShared params xa 1
+        , rejected "y = p-1 is refused" $
+            DH.getShared params xa (DH.PublicNumber (p - 1))
+        , rejected "y = p is refused" $ DH.getShared params xa (DH.PublicNumber p)
+        , rejected "y > p is refused" $ DH.getShared params xa (DH.PublicNumber (p + 1))
+        , testCase "an understated bit size still yields p-sized output" $ do
+            let understated = DH.Params p 2 8
+                yb = DH.calculatePublic understated xb
+            result <- force (DH.getShared understated xa yb)
+            Right 128 @=? result
+        ]
+  where
+    -- RFC 7919 ffdhe1024 is not defined, so use the 1024-bit MODP group of
+    -- RFC 2409 section 6.2, whose generator is 2
+    p =
+        0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF
+    params = DH.Params p 2 1024
+    xa = DH.PrivateNumber 0x1f3b5d79a2c4e60813579bdf2468ace0
+    xb = DH.PrivateNumber 0x2c4e60813579bdf2468ace01f3b5d79a
+
 dhTests :: TestTree
-dhTests = testGroup "DH" [ecdhTests]
+dhTests = testGroup "DH" [ecdhTests, ffdhTests]
