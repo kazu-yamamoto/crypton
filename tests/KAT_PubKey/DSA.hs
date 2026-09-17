@@ -2,8 +2,10 @@
 
 module KAT_PubKey.DSA (dsaTests) where
 
+import Control.Exception (SomeException, evaluate, try)
 import Crypto.Hash
 import qualified Crypto.PubKey.DSA as DSA
+import Data.Maybe (isJust)
 
 import Imports
 
@@ -399,6 +401,57 @@ doVerifyTest hashAlg i vector = testCase (show i) (True @=? actual)
             (DSA.Signature (r vector) (s vector))
             (msg vector)
 
+-- | Both sign and verify invert a value modulo q with 'fromJust'.  The
+-- inverse does not exist when the value shares a factor with q, and neither
+-- path rules that out: signWith takes k from the caller, and verify takes both
+-- the signature and the parameters from whoever supplied the public key, so a
+-- composite q admits an s that is not invertible.  Each has a way to say no --
+-- signWith returns Maybe, verify returns Bool -- so neither should raise.
+nonInvertibleTests :: TestTree
+nonInvertibleTests =
+    testGroup
+        "non-invertible values"
+        [ testCase "signWith with k = 0 returns Nothing" $
+            totalSign Nothing (DSA.signWith 0 priv SHA1 message)
+        , testCase "signWith with k = q returns Nothing" $
+            totalSign Nothing (DSA.signWith q priv SHA1 message)
+        , testCase "signWith with k sharing a factor with q returns Nothing" $
+            totalSign Nothing (DSA.signWith 3 compositePriv SHA1 message)
+        , testCase "signWith with a usable k still signs" $ do
+            result <- try (evaluate (DSA.signWith 4 priv SHA1 message))
+            assertBool "expected a signature" (either exc isJust result)
+        , testCase "verify with a non-invertible s returns False" $ do
+            result <-
+                try
+                    ( evaluate $
+                        DSA.verify
+                            SHA1
+                            compositePub
+                            (DSA.Signature 1 3)
+                            message
+                    )
+            Right False @=? left result
+        ]
+  where
+    message = "message" :: ByteString
+    q = 11
+    params = DSA.Params{DSA.params_p = 23, DSA.params_g = 4, DSA.params_q = q}
+    priv = DSA.PrivateKey params 3
+    -- q = 9 is composite, so 3 has no inverse modulo q
+    compositeParams = DSA.Params{DSA.params_p = 23, DSA.params_g = 4, DSA.params_q = 9}
+    compositePriv = DSA.PrivateKey compositeParams 3
+    compositePub = DSA.PublicKey compositeParams 4
+
+    left :: Either SomeException a -> Either String a
+    left = either (Left . takeWhile (/= '\n') . show) Right
+
+    exc :: SomeException -> Bool
+    exc _ = False
+
+    totalSign expected sig = do
+        result <- try (evaluate sig)
+        Right expected @=? left result
+
 dsaTests =
     testGroup
         "DSA"
@@ -431,4 +484,5 @@ dsaTests =
                 zipWith (doSignatureTest SHA512) [katZero ..] vectorsSHA512
             , testGroup "verify" $ zipWith (doVerifyTest SHA512) [katZero ..] vectorsSHA512
             ]
+        , nonInvertibleTests
         ]
