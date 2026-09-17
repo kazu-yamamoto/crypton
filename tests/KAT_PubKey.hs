@@ -12,6 +12,7 @@ import Data.ByteString.Char8 ()
 import Crypto.Hash
 import Crypto.PubKey.MaskGenFunction
 
+import KAT_PubKey.DH
 import KAT_PubKey.DSA
 import KAT_PubKey.ECC
 import KAT_PubKey.ECDSA
@@ -48,6 +49,7 @@ tests =
         , pssTests
         , oaepTests
         , dsaTests
+        , dhTests
         , eccTests
         , ecdsaTests
         , P256.tests
