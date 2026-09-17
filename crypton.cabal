@@ -480,6 +480,7 @@ test-suite test-crypton
         KAT_OTP
         KAT_PBKDF2
         KAT_PubKey
+        KAT_PubKey.DH
         KAT_PubKey.DSA
         KAT_PubKey.ECC
         KAT_PubKey.ECDSA
