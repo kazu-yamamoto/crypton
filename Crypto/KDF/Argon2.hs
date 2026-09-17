@@ -24,10 +24,10 @@ module Crypto.KDF.Argon2 (
     hash,
 ) where
 
-import Control.Monad (when)
 import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
+import Crypto.Internal.Compat (unsafeDoIO)
 import Data.Word
 import Foreign.C
 import Foreign.Ptr
@@ -104,6 +104,11 @@ defaultOptions =
         , version = Version13
         }
 
+-- | Hash a password with Argon2.
+--
+-- Options the underlying implementation refuses -- iterations, memory or
+-- parallelism outside the range it accepts -- are reported as
+-- 'CryptoError_ParameterInvalid'.
 hash
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
     => Options
@@ -115,22 +120,28 @@ hash options password salt outLen
     | saltLen < saltMinLength = CryptoFailed CryptoError_SaltTooSmall
     | outLen < outputMinLength = CryptoFailed CryptoError_OutputLengthTooSmall
     | outLen > outputMaxLength = CryptoFailed CryptoError_OutputLengthTooBig
-    | otherwise = CryptoPassed $ B.allocAndFreeze outLen $ \out -> do
-        res <- B.withByteArray password $ \pPass ->
-            B.withByteArray salt $ \pSalt ->
-                argon2_hash
-                    (iterations options)
-                    (memory options)
-                    (parallelism options)
-                    pPass
-                    (csizeOfInt passwordLen)
-                    pSalt
-                    (csizeOfInt saltLen)
-                    out
-                    (csizeOfInt outLen)
-                    (cOfVariant $ variant options)
-                    (cOfVersion $ version options)
-        when (res /= 0) $ error "argon2: hash: internal error"
+    | otherwise = unsafeDoIO $ do
+        -- the bounds on iterations, memory and parallelism are checked by the
+        -- C implementation, which reports them through its return code
+        (res, out) <- B.allocRet outLen $ \pOut ->
+            B.withByteArray password $ \pPass ->
+                B.withByteArray salt $ \pSalt ->
+                    argon2_hash
+                        (iterations options)
+                        (memory options)
+                        (parallelism options)
+                        pPass
+                        (csizeOfInt passwordLen)
+                        pSalt
+                        (csizeOfInt saltLen)
+                        pOut
+                        (csizeOfInt outLen)
+                        (cOfVariant $ variant options)
+                        (cOfVersion $ version options)
+        return $
+            if res == 0
+                then CryptoPassed out
+                else CryptoFailed CryptoError_ParameterInvalid
   where
     saltLen = B.length salt
     passwordLen = B.length password
