@@ -25,6 +25,7 @@ module Crypto.PubKey.RSA.PKCS15 (
 ) where
 
 import Crypto.Hash
+import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.Internal (and')
 import Crypto.PubKey.RSA (generateBlinder)
 import Crypto.PubKey.RSA.Prim
@@ -502,6 +503,14 @@ signSafer hashAlg pk m = do
     return (sign (Just blinder) hashAlg pk m)
 
 -- | verify message with the signed message
+--
+-- Following RFC 8017, the signature is rejected unless it is exactly as long
+-- as the modulus (section 8.2.2, step 1) and its integer representative is
+-- below the modulus (section 5.2.2, step 1).  Verification works by
+-- re-encoding the expected signature and comparing it with the result of the
+-- public-key operation, and that operation normalises away both the length of
+-- the encoding and any multiple of the modulus; without these checks a
+-- zero-padded signature, or @s + n@, would verify just as well as @s@.
 verify
     :: HashAlgorithmASN1 hashAlg
     => Maybe hashAlg
@@ -511,10 +520,13 @@ verify
     -> ByteString
     -- ^ Signature
     -> Bool
-verify hashAlg pk m sm =
-    case makeSignature hashAlg (public_size pk) m of
-        Left _ -> False
-        Right s -> s == (ep pk sm)
+verify hashAlg pk m sm
+    | B.length sm /= public_size pk = False
+    | os2ip sm >= public_n pk = False
+    | otherwise =
+        case makeSignature hashAlg (public_size pk) m of
+            Left _ -> False
+            Right s -> s == (ep pk sm)
 
 -- | make signature digest, used in 'sign' and 'verify'
 makeSignature
