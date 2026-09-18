@@ -32,11 +32,14 @@ import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
 
+import Data.Bits (complement, shiftR, (.&.), (.|.))
 import Data.ByteString (ByteString)
 import Data.Word
 
 import Crypto.Internal.ByteArray (ByteArray, Bytes)
 import qualified Crypto.Internal.ByteArray as B
+import Data.List (foldl')
+import Prelude hiding (foldl')
 
 -- | A specialized class for hash algorithm that can product
 -- a ASN1 wrapped description the algorithm plus the content
@@ -408,19 +411,44 @@ padSignature klen signature
     padding = 0 : 1 : (replicate (klen - siglen - 3) 0xff ++ [0])
 
 -- | Try to remove a standard PKCS1.5 encryption padding.
+--
+-- The block is scanned in full rather than up to the octet ending the padding
+-- string, so how long that string is does not show up in how long this takes.
+--
+-- What remains visible is the result itself: whether the padding was well
+-- formed, and the length of the message when it was.  That is inherent to the
+-- scheme, and it is the signal Bleichenbacher's attack needs, so a caller that
+-- decrypts attacker-supplied ciphertext must not pass the distinction on --
+-- TLS, for instance, continues with a random premaster secret and reports
+-- nothing.
 unpad :: ByteArray bytearray => bytearray -> Either Error bytearray
 unpad packed
     | paddingSuccess = Right m
     | otherwise = Left MessageNotRecognized
   where
+    len = B.length packed
     (zt, ps0m) = B.splitAt 2 packed
-    (ps, zm) = B.span (/= 0) ps0m
-    (z, m) = B.splitAt 1 zm
+
+    -- index of the first zero octet in ps0m, counted from the start of packed,
+    -- or len when there is none; every octet is looked at either way
+    zeroIndex = fst $ foldl' step (fromIntegral len :: Word32, 1 :: Word32) indexed
+    indexed = zip [2 ..] (B.unpack ps0m)
+    step (idx, unseen) (i, b) = (select found i idx, unseen .&. complement found)
+      where
+        w = fromIntegral b :: Word32
+        -- 0 when b is zero, 1 otherwise
+        nonZero = (w .|. negate w) `shiftR` 31
+        -- all ones at the first zero octet only
+        found = negate (unseen .&. complement nonZero)
+    select mask a b = (a .&. mask) .|. (b .&. complement mask)
+
+    psLength = fromIntegral zeroIndex - 2 :: Int
+    m = B.drop (fromIntegral zeroIndex + 1) packed
     paddingSuccess =
         and'
             [ zt `B.constEq` (B.pack [0, 2] :: Bytes)
-            , z == B.zero 1
-            , B.length ps >= 8
+            , fromIntegral zeroIndex < len
+            , psLength >= 8
             ]
 
 -- | decrypt message using the private key.

@@ -5,6 +5,10 @@ module KAT_PubKey.OAEP (oaepTests) where
 import Crypto.Hash
 import Crypto.PubKey.RSA
 import qualified Crypto.PubKey.RSA.OAEP as OAEP
+import Crypto.PubKey.RSA.Prim (dp, ep)
+
+import Data.Bits (xor)
+import qualified Data.ByteString as B
 
 import Imports
 
@@ -127,6 +131,39 @@ doDecryptionTest key i vec = testCase (show i) (Right (message vec) @=? actual)
   where
     actual = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key (cipherText vec)
 
+-- | EME-OAEP decoding rejects a block whose leading octet is not zero, whose
+-- recovered label hash does not match, or which has no 01 separating the
+-- padding from the message (RFC 8017 section 7.1.2).  Reach those paths by
+-- decrypting a known-good ciphertext to its encoded message, corrupting that,
+-- and re-encrypting under the public key.
+--
+-- Nothing exercised them before, and unpad is about to be rewritten, so pin
+-- the behaviour down first.
+oaepRejectTests :: TestTree
+oaepRejectTests =
+    testGroup
+        "rejected blocks"
+        [ testCase "the untouched block still decrypts" $
+            Right (message vec) @=? decrypt' (reencrypt em)
+        , rejects "a leading octet that is not 00" (poke 0 1 em)
+        , rejects "a corrupted masked seed" (flipBit 3 em)
+        , rejects "a corrupted masked db" (flipBit 60 em)
+        , rejects "a corrupted final octet" (flipBit (B.length em - 1) em)
+        , testCase "a ciphertext of the wrong length" $
+            Left MessageSizeIncorrect @=? decrypt' (B.drop 1 (cipherText vec))
+        ]
+  where
+    key = rsaKey1
+    vec = head vectorsKey1
+    em = dp Nothing key (cipherText vec)
+    reencrypt = ep (private_pub key)
+    decrypt' = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key
+    rejects name bad =
+        testCase name (Left MessageNotRecognized @=? decrypt' (reencrypt bad))
+    poke i w bs =
+        B.concat [B.take i bs, B.singleton w, B.drop (i + 1) bs]
+    flipBit i bs = poke i (B.index bs i `xor` 1) bs
+
 oaepTests =
     testGroup
         "RSA-OAEP"
@@ -139,4 +176,5 @@ oaepTests =
             zipWith (doEncryptionTest $ private_pub rsaKey1) [katZero ..] vectorsKey1
         , testGroup "decryption key 1024 bits" $
             zipWith (doDecryptionTest rsaKey1) [katZero ..] vectorsKey1
+        , oaepRejectTests
         ]

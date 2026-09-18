@@ -144,6 +144,45 @@ doMalleabilityTest i vector =
     s = fromRight (error "doMalleabilityTest") $ sig vector
     verify' = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector)
 
+-- | The checks RFC 8017 section 7.2.2 puts on an EME-PKCS1-v1_5 block: the
+-- leading @00 02@, a padding string of at least eight nonzero octets, and the
+-- @00@ that ends it.  Nothing exercised unpad before, and the scan over the
+-- padding is about to be rewritten, so pin the accepted and rejected shapes
+-- down first.
+unpadTests :: TestTree
+unpadTests =
+    testGroup
+        "unpadding"
+        [ accepts "the shortest permitted padding" (block 8 "hello") "hello"
+        , accepts "a longer padding" (block 40 "hello") "hello"
+        , accepts "an empty message" (block 8 "") ""
+        , accepts "a message of one octet" (block 8 "x") "x"
+        , rejects "a first octet that is not 00" $
+            B.cons 1 (B.drop 1 (block 8 "hello"))
+        , rejects "a second octet that is not 02" $
+            B.concat [B.pack [0, 1], B.drop 2 (block 8 "hello")]
+        , rejects "a padding string of seven octets" (block 7 "hello")
+        , rejects "a padding string of no octets" (block 0 "hello")
+        , rejects "a zero inside the first eight padding octets" $
+            B.concat [B.pack [0, 2, 0xff, 0xff, 0], "hello"]
+        , rejects "no octet ending the padding string" $
+            B.concat [B.pack [0, 2], B.replicate 40 0xff]
+        , rejects "an empty block" B.empty
+        , rejects "a block of one octet" (B.singleton 0)
+        , rejects "a block of two octets" (B.pack [0, 2])
+        ]
+  where
+    block n msg =
+        B.concat [B.pack [0, 2], B.replicate n 0xff, B.singleton 0, msg]
+    accepts name input expected =
+        testCase name (Right expected @=? RSA.unpad input)
+    rejects name input =
+        testCase
+            name
+            ( Left RSA.MessageNotRecognized
+                @=? (RSA.unpad input :: Either RSA.Error ByteString)
+            )
+
 rsaTests :: TestTree
 rsaTests =
     testGroup
@@ -158,4 +197,5 @@ rsaTests =
                 zipWith doMalleabilityTest [katZero ..] $
                     filter vectorHasSignature vectorsSHA1
             ]
+        , unpadTests
         ]
