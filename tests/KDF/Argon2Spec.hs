@@ -2,10 +2,11 @@
 
 module KDF.Argon2Spec (spec) where
 
-import Control.Exception (SomeException, evaluate, try)
+import Control.Exception (evaluate)
 import Crypto.Error
 import qualified Crypto.KDF.Argon2 as Argon2
 import qualified Data.ByteString as B
+import Data.Either (isLeft)
 import Imports
 
 data KDFVector = KDFVector
@@ -52,28 +53,16 @@ kdfTests = zipWith toKDFTest is vectors
 -- Invalid options have to come back through the failure the type already
 -- offers.
 --
--- The result is forced, because 'CryptoPassed' holds the bytes lazily and the
--- raise happens when they are produced.
-outcome
-    :: CryptoFailable ByteString
-    -> IO (Either String (Either CryptoError Int))
-outcome r = do
-    result <- try (evaluate (forceResult r))
-    return $ either (Left . takeWhile (/= '\n') . showExc) Right result
-  where
-    forceResult (CryptoFailed err) = Left err
-    forceResult (CryptoPassed bs) = Right $! B.length bs
-
-    showExc :: SomeException -> String
-    showExc = show
+-- The bytes are forced, because 'CryptoPassed' holds them lazily; a raise
+-- rather than a 'CryptoFailed' therefore fails the example.
+outcome :: CryptoFailable ByteString -> IO (Either CryptoError Int)
+outcome (CryptoFailed err) = return (Left err)
+outcome (CryptoPassed bs) = Right <$> evaluate (B.length bs)
 
 refuses :: String -> Argon2.Options -> Spec
-refuses name options = it name $ do
-    result <- outcome (Argon2.hash options pass salt outLen)
-    case result of
-        Left e -> assertFailure ("raised instead of failing: " ++ e)
-        Right (Right n) -> assertFailure ("unexpectedly produced " ++ show n ++ " bytes")
-        Right (Left _) -> return ()
+refuses name options =
+    it name $
+        outcome (Argon2.hash options pass salt outLen) >>= (`shouldSatisfy` isLeft)
 
 pass :: ByteString
 pass = "password"
@@ -86,9 +75,9 @@ outLen = 32
 
 optionTests :: [Spec]
 optionTests =
-    [ it "valid options hash" $ do
-        result <- outcome (Argon2.hash (argon2i_13 2 65536) pass salt outLen)
-        result `shouldBe` Right (Right outLen)
+    [ it "valid options hash" $
+        outcome (Argon2.hash (argon2i_13 2 65536) pass salt outLen)
+            `shouldReturn` Right outLen
     , refuses
         "parallelism of 0 is refused"
         (argon2i_13 2 65536){Argon2.parallelism = 0}

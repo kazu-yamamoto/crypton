@@ -2,7 +2,7 @@
 
 module KDF.HKDFSpec (spec) where
 
-import Control.Exception (evaluate, try)
+import Control.Exception (evaluate)
 import Crypto.Error (CryptoError (..))
 import Crypto.Hash (HashAlgorithm, SHA1, SHA256, SHA384, SHA512)
 import qualified Crypto.KDF.HKDF as HKDF
@@ -396,11 +396,9 @@ boundTests =
         describe name $ do
             it "maximum length" $
                 B.length (HKDF.expand prk info maxLen :: ByteString) `shouldBe` maxLen
-            it "one byte past the maximum" $ do
-                result <-
-                    try (evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString)))
-                        :: IO (Either CryptoError Int)
-                result `shouldBe` Left CryptoError_OutputLengthTooBig
+            it "one byte past the maximum" $
+                evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString))
+                    `shouldThrow` (== CryptoError_OutputLengthTooBig)
       where
         maxLen = 255 * hashLen
 

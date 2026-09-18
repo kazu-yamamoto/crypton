@@ -2,7 +2,7 @@
 
 module PubKey.DHSpec (spec) where
 
-import Control.Exception (SomeException, evaluate, try)
+import Control.Exception (evaluate)
 import Crypto.Error
 import qualified Crypto.PubKey.DH as DH
 import qualified Crypto.PubKey.ECC.DH as ECDH
@@ -10,24 +10,21 @@ import Crypto.PubKey.ECC.Types
 
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
-import Data.Either (isLeft)
 
 import Imports
 
 -- | 'DH.SharedKey' wraps its bytes in a newtype, so evaluating it to weak head
 -- normal form proves nothing.  Convert it to force the bytes themselves.
-force :: DH.SharedKey -> IO (Either String Int)
-force sk = do
-    result <- try (evaluate (B.length (convert sk :: ByteString)))
-    return $ either (Left . takeWhile (/= '\n') . showExc) Right result
-  where
-    showExc :: SomeException -> String
-    showExc = show
+force :: DH.SharedKey -> IO Int
+force sk = evaluate (B.length (convert sk :: ByteString))
+
+-- | getShared raises whatever getShared' reports, so any CryptoError means the
+-- exchange was refused; the exact one is asserted on getShared' below.
+anyCryptoError :: Selector CryptoError
+anyCryptoError = const True
 
 rejected :: String -> DH.SharedKey -> Spec
-rejected name sk = it name $ do
-    result <- force sk
-    assertBool "expected the exchange to be refused" (isLeft result)
+rejected name sk = it name $ force sk `shouldThrow` anyCryptoError
 
 p256 :: Curve
 p256 = getCurveByName SEC_p256r1
@@ -100,8 +97,7 @@ ffdhTests =
         it "an understated bit size still yields p-sized output" $ do
             let understated = DH.Params p 2 8
                 yb = DH.calculatePublic understated xb
-            result <- force (DH.getShared understated xa yb)
-            result `shouldBe` Right 128
+            force (DH.getShared understated xa yb) `shouldReturn` 128
   where
     -- RFC 7919 ffdhe1024 is not defined, so use the 1024-bit MODP group of
     -- RFC 2409 section 6.2, whose generator is 2

@@ -6,7 +6,7 @@ module OTPSpec (
 )
 where
 
-import Control.Exception (ErrorCall, evaluate, try)
+import Control.Exception (evaluate)
 import Crypto.Hash.Algorithms (
     Blake2b (..),
     MD5 (..),
@@ -120,29 +120,19 @@ prop_resyncExpected ctr window = resynchronize SHA1 OTP6 window key ctr (otp, []
 -- memory.  Such a digest must be refused instead.
 digestSizeTests :: [Spec]
 digestSizeTests =
-    [ it "SHA-1 (20 bytes) is accepted" $ do
-        result <- evaluated (hotp SHA1 OTP6 otpKey 1)
-        result `shouldBe` Right 287082
+    [ it "SHA-1 (20 bytes) is accepted" $
+        hotp SHA1 OTP6 otpKey 1 `shouldBe` 287082
     , rejects "MD5 (16 bytes)" (hotp MD5 OTP6 otpKey 1)
     , rejects "Blake2b-64 (8 bytes)" (hotp (Blake2b :: Blake2b 64) OTP6 otpKey 1)
-    , it "resynchronize with a short digest is rejected" $ do
-        result <- evaluated' (resynchronize MD5 OTP6 10 otpKey 0 (0, []))
-        assertBool "expected an error" (isLeft result)
+    , it "resynchronize with a short digest is rejected" $
+        evaluate (resynchronize MD5 OTP6 10 otpKey 0 (0, []))
+            `shouldThrow` anyErrorCall
     , it "mkTOTPParams rejects a short digest" $
-        assertBool
-            "expected Left"
-            (isLeft (mkTOTPParams MD5 0 30 OTP6 TwoSteps))
+        mkTOTPParams MD5 0 30 OTP6 TwoSteps `shouldSatisfy` isLeft
     ]
   where
-    rejects name otp = it (name ++ " is rejected") $ do
-        result <- evaluated otp
-        assertBool ("expected an error, got " ++ show result) (isLeft result)
-
-evaluated :: OTP -> IO (Either ErrorCall OTP)
-evaluated = try . evaluate
-
-evaluated' :: Maybe Word64 -> IO (Either ErrorCall (Maybe Word64))
-evaluated' = try . evaluate
+    rejects name otp =
+        it (name ++ " is rejected") $ evaluate otp `shouldThrow` anyErrorCall
 
 -- | totpVerify accepts a value from any step within the skew window and
 -- nothing else.  It compares a submitted value against secret-derived ones, so

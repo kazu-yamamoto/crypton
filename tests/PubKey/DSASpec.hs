@@ -2,7 +2,6 @@
 
 module PubKey.DSASpec (spec) where
 
-import Control.Exception (SomeException, evaluate, try)
 import Crypto.Hash
 import qualified Crypto.PubKey.DSA as DSA
 import Data.Maybe (isJust)
@@ -411,25 +410,15 @@ nonInvertibleTests :: Spec
 nonInvertibleTests =
     describe "non-invertible values" $ do
         it "signWith with k = 0 returns Nothing" $
-            totalSign Nothing (DSA.signWith 0 priv SHA1 message)
+            DSA.signWith 0 priv SHA1 message `shouldBe` Nothing
         it "signWith with k = q returns Nothing" $
-            totalSign Nothing (DSA.signWith q priv SHA1 message)
+            DSA.signWith q priv SHA1 message `shouldBe` Nothing
         it "signWith with k sharing a factor with q returns Nothing" $
-            totalSign Nothing (DSA.signWith 3 compositePriv SHA1 message)
-        it "signWith with a usable k still signs" $ do
-            result <- try (evaluate (DSA.signWith 4 priv SHA1 message))
-            assertBool "expected a signature" (either exc isJust result)
-        it "verify with a non-invertible s returns False" $ do
-            result <-
-                try
-                    ( evaluate $
-                        DSA.verify
-                            SHA1
-                            compositePub
-                            (DSA.Signature 1 3)
-                            message
-                    )
-            left result `shouldBe` Right False
+            DSA.signWith 3 compositePriv SHA1 message `shouldBe` Nothing
+        it "signWith with a usable k still signs" $
+            DSA.signWith 4 priv SHA1 message `shouldSatisfy` isJust
+        it "verify with a non-invertible s returns False" $
+            DSA.verify SHA1 compositePub (DSA.Signature 1 3) message `shouldBe` False
   where
     message = "message" :: ByteString
     q = 11
@@ -439,16 +428,6 @@ nonInvertibleTests =
     compositeParams = DSA.Params{DSA.params_p = 23, DSA.params_g = 4, DSA.params_q = 9}
     compositePriv = DSA.PrivateKey compositeParams 3
     compositePub = DSA.PublicKey compositeParams 4
-
-    left :: Either SomeException a -> Either String a
-    left = either (Left . takeWhile (/= '\n') . show) Right
-
-    exc :: SomeException -> Bool
-    exc _ = False
-
-    totalSign expected sig = do
-        result <- try (evaluate sig)
-        left result `shouldBe` Right expected
 
 spec :: Spec
 spec = do
