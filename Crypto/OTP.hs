@@ -46,10 +46,11 @@ import Crypto.Hash (HashAlgorithm, SHA1 (..), hashDigestSize)
 import Crypto.Internal.ByteArray (ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.MAC.HMAC
-import Data.Bits (shiftL, (.&.), (.|.))
+import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.ByteArray.Mapping (fromW64BE)
-import Data.List (elemIndex)
+import Data.List (elemIndex, foldl')
 import Data.Word
+import Prelude hiding (foldl')
 
 -- | A one-time password which is a sequence of 4 to 9 digits.
 type OTP = Word32
@@ -203,12 +204,20 @@ totpVerify
     -> OTPTime
     -> OTP
     -> Bool
-totpVerify (TP h t0 x d skew) k now otp = otp `elem` map (hotp h d k) (range window [])
+totpVerify (TP h t0 x d skew) k now otp = matched == 0
   where
     t = timeToCounter now t0 x
     window = fromIntegral (fromEnum skew)
     range 0 acc = t : acc
     range n acc = range (n - 1) ((t - n) : (t + n) : acc)
+
+    -- every candidate is compared, and none of the comparisons stops early, so
+    -- neither which step matched nor how far a mismatch got is visible in how
+    -- long this takes
+    matched = foldl' step 1 (map (hotp h d k) (range window []))
+    step acc candidate = acc .&. nonZero (candidate `xor` otp)
+    -- 0 when w is zero, 1 otherwise
+    nonZero w = (w .|. negate w) `shiftR` 31
 
 timeToCounter :: Word64 -> Word64 -> Word16 -> Word64
 timeToCounter now t0 x = (now - t0) `div` fromIntegral x
