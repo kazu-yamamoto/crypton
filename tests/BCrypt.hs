@@ -80,14 +80,13 @@ makeKATs = concatMap maketest (zip3 is passwords hashes)
     hashes = map fst expected
 
     maketest (i, password, hash) =
-        [ testCase (show i) (assertBool "" (validatePassword password hash))
+        [ it (show i) (assertBool "" (validatePassword password hash))
         ]
 
 tests =
-    testGroup
-        "bcrypt"
-        [ testGroup "KATs" makeKATs
-        , testCase
+    describe "bcrypt" $ do
+        describe "KATs" $ sequence_ makeKATs
+        it
             "Invalid hash length"
             ( assertEqual
                 ""
@@ -97,13 +96,12 @@ tests =
                     ("$2a$06$DCq7YPn5Rq63x1Lad4cll.TV4S6ytwfsfvkgY8jIucDrjc8deX1s" :: B.ByteString)
                 )
             )
-        , testCase
+        it
             "Hash and validate"
             ( assertBool
                 "Hashed password should validate"
                 (validatePassword somePassword (bcrypt 5 aSalt somePassword :: B.ByteString))
             )
-        ]
   where
     somePassword = "some password" :: B.ByteString
     aSalt =

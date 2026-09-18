@@ -29,7 +29,7 @@ mergeVec =
 mergeKATs = zipWith toProp mergeVec [(0 :: Int) ..]
   where
     toProp (nbExpands, hashAlg, expected, dat) i =
-        testCase ("merge " ++ show i) (expected @=? AFIS.merge hashAlg nbExpands dat)
+        it ("merge " ++ show i) (AFIS.merge hashAlg nbExpands dat `shouldBe` expected)
 
 data AFISParams = AFISParams B.ByteString Int SHA1 ChaChaDRG
 
@@ -48,8 +48,6 @@ instance Arbitrary ChaChaDRG where
     arbitrary = drgNewTest <$> arbitrary
 
 tests =
-    testGroup
-        "AFIS"
-        [ testGroup "KAT merge" mergeKATs
-        , testProperty "merge.split == id" $ \(AFISParams bs e hf rng) -> bs == (AFIS.merge hf e $ fst (AFIS.split hf rng e bs))
-        ]
+    describe "AFIS" $ do
+        describe "KAT merge" $ sequence_ mergeKATs
+        prop "merge.split == id" $ \(AFISParams bs e hf rng) -> bs == (AFIS.merge hf e $ fst (AFIS.split hf rng e bs))

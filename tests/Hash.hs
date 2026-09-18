@@ -452,39 +452,35 @@ runhashpfxpfx :: HashPrefixAlg -> ByteString -> Int -> ByteString
 runhashpfxpfx (HashPrefixAlg hashAlg) v len = B.convertToBase B.Base16 $ hashPrefixWith hashAlg v len
 
 makeTestAlg (name, hashAlg, results) =
-    testGroup name $ concatMap maketest (zip3 is vectors results)
+    describe name $ mapM_ maketest (zip3 is vectors results)
   where
     is :: [Int]
     is = [1 ..]
 
-    maketest (i, v, r) =
-        [ testCase (show i) (r @=? runhash hashAlg v)
-        ]
+    maketest (i, v, r) = do
+        it (show i) (runhash hashAlg v `shouldBe` r)
 
-makeTestChunk (hashName, hashAlg, _) =
-    [ testProperty hashName $ \ckLen (ArbitraryBS0_2901 inp) ->
+makeTestChunk (hashName, hashAlg, _) = do
+    prop hashName $ \ckLen (ArbitraryBS0_2901 inp) ->
         runhash hashAlg inp `propertyEq` runhashinc hashAlg (chunkS ckLen inp)
-    ]
 
-makeTestPrefix (hashName, hashAlg) =
-    [ testProperty hashName $ \(ArbitraryBS0_2901 inp) (Int0_2901 len) ->
+makeTestPrefix (hashName, hashAlg) = do
+    prop hashName $ \(ArbitraryBS0_2901 inp) (Int0_2901 len) ->
         runhashpfx hashAlg (B.take len inp) `propertyEq` runhashpfxpfx hashAlg inp len
-    ]
 
-makeTestHybrid (hashName, HashPrefixAlg alg) =
-    [ testProperty hashName $ \(ArbitraryBS0_2901 start) (ArbitraryBS0_2901 end) -> do
+makeTestHybrid (hashName, HashPrefixAlg alg) = do
+    prop hashName $ \(ArbitraryBS0_2901 start) (ArbitraryBS0_2901 end) -> do
         len <- choose (0, B.length end)
         let ref = hashWith alg (start `B.append` B.take len end)
             hyb = hashFinalizePrefix (hashUpdate (hashInitWith alg) start) end len
         return (ref `propertyEq` hyb)
-    ]
 
 -- SHAKE128 truncation example with expected byte at final position
 -- <https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/ShakeTruncation.pdf>
 shake128TruncationBytes = [0x01, 0x03, 0x07, 0x0f, 0x0f, 0x2f, 0x6f, 0x6f]
 
 makeTestSHAKE128Truncation i byte =
-    testCase (show i) $ xof 4088 `B.snoc` byte @=? xof (4088 + i)
+    it (show i) $ xof (4088 + i) `shouldBe` xof 4088 `B.snoc` byte
   where
     hashEmpty :: KnownNat n => proxy n -> Digest (SHAKE128 n)
     hashEmpty _ = hash B.empty
@@ -494,16 +490,12 @@ makeTestSHAKE128Truncation i byte =
         Just (SomeNat p) -> convert (hashEmpty p)
 
 tests =
-    testGroup
-        "hash"
-        [ testGroup "KATs" (map makeTestAlg expected)
-        , testGroup "Chunking" (concatMap makeTestChunk expected)
-        , testGroup "Prefix" (concatMap makeTestPrefix expectedPrefix)
-        , testGroup "Hybrid" (concatMap makeTestHybrid expectedPrefix)
-        , testGroup
-            "Truncating"
-            [ testGroup
-                "SHAKE128"
-                (zipWith makeTestSHAKE128Truncation [1 ..] shake128TruncationBytes)
-            ]
-        ]
+    describe "hash" $ do
+        describe "KATs" $ mapM_ makeTestAlg expected
+        describe "Chunking" $ mapM_ makeTestChunk expected
+        describe "Prefix" $ mapM_ makeTestPrefix expectedPrefix
+        describe "Hybrid" $ mapM_ makeTestHybrid expectedPrefix
+        describe "Truncating" $ do
+            describe "SHAKE128" $
+                sequence_ $
+                    (zipWith makeTestSHAKE128Truncation [1 ..] shake128TruncationBytes)

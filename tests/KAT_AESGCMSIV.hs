@@ -603,33 +603,31 @@ vectorsWrap256 =
         }
     ]
 
-makeEncryptionTest :: BlockCipher128 aes => Int -> Vector aes -> TestTree
+makeEncryptionTest :: BlockCipher128 aes => Int -> Vector aes -> Spec
 makeEncryptionTest i vec@Vector{..} =
-    testCase (show i) $
-        (t, vecCiphertext) @=? encrypt (vecCipher vec) n vecAAD vecPlaintext
+    it (show i) $
+        encrypt (vecCipher vec) n vecAAD vecPlaintext `shouldBe` (t, vecCiphertext)
   where
     t = AuthTag (B.convert vecTag)
     n = throwCryptoError (nonce vecNonce)
 
-makeDecryptionTest :: BlockCipher128 aes => Int -> Vector aes -> TestTree
+makeDecryptionTest :: BlockCipher128 aes => Int -> Vector aes -> Spec
 makeDecryptionTest i vec@Vector{..} =
-    testCase (show i) $
-        Just vecPlaintext @=? decrypt (vecCipher vec) n vecAAD vecCiphertext t
+    it (show i) $
+        decrypt (vecCipher vec) n vecAAD vecCiphertext t `shouldBe` Just vecPlaintext
   where
     t = AuthTag (B.convert vecTag)
     n = throwCryptoError (nonce vecNonce)
 
 katTests
-    :: TestName
-    -> (forall c. BlockCipher128 c => Int -> Vector c -> TestTree)
-    -> TestTree
+    :: String
+    -> (forall c. BlockCipher128 c => Int -> Vector c -> Spec)
+    -> Spec
 katTests name makeTest =
-    testGroup
-        name
-        [ testGroup "AES128" $ zipWith makeTest [1 ..] vectors128
-        , testGroup "AES256" $ zipWith makeTest [1 ..] vectors256
-        , testGroup "CounterWrap" $ zipWith makeTest [1 ..] vectorsWrap256
-        ]
+    describe name $ do
+        describe "AES128" $ zipWithM_ makeTest [1 ..] vectors128
+        describe "AES256" $ zipWithM_ makeTest [1 ..] vectors256
+        describe "CounterWrap" $ zipWithM_ makeTest [1 ..] vectorsWrap256
 
 newtype Key c = Key ByteString
     deriving (Show, Eq)
@@ -656,18 +654,12 @@ encDecTest prx (Key key) iv (ArbitraryBS0_2901 aad) (ArbitraryBS0_2901 input) =
         (tag, ciphertext) = encrypt c iv aad input
      in decrypt c iv aad ciphertext tag === Just input
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "AES-GCM-SIV"
-        [ testGroup
-            "KATs"
-            [ katTests "encrypt" makeEncryptionTest
-            , katTests "decrypt" makeDecryptionTest
-            ]
-        , testGroup
-            "properties"
-            [ testProperty "AES128" $ encDecTest (Proxy :: Proxy AES128)
-            , testProperty "AES256" $ encDecTest (Proxy :: Proxy AES256)
-            ]
-        ]
+    describe "AES-GCM-SIV" $ do
+        describe "KATs" $ do
+            katTests "encrypt" makeEncryptionTest
+            katTests "decrypt" makeDecryptionTest
+        describe "properties" $ do
+            prop "AES128" $ encDecTest (Proxy :: Proxy AES128)
+            prop "AES256" $ encDecTest (Proxy :: Proxy AES256)

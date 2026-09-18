@@ -17,9 +17,9 @@ import Crypto.PubKey.ECC.Generate
 import Crypto.PubKey.ECC.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Hspec
 import Text.Printf
+import Utils (assertBool, assertFailure)
 
 -- existential type allows storing different hash algorithms in the same value
 data HashAlg = forall hash. (Show hash, HashAlgorithm hash) => HashAlg hash
@@ -1569,31 +1569,31 @@ rfc6979Entries =
         }
     ]
 
-testPublic :: PrivateKey -> PublicPoint -> TestTree
+testPublic :: PrivateKey -> PublicPoint -> Spec
 testPublic (PrivateKey curve key) pub =
-    testCase "public" $
-        pub @=? generateQ curve key
+    it "public" $
+        generateQ curve key `shouldBe` pub
 
-testNonce :: PrivateKey -> HashAlg -> ByteString -> Integer -> TestTree
+testNonce :: PrivateKey -> HashAlg -> ByteString -> Integer -> Spec
 testNonce key (HashAlg alg) msg nonc =
-    testCase "nonce" $
-        nonc @=? deterministicNonce alg key (hashWith alg msg) Just
+    it "nonce" $
+        deterministicNonce alg key (hashWith alg msg) Just `shouldBe` nonc
 
 testSignature
-    :: PrivateKey -> HashAlg -> ByteString -> Integer -> Signature -> TestTree
-testSignature key (HashAlg alg) msg nonc sig = testCase "signature" $
+    :: PrivateKey -> HashAlg -> ByteString -> Integer -> Signature -> Spec
+testSignature key (HashAlg alg) msg nonc sig = it "signature" $
     case signWith nonc key alg msg of
         Nothing -> assertFailure "could not sign message"
-        Just result -> sig @=? result
+        Just result -> result `shouldBe` sig
 
-testVerify :: PublicKey -> HashAlg -> ByteString -> Signature -> TestTree
+testVerify :: PublicKey -> HashAlg -> ByteString -> Signature -> Spec
 testVerify pub (HashAlg alg) msg sig =
-    testCase "verify" $
+    it "verify" $
         assertBool "signature verification failed" $
             verify alg pub sig msg
 
-testEntry :: Entry -> TestTree
-testEntry entry = testGroup (show entry) tests
+testEntry :: Entry -> Spec
+testEntry entry = describe (show entry) $ sequence_ tests
   where
     tests =
         [ testPublic key $ publicPoint entry
@@ -1609,8 +1609,8 @@ testEntry entry = testGroup (show entry) tests
     key = PrivateKey curve $ privateNumber entry
     curve = getCurveByName $ curveName entry
 
-testEntryNonce :: Entry -> TestTree
-testEntryNonce entry = testGroup (show entry) tests
+testEntryNonce :: Entry -> Spec
+testEntryNonce entry = describe (show entry) $ sequence_ tests
   where
     tests =
         [ testPublic key $ publicPoint entry
@@ -1627,10 +1627,10 @@ testEntryNonce entry = testGroup (show entry) tests
     key = PrivateKey curve $ privateNumber entry
     curve = getCurveByName $ curveName entry
 
-ecdsaTests :: TestTree
+ecdsaTests :: Spec
 ecdsaTests =
-    testGroup
-        "ECDSA"
-        [ testGroup "GEC 2" $ testEntry . normalize <$> gec2Entries
-        , testGroup "RFC 6979" $ testEntryNonce . normalize <$> flatten rfc6979Entries
-        ]
+    describe "ECDSA" $ do
+        describe "GEC 2" $ sequence_ $ testEntry . normalize <$> gec2Entries
+        describe "RFC 6979" $
+            sequence_ $
+                testEntryNonce . normalize <$> flatten rfc6979Entries

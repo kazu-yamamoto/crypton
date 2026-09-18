@@ -76,7 +76,7 @@ totpSHA512Key :: ByteString
 totpSHA512Key =
     "1234567890123456789012345678901234567890123456789012345678901234"
 
-makeKATs :: (Eq a, Show a) => (t -> a) -> [(t, a)] -> [TestTree]
+makeKATs :: (Eq a, Show a) => (t -> a) -> [(t, a)] -> [Spec]
 makeKATs otp expected = concatMap (makeTest otp) (zip3 is counts otps)
   where
     is :: [Int]
@@ -85,9 +85,9 @@ makeKATs otp expected = concatMap (makeTest otp) (zip3 is counts otps)
     counts = map fst expected
     otps = map snd expected
 
-makeTest :: (Eq a1, Show a2, Show a1) => (t -> a1) -> (a2, t, a1) -> [TestTree]
+makeTest :: (Eq a1, Show a2, Show a1) => (t -> a1) -> (a2, t, a1) -> [Spec]
 makeTest otp (i, count, password) =
-    [ testCase (show i) (assertEqual "" password (otp count))
+    [ it (show i) (assertEqual "" password (otp count))
     ]
 
 totpSHA1Params :: TOTPParams SHA1
@@ -118,23 +118,23 @@ prop_resyncExpected ctr window = resynchronize SHA1 OTP6 window key ctr (otp, []
 -- 'hotp' indexing past the end of the MAC, and 'Data.ByteArray.index' does not
 -- bounds check, so the OTP is built from whatever happens to follow the MAC in
 -- memory.  Such a digest must be refused instead.
-digestSizeTests :: [TestTree]
+digestSizeTests :: [Spec]
 digestSizeTests =
-    [ testCase "SHA-1 (20 bytes) is accepted" $ do
+    [ it "SHA-1 (20 bytes) is accepted" $ do
         result <- evaluated (hotp SHA1 OTP6 otpKey 1)
-        Right 287082 @=? result
+        result `shouldBe` Right 287082
     , rejects "MD5 (16 bytes)" (hotp MD5 OTP6 otpKey 1)
     , rejects "Blake2b-64 (8 bytes)" (hotp (Blake2b :: Blake2b 64) OTP6 otpKey 1)
-    , testCase "resynchronize with a short digest is rejected" $ do
+    , it "resynchronize with a short digest is rejected" $ do
         result <- evaluated' (resynchronize MD5 OTP6 10 otpKey 0 (0, []))
         assertBool "expected an error" (isLeft result)
-    , testCase "mkTOTPParams rejects a short digest" $
+    , it "mkTOTPParams rejects a short digest" $
         assertBool
             "expected Left"
             (isLeft (mkTOTPParams MD5 0 30 OTP6 TwoSteps))
     ]
   where
-    rejects name otp = testCase (name ++ " is rejected") $ do
+    rejects name otp = it (name ++ " is rejected") $ do
         result <- evaluated otp
         assertBool ("expected an error, got " ++ show result) (isLeft result)
 
@@ -147,18 +147,18 @@ evaluated' = try . evaluate
 -- | totpVerify accepts a value from any step within the skew window and
 -- nothing else.  It compares a submitted value against secret-derived ones, so
 -- pin the accepted and rejected cases down before that comparison is rewritten.
-verifyTests :: [TestTree]
+verifyTests :: [Spec]
 verifyTests =
-    [ testCase "the value for the current step is accepted" $
+    [ it "the value for the current step is accepted" $
         assertBool "expected acceptance" (verifyAt 0)
-    , testCase "every step within the window is accepted" $
+    , it "every step within the window is accepted" $
         assertBool "expected acceptance" (all verifyAt [-2 .. 2])
-    , testCase "the step just outside the window is refused" $
+    , it "the step just outside the window is refused" $
         assertBool "expected refusal" (not (any verifyAt [-3, 3]))
-    , testCase "a value no step produces is refused" $
+    , it "a value no step produces is refused" $
         assertBool "expected refusal" $
             not (totpVerify params otpKey now (totp params otpKey now + 1))
-    , testCase "a window of no skew accepts only the current step" $
+    , it "a window of no skew accepts only the current step" $
         assertBool "expected only the current step" $
             let noSkew = TOTP.mkTOTPParams SHA1 0 30 OTP6 NoSkew
              in case noSkew of
@@ -179,31 +179,22 @@ verifyTests =
         totpVerify params otpKey now (totp params otpKey (at steps))
     at steps = fromInteger (toInteger now + 30 * steps)
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "OTP"
-        [ testGroup
-            "HOTP"
-            [ testGroup "KATs" (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
-            , testGroup "digest size" digestSizeTests
-            , testGroup
-                "properties"
-                [ testProperty "resync-expected" prop_resyncExpected
-                ]
-            ]
-        , testGroup
-            "TOTP"
-            [ testGroup
-                "KATs"
-                [ testGroup "SHA1" (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
-                , testGroup
-                    "SHA256"
-                    (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
-                , testGroup
-                    "SHA512"
-                    (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
-                ]
-            , testGroup "verify" verifyTests
-            ]
-        ]
+    describe "OTP" $ do
+        describe "HOTP" $ do
+            describe "KATs" $ sequence_ (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
+            describe "digest size" $ sequence_ digestSizeTests
+            describe "properties" $ do
+                prop "resync-expected" prop_resyncExpected
+        describe "TOTP" $ do
+            describe "KATs" $ do
+                describe "SHA1" $
+                    sequence_ (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
+                describe "SHA256" $
+                    sequence_ $
+                        (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
+                describe "SHA512" $
+                    sequence_ $
+                        (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
+            describe "verify" $ sequence_ verifyTests

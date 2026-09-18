@@ -150,5 +150,5 @@ vectors_ecb =
 kats = defaultKATs{kat_ECB = vectors_ecb}
 
 tests =
-    localOption (QuickCheckTests 5) $
+    modifyMaxSuccess (const 5) $
         testBlockCipher kats (undefined :: DES.DES)

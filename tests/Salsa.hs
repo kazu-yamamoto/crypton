@@ -64,21 +64,20 @@ instance Arbitrary RandomVector where
     arbitrary = RandomVector <$> elements vectors
 
 tests =
-    testGroup
-        "Salsa"
-        [ testGroup "KAT" $
-            zipWith
-                (\i (r, k, n, e) -> testCase (show (i :: Int)) $ salsaRunSimple e r k n)
-                [1 ..]
-                vectors
-        , testProperty "generate-combine" salsaGenerateCombine
-        , testProperty "chunking-generate" salsaGenerateChunks
-        , testProperty "chunking-combine" salsaCombineChunks
-        ]
+    describe "Salsa" $ do
+        describe "KAT" $
+            sequence_ $
+                zipWith
+                    (\i (r, k, n, e) -> it (show (i :: Int)) $ salsaRunSimple e r k n)
+                    [1 ..]
+                    vectors
+        prop "generate-combine" salsaGenerateCombine
+        prop "chunking-generate" salsaGenerateChunks
+        prop "chunking-combine" salsaCombineChunks
   where
     salsaRunSimple expected rounds key nonce =
         let salsa = Salsa.initialize rounds key nonce
-         in map snd expected @=? salsaLoop 0 salsa expected
+         in salsaLoop 0 salsa expected `shouldBe` map snd expected
 
     salsaLoop _ _ [] = []
     salsaLoop current salsa (r@(ofs, expectBs) : rs)

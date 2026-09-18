@@ -4,8 +4,7 @@ module BCryptPBKDF (tests) where
 
 import qualified Data.ByteString as B
 
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Hspec
 
 import Crypto.KDF.BCryptPBKDF (
     Parameters (..),
@@ -13,24 +12,18 @@ import Crypto.KDF.BCryptPBKDF (
     hashInternal,
  )
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "BCryptPBKDF"
-        [ testGroup
-            "generate"
-            [ testCase "1" generate1
-            , testCase "2" generate2
-            , testCase "3" generate3
-            ]
-        , testGroup
-            "hashInternal"
-            [ testCase "1" hashInternal1
-            ]
-        ]
+    describe "BCryptPBKDF" $ do
+        describe "generate" $ do
+            it "1" generate1
+            it "2" generate2
+            it "3" generate3
+        describe "hashInternal" $ do
+            it "1" hashInternal1
   where
     -- test vector taken from the go implementation by @dchest
-    generate1 = expected @=? generate params pass salt
+    generate1 = generate params pass salt `shouldBe` expected
       where
         params = Parameters 12 32
         pass = "password" :: B.ByteString
@@ -73,7 +66,7 @@ tests =
                 :: B.ByteString
 
     -- test vector generated with the go implemenation by @dchest
-    generate2 = expected @=? generate params pass salt
+    generate2 = generate params pass salt `shouldBe` expected
       where
         params = Parameters 7 71
         pass = "DieWuerdeDesMenschenIstUnantastbar" :: B.ByteString
@@ -155,7 +148,7 @@ tests =
                 :: B.ByteString
 
     -- test vector generated with the go implemenation by @dchest
-    generate3 = expected @=? generate params pass salt
+    generate3 = generate params pass salt `shouldBe` expected
       where
         params = Parameters 5 5
         pass = "ABC" :: B.ByteString
@@ -170,7 +163,7 @@ tests =
                 ]
                 :: B.ByteString
 
-    hashInternal1 = expected @=? hashInternal passHash saltHash
+    hashInternal1 = hashInternal passHash saltHash `shouldBe` expected
       where
         passHash = B.pack [0 .. 63] :: B.ByteString
         saltHash = B.pack [64 .. 127] :: B.ByteString

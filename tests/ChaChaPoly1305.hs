@@ -77,29 +77,27 @@ a5plain =
 a5tag :: ByteString
 a5tag = "\xee\xad\x9d\x67\x89\x0c\xbb\x22\x39\x23\x36\xfe\xa1\x85\x1f\x38"
 
-rfc8439encrypt = a5cipher @=? ct
+rfc8439encrypt = ct `shouldBe` a5cipher
   where
     ct = case CP.aeadChacha20poly1305Init a5key a5nonce of
         CryptoPassed st -> snd $ aeadSimpleEncrypt st a5aad a5plain 16
         _ -> "dummy"
 
-rfc8439decrypt = Just a5plain @=? mpt
+rfc8439decrypt = mpt `shouldBe` Just a5plain
   where
     mpt = case CP.aeadChacha20poly1305Init a5key a5nonce of
         CryptoPassed st -> aeadSimpleDecrypt st a5aad a5cipher (AuthTag $ B.convert a5tag)
         _ -> Nothing
 
 tests =
-    testGroup
-        "ChaChaPoly1305"
-        [ testCase "V1" runEncrypt
-        , testCase "V1-decrypt" runDecrypt
-        , testCase "V1-extended" runEncryptX
-        , testCase "V1-extended-decrypt" runDecryptX
-        , testCase "nonce increment" runNonceInc
-        , testCase "RFC8439 A5 enc" rfc8439encrypt
-        , testCase "RFC8439 A5 dec" rfc8439decrypt
-        ]
+    describe "ChaChaPoly1305" $ do
+        it "V1" runEncrypt
+        it "V1-decrypt" runDecrypt
+        it "V1-extended" runEncryptX
+        it "V1-extended-decrypt" runDecryptX
+        it "nonce increment" runNonceInc
+        it "RFC8439 A5 enc" rfc8439encrypt
+        it "RFC8439 A5 dec" rfc8439decrypt
   where
     runEncrypt =
         let ini =

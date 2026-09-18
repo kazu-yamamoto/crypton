@@ -27,7 +27,7 @@ b20_256_k0_i0 =
 
 -- XChaCha20 test vector from RFC draft: https://datatracker.ietf.org/doc/html/draft-arciszewski-xchacha
 
-xChaCha20_ExampleKAT = expected @=? fst (ChaCha.combine initState plaintext)
+xChaCha20_ExampleKAT = fst (ChaCha.combine initState plaintext) `shouldBe` expected
   where
     iv = B.pack $ [0x40 .. 0x56] ++ [0x58]
     key = B.pack [0x80 .. 0x9f]
@@ -39,7 +39,7 @@ xChaCha20_ExampleKAT = expected @=? fst (ChaCha.combine initState plaintext)
     expected =
         "\x45\x59\xab\xba\x4e\x48\xc1\x61\x02\xe8\xbb\x2c\x05\xe6\x94\x7f\x50\xa7\x86\xde\x16\x2f\x9b\x0b\x7e\x59\x2a\x9b\x53\xd0\xd4\xe9\x8d\x8d\x64\x10\xd5\x40\xa1\xa6\x37\x5b\x26\xd8\x0d\xac\xe4\xfa\xb5\x23\x84\xc7\x31\xac\xbf\x16\xa5\x92\x3c\x0c\x48\xd3\x57\x5d\x4d\x0d\x2c\x67\x3b\x66\x6f\xaa\x73\x10\x61\x27\x77\x01\x09\x3a\x6b\xf7\xa1\x58\xa8\x86\x42\x92\xa4\x1c\x48\xe3\xa9\xb4\xc0\xda\xec\xe0\xf8\xd9\x8d\x0d\x7e\x05\xb3\x7a\x30\x7b\xbb\x66\x33\x31\x64\xec\x9e\x1b\x24\xea\x0d\x6c\x3f\xfd\xdc\xec\x4f\x68\xe7\x44\x30\x56\x19\x3a\x03\xc8\x10\xe1\x13\x44\xca\x06\xd8\xed\x8a\x2b\xfb\x1e\x8d\x48\xcf\xa6\xbc\x0e\xb4\xe2\x46\x4b\x74\x81\x42\x40\x7c\x9f\x43\x1a\xee\x76\x99\x60\xe1\x5b\xa8\xb9\x68\x90\x46\x6e\xf2\x45\x75\x99\x85\x23\x85\xc6\x61\xf7\x52\xce\x20\xf9\xda\x0c\x09\xab\x6b\x19\xdf\x74\xe7\x6a\x95\x96\x74\x46\xf8\xd0\xfd\x41\x5e\x7b\xee\x2a\x12\xa1\x14\xc2\x0e\xb5\x29\x2a\xe7\xa3\x49\xae\x57\x78\x20\xd5\x52\x0a\x1f\x3f\xb6\x2a\x17\xce\x6a\x7e\x68\xfa\x7c\x79\x11\x1d\x88\x60\x92\x0b\xc0\x48\xef\x43\xfe\x84\x48\x6c\xcb\x87\xc2\x5f\x0a\xe0\x45\xf0\xcc\xe1\xe7\x98\x9a\x9a\xa2\x20\xa2\x8b\xdd\x48\x27\xe7\x51\xa2\x4a\x6d\x5c\x62\xd7\x90\xa6\x63\x93\xb9\x31\x11\xc1\xa5\x5d\xd7\x42\x1a\x10\x18\x49\x74\xc7\xc5"
 
-rfc8439A2_1 = cipher @=? cipher'
+rfc8439A2_1 = cipher' `shouldBe` cipher
   where
     key :: ByteString
     key =
@@ -54,7 +54,7 @@ rfc8439A2_1 = cipher @=? cipher'
         "\x76\xb8\xe0\xad\xa0\xf1\x3d\x90\x40\x5d\x6a\xe5\x53\x86\xbd\x28\xbd\xd2\x19\xb8\xa0\x8d\xed\x1a\xa8\x36\xef\xcc\x8b\x77\x0d\xc7\xda\x41\x59\x7c\x51\x57\x48\x8d\x77\x24\xe0\x3f\xb8\xd8\x4a\x37\x6a\x43\xb8\xf4\x15\x18\xa1\x1c\xc3\x87\xb6\x69\xb2\xee\x65\x86"
     cipher' = fst $ ChaCha.combine (ChaCha.initialize 20 key nonce) plain
 
-rfc8439A2_2 = cipher @=? cipher'
+rfc8439A2_2 = cipher' `shouldBe` cipher
   where
     key :: ByteString
     key =
@@ -71,7 +71,7 @@ rfc8439A2_2 = cipher @=? cipher'
         fst $
             ChaCha.combine (ChaCha.setCounter32 1 (ChaCha.initialize 20 key nonce)) plain
 
-rfc8439A2_3 = cipher @=? cipher'
+rfc8439A2_3 = cipher' `shouldBe` cipher
   where
     key :: ByteString
     key =
@@ -99,26 +99,24 @@ instance Arbitrary Vector where
     arbitrary = Vector 20 <$> arbitraryBS 16 <*> arbitraryBS 12
 
 tests =
-    testGroup
-        "ChaCha"
-        [ testCase "8-128-K0-I0" (chachaRunSimple b8_128_k0_i0 8 16 8)
-        , testCase "12-128-K0-I0" (chachaRunSimple b12_128_k0_i0 12 16 8)
-        , testCase "20-128-K0-I0" (chachaRunSimple b20_128_k0_i0 20 16 8)
-        , testCase "8-256-K0-I0" (chachaRunSimple b8_256_k0_i0 8 32 8)
-        , testCase "12-256-K0-I0" (chachaRunSimple b12_256_k0_i0 12 32 8)
-        , testCase "20-256-K0-I0" (chachaRunSimple b20_256_k0_i0 20 32 8)
-        , testCase "XChaCha20 example KAT" xChaCha20_ExampleKAT
-        , testCase "RFC 8439 A2 #1 ChaCha20" rfc8439A2_1
-        , testCase "RFC 8439 A2 #2 ChaCha20" rfc8439A2_2
-        , testCase "RFC 8439 A2 #3 ChaCha20" rfc8439A2_3
-        , testProperty "generate-combine" chachaGenerateCombine
-        , testProperty "chunking-generate" chachaGenerateChunks
-        , testProperty "chunking-combine" chachaCombineChunks
-        ]
+    describe "ChaCha" $ do
+        it "8-128-K0-I0" (chachaRunSimple b8_128_k0_i0 8 16 8)
+        it "12-128-K0-I0" (chachaRunSimple b12_128_k0_i0 12 16 8)
+        it "20-128-K0-I0" (chachaRunSimple b20_128_k0_i0 20 16 8)
+        it "8-256-K0-I0" (chachaRunSimple b8_256_k0_i0 8 32 8)
+        it "12-256-K0-I0" (chachaRunSimple b12_256_k0_i0 12 32 8)
+        it "20-256-K0-I0" (chachaRunSimple b20_256_k0_i0 20 32 8)
+        it "XChaCha20 example KAT" xChaCha20_ExampleKAT
+        it "RFC 8439 A2 #1 ChaCha20" rfc8439A2_1
+        it "RFC 8439 A2 #2 ChaCha20" rfc8439A2_2
+        it "RFC 8439 A2 #3 ChaCha20" rfc8439A2_3
+        prop "generate-combine" chachaGenerateCombine
+        prop "chunking-generate" chachaGenerateChunks
+        prop "chunking-combine" chachaCombineChunks
   where
     chachaRunSimple expected rounds klen nonceLen =
         let chacha = ChaCha.initialize rounds (B.replicate klen 0) (B.replicate nonceLen 0)
-         in expected @=? fst (ChaCha.generate chacha (B.length expected))
+         in fst (ChaCha.generate chacha (B.length expected)) `shouldBe` expected
 
     chachaGenerateChunks :: ChunkingLen -> Vector -> Bool
     chachaGenerateChunks (ChunkingLen ckLen) (Vector rounds key iv) =

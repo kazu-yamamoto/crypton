@@ -106,14 +106,14 @@ vectorToPublic vector =
 vectorHasSignature :: VectorRSA -> Bool
 vectorHasSignature = isRight . sig
 
-doSignatureTest :: Show a => a -> VectorRSA -> TestTree
-doSignatureTest i vector = testCase (show i) (expected @=? actual)
+doSignatureTest :: Show a => a -> VectorRSA -> Spec
+doSignatureTest i vector = it (show i) (actual `shouldBe` expected)
   where
     expected = sig vector
     actual = RSA.sign Nothing (Just SHA1) (vectorToPrivate vector) (msg vector)
 
-doVerifyTest :: Show a => a -> VectorRSA -> TestTree
-doVerifyTest i vector = testCase (show i) (True @=? actual)
+doVerifyTest :: Show a => a -> VectorRSA -> Spec
+doVerifyTest i vector = it (show i) (actual `shouldBe` True)
   where
     actual = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector) bs
     bs = fromRight (error "doVerifyTest") $ sig vector
@@ -125,21 +125,19 @@ doVerifyTest i vector = testCase (show i) (True @=? actual)
 -- it against the result of the public-key operation, which normalises both the
 -- length and the range away: without those two checks a zero-padded signature
 -- and @s + n@ verify just as well as @s@ itself.
-doMalleabilityTest :: Show a => a -> VectorRSA -> TestTree
+doMalleabilityTest :: Show a => a -> VectorRSA -> Spec
 doMalleabilityTest i vector =
-    testGroup
-        (show i)
-        [ testCase "the signature itself verifies" $
-            True @=? verify' s
-        , testCase "a leading zero octet is rejected" $
-            False @=? verify' (B.cons 0 s)
-        , testCase "a trailing zero octet is rejected" $
-            False @=? verify' (B.snoc s 0)
-        , testCase "s + n is rejected" $
-            False @=? verify' (i2osp (os2ip s + n vector))
-        , testCase "an empty signature is rejected" $
-            False @=? verify' B.empty
-        ]
+    describe (show i) $ do
+        it "the signature itself verifies" $
+            verify' s `shouldBe` True
+        it "a leading zero octet is rejected" $
+            verify' (B.cons 0 s) `shouldBe` False
+        it "a trailing zero octet is rejected" $
+            verify' (B.snoc s 0) `shouldBe` False
+        it "s + n is rejected" $
+            verify' (i2osp (os2ip s + n vector)) `shouldBe` False
+        it "an empty signature is rejected" $
+            verify' B.empty `shouldBe` False
   where
     s = fromRight (error "doMalleabilityTest") $ sig vector
     verify' = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector)
@@ -149,53 +147,49 @@ doMalleabilityTest i vector =
 -- @00@ that ends it.  Nothing exercised unpad before, and the scan over the
 -- padding is about to be rewritten, so pin the accepted and rejected shapes
 -- down first.
-unpadTests :: TestTree
+unpadTests :: Spec
 unpadTests =
-    testGroup
-        "unpadding"
-        [ accepts "the shortest permitted padding" (block 8 "hello") "hello"
-        , accepts "a longer padding" (block 40 "hello") "hello"
-        , accepts "an empty message" (block 8 "") ""
-        , accepts "a message of one octet" (block 8 "x") "x"
-        , rejects "a first octet that is not 00" $
+    describe "unpadding" $ do
+        accepts "the shortest permitted padding" (block 8 "hello") "hello"
+        accepts "a longer padding" (block 40 "hello") "hello"
+        accepts "an empty message" (block 8 "") ""
+        accepts "a message of one octet" (block 8 "x") "x"
+        rejects "a first octet that is not 00" $
             B.cons 1 (B.drop 1 (block 8 "hello"))
-        , rejects "a second octet that is not 02" $
+        rejects "a second octet that is not 02" $
             B.concat [B.pack [0, 1], B.drop 2 (block 8 "hello")]
-        , rejects "a padding string of seven octets" (block 7 "hello")
-        , rejects "a padding string of no octets" (block 0 "hello")
-        , rejects "a zero inside the first eight padding octets" $
+        rejects "a padding string of seven octets" (block 7 "hello")
+        rejects "a padding string of no octets" (block 0 "hello")
+        rejects "a zero inside the first eight padding octets" $
             B.concat [B.pack [0, 2, 0xff, 0xff, 0], "hello"]
-        , rejects "no octet ending the padding string" $
+        rejects "no octet ending the padding string" $
             B.concat [B.pack [0, 2], B.replicate 40 0xff]
-        , rejects "an empty block" B.empty
-        , rejects "a block of one octet" (B.singleton 0)
-        , rejects "a block of two octets" (B.pack [0, 2])
-        ]
+        rejects "an empty block" B.empty
+        rejects "a block of one octet" (B.singleton 0)
+        rejects "a block of two octets" (B.pack [0, 2])
   where
     block n msg =
         B.concat [B.pack [0, 2], B.replicate n 0xff, B.singleton 0, msg]
     accepts name input expected =
-        testCase name (Right expected @=? RSA.unpad input)
+        it name (RSA.unpad input `shouldBe` Right expected)
     rejects name input =
-        testCase
+        it
             name
-            ( Left RSA.MessageNotRecognized
-                @=? (RSA.unpad input :: Either RSA.Error ByteString)
+            ( (RSA.unpad input :: Either RSA.Error ByteString)
+                `shouldBe` Left RSA.MessageNotRecognized
             )
 
-rsaTests :: TestTree
+rsaTests :: Spec
 rsaTests =
-    testGroup
-        "RSA"
-        [ testGroup
-            "SHA1"
-            [ testGroup "signature" $ zipWith doSignatureTest [katZero ..] vectorsSHA1
-            , testGroup "verify" $
-                zipWith doVerifyTest [katZero ..] $
-                    filter vectorHasSignature vectorsSHA1
-            , testGroup "malleability" $
-                zipWith doMalleabilityTest [katZero ..] $
-                    filter vectorHasSignature vectorsSHA1
-            ]
-        , unpadTests
-        ]
+    describe "RSA" $ do
+        describe "SHA1" $ do
+            describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
+            describe "verify" $
+                sequence_ $
+                    zipWith doVerifyTest [katZero ..] $
+                        filter vectorHasSignature vectorsSHA1
+            describe "malleability" $
+                sequence_ $
+                    zipWith doMalleabilityTest [katZero ..] $
+                        filter vectorHasSignature vectorsSHA1
+        unpadTests

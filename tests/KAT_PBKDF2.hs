@@ -9,8 +9,7 @@ import qualified Crypto.KDF.PBKDF2 as PBKDF2
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 ()
 
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Hspec
 
 type VectParams = (ByteString, ByteString, Int, Int)
 
@@ -67,48 +66,54 @@ vectors_hmac_sha512 =
     ]
 
 tests =
-    testGroup
-        "PBKDF2"
-        [ testGroup "KATs-HMAC-SHA1" (katTests (PBKDF2.prfHMAC SHA1) vectors_hmac_sha1)
-        , testGroup "KATs-HMAC-SHA1 (fast)" (katTestFastPBKDF2_SHA1 vectors_hmac_sha1)
-        , testGroup
-            "KATs-HMAC-SHA256"
-            (katTests (PBKDF2.prfHMAC SHA256) vectors_hmac_sha256)
-        , testGroup
-            "KATs-HMAC-SHA256 (fast)"
-            (katTestFastPBKDF2_SHA256 vectors_hmac_sha256)
-        , testGroup
-            "KATs-HMAC-SHA512"
-            (katTests (PBKDF2.prfHMAC SHA512) vectors_hmac_sha512)
-        , testGroup
-            "KATs-HMAC-SHA512 (fast)"
-            (katTestFastPBKDF2_SHA512 vectors_hmac_sha512)
-        ]
+    describe "PBKDF2" $ do
+        describe "KATs-HMAC-SHA1" $
+            sequence_ (katTests (PBKDF2.prfHMAC SHA1) vectors_hmac_sha1)
+        describe "KATs-HMAC-SHA1 (fast)" $
+            sequence_ (katTestFastPBKDF2_SHA1 vectors_hmac_sha1)
+        describe "KATs-HMAC-SHA256" $
+            sequence_ $
+                (katTests (PBKDF2.prfHMAC SHA256) vectors_hmac_sha256)
+        describe "KATs-HMAC-SHA256 (fast)" $
+            sequence_ $
+                (katTestFastPBKDF2_SHA256 vectors_hmac_sha256)
+        describe "KATs-HMAC-SHA512" $
+            sequence_ $
+                (katTests (PBKDF2.prfHMAC SHA512) vectors_hmac_sha512)
+        describe "KATs-HMAC-SHA512 (fast)" $
+            sequence_ $
+                (katTestFastPBKDF2_SHA512 vectors_hmac_sha512)
   where
     katTests prf = zipWith (toKatTest prf) is
 
     toKatTest prf i ((pass, salt, iter, dkLen), output) =
-        testCase
+        it
             (show i)
-            (output @=? PBKDF2.generate prf (PBKDF2.Parameters iter dkLen) pass salt)
+            (PBKDF2.generate prf (PBKDF2.Parameters iter dkLen) pass salt `shouldBe` output)
 
     katTestFastPBKDF2_SHA1 = zipWith toKatTestFastPBKDF2_SHA1 is
     toKatTestFastPBKDF2_SHA1 i ((pass, salt, iter, dkLen), output) =
-        testCase
+        it
             (show i)
-            (output @=? PBKDF2.fastPBKDF2_SHA1 (PBKDF2.Parameters iter dkLen) pass salt)
+            ( PBKDF2.fastPBKDF2_SHA1 (PBKDF2.Parameters iter dkLen) pass salt
+                `shouldBe` output
+            )
 
     katTestFastPBKDF2_SHA256 = zipWith toKatTestFastPBKDF2_SHA256 is
     toKatTestFastPBKDF2_SHA256 i ((pass, salt, iter, dkLen), output) =
-        testCase
+        it
             (show i)
-            (output @=? PBKDF2.fastPBKDF2_SHA256 (PBKDF2.Parameters iter dkLen) pass salt)
+            ( PBKDF2.fastPBKDF2_SHA256 (PBKDF2.Parameters iter dkLen) pass salt
+                `shouldBe` output
+            )
 
     katTestFastPBKDF2_SHA512 = zipWith toKatTestFastPBKDF2_SHA512 is
     toKatTestFastPBKDF2_SHA512 i ((pass, salt, iter, dkLen), output) =
-        testCase
+        it
             (show i)
-            (output @=? PBKDF2.fastPBKDF2_SHA512 (PBKDF2.Parameters iter dkLen) pass salt)
+            ( PBKDF2.fastPBKDF2_SHA512 (PBKDF2.Parameters iter dkLen) pass salt
+                `shouldBe` output
+            )
 
     is :: [Int]
     is = [1 ..]

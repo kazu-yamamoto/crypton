@@ -387,12 +387,12 @@ vectorToPublic vector =
         , DSA.public_params = pgq vector
         }
 
-doSignatureTest hashAlg i vector = testCase (show i) (expected @=? actual)
+doSignatureTest hashAlg i vector = it (show i) (actual `shouldBe` expected)
   where
     expected = Just $ DSA.Signature (r vector) (s vector)
     actual = DSA.signWith (k vector) (vectorToPrivate vector) hashAlg (msg vector)
 
-doVerifyTest hashAlg i vector = testCase (show i) (True @=? actual)
+doVerifyTest hashAlg i vector = it (show i) (actual `shouldBe` True)
   where
     actual =
         DSA.verify
@@ -407,20 +407,19 @@ doVerifyTest hashAlg i vector = testCase (show i) (True @=? actual)
 -- the signature and the parameters from whoever supplied the public key, so a
 -- composite q admits an s that is not invertible.  Each has a way to say no --
 -- signWith returns Maybe, verify returns Bool -- so neither should raise.
-nonInvertibleTests :: TestTree
+nonInvertibleTests :: Spec
 nonInvertibleTests =
-    testGroup
-        "non-invertible values"
-        [ testCase "signWith with k = 0 returns Nothing" $
+    describe "non-invertible values" $ do
+        it "signWith with k = 0 returns Nothing" $
             totalSign Nothing (DSA.signWith 0 priv SHA1 message)
-        , testCase "signWith with k = q returns Nothing" $
+        it "signWith with k = q returns Nothing" $
             totalSign Nothing (DSA.signWith q priv SHA1 message)
-        , testCase "signWith with k sharing a factor with q returns Nothing" $
+        it "signWith with k sharing a factor with q returns Nothing" $
             totalSign Nothing (DSA.signWith 3 compositePriv SHA1 message)
-        , testCase "signWith with a usable k still signs" $ do
+        it "signWith with a usable k still signs" $ do
             result <- try (evaluate (DSA.signWith 4 priv SHA1 message))
             assertBool "expected a signature" (either exc isJust result)
-        , testCase "verify with a non-invertible s returns False" $ do
+        it "verify with a non-invertible s returns False" $ do
             result <-
                 try
                     ( evaluate $
@@ -430,8 +429,7 @@ nonInvertibleTests =
                             (DSA.Signature 1 3)
                             message
                     )
-            Right False @=? left result
-        ]
+            left result `shouldBe` Right False
   where
     message = "message" :: ByteString
     q = 11
@@ -450,39 +448,31 @@ nonInvertibleTests =
 
     totalSign expected sig = do
         result <- try (evaluate sig)
-        Right expected @=? left result
+        left result `shouldBe` Right expected
 
 dsaTests =
-    testGroup
-        "DSA"
-        [ testGroup
-            "SHA1"
-            [ testGroup "signature" $ zipWith (doSignatureTest SHA1) [katZero ..] vectorsSHA1
-            , testGroup "verify" $ zipWith (doVerifyTest SHA1) [katZero ..] vectorsSHA1
-            ]
-        , testGroup
-            "SHA224"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA224) [katZero ..] vectorsSHA224
-            , testGroup "verify" $ zipWith (doVerifyTest SHA224) [katZero ..] vectorsSHA224
-            ]
-        , testGroup
-            "SHA256"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA256) [katZero ..] vectorsSHA256
-            , testGroup "verify" $ zipWith (doVerifyTest SHA256) [katZero ..] vectorsSHA256
-            ]
-        , testGroup
-            "SHA384"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA384) [katZero ..] vectorsSHA384
-            , testGroup "verify" $ zipWith (doVerifyTest SHA384) [katZero ..] vectorsSHA384
-            ]
-        , testGroup
-            "SHA512"
-            [ testGroup "signature" $
-                zipWith (doSignatureTest SHA512) [katZero ..] vectorsSHA512
-            , testGroup "verify" $ zipWith (doVerifyTest SHA512) [katZero ..] vectorsSHA512
-            ]
-        , nonInvertibleTests
-        ]
+    describe "DSA" $ do
+        describe "SHA1" $ do
+            describe "signature" $ zipWithM_ (doSignatureTest SHA1) [katZero ..] vectorsSHA1
+            describe "verify" $ zipWithM_ (doVerifyTest SHA1) [katZero ..] vectorsSHA1
+        describe "SHA224" $ do
+            describe "signature" $
+                sequence_ $
+                    zipWith (doSignatureTest SHA224) [katZero ..] vectorsSHA224
+            describe "verify" $ zipWithM_ (doVerifyTest SHA224) [katZero ..] vectorsSHA224
+        describe "SHA256" $ do
+            describe "signature" $
+                sequence_ $
+                    zipWith (doSignatureTest SHA256) [katZero ..] vectorsSHA256
+            describe "verify" $ zipWithM_ (doVerifyTest SHA256) [katZero ..] vectorsSHA256
+        describe "SHA384" $ do
+            describe "signature" $
+                sequence_ $
+                    zipWith (doSignatureTest SHA384) [katZero ..] vectorsSHA384
+            describe "verify" $ zipWithM_ (doVerifyTest SHA384) [katZero ..] vectorsSHA384
+        describe "SHA512" $ do
+            describe "signature" $
+                sequence_ $
+                    zipWith (doSignatureTest SHA512) [katZero ..] vectorsSHA512
+            describe "verify" $ zipWithM_ (doVerifyTest SHA512) [katZero ..] vectorsSHA512
+        nonInvertibleTests

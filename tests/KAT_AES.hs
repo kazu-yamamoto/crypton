@@ -117,50 +117,46 @@ kats256 =
 
 -- SP 800-38D 5.2.1.1: 1 <= len(IV) <= 2^64 - 1.  A zero-length IV makes
 -- J0 the GHASH of the empty string, which leaks the authentication key.
-aeadIVLengthTests :: TestTree
+aeadIVLengthTests :: Spec
 aeadIVLengthTests =
-    testGroup
-        "AEAD IV length"
-        [ testCase "96-bit IV accepted" $
-            True @=? isRight (initWith (B.replicate 12 0))
-        , testCase "8-bit IV accepted" $
-            True @=? isRight (initWith (B.replicate 1 0))
-        , testCase "empty IV rejected" $
-            Left CryptoError_IvSizeInvalid @=? initWith B.empty
-        ]
+    describe "AEAD IV length" $ do
+        it "96-bit IV accepted" $
+            isRight (initWith (B.replicate 12 0)) `shouldBe` True
+        it "8-bit IV accepted" $
+            isRight (initWith (B.replicate 1 0)) `shouldBe` True
+        it "empty IV rejected" $
+            initWith B.empty `shouldBe` Left CryptoError_IvSizeInvalid
   where
     ctx = throwCryptoError (cipherInit (B.replicate 16 0)) :: AES.AES128
     initWith iv =
         eitherCryptoError (() <$ aeadInit AEAD_GCM ctx (iv :: ByteString))
     isRight = either (const False) (const True)
 
-aeadTagLengthTests :: TestTree
+aeadTagLengthTests :: Spec
 aeadTagLengthTests =
-    testGroup
-        "AEAD tag length"
-        [ testCase "full tag verifies" $ Just message @=? openWith fullTag
-        , testCase "empty tag rejected" $ Nothing @=? openWith B.empty
-        , testCase "1-byte tag rejected" $ Nothing @=? openWith (B.take 1 fullTag)
-        , testCase "3-byte tag rejected" $ Nothing @=? openWith (B.take 3 fullTag)
-        , testCase "wrong tag rejected" $
-            Nothing @=? openWith (B.map (+ 1) fullTag)
-        , -- a truncated tag is still at or above the minimum, so the length
-          -- taken from the tag is the peer's choice of how much to verify
-          testCase "4-byte tag accepted, since the tag sets the length" $
-            Just message @=? openWith (B.take 4 fullTag)
-        , testCase "aeadSimpleDecrypt' verifies the full tag" $
-            Just message @=? openWith' 16 fullTag
-        , testCase "aeadSimpleDecrypt' refuses a truncated tag" $
-            Nothing @=? openWith' 16 (B.take 4 fullTag)
-        , testCase "aeadSimpleDecrypt' refuses an overlong tag" $
-            Nothing @=? openWith' 16 (fullTag `B.append` B.singleton 0)
-        , testCase "aeadSimpleDecrypt' refuses a length below the minimum" $
-            Nothing @=? openWith' 3 (B.take 3 fullTag)
-        , testCase "aeadSimpleDecrypt' verifies a short tag the caller asked for" $
-            Just message @=? openWith' 8 (B.take 8 fullTag)
-        , testCase "aeadSimpleDecrypt' refuses a wrong tag" $
-            Nothing @=? openWith' 16 (B.map (+ 1) fullTag)
-        ]
+    describe "AEAD tag length" $ do
+        it "full tag verifies" $ openWith fullTag `shouldBe` Just message
+        it "empty tag rejected" $ openWith B.empty `shouldBe` Nothing
+        it "1-byte tag rejected" $ openWith (B.take 1 fullTag) `shouldBe` Nothing
+        it "3-byte tag rejected" $ openWith (B.take 3 fullTag) `shouldBe` Nothing
+        it "wrong tag rejected" $
+            openWith (B.map (+ 1) fullTag) `shouldBe` Nothing
+        -- a truncated tag is still at or above the minimum, so the length
+        -- taken from the tag is the peer's choice of how much to verify
+        it "4-byte tag accepted, since the tag sets the length" $
+            openWith (B.take 4 fullTag) `shouldBe` Just message
+        it "aeadSimpleDecrypt' verifies the full tag" $
+            openWith' 16 fullTag `shouldBe` Just message
+        it "aeadSimpleDecrypt' refuses a truncated tag" $
+            openWith' 16 (B.take 4 fullTag) `shouldBe` Nothing
+        it "aeadSimpleDecrypt' refuses an overlong tag" $
+            openWith' 16 (fullTag `B.append` B.singleton 0) `shouldBe` Nothing
+        it "aeadSimpleDecrypt' refuses a length below the minimum" $
+            openWith' 3 (B.take 3 fullTag) `shouldBe` Nothing
+        it "aeadSimpleDecrypt' verifies a short tag the caller asked for" $
+            openWith' 8 (B.take 8 fullTag) `shouldBe` Just message
+        it "aeadSimpleDecrypt' refuses a wrong tag" $
+            openWith' 16 (B.map (+ 1) fullTag) `shouldBe` Nothing
   where
     key = B.replicate 16 0
     iv = B.replicate 12 0
@@ -174,18 +170,17 @@ aeadTagLengthTests =
     openWith' n t = aeadSimpleDecrypt' aead aad ciphertext n (AuthTag (BA.convert t))
 
 tests =
-    testGroup
-        "AES"
-        [ testBlockCipher kats128 (undefined :: AES.AES128)
-        , testBlockCipher kats192 (undefined :: AES.AES192)
-        , testBlockCipher kats256 (undefined :: AES.AES256)
-        , aeadIVLengthTests
-        , aeadTagLengthTests
-        {-
-            , testProperty "genCtr" $ \(key, iv1) ->
-                let (bs1, iv2)    = AES.genCounter key iv1 32
-                    (bs2, iv3)    = AES.genCounter key iv2 32
-                    (bsAll, iv3') = AES.genCounter key iv1 64
-                 in (B.concat [bs1,bs2] == bsAll && iv3 == iv3')
-        -}
-        ]
+    describe "AES" $ do
+        testBlockCipher kats128 (undefined :: AES.AES128)
+        testBlockCipher kats192 (undefined :: AES.AES192)
+        testBlockCipher kats256 (undefined :: AES.AES256)
+        aeadIVLengthTests
+        aeadTagLengthTests
+
+{-
+  , prop "genCtr" $ \(key, iv1) ->
+      let (bs1, iv2)    = AES.genCounter key iv1 32
+          (bs2, iv3)    = AES.genCounter key iv2 32
+          (bsAll, iv3') = AES.genCounter key iv1 64
+       in (B.concat [bs1,bs2] == bsAll && iv3 == iv3')
+-}

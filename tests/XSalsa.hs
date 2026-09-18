@@ -146,23 +146,23 @@ vectorsCB =
     ]
 
 tests =
-    testGroup
-        "XSalsa"
-        [ testGroup "KAT" $
-            zipWith
-                (\i (r, k, n, p, e) -> testCase (show (i :: Int)) $ salsaRunSimple r k n p e)
-                [1 ..]
-                vectors
-        , testGroup "crypto_box encryption" $
-            zipWith
-                (\i (r, k, n, p, e) -> testCase (show (i :: Int)) $ cryptoBoxEnc r k n p e)
-                [1 ..]
-                vectorsCB
-        ]
+    describe "XSalsa" $ do
+        describe "KAT" $
+            sequence_ $
+                zipWith
+                    (\i (r, k, n, p, e) -> it (show (i :: Int)) $ salsaRunSimple r k n p e)
+                    [1 ..]
+                    vectors
+        describe "crypto_box encryption" $
+            sequence_ $
+                zipWith
+                    (\i (r, k, n, p, e) -> it (show (i :: Int)) $ cryptoBoxEnc r k n p e)
+                    [1 ..]
+                    vectorsCB
   where
     salsaRunSimple rounds key nonce plain expected =
         let salsa = XSalsa.initialize rounds key nonce
-         in fst (XSalsa.combine salsa plain) @?= expected
+         in fst (XSalsa.combine salsa plain) `shouldBe` expected
 
     cryptoBoxEnc rounds shared nonce plain expected =
         let zero = B.replicate 16 0
@@ -170,4 +170,4 @@ tests =
             salsa0 = XSalsa.initialize rounds shared (zero `B.append` iv0)
             salsa1 = XSalsa.derive salsa0 iv1
             (_, salsa2) = XSalsa.generate salsa1 32 :: (B.ByteString, XSalsa.State)
-         in fst (XSalsa.combine salsa2 plain) @?= expected
+         in fst (XSalsa.combine salsa2 plain) `shouldBe` expected

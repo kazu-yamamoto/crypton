@@ -444,7 +444,7 @@ vectorsKey8 =
         }
     ]
 
-doSignTest key i vector = testCase (show i) (Right (signature vector) @=? actual)
+doSignTest key i vector = it (show i) (actual `shouldBe` Right (signature vector))
   where
     actual =
         PSS.signWithSalt
@@ -454,7 +454,7 @@ doSignTest key i vector = testCase (show i) (Right (signature vector) @=? actual
             key
             (message vector)
 
-doVerifyTest key i vector = testCase (show i) (True @=? actual)
+doVerifyTest key i vector = it (show i) (actual `shouldBe` True)
   where
     actual =
         PSS.verify
@@ -464,28 +464,32 @@ doVerifyTest key i vector = testCase (show i) (True @=? actual)
             (signature vector)
 
 pssTests =
-    testGroup
-        "RSA-PSS"
-        [ testGroup
-            "signature internal"
-            [doSignTest rsaKeyInt katZero vectorInt]
-        , testGroup
-            "verify internal"
-            [doVerifyTest rsaKeyInt katZero vectorInt]
-        , testGroup "signature key 1024" $
-            zipWith (doSignTest rsaKey1) [katZero ..] vectorsKey1
-        , testGroup "verify key 1024" $
-            zipWith (doVerifyTest rsaKey1) [katZero ..] vectorsKey1
-        , testGroup "signature key 1025" $
-            zipWith (doSignTest rsaKey2) [katZero ..] vectorsKey2
-        , testGroup "verify key 1025" $
-            zipWith (doVerifyTest rsaKey2) [katZero ..] vectorsKey2
-        , testGroup "signature key 1026" $
-            zipWith (doSignTest rsaKey3) [katZero ..] vectorsKey3
-        , testGroup "verify key 1026" $
-            zipWith (doVerifyTest rsaKey3) [katZero ..] vectorsKey3
-        , testGroup "signature key 1031" $
-            zipWith (doSignTest rsaKey8) [katZero ..] vectorsKey8
-        , testGroup "verify key 1031" $
-            zipWith (doVerifyTest rsaKey8) [katZero ..] vectorsKey8
-        ]
+    describe "RSA-PSS" $ do
+        describe "signature internal" $ do
+            doSignTest rsaKeyInt katZero vectorInt
+        describe "verify internal" $ do
+            doVerifyTest rsaKeyInt katZero vectorInt
+        describe "signature key 1024" $
+            sequence_ $
+                zipWith (doSignTest rsaKey1) [katZero ..] vectorsKey1
+        describe "verify key 1024" $
+            sequence_ $
+                zipWith (doVerifyTest rsaKey1) [katZero ..] vectorsKey1
+        describe "signature key 1025" $
+            sequence_ $
+                zipWith (doSignTest rsaKey2) [katZero ..] vectorsKey2
+        describe "verify key 1025" $
+            sequence_ $
+                zipWith (doVerifyTest rsaKey2) [katZero ..] vectorsKey2
+        describe "signature key 1026" $
+            sequence_ $
+                zipWith (doSignTest rsaKey3) [katZero ..] vectorsKey3
+        describe "verify key 1026" $
+            sequence_ $
+                zipWith (doVerifyTest rsaKey3) [katZero ..] vectorsKey3
+        describe "signature key 1031" $
+            sequence_ $
+                zipWith (doSignTest rsaKey8) [katZero ..] vectorsKey8
+        describe "verify key 1031" $
+            sequence_ $
+                zipWith (doVerifyTest rsaKey8) [katZero ..] vectorsKey8

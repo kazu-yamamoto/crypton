@@ -50,8 +50,8 @@ normalizeECC curve (ECC.Signature r s)
   where
     n = ECC.ecc_n $ ECC.common_curve curve
 
-testRecover :: ECC.CurveName -> TestTree
-testRecover name = testProperty (show name) $ \(ArbitraryBS0_2901 msg) -> do
+testRecover :: ECC.CurveName -> Spec
+testRecover name = prop (show name) $ \(ArbitraryBS0_2901 msg) -> do
     let curve = ECC.getCurveByName name
     let n = ECC.ecc_n $ ECC.common_curve curve
     k <- choose (1, n - 1)
@@ -64,8 +64,8 @@ testRecover name = testProperty (show name) $ \(ArbitraryBS0_2901 msg) -> do
         propertyHold
             [eqTest "recovery" (Just $ ECC.generateQ curve d) (ECC.public_q <$> pub)]
 
-testNormalize :: ECC.CurveName -> TestTree
-testNormalize name = testProperty (show name) $ \(ArbitraryBS0_2901 msg) -> do
+testNormalize :: ECC.CurveName -> Spec
+testNormalize name = prop (show name) $ \(ArbitraryBS0_2901 msg) -> do
     let curve = ECC.getCurveByName name
     let n = ECC.ecc_n $ ECC.common_curve curve
     k <- choose (1, n - 1)
@@ -76,42 +76,34 @@ testNormalize name = testProperty (show name) $ \(ArbitraryBS0_2901 msg) -> do
             ECC.signExtendedDigestWith k key digest >>= \s -> pure $ ECC.sign_s (ECC.signature s) <= n `div` 2
     pure $ propertyHold [eqTest "normalized" (Just True) check]
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "ECDSA"
-        [ localOption (QuickCheckTests 5) $
-            testGroup
-                "verification"
-                [ testProperty "SHA1" $ propertyECDSA SHA1
-                , testProperty "SHA224" $ propertyECDSA SHA224
-                , testProperty "SHA256" $ propertyECDSA SHA256
-                , testProperty "SHA384" $ propertyECDSA SHA384
-                , testProperty "SHA512" $ propertyECDSA SHA512
-                ]
-        , testGroup
-            "recovery"
-            [ localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p128r1
-            , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p128r2
-            , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p256k1
-            , localOption (QuickCheckTests 100) $ testRecover ECC.SEC_p256r1
-            , localOption (QuickCheckTests 50) $ testRecover ECC.SEC_t131r1
-            , localOption (QuickCheckTests 50) $ testRecover ECC.SEC_t131r2
-            , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233k1
-            , localOption (QuickCheckTests 20) $ testRecover ECC.SEC_t233r1
-            ]
-        , testGroup
-            "normalize"
-            [ localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p128r1
-            , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p128r2
-            , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256k1
-            , localOption (QuickCheckTests 100) $ testNormalize ECC.SEC_p256r1
-            , localOption (QuickCheckTests 50) $ testNormalize ECC.SEC_t131r1
-            , localOption (QuickCheckTests 50) $ testNormalize ECC.SEC_t131r2
-            , localOption (QuickCheckTests 20) $ testNormalize ECC.SEC_t233k1
-            , localOption (QuickCheckTests 20) $ testNormalize ECC.SEC_t233r1
-            ]
-        ]
+    describe "ECDSA" $ do
+        modifyMaxSuccess (const 5) $
+            describe "verification" $ do
+                prop "SHA1" $ propertyECDSA SHA1
+                prop "SHA224" $ propertyECDSA SHA224
+                prop "SHA256" $ propertyECDSA SHA256
+                prop "SHA384" $ propertyECDSA SHA384
+                prop "SHA512" $ propertyECDSA SHA512
+        describe "recovery" $ do
+            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r1
+            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r2
+            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256k1
+            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256r1
+            modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r1
+            modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r2
+            modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233k1
+            modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233r1
+        describe "normalize" $ do
+            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r1
+            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r2
+            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256k1
+            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256r1
+            modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r1
+            modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r2
+            modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233k1
+            modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233r1
   where
     propertyECDSA hashAlg (Curve c curve _) (ArbitraryBS0_2901 msg) = do
         d <- arbitraryScalar curve

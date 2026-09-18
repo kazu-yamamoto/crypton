@@ -10,5 +10,5 @@ import Imports
 kats = defaultKATs
 
 tests =
-    localOption (QuickCheckTests 5) $
+    modifyMaxSuccess (const 5) $
         testBlockCipher kats (undefined :: TripleDES.DES_EEE3)

@@ -52,67 +52,54 @@ import qualified KAT_AFIS
 import qualified Padding
 
 tests =
-    testGroup
-        "crypton"
-        [ testGroup
-            "runtime"
-            [ testCaseInfo "CPU" (return $ show processorOptions)
-            ]
-        , Number.tests
-        , Number.F2m.tests
-        , Hash.tests
-        , Padding.tests
-        , testGroup
-            "ConstructHash"
-            [ KAT_MiyaguchiPreneel.tests
-            ]
-        , testGroup
-            "MAC"
-            [ Poly1305.tests
-            , KAT_Blake2.tests
-            , KAT_CMAC.tests
-            , KAT_HMAC.tests
-            , KAT_KMAC.tests
-            ]
-        , KAT_Curve25519.tests
-        , KAT_Curve448.tests
-        , KAT_Ed25519.tests
-        , KAT_Ed448.tests
-        , KAT_EdDSA.tests
-        , KAT_PubKey.tests
-        , KAT_OTP.tests
-        , testGroup
-            "KDF"
-            [ KAT_PBKDF2.tests
-            , KAT_Scrypt.tests
-            , BCrypt.tests
-            , BCryptPBKDF.tests
-            , KAT_HKDF.tests
-            , KAT_Argon2.tests
-            ]
-        , testGroup
-            "block-cipher"
-            [ KAT_AES.tests
-            , KAT_AESGCMSIV.tests
-            , KAT_Blowfish.tests
-            , KAT_CAST5.tests
-            , KAT_Camellia.tests
-            , KAT_DES.tests
-            , KAT_TripleDES.tests
-            , KAT_Twofish.tests
-            ]
-        , testGroup
-            "stream-cipher"
-            [ KAT_RC4.tests
-            , ChaCha.tests
-            , ChaChaPoly1305.tests
-            , Salsa.tests
-            , XSalsa.tests
-            ]
-        , KAT_AFIS.tests
-        , ECC.tests
-        , ECC.Edwards25519.tests
-        , ECDSA.tests
-        ]
+    describe "crypton" $ do
+        describe "runtime" $ do
+            it "CPU" $ putStrLn (show processorOptions)
+        Number.tests
+        Number.F2m.tests
+        Hash.tests
+        Padding.tests
+        describe "ConstructHash" $ do
+            KAT_MiyaguchiPreneel.tests
+        describe "MAC" $ do
+            Poly1305.tests
+            KAT_Blake2.tests
+            KAT_CMAC.tests
+            KAT_HMAC.tests
+            KAT_KMAC.tests
+        KAT_Curve25519.tests
+        KAT_Curve448.tests
+        KAT_Ed25519.tests
+        KAT_Ed448.tests
+        KAT_EdDSA.tests
+        KAT_PubKey.tests
+        KAT_OTP.tests
+        describe "KDF" $ do
+            KAT_PBKDF2.tests
+            KAT_Scrypt.tests
+            BCrypt.tests
+            BCryptPBKDF.tests
+            KAT_HKDF.tests
+            KAT_Argon2.tests
+        describe "block-cipher" $ do
+            KAT_AES.tests
+            KAT_AESGCMSIV.tests
+            KAT_Blowfish.tests
+            KAT_CAST5.tests
+            KAT_Camellia.tests
+            KAT_DES.tests
+            KAT_TripleDES.tests
+            KAT_Twofish.tests
+        describe "stream-cipher" $ do
+            KAT_RC4.tests
+            ChaCha.tests
+            ChaChaPoly1305.tests
+            Salsa.tests
+            XSalsa.tests
+        KAT_AFIS.tests
+        ECC.tests
+        ECC.Edwards25519.tests
+        ECDSA.tests
 
-main = defaultMain tests
+main :: IO ()
+main = hspec tests

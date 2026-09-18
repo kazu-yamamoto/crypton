@@ -21,17 +21,16 @@ instance Arbitrary Chunking where
     arbitrary = Chunking <$> choose (1, 34) <*> choose (1, 2048)
 
 tests =
-    testGroup
-        "Poly1305"
-        [ testCase "V0" $
+    describe "Poly1305" $ do
+        it "V0" $
             let key =
                     "\x85\xd6\xbe\x78\x57\x55\x6d\x33\x7f\x44\x52\xfe\x42\xd5\x06\xa8\x01\x03\x80\x8a\xfb\x0d\xb2\xfd\x4a\xbf\xf6\xaf\x41\x49\xf5\x1b"
                         :: ByteString
                 msg = "Cryptographic Forum Research Group" :: ByteString
                 tag =
                     "\xa8\x06\x1d\xc1\x30\x51\x36\xc6\xc2\x2b\x8b\xaf\x0c\x01\x27\xa9" :: ByteString
-             in tag @=? B.convert (Poly1305.auth key msg)
-        , testProperty "Chunking" $ \(Chunking chunkLen totalLen) ->
+             in B.convert (Poly1305.auth key msg) `shouldBe` tag
+        prop "Chunking" $ \(Chunking chunkLen totalLen) ->
             let key = B.replicate 32 0
                 msg = B.pack $ take totalLen $ concat (replicate 10 [1 .. 255])
              in Poly1305.auth key msg
@@ -41,7 +40,6 @@ tests =
                             (throwCryptoError $ Poly1305.initialize key)
                             (chunks chunkLen msg)
                         )
-        ]
   where
     chunks i bs
         | B.length bs < i = [bs]

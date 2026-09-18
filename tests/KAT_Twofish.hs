@@ -380,9 +380,7 @@ kats192 = defaultKATs{kat_ECB = vectors_twofish192}
 kats256 = defaultKATs{kat_ECB = vectors_twofish256}
 
 tests =
-    testGroup
-        "Twofish"
-        [ testBlockCipher kats128 (undefined :: Twofish128)
-        , testBlockCipher kats192 (undefined :: Twofish192)
-        , testBlockCipher kats256 (undefined :: Twofish256)
-        ]
+    describe "Twofish" $ do
+        testBlockCipher kats128 (undefined :: Twofish128)
+        testBlockCipher kats192 (undefined :: Twofish192)
+        testBlockCipher kats256 (undefined :: Twofish256)

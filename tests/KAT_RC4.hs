@@ -3,8 +3,7 @@
 
 module KAT_RC4 where
 
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Hspec
 
 import qualified Crypto.Cipher.RC4 as RC4
 import Data.ByteString (ByteString)
@@ -31,12 +30,13 @@ vectors =
     ]
 
 tests =
-    testGroup "RC4" $
-        zipWith toKatTest is vectors
+    describe "RC4" $
+        sequence_ $
+            zipWith toKatTest is vectors
   where
     toKatTest i (key, plainText, cipherText) =
-        testCase
+        it
             (show i)
-            (cipherText @=? snd (RC4.combine (RC4.initialize key) plainText))
+            (snd (RC4.combine (RC4.initialize key) plainText) `shouldBe` cipherText)
     is :: [Int]
     is = [1 ..]

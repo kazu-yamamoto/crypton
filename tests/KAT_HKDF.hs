@@ -363,26 +363,25 @@ sha256KDFVectors =
         )
     ]
 
-kdfTests :: [TestTree]
+kdfTests :: [Spec]
 kdfTests =
-    [ testGroup "sha256" $ concatMap toKDFTest $ zip is sha256KDFVectors
+    [ describe "sha256" $ mapM_ toKDFTest $ zip is sha256KDFVectors
     ]
   where
-    toKDFTest (i, kdfVector) =
-        [ testCase (show i) (t HKDF.extract kdfVector)
-        ]
+    toKDFTest (i, kdfVector) = do
+        it (show i) (t HKDF.extract kdfVector)
 
     t
         :: HashAlgorithm a
-        => (ByteString -> ByteString -> HKDF.PRK a) -> KDFVector a -> Assertion
+        => (ByteString -> ByteString -> HKDF.PRK a) -> KDFVector a -> Expectation
     t ext v =
         let prk = ext (kdfSalt v) (kdfIKM v)
-         in kdfResult v @=? HKDF.expand prk (kdfInfo v) (B.length $ kdfResult v)
+         in HKDF.expand prk (kdfInfo v) (B.length $ kdfResult v) `shouldBe` kdfResult v
 
     is :: [Int]
     is = [1 ..]
 
-boundTests :: [TestTree]
+boundTests :: [Spec]
 boundTests =
     [ boundTest "SHA-1" (HKDF.extract salt ikm :: HKDF.PRK SHA1) 20
     , boundTest "SHA-256" (HKDF.extract salt ikm :: HKDF.PRK SHA256) 32
@@ -394,22 +393,18 @@ boundTests =
     ikm = "input key material" :: ByteString
     info = "info" :: ByteString
     boundTest name prk hashLen =
-        testGroup
-            name
-            [ testCase "maximum length" $
-                maxLen @=? B.length (HKDF.expand prk info maxLen :: ByteString)
-            , testCase "one byte past the maximum" $ do
+        describe name $ do
+            it "maximum length" $
+                B.length (HKDF.expand prk info maxLen :: ByteString) `shouldBe` maxLen
+            it "one byte past the maximum" $ do
                 result <-
                     try (evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString)))
                         :: IO (Either CryptoError Int)
-                Left CryptoError_OutputLengthTooBig @=? result
-            ]
+                result `shouldBe` Left CryptoError_OutputLengthTooBig
       where
         maxLen = 255 * hashLen
 
 tests =
-    testGroup
-        "HKDF"
-        [ testGroup "KATs" kdfTests
-        , testGroup "output bound" boundTests
-        ]
+    describe "HKDF" $ do
+        describe "KATs" $ sequence_ kdfTests
+        describe "output bound" $ sequence_ boundTests

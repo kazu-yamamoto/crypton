@@ -135,24 +135,24 @@ vectors =
         }
     ]
 
-doPublicKeyTest :: Int -> Vec -> TestTree
+doPublicKeyTest :: Int -> Vec -> Spec
 doPublicKeyTest i Vec{..} =
-    testCase (show i) (pub @=? EdDSA.toPublic vecPrx vecAlg sec)
+    it (show i) (EdDSA.toPublic vecPrx vecAlg sec `shouldBe` pub)
   where
     !pub = throwCryptoError $ EdDSA.publicKey vecPrx vecAlg vecPub
     !sec = throwCryptoError $ EdDSA.secretKey vecPrx vecSec
 
-doSignatureTest :: Int -> Vec -> TestTree
+doSignatureTest :: Int -> Vec -> Spec
 doSignatureTest i Vec{..} =
-    testCase (show i) (sig @=? EdDSA.sign vecPrx sec pub vecMsg)
+    it (show i) (EdDSA.sign vecPrx sec pub vecMsg `shouldBe` sig)
   where
     !sig = throwCryptoError $ EdDSA.signature vecPrx vecAlg vecSig
     !pub = throwCryptoError $ EdDSA.publicKey vecPrx vecAlg vecPub
     !sec = throwCryptoError $ EdDSA.secretKey vecPrx vecSec
 
-doVerifyTest :: Int -> Vec -> TestTree
+doVerifyTest :: Int -> Vec -> Spec
 doVerifyTest i Vec{..} =
-    testCase (show i) (True @=? EdDSA.verify vecPrx pub vecMsg sig)
+    it (show i) (EdDSA.verify vecPrx pub vecMsg sig `shouldBe` True)
   where
     !sig = throwCryptoError $ EdDSA.signature vecPrx vecAlg vecSig
     !pub = throwCryptoError $ EdDSA.publicKey vecPrx vecAlg vecPub
@@ -178,27 +178,39 @@ data NegVec
     }
 
 negVectors =
-    [ ed25519Neg 63 "s replaced by s + L"
+    [ ed25519Neg
+        63
+        "s replaced by s + L"
         "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
         "54657374"
         "7c38e026f29e14aabd059a0f2db8b0cd783040609a8be684db12f82a27774ab067654bce3832c2d76f8f6f5dafc08d9339d4eef676573336a5c51eb6f946b31d"
-    , ed25519Neg 64 "s replaced by s + 2L"
+    , ed25519Neg
+        64
+        "s replaced by s + 2L"
         "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
         "54657374"
         "7c38e026f29e14aabd059a0f2db8b0cd783040609a8be684db12f82a27774ab05439412b5395d42f462c67008eba6ca839d4eef676573336a5c51eb6f946b32d"
-    , ed25519Neg 65 "s replaced by s + 4L"
+    , ed25519Neg
+        65
+        "s replaced by s + 4L"
         "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
         "54657374"
         "7c38e026f29e14aabd059a0f2db8b0cd783040609a8be684db12f82a27774ab02ee12ce5875bf9dff26556464bae2ad239d4eef676573336a5c51eb6f946b34d"
-    , ed25519Neg 66 "s replaced by s + 8L"
+    , ed25519Neg
+        66
+        "s replaced by s + 8L"
         "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
         "54657374"
         "7c38e026f29e14aabd059a0f2db8b0cd783040609a8be684db12f82a27774ab0e2300459f1e742404cd934d2c595a6253ad4eef676573336a5c51eb6f946b38d"
-    , ed25519Neg 85 "s just above the bound"
+    , ed25519Neg
+        85
+        "s just above the bound"
         "100fdf47fb94f1536a4f7c3fda27383fa03375a8f527c537e6f1703c47f94f86"
         "6a0bc2b0057cedfc0fa2e3f7f7d39279b30f454a69dfd1117c758d86b19d85e0"
         "0971f86d2c9c78582524a103cb9cf949522ae528f8054dc20107d999be673ff4e25ebf2f2928766b1248bec6e91697775f8446639ede46ad4df4053000000010"
-    , ed25519Neg 151 "R encodes y = 1 with the sign bit of x set"
+    , ed25519Neg
+        151
+        "R encodes y = 1 with the sign bit of x set"
         "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
         "313233343030"
         "0100000000000000000000000000000000000000000000000000000000000080c803ee1f2342aa96ff698a393d1ab5e66f3eda101d6d120b394c3fd32c117d0a"
@@ -215,18 +227,18 @@ negVectors =
             , negSig = unhex sig
             }
 
-doNegVerifyTest :: NegVec -> TestTree
+doNegVerifyTest :: NegVec -> Spec
 doNegVerifyTest NegVec{..} =
-    testCase (show negTc ++ ": " ++ negWhy) (False @=? EdDSA.verify negPrx pub negMsg sig)
+    it
+        (show negTc ++ ": " ++ negWhy)
+        (EdDSA.verify negPrx pub negMsg sig `shouldBe` False)
   where
     !sig = throwCryptoError $ EdDSA.signature negPrx negAlg negSig
     !pub = throwCryptoError $ EdDSA.publicKey negPrx negAlg negPub
 
 tests =
-    testGroup
-        "EdDSA"
-        [ testGroup "gen publickey" $ zipWith doPublicKeyTest [katZero ..] vectors
-        , testGroup "gen signature" $ zipWith doSignatureTest [katZero ..] vectors
-        , testGroup "verify sig" $ zipWith doVerifyTest [katZero ..] vectors
-        , testGroup "reject non-canonical encoding" $ map doNegVerifyTest negVectors
-        ]
+    describe "EdDSA" $ do
+        describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
+        describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
+        describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
+        describe "reject non-canonical encoding" $ mapM_ doNegVerifyTest negVectors

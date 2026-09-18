@@ -328,9 +328,10 @@ vectorsECDH =
 unhex :: ByteString -> ByteString
 unhex = fromRight (error "unhex") . convertFromBase Base16
 
-doECDHTest :: Show p => p -> (ByteString, ByteString, ByteString) -> TestTree
-doECDHTest i (priv, pub, shared) = testCase (show i) $
-    CryptoPassed (unhex shared) @=? (convert <$> ECC.ecdh prx sk pk)
+doECDHTest :: Show p => p -> (ByteString, ByteString, ByteString) -> Spec
+doECDHTest i (priv, pub, shared) =
+    it (show i) $
+        (convert <$> ECC.ecdh prx sk pk) `shouldBe` CryptoPassed (unhex shared)
   where
     prx = Just ECC.Curve_P256R1
     sk = throwCryptoError $ ECC.decodeScalar prx (unhex priv)
@@ -339,43 +340,44 @@ doECDHTest i (priv, pub, shared) = testCase (show i) $
 cryptoError :: CryptoFailable a -> Maybe CryptoError
 cryptoError = onCryptoFailure Just (const Nothing)
 
-doPointDecodeTest :: Show p => p -> VectorPoint -> TestTree
+doPointDecodeTest :: Show p => p -> VectorPoint -> Spec
 doPointDecodeTest i vector =
     case vpCurve vector of
         Curve curve ->
             let prx = Just curve -- using Maybe as Proxy
-             in testCase
+             in it
                     (show i)
-                    (vpError vector @=? cryptoError (ECC.decodePoint prx $ vpEncodedPoint vector))
+                    ( cryptoError (ECC.decodePoint prx $ vpEncodedPoint vector)
+                        `shouldBe` vpError vector
+                    )
 
-doWeakPointECDHTest :: Show p => p -> VectorPoint -> TestTree
+doWeakPointECDHTest :: Show p => p -> VectorPoint -> Spec
 doWeakPointECDHTest i vector =
     case vpCurve vector of
-        Curve curve -> testCase (show i) $ do
+        Curve curve -> it (show i) $ do
             let prx = Just curve -- using Maybe as Proxy
                 public = throwCryptoError $ ECC.decodePoint prx $ vpEncodedPoint vector
             keyPair <- ECC.curveGenerateKeyPair prx
-            vpError vector
-                @=? cryptoError (ECC.ecdh prx (ECC.keypairGetPrivate keyPair) public)
+            cryptoError (ECC.ecdh prx (ECC.keypairGetPrivate keyPair) public)
+                `shouldBe` vpError vector
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "ECC"
-        [ testGroup "decodePoint" $ zipWith doPointDecodeTest [katZero ..] vectorsPoint
-        , testGroup "ECDH KATs" $ zipWith doECDHTest [katZero ..] vectorsECDH
-        , testGroup "ECDH weak points" $
-            zipWith doWeakPointECDHTest [katZero ..] vectorsWeakPoint
-        , testGroup
-            "property"
-            [ testProperty "decodePoint.encodePoint==id" $ \testDRG (Curve curve) ->
+    describe "ECC" $ do
+        describe "decodePoint" $ zipWithM_ doPointDecodeTest [katZero ..] vectorsPoint
+        describe "ECDH KATs" $ zipWithM_ doECDHTest [katZero ..] vectorsECDH
+        describe "ECDH weak points" $
+            sequence_ $
+                zipWith doWeakPointECDHTest [katZero ..] vectorsWeakPoint
+        describe "property" $ do
+            prop "decodePoint.encodePoint==id" $ \testDRG (Curve curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     keyPair = withTestDRG testDRG $ ECC.curveGenerateKeyPair prx
                     p1 = ECC.keypairGetPublic keyPair
                     bs = ECC.encodePoint prx p1 :: ByteString
                     p2 = ECC.decodePoint prx bs
                  in CryptoPassed p1 == p2
-            , localOption (QuickCheckTests 20) $ testProperty "ECDH commutes" $ \testDRG (Curve curve) ->
+            modifyMaxSuccess (const 20) $ prop "ECDH commutes" $ \testDRG (Curve curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     (alice, bob) =
                         withTestDRG testDRG $
@@ -389,19 +391,19 @@ tests =
                  in aliceShared == bobShared
                         && aliceShared == CryptoPassed aliceShared'
                         && bobShared == CryptoPassed bobShared'
-            , testProperty "decodeScalar.encodeScalar==id" $ \testDRG (CurveArith curve) ->
+            prop "decodeScalar.encodeScalar==id" $ \testDRG (CurveArith curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     s1 = withTestDRG testDRG $ ECC.curveGenerateScalar prx
                     bs = ECC.encodeScalar prx s1 :: ByteString
                     s2 = ECC.decodeScalar prx bs
                  in CryptoPassed s1 == s2
-            , testProperty "scalarFromInteger.scalarToInteger==id" $ \testDRG (CurveArith curve) ->
+            prop "scalarFromInteger.scalarToInteger==id" $ \testDRG (CurveArith curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     s1 = withTestDRG testDRG $ ECC.curveGenerateScalar prx
                     bs = ECC.scalarToInteger prx s1
                     s2 = ECC.scalarFromInteger prx bs
                  in CryptoPassed s1 == s2
-            , localOption (QuickCheckTests 20) $ testProperty "(a + b).P = a.P + b.P" $ \testDRG (CurveArith curve) ->
+            modifyMaxSuccess (const 20) $ prop "(a + b).P = a.P + b.P" $ \testDRG (CurveArith curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     (s, a, b) =
                         withTestDRG testDRG $
@@ -412,7 +414,7 @@ tests =
                     p = ECC.pointBaseSmul prx s
                  in ECC.pointSmul prx (ECC.scalarAdd prx a b) p
                         == ECC.pointAdd prx (ECC.pointSmul prx a p) (ECC.pointSmul prx b p)
-            , localOption (QuickCheckTests 20) $ testProperty "(a * b).P = a.(b.P)" $ \testDRG (CurveArith curve) ->
+            modifyMaxSuccess (const 20) $ prop "(a * b).P = a.(b.P)" $ \testDRG (CurveArith curve) ->
                 let prx = Just curve -- using Maybe as Proxy
                     (s, a, b) =
                         withTestDRG testDRG $
@@ -423,5 +425,3 @@ tests =
                     p = ECC.pointBaseSmul prx s
                  in ECC.pointSmul prx (ECC.scalarMul prx a b) p
                         == ECC.pointSmul prx a (ECC.pointSmul prx b p)
-            ]
-        ]

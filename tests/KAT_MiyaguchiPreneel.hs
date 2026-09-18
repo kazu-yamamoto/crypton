@@ -19,37 +19,35 @@ hxs =
         . B8.pack
         . filter (/= ' ')
 
-gAES128 :: TestTree
+gAES128 :: Spec
 gAES128 =
     igroup
         "aes128"
         [ runMP128 B8.empty
-            @?= hxs "66e94bd4 ef8a2c3b 884cfa59 ca342b2e"
+            `shouldBe` hxs "66e94bd4 ef8a2c3b 884cfa59 ca342b2e"
         , runMP128 (hxs "01000000 00000000 00000000 00000000")
-            @?= hxs "46711816 e91d6ff0 59bbbf2b f58e0fd3"
+            `shouldBe` hxs "46711816 e91d6ff0 59bbbf2b f58e0fd3"
         , runMP128 (hxs "00000000 00000000 00000000 00000001")
-            @?= hxs "58e2fcce fa7e3061 367f1d57 a4e7455b"
+            `shouldBe` hxs "58e2fcce fa7e3061 367f1d57 a4e7455b"
         , runMP128
             ( hxs $
                 "00000000 00000000 00000000 00000000"
                     ++ "01"
             )
-            @?= hxs "a5ff35ae 097adf5d 646abf5e bf4c16f4"
+            `shouldBe` hxs "a5ff35ae 097adf5d 646abf5e bf4c16f4"
         ]
 
-igroup :: TestName -> [Assertion] -> TestTree
-igroup nm = testGroup nm . zipWith (flip ($)) [1 ..] . map icase
+igroup :: String -> [Expectation] -> Spec
+igroup nm = describe nm . sequence_ . zipWith (flip ($)) [1 ..] . map icase
   where
-    icase c i = testCase (show (i :: Int)) c
+    icase c i = it (show (i :: Int)) c
 
-vectors :: TestTree
+vectors :: Spec
 vectors =
-    testGroup
-        "KATs"
-        [gAES128]
+    describe "KATs" $ do
+        gAES128
 
-tests :: TestTree
+tests :: Spec
 tests =
-    testGroup
-        "MiyaguchiPreneel"
-        [vectors]
+    describe "MiyaguchiPreneel" $ do
+        vectors

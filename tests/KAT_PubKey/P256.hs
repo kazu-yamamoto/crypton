@@ -83,32 +83,45 @@ yV = 0x0c3527bd081c1c07b313bc1a0c3f845fb2fe22557699ccc8f1354e61a27b7f88
 
 validPointEdgeCases :: [(String, (Integer, Integer))]
 validPointEdgeCases =
-    [ ("x-zero-1", (0, 0x66485c780e2f83d72433bd5d84a06bb6541c2af31dae871728bf856a174f93f4))
-    , ("x-zero-2", (0, 0x99b7a386f1d07c29dbcc42a27b5f9449abe3d50de25178e8d7407a95e8b06c0b))
-    , ("y-one-1", (0x09e78d4ef60d05f750f6636209092bc43cbdd6b47e11a9de20a9feb2a50bb96c, 1))
-    , ("y-one-2", (0x8d0177ebab9c6e9e10db6dd095dbac0d6375e8a97b70f611875d877f0069d2c7, 1))
-    , ("y-one-3", (0x6916fac45e568b6b9e2e2ecd611b282e5fcc40a3067d601057f879ce5a8a73cc, 1))
+    [
+        ( "x-zero-1"
+        , (0, 0x66485c780e2f83d72433bd5d84a06bb6541c2af31dae871728bf856a174f93f4)
+        )
+    ,
+        ( "x-zero-2"
+        , (0, 0x99b7a386f1d07c29dbcc42a27b5f9449abe3d50de25178e8d7407a95e8b06c0b)
+        )
+    ,
+        ( "y-one-1"
+        , (0x09e78d4ef60d05f750f6636209092bc43cbdd6b47e11a9de20a9feb2a50bb96c, 1)
+        )
+    ,
+        ( "y-one-2"
+        , (0x8d0177ebab9c6e9e10db6dd095dbac0d6375e8a97b70f611875d877f0069d2c7, 1)
+        )
+    ,
+        ( "y-one-3"
+        , (0x6916fac45e568b6b9e2e2ecd611b282e5fcc40a3067d601057f879ce5a8a73cc, 1)
+        )
     ]
 
 tests =
-    testGroup
-        "P256"
-        [ testGroup
-            "scalar"
-            [ testProperty "marshalling" $ \(QAInteger r) ->
+    describe "P256" $ do
+        describe "scalar" $ do
+            prop "marshalling" $ \(QAInteger r) ->
                 let rBytes = i2ospScalar r
                  in case P256.scalarFromBinary rBytes of
                         CryptoFailed err -> error (show err)
                         CryptoPassed scalar -> rBytes `propertyEq` P256.scalarToBinary scalar
-            , testProperty "add" $ \r1 r2 ->
+            prop "add" $ \r1 r2 ->
                 let r = (unP256 r1 + unP256 r2) `mod` curveN
                     r' = P256.scalarAdd (unP256Scalar r1) (unP256Scalar r2)
                  in r `propertyEq` p256ScalarToInteger r'
-            , testProperty "add0" $ \r ->
+            prop "add0" $ \r ->
                 let v = unP256 r `mod` curveN
                     v' = P256.scalarAdd (unP256Scalar r) P256.scalarZero
                  in v `propertyEq` p256ScalarToInteger v'
-            , testProperty "sub" $ \r1 r2 ->
+            prop "sub" $ \r1 r2 ->
                 let r = (unP256 r1 - unP256 r2) `mod` curveN
                     r' = P256.scalarSub (unP256Scalar r1) (unP256Scalar r2)
                     v = (unP256 r2 - unP256 r1) `mod` curveN
@@ -117,80 +130,77 @@ tests =
                         [ eqTest "r1-r2" r (p256ScalarToInteger r')
                         , eqTest "r2-r1" v (p256ScalarToInteger v')
                         ]
-            , testProperty "sub0" $ \r ->
+            prop "sub0" $ \r ->
                 let v = unP256 r `mod` curveN
                     v' = P256.scalarSub (unP256Scalar r) P256.scalarZero
                  in v `propertyEq` p256ScalarToInteger v'
-            , testProperty "mul" $ \r1 r2 ->
+            prop "mul" $ \r1 r2 ->
                 let r = (unP256 r1 * unP256 r2) `mod` curveN
                     r' = P256.scalarMul (unP256Scalar r1) (unP256Scalar r2)
                  in r `propertyEq` p256ScalarToInteger r'
-            , testProperty "inv" $ \r' ->
+            prop "inv" $ \r' ->
                 let inv = inverseCoprimes (unP256 r') curveN
                     inv' = P256.scalarInv (unP256Scalar r')
                  in unP256 r' /= 0 ==> inv `propertyEq` p256ScalarToInteger inv'
-            , testProperty "inv-safe" $ \r' ->
+            prop "inv-safe" $ \r' ->
                 let inv = P256.scalarInv (unP256Scalar r')
                     inv' = P256.scalarInvSafe (unP256Scalar r')
                  in unP256 r' /= 0 ==> inv `propertyEq` inv'
-            , testProperty "inv-safe-mul" $ \r' ->
+            prop "inv-safe-mul" $ \r' ->
                 let inv = P256.scalarInvSafe (unP256Scalar r')
                     res = P256.scalarMul (unP256Scalar r') inv
                  in unP256 r' /= 0 ==> 1 `propertyEq` p256ScalarToInteger res
-            , testProperty "inv-safe-zero" $
+            prop "inv-safe-zero" $
                 let inv0 = P256.scalarInvSafe P256.scalarZero
                     invN = P256.scalarInvSafe P256.scalarN
                  in propertyHold
                         [ eqTest "scalarZero" P256.scalarZero inv0
                         , eqTest "scalarN" P256.scalarZero invN
                         ]
-            ]
-        , testGroup
-            "point"
-            [ testProperty "marshalling" $ \rx ry ->
+        describe "point" $ do
+            prop "marshalling" $ \rx ry ->
                 let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
                     b = P256.pointToBinary p :: Bytes
                     p' = P256.unsafePointFromBinary b
                  in propertyHold [eqTest "point" (CryptoPassed p) p']
-            , testProperty "marshalling-integer" $ \rx ry ->
+            prop "marshalling-integer" $ \rx ry ->
                 let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
                     (x, y) = P256.pointToIntegers p
                  in propertyHold [eqTest "x" (unP256 rx) x, eqTest "y" (unP256 ry) y]
-            , testCase "valid-point-1" $ casePointIsValid (xS, yS)
-            , testCase "valid-point-2" $ casePointIsValid (xR, yR)
-            , testCase "valid-point-3" $ casePointIsValid (xT, yT)
-            , -- The quotient estimate in crypton_p256_modmul can exceed the
-              -- true quotient, and the resulting borrow used to abort the
-              -- process on an assertion inside the reduction rather than
-              -- being corrected.  Both points below are on the curve.
-              testCase "valid-point-reduction-1" $ casePointIsValid (xU, yU)
-            , testCase "valid-point-reduction-2" $ casePointIsValid (xV, yV)
-            , testGroup "valid-point-edge-cases" $
-                map (\(name, point) -> testCase name $ casePointIsValid point) validPointEdgeCases
-            , testCase "point-add-1" $
+            it "valid-point-1" $ casePointIsValid (xS, yS)
+            it "valid-point-2" $ casePointIsValid (xR, yR)
+            it "valid-point-3" $ casePointIsValid (xT, yT)
+            -- The quotient estimate in crypton_p256_modmul can exceed the
+            -- true quotient, and the resulting borrow used to abort the
+            -- process on an assertion inside the reduction rather than
+            -- being corrected.  Both points below are on the curve.
+            it "valid-point-reduction-1" $ casePointIsValid (xU, yU)
+            it "valid-point-reduction-2" $ casePointIsValid (xV, yV)
+            describe "valid-point-edge-cases" $
+                sequence_ $
+                    map (\(name, point) -> it name $ casePointIsValid point) validPointEdgeCases
+            it "point-add-1" $
                 let s = P256.pointFromIntegers (xS, yS)
                     t = P256.pointFromIntegers (xT, yT)
                     r = P256.pointFromIntegers (xR, yR)
-                 in r @=? P256.pointAdd s t
-            , testProperty "point-add-infinity" casePointAddInfinity
-            , testProperty "lift-to-curve" propertyLiftToCurve
-            , testProperty "point-add" propertyPointAdd
-            , testProperty "point-add-infinity-identity" propertyPointAddInfinityIdentity
-            , testProperty "point-add-inverse" propertyPointAddInverse
-            , testProperty "point-negate" propertyPointNegate
-            , testProperty "point-mul" propertyPointMul
-            , testProperty "infinity" $
+                 in P256.pointAdd s t `shouldBe` r
+            prop "point-add-infinity" casePointAddInfinity
+            prop "lift-to-curve" propertyLiftToCurve
+            prop "point-add" propertyPointAdd
+            prop "point-add-infinity-identity" propertyPointAddInfinityIdentity
+            prop "point-add-inverse" propertyPointAddInverse
+            prop "point-negate" propertyPointNegate
+            prop "point-mul" propertyPointMul
+            prop "infinity" $
                 let gN = P256.toPoint P256.scalarN
                     g1 = P256.pointBase
                  in propertyHold
                         [ eqTest "zero" True (P256.pointIsAtInfinity gN)
                         , eqTest "base" False (P256.pointIsAtInfinity g1)
                         ]
-            ]
-        ]
   where
     casePointIsValid pointTuple =
-        let s = P256.pointFromIntegers pointTuple in True @=? P256.pointIsValid s
+        let s = P256.pointFromIntegers pointTuple in P256.pointIsValid s `shouldBe` True
 
     propertyLiftToCurve r =
         let p = P256.toPoint (unP256Scalar r)

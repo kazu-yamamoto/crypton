@@ -122,12 +122,12 @@ vectorsKey1 =
         }
     ]
 
-doEncryptionTest key i vec = testCase (show i) (Right (cipherText vec) @=? actual)
+doEncryptionTest key i vec = it (show i) (actual `shouldBe` Right (cipherText vec))
   where
     actual =
         OAEP.encryptWithSeed (seed vec) (OAEP.defaultOAEPParams SHA1) key (message vec)
 
-doDecryptionTest key i vec = testCase (show i) (Right (message vec) @=? actual)
+doDecryptionTest key i vec = it (show i) (actual `shouldBe` Right (message vec))
   where
     actual = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key (cipherText vec)
 
@@ -139,19 +139,17 @@ doDecryptionTest key i vec = testCase (show i) (Right (message vec) @=? actual)
 --
 -- Nothing exercised them before, and unpad is about to be rewritten, so pin
 -- the behaviour down first.
-oaepRejectTests :: TestTree
+oaepRejectTests :: Spec
 oaepRejectTests =
-    testGroup
-        "rejected blocks"
-        [ testCase "the untouched block still decrypts" $
-            Right (message vec) @=? decrypt' (reencrypt em)
-        , rejects "a leading octet that is not 00" (poke 0 1 em)
-        , rejects "a corrupted masked seed" (flipBit 3 em)
-        , rejects "a corrupted masked db" (flipBit 60 em)
-        , rejects "a corrupted final octet" (flipBit (B.length em - 1) em)
-        , testCase "a ciphertext of the wrong length" $
-            Left MessageSizeIncorrect @=? decrypt' (B.drop 1 (cipherText vec))
-        ]
+    describe "rejected blocks" $ do
+        it "the untouched block still decrypts" $
+            decrypt' (reencrypt em) `shouldBe` Right (message vec)
+        rejects "a leading octet that is not 00" (poke 0 1 em)
+        rejects "a corrupted masked seed" (flipBit 3 em)
+        rejects "a corrupted masked db" (flipBit 60 em)
+        rejects "a corrupted final octet" (flipBit (B.length em - 1) em)
+        it "a ciphertext of the wrong length" $
+            decrypt' (B.drop 1 (cipherText vec)) `shouldBe` Left MessageSizeIncorrect
   where
     key = rsaKey1
     vec = head vectorsKey1
@@ -159,22 +157,20 @@ oaepRejectTests =
     reencrypt = ep (private_pub key)
     decrypt' = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key
     rejects name bad =
-        testCase name (Left MessageNotRecognized @=? decrypt' (reencrypt bad))
+        it name (decrypt' (reencrypt bad) `shouldBe` Left MessageNotRecognized)
     poke i w bs =
         B.concat [B.take i bs, B.singleton w, B.drop (i + 1) bs]
     flipBit i bs = poke i (B.index bs i `xor` 1) bs
 
 oaepTests =
-    testGroup
-        "RSA-OAEP"
-        [ testGroup
-            "internal"
-            [ doEncryptionTest (private_pub rsaKeyInt) (0 :: Int) vectorInt
-            , doDecryptionTest rsaKeyInt (0 :: Int) vectorInt
-            ]
-        , testGroup "encryption key 1024 bits" $
-            zipWith (doEncryptionTest $ private_pub rsaKey1) [katZero ..] vectorsKey1
-        , testGroup "decryption key 1024 bits" $
-            zipWith (doDecryptionTest rsaKey1) [katZero ..] vectorsKey1
-        , oaepRejectTests
-        ]
+    describe "RSA-OAEP" $ do
+        describe "internal" $ do
+            doEncryptionTest (private_pub rsaKeyInt) (0 :: Int) vectorInt
+            doDecryptionTest rsaKeyInt (0 :: Int) vectorInt
+        describe "encryption key 1024 bits" $
+            sequence_ $
+                zipWith (doEncryptionTest $ private_pub rsaKey1) [katZero ..] vectorsKey1
+        describe "decryption key 1024 bits" $
+            sequence_ $
+                zipWith (doDecryptionTest rsaKey1) [katZero ..] vectorsKey1
+        oaepRejectTests

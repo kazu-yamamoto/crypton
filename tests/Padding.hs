@@ -21,26 +21,24 @@ zeroCases =
 
 -- instance Arbitrary where
 
-testPad :: Int -> (B.ByteString, Int, B.ByteString) -> TestTree
+testPad :: Int -> (B.ByteString, Int, B.ByteString) -> Spec
 testPad n (inp, sz, padded) =
-    testCase (show n) $
+    it (show n) $
         propertyHoldCase
             [ eqTest "padded" padded (pad (PKCS7 sz) inp)
             , eqTest "unpadded" (Just inp) (unpad (PKCS7 sz) padded)
             ]
 
 testZeroPad
-    :: Int -> (B.ByteString, Int, B.ByteString, Maybe B.ByteString) -> TestTree
+    :: Int -> (B.ByteString, Int, B.ByteString, Maybe B.ByteString) -> Spec
 testZeroPad n (inp, sz, padded, unpadded) =
-    testCase (show n) $
+    it (show n) $
         propertyHoldCase
             [ eqTest "padded" padded (pad (ZERO sz) inp)
             , eqTest "unpadded" unpadded (unpad (ZERO sz) padded)
             ]
 
 tests =
-    testGroup
-        "Padding"
-        [ testGroup "Cases" $ zipWith testPad [1 ..] cases
-        , testGroup "ZeroCases" $ zipWith testZeroPad [1 ..] zeroCases
-        ]
+    describe "Padding" $ do
+        describe "Cases" $ zipWithM_ testPad [1 ..] cases
+        describe "ZeroCases" $ zipWithM_ testZeroPad [1 ..] zeroCases

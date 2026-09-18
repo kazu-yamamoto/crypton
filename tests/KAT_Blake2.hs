@@ -133,22 +133,21 @@ vectorsBlake2spKAT =
   where
     fixedKey = B.pack [0x00 .. 0x1f]
 
-macTests :: [TestTree]
+macTests :: [Spec]
 macTests =
-    [ testGroup "Blake2b_512" (concatMap toMACTest $ zip is vectorsBlake2bKAT)
-    , testGroup "Blake2bp_512" (concatMap toMACTest $ zip is vectorsBlake2bpKAT)
-    , testGroup "Blake2s_512" (concatMap toMACTest $ zip is vectorsBlake2sKAT)
-    , testGroup "Blake2sp_512" (concatMap toMACTest $ zip is vectorsBlake2spKAT)
+    [ describe "Blake2b_512" $ mapM_ toMACTest $ zip is vectorsBlake2bKAT
+    , describe "Blake2bp_512" $ mapM_ toMACTest $ zip is vectorsBlake2bpKAT
+    , describe "Blake2s_512" $ mapM_ toMACTest $ zip is vectorsBlake2sKAT
+    , describe "Blake2sp_512" $ mapM_ toMACTest $ zip is vectorsBlake2spKAT
     ]
   where
-    toMACTest (i, MACVector{..}) =
-        [ testCase (show i) (macResult @=? KB.keyedBlake2 macKey macMessage)
-        , testCase
+    toMACTest (i, MACVector{..}) = do
+        it (show i) (KB.keyedBlake2 macKey macMessage `shouldBe` macResult)
+        it
             ("incr-" ++ show i)
-            ( macResult
-                @=? KB.finalize (KB.update (KB.initialize macKey) macMessage)
+            ( KB.finalize (KB.update (KB.initialize macKey) macMessage)
+                `shouldBe` macResult
             )
-        ]
     is :: [Int]
     is = [1 ..]
 
@@ -171,7 +170,7 @@ instance KB.HashBlake2 a => Arbitrary (MacIncrementalList a) where
         msgs <- choose (1, 20) >>= \n -> replicateM n (arbitraryBSof 1 99)
         return $ MacIncrementalList key msgs (KB.keyedBlake2 key (B.concat msgs))
 
-macIncrementalTests :: [TestTree]
+macIncrementalTests :: [Spec]
 macIncrementalTests =
     [ testIncrProperties "Blake2b_512" (Blake2b :: Blake2b 512)
     , testIncrProperties "Blake2bp_512" (Blake2bp :: Blake2bp 512)
@@ -179,13 +178,11 @@ macIncrementalTests =
     , testIncrProperties "Blake2sp_256" (Blake2sp :: Blake2sp 256)
     ]
   where
-    testIncrProperties :: KB.HashBlake2 a => TestName -> a -> TestTree
+    testIncrProperties :: KB.HashBlake2 a => String -> a -> Spec
     testIncrProperties name a =
-        testGroup
-            name
-            [ testProperty "list-one" (prop_inc0 a)
-            , testProperty "list-multi" (prop_inc1 a)
-            ]
+        describe name $ do
+            prop "list-one" (prop_inc0 a)
+            prop "list-multi" (prop_inc1 a)
 
     prop_inc0 :: KB.HashBlake2 a => a -> MacIncremental a -> Bool
     prop_inc0 _ (MacIncremental secret msg result) =
@@ -196,8 +193,6 @@ macIncrementalTests =
         result `assertEq` KB.finalize (foldl' KB.update (KB.initialize secret) msgs)
 
 tests =
-    testGroup
-        "Blake2"
-        [ testGroup "KATs" macTests
-        , testGroup "properties" macIncrementalTests
-        ]
+    describe "Blake2" $ do
+        describe "KATs" $ sequence_ macTests
+        describe "properties" $ sequence_ macIncrementalTests

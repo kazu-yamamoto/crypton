@@ -18,7 +18,7 @@ import Data.ByteString.Char8 as X ()
 import Data.Foldable as X (foldl')
 import Data.Monoid as X
 
-import Test.Tasty as X
-import Test.Tasty.HUnit as X
-import Test.Tasty.QuickCheck as X hiding (vector)
+import Test.Hspec as X
+import Test.Hspec.QuickCheck as X (modifyMaxSuccess, prop)
+import Test.QuickCheck as X hiding (vector)
 import Utils as X

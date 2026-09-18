@@ -129,32 +129,33 @@ sha3_512_MAC_Vectors =
             "\x5a\x4b\xfe\xab\x61\x66\x42\x7c\x7a\x36\x47\xb7\x47\x29\x2b\x83\x84\x53\x7c\xdb\x89\xaf\xb3\xbf\x56\x65\xe4\xc5\xe7\x09\x35\x0b\x28\x7b\xae\xc9\x21\xfd\x7c\xa0\xee\x7a\x0c\x31\xd0\x22\xa9\x5e\x1f\xc9\x2b\xa9\xd7\x7d\xf8\x83\x96\x02\x75\xbe\xb4\xe6\x20\x24"
     ]
 
-macTests :: [TestTree]
+macTests :: [Spec]
 macTests =
-    [ testGroup "md5" $ concatMap toMACTest $ zip is md5MACVectors
-    , testGroup "sha1" $ concatMap toMACTest $ zip is sha1MACVectors
-    , testGroup "sha256" $ concatMap toMACTest $ zip is sha256MACVectors
-    , testGroup "keccak-224" $ concatMap toMACTest $ zip is keccak_224_MAC_Vectors
-    , testGroup "keccak-256" $ concatMap toMACTest $ zip is keccak_256_MAC_Vectors
-    , testGroup "keccak-384" $ concatMap toMACTest $ zip is keccak_384_MAC_Vectors
-    , testGroup "keccak-512" $ concatMap toMACTest $ zip is keccak_512_MAC_Vectors
-    , testGroup "sha3-224" $ concatMap toMACTest $ zip is sha3_224_MAC_Vectors
-    , testGroup "sha3-256" $ concatMap toMACTest $ zip is sha3_256_MAC_Vectors
-    , testGroup "sha3-384" $ concatMap toMACTest $ zip is sha3_384_MAC_Vectors
-    , testGroup "sha3-512" $ concatMap toMACTest $ zip is sha3_512_MAC_Vectors
+    [ describe "md5" $ mapM_ toMACTest $ zip is md5MACVectors
+    , describe "sha1" $ mapM_ toMACTest $ zip is sha1MACVectors
+    , describe "sha256" $ mapM_ toMACTest $ zip is sha256MACVectors
+    , describe "keccak-224" $ mapM_ toMACTest $ zip is keccak_224_MAC_Vectors
+    , describe "keccak-256" $ mapM_ toMACTest $ zip is keccak_256_MAC_Vectors
+    , describe "keccak-384" $ mapM_ toMACTest $ zip is keccak_384_MAC_Vectors
+    , describe "keccak-512" $ mapM_ toMACTest $ zip is keccak_512_MAC_Vectors
+    , describe "sha3-224" $ mapM_ toMACTest $ zip is sha3_224_MAC_Vectors
+    , describe "sha3-256" $ mapM_ toMACTest $ zip is sha3_256_MAC_Vectors
+    , describe "sha3-384" $ mapM_ toMACTest $ zip is sha3_384_MAC_Vectors
+    , describe "sha3-512" $ mapM_ toMACTest $ zip is sha3_512_MAC_Vectors
     ]
   where
-    toMACTest (i, macVector) =
-        [ testCase
+    toMACTest (i, macVector) = do
+        it
             (show i)
-            (macResult macVector @=? HMAC.hmac (macKey macVector) (macSecret macVector))
-        , testCase
-            ("incr-" ++ show i)
-            ( macResult macVector
-                @=? HMAC.finalize
-                    (HMAC.update (HMAC.initialize (macKey macVector)) (macSecret macVector))
+            ( HMAC.hmac (macKey macVector) (macSecret macVector)
+                `shouldBe` macResult macVector
             )
-        ]
+        it
+            ("incr-" ++ show i)
+            ( HMAC.finalize
+                (HMAC.update (HMAC.initialize (macKey macVector)) (macSecret macVector))
+                `shouldBe` macResult macVector
+            )
     is :: [Int]
     is = [1 ..]
 
@@ -176,7 +177,7 @@ instance HashAlgorithm a => Arbitrary (MacIncrementalList a) where
         msgs <- choose (1, 20) >>= \n -> replicateM n (arbitraryBSof 1 99)
         return $ MacIncrementalList key msgs (HMAC.hmac key (B.concat msgs))
 
-macIncrementalTests :: [TestTree]
+macIncrementalTests :: [Spec]
 macIncrementalTests =
     [ testIncrProperties MD5
     , testIncrProperties SHA1
@@ -189,11 +190,9 @@ macIncrementalTests =
   where
     -- testIncrProperties :: HashAlgorithm a => a -> [Property]
     testIncrProperties a =
-        testGroup
-            (show a)
-            [ testProperty "list-one" (prop_inc0 a)
-            , testProperty "list-multi" (prop_inc1 a)
-            ]
+        describe (show a) $ do
+            prop "list-one" (prop_inc0 a)
+            prop "list-multi" (prop_inc1 a)
 
     prop_inc0 :: HashAlgorithm a => a -> MacIncremental a -> Bool
     prop_inc0 _ (MacIncremental secret msg result) =
@@ -205,8 +204,6 @@ macIncrementalTests =
             `assertEq` HMAC.finalize (foldl' HMAC.update (HMAC.initialize secret) msgs)
 
 tests =
-    testGroup
-        "HMAC"
-        [ testGroup "KATs" macTests
-        , testGroup "properties" macIncrementalTests
-        ]
+    describe "HMAC" $ do
+        describe "KATs" $ sequence_ macTests
+        describe "properties" $ sequence_ macIncrementalTests

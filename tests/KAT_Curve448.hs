@@ -35,16 +35,14 @@ aliceMultBob =
     "\x07\xff\xf4\x18\x1a\xc6\xcc\x95\xec\x1c\x16\xa9\x4a\x0f\x74\xd1\x2d\xa2\x32\xce\x40\xa7\x75\x52\x28\x1d\x28\x2b\xb6\x0c\x0b\x56\xfd\x24\x64\xc3\x35\x54\x39\x36\x52\x1c\x24\x40\x30\x85\xd5\x9a\x44\x9a\x50\x37\x51\x4a\x87\x9d"
         :: ByteString
 
-katTests :: [TestTree]
+katTests :: [Spec]
 katTests =
-    [ testCase "0" (aliceMultBob @=? B.convert (Curve448.dh alicePublic bobPrivate))
-    , testCase "1" (aliceMultBob @=? B.convert (Curve448.dh bobPublic alicePrivate))
-    , testCase "2" (alicePublic @=? Curve448.toPublic alicePrivate)
-    , testCase "3" (bobPublic @=? Curve448.toPublic bobPrivate)
+    [ it "0" (B.convert (Curve448.dh alicePublic bobPrivate) `shouldBe` aliceMultBob)
+    , it "1" (B.convert (Curve448.dh bobPublic alicePrivate) `shouldBe` aliceMultBob)
+    , it "2" (Curve448.toPublic alicePrivate `shouldBe` alicePublic)
+    , it "3" (Curve448.toPublic bobPrivate `shouldBe` bobPublic)
     ]
 
 tests =
-    testGroup
-        "Curve448"
-        [ testGroup "KATs" katTests
-        ]
+    describe "Curve448" $ do
+        describe "KATs" $ sequence_ katTests

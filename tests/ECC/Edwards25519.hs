@@ -41,46 +41,42 @@ torsion8 =
             )
 
 tests =
-    testGroup
-        "ECC.Edwards25519"
-        [ testGroup
-            "vectors"
-            [ testCase "11*G" $ p011 @=? toPoint s011
-            , testCase "123*G" $ p123 @=? toPoint s123
-            , testCase "134*G" $ p134 @=? toPoint s134
-            , testCase "123*G + 11*G" $ p134 @=? pointAdd p123 p011
-            ]
-        , testGroup
-            "scalar arithmetic"
-            [ testProperty "scalarDecodeLong.scalarEncode==id" $ \s ->
+    describe "ECC.Edwards25519" $ do
+        describe "vectors" $ do
+            it "11*G" $ toPoint s011 `shouldBe` p011
+            it "123*G" $ toPoint s123 `shouldBe` p123
+            it "134*G" $ toPoint s134 `shouldBe` p134
+            it "123*G + 11*G" $ pointAdd p123 p011 `shouldBe` p134
+        describe "scalar arithmetic" $ do
+            prop "scalarDecodeLong.scalarEncode==id" $ \s ->
                 let bs = scalarEncode s :: ByteString
                     ss = scalarDecodeLong bs
                  in CryptoPassed s `propertyEq` ss
-            , testCase "curve order" $ s0 @=? sN
-            , testProperty "addition with zero" $ \s ->
+            it "curve order" $ sN `shouldBe` s0
+            prop "addition with zero" $ \s ->
                 propertyHold
                     [ eqTest "zero left" s (scalarAdd s0 s)
                     , eqTest "zero right" s (scalarAdd s s0)
                     ]
-            , testProperty "addition associative" $ \sa sb sc ->
+            prop "addition associative" $ \sa sb sc ->
                 scalarAdd sa (scalarAdd sb sc) === scalarAdd (scalarAdd sa sb) sc
-            , testProperty "addition commutative" $ \sa sb ->
+            prop "addition commutative" $ \sa sb ->
                 scalarAdd sa sb === scalarAdd sb sa
-            , testProperty "multiplication with zero" $ \s ->
+            prop "multiplication with zero" $ \s ->
                 propertyHold
                     [ eqTest "zero left" s0 (scalarMul s0 s)
                     , eqTest "zero right" s0 (scalarMul s s0)
                     ]
-            , testProperty "multiplication with one" $ \s ->
+            prop "multiplication with one" $ \s ->
                 propertyHold
                     [ eqTest "one left" s (scalarMul s1 s)
                     , eqTest "one right" s (scalarMul s s1)
                     ]
-            , testProperty "multiplication associative" $ \sa sb sc ->
+            prop "multiplication associative" $ \sa sb sc ->
                 scalarMul sa (scalarMul sb sc) === scalarMul (scalarMul sa sb) sc
-            , testProperty "multiplication commutative" $ \sa sb ->
+            prop "multiplication commutative" $ \sa sb ->
                 scalarMul sa sb === scalarMul sb sa
-            , testProperty "multiplication distributive" $ \sa sb sc ->
+            prop "multiplication distributive" $ \sa sb sc ->
                 propertyHold
                     [ eqTest
                         "distributive left"
@@ -91,56 +87,52 @@ tests =
                         ((sb `scalarMul` sa) `scalarAdd` (sc `scalarMul` sa))
                         ((sb `scalarAdd` sc) `scalarMul` sa)
                     ]
-            ]
-        , testGroup
-            "point arithmetic"
-            [ testProperty "pointDecode.pointEncode==id" $ \p ->
+        describe "point arithmetic" $ do
+            prop "pointDecode.pointEncode==id" $ \p ->
                 let bs = pointEncode p :: ByteString
                     p' = pointDecode bs
                  in CryptoPassed p `propertyEq` p'
-            , testProperty "pointEncode.pointDecode==id" $ \p ->
+            prop "pointEncode.pointDecode==id" $ \p ->
                 let b = pointEncode p :: ByteString
                     p' = pointDecode b
                     b' = pointEncode `fmap` p'
                  in CryptoPassed b `propertyEq` b'
-            , testProperty "addition with identity" $ \p ->
+            prop "addition with identity" $ \p ->
                 propertyHold
                     [ eqTest "identity left" p (pointAdd p0 p)
                     , eqTest "identity right" p (pointAdd p p0)
                     ]
-            , testProperty "addition associative" $ \pa pb pc ->
+            prop "addition associative" $ \pa pb pc ->
                 pointAdd pa (pointAdd pb pc) === pointAdd (pointAdd pa pb) pc
-            , testProperty "addition commutative" $ \pa pb ->
+            prop "addition commutative" $ \pa pb ->
                 pointAdd pa pb === pointAdd pb pa
-            , testProperty "negation" $ \p ->
+            prop "negation" $ \p ->
                 p0 `propertyEq` pointAdd p (pointNegate p)
-            , testProperty "doubling" $ \p ->
+            prop "doubling" $ \p ->
                 pointAdd p p `propertyEq` pointDouble p
-            , testProperty "multiplication by cofactor" $ \p ->
+            prop "multiplication by cofactor" $ \p ->
                 pointMul s8 p `propertyEq` pointMulByCofactor p
-            , testProperty "prime order" $ \(PrimeOrder p) ->
+            prop "prime order" $ \(PrimeOrder p) ->
                 True `propertyEq` pointHasPrimeOrder p
-            , testCase "8-torsion point" $ do
+            it "8-torsion point" $ do
                 assertBool "mul by 4" $ p0 /= pointMul s4 torsion8
                 assertBool "mul by 8" $ p0 == pointMul s8 torsion8
-            , testProperty "scalarmult with zero" $ \p ->
+            prop "scalarmult with zero" $ \p ->
                 p0 `propertyEq` pointMul s0 p
-            , testProperty "scalarmult with one" $ \p ->
+            prop "scalarmult with one" $ \p ->
                 p `propertyEq` pointMul s1 p
-            , testProperty "scalarmult with two" $ \p ->
+            prop "scalarmult with two" $ \p ->
                 pointDouble p `propertyEq` pointMul s2 p
-            , testProperty "scalarmult with curve order - 1" $ \p ->
+            prop "scalarmult with curve order - 1" $ \p ->
                 pointHasPrimeOrder p === (pointNegate p == pointMul sI p)
-            , testProperty "scalarmult commutative" $ \a b ->
+            prop "scalarmult commutative" $ \a b ->
                 pointMul a (toPoint b) === pointMul b (toPoint a)
-            , testProperty "scalarmult distributive" $ \x y (PrimeOrder p) ->
+            prop "scalarmult distributive" $ \x y (PrimeOrder p) ->
                 let pR = pointMul x p `pointAdd` pointMul y p
                  in pR `propertyEq` pointMul (x `scalarAdd` y) p
-            , testProperty "double scalarmult" $ \n1 n2 p ->
+            prop "double scalarmult" $ \n1 n2 p ->
                 let pR = pointAdd (toPoint n1) (pointMul n2 p)
                  in pR `propertyEq` pointsMulVarTime n1 n2 p
-            ]
-        ]
   where
     p0 = toPoint s0
     s0 = smallScalar 0

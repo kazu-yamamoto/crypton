@@ -508,12 +508,10 @@ test-suite test-crypton
     build-depends:
         base >=4.13 && <5,
         bytestring,
+        QuickCheck,
         crypton,
-        ram,
-        tasty,
-        tasty-hunit,
-        tasty-kat,
-        tasty-quickcheck
+        hspec,
+        ram
 
 benchmark bench-crypton
     type:             exitcode-stdio-1.0

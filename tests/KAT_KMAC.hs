@@ -87,20 +87,19 @@ vectors256 =
         }
     ]
 
-macTests :: [TestTree]
+macTests :: [Spec]
 macTests =
-    [ testGroup "SHAKE128" (concatMap toMACTest $ zip is vectors128)
-    , testGroup "SHAKE256" (concatMap toMACTest $ zip is vectors256)
+    [ describe "SHAKE128" $ mapM_ toMACTest $ zip is vectors128
+    , describe "SHAKE256" $ mapM_ toMACTest $ zip is vectors256
     ]
   where
-    toMACTest (i, MACVector{..}) =
-        [ testCase (show i) (macResult @=? KMAC.kmac macString macKey macSecret)
-        , testCase
+    toMACTest (i, MACVector{..}) = do
+        it (show i) (KMAC.kmac macString macKey macSecret `shouldBe` macResult)
+        it
             ("incr-" ++ show i)
-            ( macResult
-                @=? KMAC.finalize (KMAC.update (KMAC.initialize macString macKey) macSecret)
+            ( KMAC.finalize (KMAC.update (KMAC.initialize macString macKey) macSecret)
+                `shouldBe` macResult
             )
-        ]
     is :: [Int]
     is = [1 ..]
 
@@ -125,19 +124,17 @@ instance KMAC.HashSHAKE a => Arbitrary (MacIncrementalList a) where
         msgs <- choose (1, 20) >>= \n -> replicateM n (arbitraryBSof 1 99)
         return $ MacIncrementalList str key msgs (KMAC.kmac str key (B.concat msgs))
 
-macIncrementalTests :: [TestTree]
+macIncrementalTests :: [Spec]
 macIncrementalTests =
     [ testIncrProperties "SHAKE128_256" (SHAKE128 :: SHAKE128 256)
     , testIncrProperties "SHAKE256_512" (SHAKE256 :: SHAKE256 512)
     ]
   where
-    testIncrProperties :: KMAC.HashSHAKE a => TestName -> a -> TestTree
+    testIncrProperties :: KMAC.HashSHAKE a => String -> a -> Spec
     testIncrProperties name a =
-        testGroup
-            name
-            [ testProperty "list-one" (prop_inc0 a)
-            , testProperty "list-multi" (prop_inc1 a)
-            ]
+        describe name $ do
+            prop "list-one" (prop_inc0 a)
+            prop "list-multi" (prop_inc1 a)
 
     prop_inc0 :: KMAC.HashSHAKE a => a -> MacIncremental a -> Bool
     prop_inc0 _ (MacIncremental str secret msg result) =
@@ -149,8 +146,6 @@ macIncrementalTests =
             `assertEq` KMAC.finalize (foldl' KMAC.update (KMAC.initialize str secret) msgs)
 
 tests =
-    testGroup
-        "KMAC"
-        [ testGroup "KATs" macTests
-        , testGroup "properties" macIncrementalTests
-        ]
+    describe "KMAC" $ do
+        describe "KATs" $ sequence_ macTests
+        describe "properties" $ sequence_ macIncrementalTests

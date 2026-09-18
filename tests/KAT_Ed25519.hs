@@ -67,18 +67,18 @@ vectors =
         }
     ]
 
-doPublicKeyTest i vec = testCase (show i) (pub @=? Ed25519.toPublic sec)
+doPublicKeyTest i vec = it (show i) (Ed25519.toPublic sec `shouldBe` pub)
   where
     !pub = throwCryptoError $ Ed25519.publicKey (vecPub vec)
     !sec = throwCryptoError $ Ed25519.secretKey (vecSec vec)
 
-doSignatureTest i vec = testCase (show i) (sig @=? Ed25519.sign sec pub (vecMsg vec))
+doSignatureTest i vec = it (show i) (Ed25519.sign sec pub (vecMsg vec) `shouldBe` sig)
   where
     !sig = throwCryptoError $ Ed25519.signature (vecSig vec)
     !pub = throwCryptoError $ Ed25519.publicKey (vecPub vec)
     !sec = throwCryptoError $ Ed25519.secretKey (vecSec vec)
 
-doVerifyTest i vec = testCase (show i) (True @=? Ed25519.verify pub (vecMsg vec) sig)
+doVerifyTest i vec = it (show i) (Ed25519.verify pub (vecMsg vec) sig `shouldBe` True)
   where
     !sig = throwCryptoError $ Ed25519.signature (vecSig vec)
     !pub = throwCryptoError $ Ed25519.publicKey (vecPub vec)
@@ -99,7 +99,8 @@ negVectors =
     [ NegVec
         { negTc = 63
         , negWhy = "s replaced by s + L"
-        , negPub = unhex "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
+        , negPub =
+            unhex "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa"
         , negMsg = unhex "54657374"
         , negSig =
             unhex
@@ -108,27 +109,29 @@ negVectors =
     , NegVec
         { negTc = 85
         , negWhy = "s just above the bound"
-        , negPub = unhex "100fdf47fb94f1536a4f7c3fda27383fa03375a8f527c537e6f1703c47f94f86"
-        , negMsg = unhex "6a0bc2b0057cedfc0fa2e3f7f7d39279b30f454a69dfd1117c758d86b19d85e0"
+        , negPub =
+            unhex "100fdf47fb94f1536a4f7c3fda27383fa03375a8f527c537e6f1703c47f94f86"
+        , negMsg =
+            unhex "6a0bc2b0057cedfc0fa2e3f7f7d39279b30f454a69dfd1117c758d86b19d85e0"
         , negSig =
             unhex
                 "0971f86d2c9c78582524a103cb9cf949522ae528f8054dc20107d999be673ff4e25ebf2f2928766b1248bec6e91697775f8446639ede46ad4df4053000000010"
         }
     ]
 
-doNegVerifyTest :: NegVec -> TestTree
+doNegVerifyTest :: NegVec -> Spec
 doNegVerifyTest NegVec{..} =
-    testCase (show negTc ++ ": " ++ negWhy) (False @=? Ed25519.verify pub negMsg sig)
+    it
+        (show negTc ++ ": " ++ negWhy)
+        (Ed25519.verify pub negMsg sig `shouldBe` False)
   where
     !sig = throwCryptoError $ Ed25519.signature negSig
     !pub = throwCryptoError $ Ed25519.publicKey negPub
 
 tests =
-    testGroup
-        "Ed25519"
-        [ testCase "gen secretkey" (Ed25519.generateSecretKey *> pure ())
-        , testGroup "gen publickey" $ zipWith doPublicKeyTest [katZero ..] vectors
-        , testGroup "gen signature" $ zipWith doSignatureTest [katZero ..] vectors
-        , testGroup "verify sig" $ zipWith doVerifyTest [katZero ..] vectors
-        , testGroup "reject non-canonical scalar" $ map doNegVerifyTest negVectors
-        ]
+    describe "Ed25519" $ do
+        it "gen secretkey" (Ed25519.generateSecretKey *> pure () :: Expectation)
+        describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
+        describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
+        describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
+        describe "reject non-canonical scalar" $ mapM_ doNegVerifyTest negVectors

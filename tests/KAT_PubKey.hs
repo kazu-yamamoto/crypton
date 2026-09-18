@@ -2,8 +2,8 @@
 
 module KAT_PubKey (tests) where
 
-import Test.Tasty
-import Test.Tasty.HUnit
+import Control.Monad (zipWithM_)
+import Test.Hspec
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -28,7 +28,7 @@ data VectorMgf = VectorMgf
     , dbMask :: ByteString
     }
 
-doMGFTest i vmgf = testCase (show i) (dbMask vmgf @=? actual)
+doMGFTest i vmgf = it (show i) (actual `shouldBe` dbMask vmgf)
   where
     actual = mgf1 SHA1 (seed vmgf) (B.length $ dbMask vmgf)
 
@@ -42,18 +42,14 @@ vectorsMGF =
     ]
 
 tests =
-    testGroup
-        "PubKey"
-        [ testGroup "MGF1" $ zipWith doMGFTest [katZero ..] vectorsMGF
-        , rsaTests
-        , pssTests
-        , oaepTests
-        , dsaTests
-        , dhTests
-        , eccTests
-        , ecdsaTests
-        , P256.tests
-        , rabinTests
-        ]
-
--- newKats = [ eccKatTests ]
+    describe "PubKey" $ do
+        describe "MGF1" $ zipWithM_ doMGFTest [katZero ..] vectorsMGF
+        rsaTests
+        pssTests
+        oaepTests
+        dsaTests
+        dhTests
+        eccTests
+        ecdsaTests
+        P256.tests
+        rabinTests
