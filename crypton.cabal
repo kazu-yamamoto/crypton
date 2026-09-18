@@ -439,71 +439,68 @@ library
 
 test-suite test-crypton
     type:             exitcode-stdio-1.0
-    main-is:          Tests.hs
+    main-is:          Spec.hs
     hs-source-dirs:   tests
     other-modules:
-        BCrypt
-        BCryptPBKDF
+        AFISSpec
         BlockCipher
-        ChaCha
-        ChaChaPoly1305
-        ECC
-        ECC.Edwards25519
-        ECDSA
-        Hash
+        BlockCipher.AES.CBC
+        BlockCipher.AES.CCM
+        BlockCipher.AES.ECB
+        BlockCipher.AES.GCM
+        BlockCipher.AES.OCB3
+        BlockCipher.AES.XTS
+        BlockCipher.AESGCMSIVSpec
+        BlockCipher.AESSpec
+        BlockCipher.BlowfishSpec
+        BlockCipher.CamelliaSpec
+        BlockCipher.CAST5Spec
+        BlockCipher.DESSpec
+        BlockCipher.TripleDESSpec
+        BlockCipher.TwofishSpec
+        ConstructHash.MiyaguchiPreneelSpec
+        Curve25519Spec
+        Curve448Spec
+        ECC.Edwards25519Spec
+        ECCSpec
+        ECDSASpec
+        Ed25519Spec
+        Ed448Spec
+        EdDSASpec
+        HashSpec
         Imports
-        KAT_AES
-        KAT_AES.KATCBC
-        KAT_AES.KATCCM
-        KAT_AES.KATECB
-        KAT_AES.KATGCM
-        KAT_AES.KATOCB3
-        KAT_AES.KATXTS
-        KAT_AESGCMSIV
-        KAT_AFIS
-        KAT_Argon2
-        KAT_Blake2
-        KAT_Blowfish
-        KAT_Camellia
-        KAT_CAST5
-        KAT_CMAC
-        KAT_Curve25519
-        KAT_Curve448
-        KAT_DES
-        KAT_Ed25519
-        KAT_Ed448
-        KAT_EdDSA
-        KAT_HKDF
-        KAT_HMAC
-        KAT_KMAC
-        KAT_MiyaguchiPreneel
-        KAT_OTP
-        KAT_PBKDF2
-        KAT_PubKey
-        KAT_PubKey.DH
-        KAT_PubKey.DSA
-        KAT_PubKey.ECC
-        KAT_PubKey.ECDSA
-        KAT_PubKey.OAEP
-        KAT_PubKey.P256
-        KAT_PubKey.PSS
-        KAT_PubKey.Rabin
-        KAT_PubKey.RSA
-        KAT_RC4
-        KAT_Scrypt
-        KAT_TripleDES
-        KAT_Twofish
-        Number
-        Number.F2m
-        Padding
-        Poly1305
-        Salsa
+        KDF.Argon2Spec
+        KDF.BCryptPBKDFSpec
+        KDF.BCryptSpec
+        KDF.HKDFSpec
+        KDF.PBKDF2Spec
+        KDF.ScryptSpec
+        MAC.Blake2Spec
+        MAC.CMACSpec
+        MAC.HMACSpec
+        MAC.KMACSpec
+        MAC.Poly1305Spec
+        Number.F2mSpec
+        NumberSpec
+        OTPSpec
+        PaddingSpec
+        PubKey.DHSpec
+        PubKey.DSASpec
+        PubKey.ECCSpec
+        PubKey.ECDSASpec
+        PubKey.MGF1Spec
+        PubKey.OAEPSpec
+        PubKey.P256Spec
+        PubKey.PSSSpec
+        PubKey.RabinSpec
+        PubKey.RSASpec
+        RuntimeSpec
+        StreamCipher.ChaChaPoly1305Spec
+        StreamCipher.ChaChaSpec
+        StreamCipher.RC4Spec
+        StreamCipher.SalsaSpec
+        StreamCipher.XSalsaSpec
         Utils
-        XSalsa
-
-    default-language: Haskell2010
-    ghc-options:
-        -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
 
     build-depends:
         base >=4.13 && <5,
@@ -512,6 +509,12 @@ test-suite test-crypton
         crypton,
         hspec,
         ram
+
+    build-tool-depends: hspec-discover:hspec-discover
+
+    default-language: Haskell2010
+    ghc-options:
+        -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
 
 benchmark bench-crypton
     type:             exitcode-stdio-1.0
