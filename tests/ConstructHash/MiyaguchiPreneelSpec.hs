@@ -1,0 +1,52 @@
+module ConstructHash.MiyaguchiPreneelSpec (spec) where
+
+import Crypto.Cipher.AES (AES128)
+import Crypto.ConstructHash.MiyaguchiPreneel as MiyaguchiPreneel
+
+import Imports
+
+import qualified Data.ByteArray as B
+import Data.ByteArray.Encoding (Base (Base16), convertFromBase)
+import qualified Data.ByteString.Char8 as B8
+
+runMP128 :: ByteString -> ByteString
+runMP128 s = B.convert (MiyaguchiPreneel.compute s :: MiyaguchiPreneel AES128)
+
+hxs :: String -> ByteString
+hxs =
+    either (error . ("hxs:" ++)) id
+        . convertFromBase Base16
+        . B8.pack
+        . filter (/= ' ')
+
+gAES128 :: Spec
+gAES128 =
+    igroup
+        "aes128"
+        [ runMP128 B8.empty
+            `shouldBe` hxs "66e94bd4 ef8a2c3b 884cfa59 ca342b2e"
+        , runMP128 (hxs "01000000 00000000 00000000 00000000")
+            `shouldBe` hxs "46711816 e91d6ff0 59bbbf2b f58e0fd3"
+        , runMP128 (hxs "00000000 00000000 00000000 00000001")
+            `shouldBe` hxs "58e2fcce fa7e3061 367f1d57 a4e7455b"
+        , runMP128
+            ( hxs $
+                "00000000 00000000 00000000 00000000"
+                    ++ "01"
+            )
+            `shouldBe` hxs "a5ff35ae 097adf5d 646abf5e bf4c16f4"
+        ]
+
+igroup :: String -> [Expectation] -> Spec
+igroup nm = describe nm . sequence_ . zipWith (flip ($)) [1 ..] . map icase
+  where
+    icase c i = it (show (i :: Int)) c
+
+vectors :: Spec
+vectors =
+    describe "KATs" $ do
+        gAES128
+
+spec :: Spec
+spec = do
+    vectors

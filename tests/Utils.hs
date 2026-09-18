@@ -13,8 +13,9 @@ import Data.List
 import Data.Word
 import Prelude
 
-import Test.Tasty.HUnit ((@=?))
-import Test.Tasty.QuickCheck
+import Control.Monad (unless)
+import Test.Hspec (Expectation, expectationFailure, shouldBe)
+import Test.QuickCheck hiding (maxSize)
 
 newtype TestDRG = TestDRG (Word64, Word64, Word64, Word64, Word64)
     deriving (Show, Eq)
@@ -158,5 +159,15 @@ propertyHold l =
         | otherwise =
             (name ++ ": expected " ++ show a ++ " but got: " ++ show b) : acc
 
-propertyHoldCase :: [PropertyTest] -> IO ()
-propertyHoldCase l = True @=? propertyHold l
+propertyHoldCase :: [PropertyTest] -> Expectation
+propertyHoldCase l = propertyHold l `shouldBe` True
+
+-- | The HUnit assertions the suite used under tasty, on top of hspec.
+assertBool :: String -> Bool -> Expectation
+assertBool msg b = unless b (expectationFailure msg)
+
+assertFailure :: String -> Expectation
+assertFailure = expectationFailure
+
+assertEqual :: (Eq a, Show a) => String -> a -> a -> Expectation
+assertEqual _ expected actual = actual `shouldBe` expected

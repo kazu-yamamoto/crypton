@@ -132,50 +132,50 @@ defaultKATs = KATs [] [] [] [] [] []
 
 {-
 testECB (_, _, cipherInit) ecbEncrypt ecbDecrypt kats =
-    testGroup "ECB" (concatMap katTest (zip is kats) {- ++ propTests-})
+    describe "ECB" $ mapM_ (katTest (zip is kats) {- ++ propTests-})
   where katTest (i,d) =
-            [ testCase ("E" ++ show i) (ecbEncrypt ctx (ecbPlaintext d) @?= ecbCiphertext d)
-            , testCase ("D" ++ show i) (ecbDecrypt ctx (ecbCiphertext d) @?= ecbPlaintext d)
+            [ it ("E" ++ show i) (ecbEncrypt ctx (ecbPlaintext d) `shouldBe` ecbCiphertext d)
+            , it ("D" ++ show i) (ecbDecrypt ctx (ecbCiphertext d) `shouldBe` ecbPlaintext d)
             ]
           where ctx = cipherInit (ecbKey d)
-        --propTest = testProperty "decrypt.encrypt" (ECBUnit key plaintext) =
+        --propTest = prop "decrypt.encrypt" (ECBUnit key plaintext) =
 
         --testProperty_ECB (ECBUnit (cipherInit -> ctx) (toBytes -> plaintext)) =
         --    plaintext `assertEq` ecbDecrypt ctx (ecbEncrypt ctx plaintext)
 
 testKatCBC cbcInit cbcEncrypt cbcDecrypt (i,d) =
-    [ testCase ("E" ++ show i) (cbcEncrypt ctx iv (cbcPlaintext d) @?= cbcCiphertext d)
-    , testCase ("D" ++ show i) (cbcDecrypt ctx iv (cbcCiphertext d) @?= cbcPlaintext d)
+    [ it ("E" ++ show i) (cbcEncrypt ctx iv (cbcPlaintext d) `shouldBe` cbcCiphertext d)
+    , it ("D" ++ show i) (cbcDecrypt ctx iv (cbcCiphertext d) `shouldBe` cbcPlaintext d)
     ]
   where ctx = cbcInit $ cbcKey d
         iv  = cbcIV d
 
 testKatCFB cfbInit cfbEncrypt cfbDecrypt (i,d) =
-    [ testCase ("E" ++ show i) (cfbEncrypt ctx iv (cfbPlaintext d) @?= cfbCiphertext d)
-    , testCase ("D" ++ show i) (cfbDecrypt ctx iv (cfbCiphertext d) @?= cfbPlaintext d)
+    [ it ("E" ++ show i) (cfbEncrypt ctx iv (cfbPlaintext d) `shouldBe` cfbCiphertext d)
+    , it ("D" ++ show i) (cfbDecrypt ctx iv (cfbCiphertext d) `shouldBe` cfbPlaintext d)
     ]
   where ctx = cfbInit $ cfbKey d
         iv  = cfbIV d
 
 testKatCTR ctrInit ctrCombine (i,d) =
-    [ testCase ("E" ++ i) (ctrCombine ctx iv (ctrPlaintext d) @?= ctrCiphertext d)
-    , testCase ("D" ++ i) (ctrCombine ctx iv (ctrCiphertext d) @?= ctrPlaintext d)
+    [ it ("E" ++ i) (ctrCombine ctx iv (ctrPlaintext d) `shouldBe` ctrCiphertext d)
+    , it ("D" ++ i) (ctrCombine ctx iv (ctrCiphertext d) `shouldBe` ctrPlaintext d)
     ]
   where ctx = ctrInit $ ctrKey d
         iv  = ctrIV d
 
 testKatXTS xtsInit xtsEncrypt xtsDecrypt (i,d) =
-    [ testCase ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) @?= xtsCiphertext d)
-    , testCase ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) @?= xtsPlaintext d)
+    [ it ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) `shouldBe` xtsCiphertext d)
+    , it ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) `shouldBe` xtsPlaintext d)
     ]
   where ctx  = xtsInit (xtsKey1 d, xtsKey2 d)
         iv   = xtsIV d
 
 testKatAEAD cipherInit aeadInit aeadAppendHeader aeadEncrypt aeadDecrypt aeadFinalize (i,d) =
-    [ testCase ("AE" ++ i) (etag @?= aeadTag d)
-    , testCase ("AD" ++ i) (dtag @?= aeadTag d)
-    , testCase ("E" ++ i)  (ebs @?= aeadCiphertext d)
-    , testCase ("D" ++ i)  (dbs @?= aeadPlaintext d)
+    [ it ("AE" ++ i) (etag `shouldBe` aeadTag d)
+    , it ("AD" ++ i) (dtag `shouldBe` aeadTag d)
+    , it ("E" ++ i)  (ebs `shouldBe` aeadCiphertext d)
+    , it ("D" ++ i)  (dbs `shouldBe` aeadPlaintext d)
     ]
   where ctx              = cipherInit $ aeadKey d
         (Just aead)      = aeadInit ctx (aeadIV d)
@@ -190,61 +190,53 @@ testKATs
     :: BlockCipher cipher
     => KATs
     -> cipher
-    -> TestTree
-testKATs kats cipher =
-    testGroup
-        "KAT"
-        ( maybeGroup makeECBTest "ECB" (kat_ECB kats)
-            ++ maybeGroup makeCBCTest "CBC" (kat_CBC kats)
-            ++ maybeGroup makeCFBTest "CFB" (kat_CFB kats)
-            ++ maybeGroup makeCTRTest "CTR" (kat_CTR kats)
-            -- ++ maybeGroup makeXTSTest "XTS" (kat_XTS kats)
-            ++ maybeGroup makeAEADTest "AEAD" (kat_AEAD kats)
-        )
+    -> Spec
+testKATs kats cipher = describe "KAT" $ do
+    maybeGroup makeECBTest "ECB" (kat_ECB kats)
+    maybeGroup makeCBCTest "CBC" (kat_CBC kats)
+    maybeGroup makeCFBTest "CFB" (kat_CFB kats)
+    maybeGroup makeCTRTest "CTR" (kat_CTR kats)
+    -- maybeGroup makeXTSTest "XTS" (kat_XTS kats)
+    maybeGroup makeAEADTest "AEAD" (kat_AEAD kats)
   where
-    makeECBTest i d =
-        [ testCase ("E" ++ i) (ecbEncrypt ctx (ecbPlaintext d) @?= ecbCiphertext d)
-        , testCase ("D" ++ i) (ecbDecrypt ctx (ecbCiphertext d) @?= ecbPlaintext d)
-        ]
+    makeECBTest i d = do
+        it ("E" ++ i) (ecbEncrypt ctx (ecbPlaintext d) `shouldBe` ecbCiphertext d)
+        it ("D" ++ i) (ecbDecrypt ctx (ecbCiphertext d) `shouldBe` ecbPlaintext d)
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ ecbKey d)
-    makeCBCTest i d =
-        [ testCase ("E" ++ i) (cbcEncrypt ctx iv (cbcPlaintext d) @?= cbcCiphertext d)
-        , testCase ("D" ++ i) (cbcDecrypt ctx iv (cbcCiphertext d) @?= cbcPlaintext d)
-        ]
+    makeCBCTest i d = do
+        it ("E" ++ i) (cbcEncrypt ctx iv (cbcPlaintext d) `shouldBe` cbcCiphertext d)
+        it ("D" ++ i) (cbcDecrypt ctx iv (cbcCiphertext d) `shouldBe` cbcPlaintext d)
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ cbcKey d)
         iv = cipherMakeIV cipher $ cbcIV d
-    makeCFBTest i d =
-        [ testCase ("E" ++ i) (cfbEncrypt ctx iv (cfbPlaintext d) @?= cfbCiphertext d)
-        , testCase ("D" ++ i) (cfbDecrypt ctx iv (cfbCiphertext d) @?= cfbPlaintext d)
-        ]
+    makeCFBTest i d = do
+        it ("E" ++ i) (cfbEncrypt ctx iv (cfbPlaintext d) `shouldBe` cfbCiphertext d)
+        it ("D" ++ i) (cfbDecrypt ctx iv (cfbCiphertext d) `shouldBe` cfbPlaintext d)
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ cfbKey d)
         iv = cipherMakeIV cipher $ cfbIV d
-    makeCTRTest i d =
-        [ testCase ("E" ++ i) (ctrCombine ctx iv (ctrPlaintext d) @?= ctrCiphertext d)
-        , testCase ("D" ++ i) (ctrCombine ctx iv (ctrCiphertext d) @?= ctrPlaintext d)
-        ]
+    makeCTRTest i d = do
+        it ("E" ++ i) (ctrCombine ctx iv (ctrPlaintext d) `shouldBe` ctrCiphertext d)
+        it ("D" ++ i) (ctrCombine ctx iv (ctrCiphertext d) `shouldBe` ctrPlaintext d)
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ ctrKey d)
         iv = cipherMakeIV cipher $ ctrIV d
     {-
             makeXTSTest i d  =
-                [ testCase ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) @?= xtsCiphertext d)
-                , testCase ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) @?= xtsPlaintext d)
+                [ it ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) `shouldBe` xtsCiphertext d)
+                , it ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) `shouldBe` xtsPlaintext d)
                 ]
               where ctx1 = cipherInitNoErr (cipherMakeKey cipher $ xtsKey1 d)
                     ctx2 = cipherInitNoErr (cipherMakeKey cipher $ xtsKey2 d)
                     ctx  = (ctx1, ctx2)
                     iv   = cipherMakeIV cipher $ xtsIV d
     -}
-    makeAEADTest i d =
-        [ testCase ("AE" ++ i) (etag @?= AuthTag (B.convert (aeadTag d)))
-        , testCase ("AD" ++ i) (dtag @?= AuthTag (B.convert (aeadTag d)))
-        , testCase ("E" ++ i) (ebs @?= aeadCiphertext d)
-        , testCase ("D" ++ i) (dbs @?= aeadPlaintext d)
-        ]
+    makeAEADTest i d = do
+        it ("AE" ++ i) (etag `shouldBe` AuthTag (B.convert (aeadTag d)))
+        it ("AD" ++ i) (dtag `shouldBe` AuthTag (B.convert (aeadTag d)))
+        it ("E" ++ i) (ebs `shouldBe` aeadCiphertext d)
+        it ("D" ++ i) (dbs `shouldBe` aeadPlaintext d)
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ aeadKey d)
         aead = aeadInitNoErr (aeadMode d) ctx (aeadIV d)
@@ -435,8 +427,8 @@ instance StreamCipher a => Arbitrary (StreamUnit a) where
             <$> generateKey
             <*> generatePlaintext
 
-testBlockCipherBasic :: BlockCipher a => a -> [TestTree]
-testBlockCipherBasic cipher = [testProperty "ECB" ecbProp]
+testBlockCipherBasic :: BlockCipher a => a -> Spec
+testBlockCipherBasic cipher = prop "ECB" ecbProp
   where
     ecbProp = toTests cipher
     toTests :: BlockCipher a => a -> (ECBUnit a -> Bool)
@@ -444,13 +436,12 @@ testBlockCipherBasic cipher = [testProperty "ECB" ecbProp]
     testProperty_ECB (ECBUnit key (unPlaintextBS -> plaintext)) = withCtx key $ \ctx ->
         plaintext `assertEq` ecbDecrypt ctx (ecbEncrypt ctx plaintext)
 
-testBlockCipherModes :: BlockCipher a => a -> [TestTree]
-testBlockCipherModes cipher =
-    [ testProperty "CBC" cbcProp
-    , testProperty "CFB" cfbProp
-    , -- , testProperty "CFB8" cfb8Prop
-      testProperty "CTR" ctrProp
-    ]
+testBlockCipherModes :: BlockCipher a => a -> Spec
+testBlockCipherModes cipher = do
+    prop "CBC" cbcProp
+    prop "CFB" cfbProp
+    -- prop "CFB8" cfb8Prop
+    prop "CTR" ctrProp
   where
     (cbcProp, cfbProp, ctrProp) = toTests cipher
     toTests
@@ -480,14 +471,13 @@ testBlockCipherModes cipher =
     testProperty_CTR (CTRUnit key testIV (unPlaintext -> plaintext)) = withCtx key $ \ctx ->
         plaintext `assertEq` ctrCombine ctx testIV (ctrCombine ctx testIV plaintext)
 
-testBlockCipherAEAD :: BlockCipher a => a -> [TestTree]
-testBlockCipherAEAD cipher =
-    [ testProperty "OCB" (aeadProp AEAD_OCB)
-    , testProperty "CCM" (aeadProp (AEAD_CCM 0 CCM_M16 CCM_L2))
-    , testProperty "EAX" (aeadProp AEAD_EAX)
-    , testProperty "CWC" (aeadProp AEAD_CWC)
-    , testProperty "GCM" (aeadProp AEAD_GCM)
-    ]
+testBlockCipherAEAD :: BlockCipher a => a -> Spec
+testBlockCipherAEAD cipher = do
+    prop "OCB" (aeadProp AEAD_OCB)
+    prop "CCM" (aeadProp (AEAD_CCM 0 CCM_M16 CCM_L2))
+    prop "EAX" (aeadProp AEAD_EAX)
+    prop "CWC" (aeadProp AEAD_CWC)
+    prop "GCM" (aeadProp AEAD_GCM)
   where
     aeadProp = toTests cipher
     toTests :: BlockCipher a => a -> (AEADMode -> AEADUnit a -> Bool)
@@ -518,8 +508,8 @@ withCtx (Key key) f =
         CryptoPassed ctx -> f ctx
 
 {-
-testBlockCipherXTS :: BlockCipher a => a -> [TestTree]
-testBlockCipherXTS cipher = [testProperty "XTS" xtsProp]
+testBlockCipherXTS :: BlockCipher a => a -> [Spec]
+testBlockCipherXTS cipher = [prop "XTS" xtsProp]
   where xtsProp = toTests cipher
         toTests :: BlockCipher a => a -> (XTSUnit a -> Bool)
         toTests _ = testProperty_XTS
@@ -531,26 +521,21 @@ testBlockCipherXTS cipher = [testProperty "XTS" xtsProp]
 
 -- | Test a generic block cipher for properties
 -- related to block cipher modes.
-testModes :: BlockCipher a => a -> [TestTree]
+testModes :: BlockCipher a => a -> Spec
 testModes cipher =
-    [ testGroup
-        "decrypt.encrypt==id"
-        --        (testBlockCipherBasic cipher ++ testBlockCipherModes cipher ++ testBlockCipherAEAD cipher ++ testBlockCipherXTS cipher)
-        ( testBlockCipherBasic cipher
-            ++ testBlockCipherModes cipher
-            ++ testBlockCipherAEAD cipher
-        )
-    ]
+    describe "decrypt.encrypt==id" $ do
+        testBlockCipherBasic cipher
+        testBlockCipherModes cipher
+        testBlockCipherAEAD cipher
 
 -- | Test IV arithmetic (based on the cipher block size)
-testIvArith :: BlockCipher a => a -> [TestTree]
-testIvArith cipher =
-    [ testCase "nullIV is null" $
-        True @=? B.all (== 0) (ivNull cipher)
-    , testProperty "ivAdd is linear" $ \a b -> do
+testIvArith :: BlockCipher a => a -> Spec
+testIvArith cipher = do
+    it "nullIV is null" $
+        B.all (== 0) (ivNull cipher) `shouldBe` True
+    prop "ivAdd is linear" $ \a b -> do
         iv <- generateIvFromCipher cipher
         return $ ivAdd iv (a + b) `propertyEq` ivAdd (ivAdd iv a) b
-    ]
   where
     ivNull :: BlockCipher a => a -> IV a
     ivNull = const nullIV
@@ -565,14 +550,12 @@ testIvArith cipher =
         return $ cipherMakeIV c (B.pack $ zeros ++ ones)
 
 -- | Return tests for a specific blockcipher and a list of KATs
-testBlockCipher :: BlockCipher a => KATs -> a -> TestTree
+testBlockCipher :: BlockCipher a => KATs -> a -> Spec
 testBlockCipher kats cipher =
-    testGroup
-        (cipherName cipher)
-        ( (if kats == defaultKATs then [] else [testKATs kats cipher])
-            ++ testModes cipher
-            ++ testIvArith cipher
-        )
+    describe (cipherName cipher) $ do
+        unless (kats == defaultKATs) $ testKATs kats cipher
+        testModes cipher
+        testIvArith cipher
 
 cipherMakeKey :: Cipher cipher => cipher -> ByteString -> Key cipher
 cipherMakeKey _ bs = Key bs
@@ -580,11 +563,11 @@ cipherMakeKey _ bs = Key bs
 cipherMakeIV :: BlockCipher cipher => cipher -> ByteString -> IV cipher
 cipherMakeIV _ bs = fromJust $ makeIV bs
 
-maybeGroup :: (String -> t -> [TestTree]) -> TestName -> [t] -> [TestTree]
+maybeGroup :: (String -> t -> Spec) -> String -> [t] -> Spec
 maybeGroup mkTest groupName l
-    | null l = []
+    | null l = return ()
     | otherwise =
-        [testGroup groupName (concatMap (\(i, d) -> mkTest (show i) d) $ zip nbs l)]
+        describe groupName $ mapM_ (\(i, d) -> mkTest (show i) d) (zip nbs l)
   where
     nbs :: [Int]
     nbs = [0 ..]
