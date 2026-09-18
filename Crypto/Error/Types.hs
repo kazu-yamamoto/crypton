@@ -50,6 +50,9 @@ data CryptoError
       CryptoError_SaltTooSmall
     | CryptoError_OutputLengthTooSmall
     | CryptoError_OutputLengthTooBig
+    | -- | A parameter is outside the range the algorithm accepts.  Appended to
+      -- keep the 'Enum' values of the constructors above unchanged.
+      CryptoError_ParameterInvalid
     deriving (Show, Eq, Enum, Data)
 
 instance E.Exception CryptoError
