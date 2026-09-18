@@ -26,10 +26,29 @@ data Format
       ZERO Int
     deriving (Show, Eq)
 
+-- | Is this a block size PKCS7 can describe?
+--
+-- The padding octet carries the number of octets added, so it cannot describe
+-- a block longer than 255, and a block of zero has nothing to describe.
+-- Outside that range the octet would be computed as an 'Int' and then narrowed
+-- to a 'Data.Word.Word8', which wraps: 'pad' and 'unpad' would agree on the
+-- wrapped value and hand back something other than what was padded.
+pkcs7SizeValid :: Int -> Bool
+pkcs7SizeValid sz = sz >= 1 && sz <= 255
+
 -- | Apply some pad to a bytearray
+--
+-- A 'PKCS7' block size outside 1..255 raises an 'error'; 'unpad' reports the
+-- same condition as 'Nothing'.
 pad :: ByteArray byteArray => Format -> byteArray -> byteArray
 pad PKCS5 bin = pad (PKCS7 8) bin
-pad (PKCS7 sz) bin = bin `B.append` paddingString
+pad (PKCS7 sz) bin
+    | not (pkcs7SizeValid sz) =
+        error $
+            "Crypto.Data.Padding: PKCS7 block size "
+                ++ show sz
+                ++ " is not between 1 and 255"
+    | otherwise = bin `B.append` paddingString
   where
     paddingString = B.replicate paddingByte (fromIntegral paddingByte)
     paddingByte = sz - (B.length bin `mod` sz)
@@ -47,6 +66,7 @@ pad (ZERO sz) bin = bin `B.append` paddingString
 unpad :: ByteArray byteArray => Format -> byteArray -> Maybe byteArray
 unpad PKCS5 bin = unpad (PKCS7 8) bin
 unpad (PKCS7 sz) bin
+    | not (pkcs7SizeValid sz) = Nothing
     | len == 0 = Nothing
     | (len `mod` sz) /= 0 = Nothing
     | paddingSz < 1 || paddingSz > len = Nothing
