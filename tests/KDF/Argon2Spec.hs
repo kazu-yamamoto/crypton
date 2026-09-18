@@ -6,7 +6,6 @@ import Control.Exception (evaluate)
 import Crypto.Error
 import qualified Crypto.KDF.Argon2 as Argon2
 import qualified Data.ByteString as B
-import Data.Either (isLeft)
 import Imports
 
 data KDFVector = KDFVector
@@ -62,7 +61,8 @@ outcome (CryptoPassed bs) = Right <$> evaluate (B.length bs)
 refuses :: String -> Argon2.Options -> Spec
 refuses name options =
     it name $
-        outcome (Argon2.hash options pass salt outLen) >>= (`shouldSatisfy` isLeft)
+        outcome (Argon2.hash options pass salt outLen)
+            `shouldReturn` Left CryptoError_ParameterInvalid
 
 pass :: ByteString
 pass = "password"
