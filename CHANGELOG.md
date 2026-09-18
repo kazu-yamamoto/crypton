@@ -1,5 +1,58 @@
 # CHANGELOG for crypton
 
+## 1.2.0
+
+* feat(aead): add `aeadSimpleDecrypt'`, which takes the tag length as its own argument instead of reading it off the supplied tag
+  [#94](https://github.com/kazu-yamamoto/crypton/pull/94)
+* Breaking change: feat(dh): add `getShared'` to `Crypto.PubKey.DH` and `Crypto.PubKey.ECC.DH`, reporting a rejected peer value as `CryptoFailable`; `getShared` is now defined in terms of it and so raises a `CryptoError` rather than an `ErrorCall`
+  [#93](https://github.com/kazu-yamamoto/crypton/pull/93)
+* fix(otp): compare TOTP candidates without an early exit
+  [#92](https://github.com/kazu-yamamoto/crypton/pull/92)
+* fix(rsa): drop the early exits from PKCS#1 v1.5 and OAEP unpadding
+  [#91](https://github.com/kazu-yamamoto/crypton/pull/91)
+* Breaking change: fix(argon2): report invalid options as `CryptoFailed` rather than raising, adding `CryptoError_ParameterInvalid` to `CryptoError`
+  [#90](https://github.com/kazu-yamamoto/crypton/pull/90)
+* Breaking change: fix(dh): validate the peer public number, and size the shared secret from `p` rather than `params_bits`
+  [#89](https://github.com/kazu-yamamoto/crypton/pull/89)
+* fix(dsa): do not crash on values that are not invertible modulo `q`
+  [#88](https://github.com/kazu-yamamoto/crypton/pull/88)
+* Breaking change: fix(ecdh): validate the peer point before the exchange
+  [#87](https://github.com/kazu-yamamoto/crypton/pull/87)
+* Breaking change: fix(pkcs15): reject PKCS#1 v1.5 signatures of the wrong length or out of range
+  [#86](https://github.com/kazu-yamamoto/crypton/pull/86)
+* Breaking change: fix(otp): require a digest long enough for RFC 4226 dynamic truncation, which was reading past the end of the MAC
+  [#85](https://github.com/kazu-yamamoto/crypton/pull/85)
+* fix(ecc): accept zero-x P-256 shared secret
+  [#84](https://github.com/kazu-yamamoto/crypton/pull/84)
+* fix(p256): accept valid edge-case points
+  [#83](https://github.com/kazu-yamamoto/crypton/pull/83)
+* Breaking change: fix(hkdf): enforce output length limit
+  [#82](https://github.com/kazu-yamamoto/crypton/pull/82)
+* Breaking change: fix(ed25519): reject non-canonical signatures
+  [#81](https://github.com/kazu-yamamoto/crypton/pull/81)
+* Support GHC 9.14; `tested-with` now covers 9.10.2, 9.12.4 and 9.14.1
+  [#74](https://github.com/kazu-yamamoto/crypton/pull/74)
+
+### API changes
+
+* New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.getShared'`,
+  `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`.
+  These are additions and break nothing.
+* Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
+  appended, so the `Enum` values of the existing constructors are unchanged, but an
+  exhaustive `case` without a wildcard will warn.  Adding a constructor to an exported
+  datatype is what requires the major version bump under the PVP; everything else
+  below changes behaviour rather than types.
+* Breaking change: `getShared` in both DH modules raises a `CryptoError` where it
+  previously raised an `ErrorCall`, since it is now defined in terms of `getShared'`.
+* Breaking change: input that used to be accepted is now rejected -- a digest shorter
+  than 20 bytes in `Crypto.OTP.hotp`, a signature of the wrong length or out of range
+  in `Crypto.PubKey.RSA.PKCS15.verify`, an off-curve peer point or a peer public number
+  outside `1 < y < p-1` in `getShared`, an output beyond 255 blocks in
+  `Crypto.KDF.HKDF.expand`, a non-canonical Ed25519 signature, and `Options` the
+  implementation refuses in `Crypto.KDF.Argon2.hash`.
+* No exported function changed its signature.
+
 ## 1.1.5
 
 * fix(aead): reject undersized tags
