@@ -2,7 +2,8 @@
 
 module KAT_PubKey.DH (dhTests) where
 
-import Control.Exception (ErrorCall, evaluate, try)
+import Control.Exception (SomeException, evaluate, try)
+import Crypto.Error
 import qualified Crypto.PubKey.DH as DH
 import qualified Crypto.PubKey.ECC.DH as ECDH
 import Crypto.PubKey.ECC.Types
@@ -15,8 +16,13 @@ import Imports
 
 -- | 'DH.SharedKey' wraps its bytes in a newtype, so evaluating it to weak head
 -- normal form proves nothing.  Convert it to force the bytes themselves.
-force :: DH.SharedKey -> IO (Either ErrorCall Int)
-force sk = try (evaluate (B.length (convert sk :: ByteString)))
+force :: DH.SharedKey -> IO (Either String Int)
+force sk = do
+    result <- try (evaluate (B.length (convert sk :: ByteString)))
+    return $ either (Left . takeWhile (/= '\n') . showExc) Right result
+  where
+    showExc :: SomeException -> String
+    showExc = show
 
 rejected :: String -> DH.SharedKey -> TestTree
 rejected name sk = testCase name $ do
@@ -45,6 +51,18 @@ ecdhTests =
             ECDH.getShared p256 da (Point (-1) 1)
         , rejected "the point at infinity is refused" $
             ECDH.getShared p256 da PointO
+        , testCase "getShared' agrees with getShared on a valid exchange" $ do
+            let qb = ECDH.calculatePublic p256 db
+            CryptoPassed (ECDH.getShared p256 da qb) @=? ECDH.getShared' p256 da qb
+        , testCase "getShared' reports a point not on the curve" $
+            CryptoFailed CryptoError_PointCoordinatesInvalid
+                @=? ECDH.getShared' p256 da (Point 1 1)
+        , testCase "getShared' reports a negative coordinate" $
+            CryptoFailed CryptoError_PointCoordinatesInvalid
+                @=? ECDH.getShared' p256 da (Point (-1) 1)
+        , testCase "getShared' reports the point at infinity" $
+            CryptoFailed CryptoError_ScalarMultiplicationInvalid
+                @=? ECDH.getShared' p256 da PointO
         ]
   where
     da = 0x2eb7ef8e5dcbd0f0fbf70b5d4d43ea0b5f0dbcb45a3e3d8b3f1eaf7a35b1fb31
@@ -72,6 +90,16 @@ ffdhTests =
             DH.getShared params xa (DH.PublicNumber (p - 1))
         , rejected "y = p is refused" $ DH.getShared params xa (DH.PublicNumber p)
         , rejected "y > p is refused" $ DH.getShared params xa (DH.PublicNumber (p + 1))
+        , testCase "getShared' agrees with getShared on a valid exchange" $ do
+            let yb = DH.calculatePublic params xb
+            CryptoPassed (DH.getShared params xa yb) @=? DH.getShared' params xa yb
+        , testCase "getShared' reports a public number out of range" $
+            mapM_
+                ( \y ->
+                    CryptoFailed CryptoError_ParameterInvalid
+                        @=? DH.getShared' params xa (DH.PublicNumber y)
+                )
+                [0, 1, p - 1, p, p + 1]
         , testCase "an understated bit size still yields p-sized output" $ do
             let understated = DH.Params p 2 8
                 yb = DH.calculatePublic understated xb
