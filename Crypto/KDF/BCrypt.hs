@@ -37,6 +37,16 @@
 -- if passwords are UTF-8 encoded (which they should be) and less than 256
 -- characters long.
 --
+-- Only the first 72 bytes of a password are used.  The rest is silently
+-- ignored, so two passwords sharing a 72-byte prefix produce the same hash and
+-- validate against each other.  That is what the original implementation does
+-- and is kept for compatibility, but it means a longer
+-- passphrase buys nothing past that point, and the limit is on /bytes/ rather
+-- than characters -- a UTF-8 passphrase reaches it sooner than its length in
+-- characters suggests.  Where passwords may be longer, hash them to a fixed
+-- size first, or use "Crypto.KDF.Argon2" or "Crypto.KDF.Scrypt", which have no
+-- such limit.
+--
 -- The cost parameter can be between 4 and 31 inclusive, but anything less than
 -- 10 is probably not strong enough. High values may be prohibitively slow
 -- depending on your hardware. Choose the highest value you can without having
@@ -85,6 +95,7 @@ hashPassword
     -- Values which lie outside this range will be adjusted accordingly.
     -> password
     -- ^ The password. Should be the UTF-8 encoded bytes of the password text.
+    -- Only the first 72 bytes are used; see the module documentation.
     -> m hash
     -- ^ The bcrypt hash in standard format.
 hashPassword cost password = do
@@ -103,6 +114,7 @@ bcrypt
     -- ^ The salt. Must be 16 bytes in length or an error will be raised.
     -> password
     -- ^ The password. Should be the UTF-8 encoded bytes of the password text.
+    -- Only the first 72 bytes are used; see the module documentation.
     -> output
     -- ^ The bcrypt hash in standard format.
 bcrypt cost salt password = B.concat [header, B.snoc costBytes dollar, b64 salt, b64 hash]
@@ -128,6 +140,9 @@ bcrypt cost salt password = B.concat [header, B.snoc costBytes dollar, b64 salt,
 --
 -- Returns @False@ if the password doesn't match the hash, or if the hash is
 -- invalid or an unsupported version.
+--
+-- Only the first 72 bytes of the password are compared; see the module
+-- documentation.
 validatePassword
     :: (ByteArray password, ByteArray hash) => password -> hash -> Bool
 validatePassword password bcHash = either (const False) id (validatePasswordEither password bcHash)
@@ -135,7 +150,7 @@ validatePassword password bcHash = either (const False) id (validatePasswordEith
 -- | Check a password against a bcrypt hash
 --
 -- As for @validatePassword@ but will provide error information if the hash is invalid or
--- an unsupported version.
+-- an unsupported version.  The same 72-byte limit applies.
 validatePasswordEither
     :: (ByteArray password, ByteArray hash) => password -> hash -> Either String Bool
 validatePasswordEither password bcHash = do

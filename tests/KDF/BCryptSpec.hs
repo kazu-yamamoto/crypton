@@ -102,7 +102,25 @@ spec = do
             "Hashed password should validate"
             (validatePassword somePassword (bcrypt 5 aSalt somePassword :: B.ByteString))
         )
+    describe "password length limit" $ do
+        -- bcrypt keys Blowfish with at most the first 72 bytes of the
+        -- password, so everything after that is ignored.  The Openwall
+        -- vectors above cover the hash value; these cover what it means for
+        -- a caller, which is what the haddock now documents.
+        it "ignores everything after the first 72 bytes" $
+            bcrypt 5 aSalt longer `shouldBe` (bcrypt 5 aSalt otherTail :: B.ByteString)
+        it "accepts a password differing only past the 72nd byte" $
+            validatePassword otherTail (bcrypt 5 aSalt longer :: B.ByteString)
+                `shouldBe` True
+        it "still separates passwords differing within the first 72 bytes" $
+            validatePassword
+                (B.snoc (B.take 71 prefix72) 0x21)
+                (bcrypt 5 aSalt longer :: B.ByteString)
+                `shouldBe` False
   where
+    prefix72 = B.replicate 72 0x61
+    longer = prefix72 `B.append` "aaaaaaaaaaaaaaaaaaaa"
+    otherTail = prefix72 `B.append` "something else entirely"
     somePassword = "some password" :: B.ByteString
     aSalt =
         "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
