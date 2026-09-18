@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
@@ -7,18 +8,28 @@
 -- Stability   : experimental
 -- Portability : Good
 --
--- This module is a work in progress. do not use:
--- it might eat your dog, your data or even both.
+-- ElGamal encryption and signature over the multiplicative group of integers
+-- modulo a prime, reusing the parameters of "Crypto.PubKey.DH".
 --
--- TODO: provide a mapping between integer and ciphertext
---       generate numbers correctly
+-- /These are raw primitives, not a scheme./  The encryption here is textbook
+-- ElGamal: it applies no padding, so it is malleable by construction --
+-- multiplying a ciphertext's second component by @t@ multiplies the plaintext
+-- by @t@ -- and it is not IND-CCA secure.  A message is an 'Integer' below the
+-- modulus rather than a byte string, and nothing here maps one to the other.
+-- Use it to build a scheme that adds those, or prefer
+-- "Crypto.PubKey.RSA.OAEP" or "Crypto.PubKey.ECIES" where a scheme is what is
+-- wanted.
+--
+-- The signature primitive is likewise raw, and an ephemeral value must never
+-- be reused between signatures: two signatures under the same @k@ reveal the
+-- private key.
 module Crypto.PubKey.ElGamal (
     Params,
     PublicNumber,
     PrivateNumber,
     EphemeralKey (..),
     SharedKey,
-    Signature,
+    Signature (..),
 
     -- * Generation
     generatePrivate,
@@ -37,11 +48,12 @@ module Crypto.PubKey.ElGamal (
     verify,
 ) where
 
+import Crypto.Error
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Basic (gcde)
-import Crypto.Number.Generate (generateMax)
+import Crypto.Number.Generate (generateBetween, generateMax)
 import Crypto.Number.ModArithmetic (expFast, expSafe, inverse)
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.DH (
@@ -51,38 +63,59 @@ import Crypto.PubKey.DH (
     SharedKey (..),
  )
 import Crypto.Random.Types
-import Data.Maybe (fromJust)
+import Data.Data
 
 -- | ElGamal Signature
-data Signature = Signature (Integer, Integer)
+data Signature = Signature
+    { sign_r :: Integer
+    -- ^ ElGamal r
+    , sign_s :: Integer
+    -- ^ ElGamal s
+    }
+    deriving (Show, Read, Eq, Data)
+
+instance NFData Signature where
+    rnf (Signature r s) = r `seq` s `seq` ()
 
 -- | ElGamal Ephemeral key. also called Temporary key.
 newtype EphemeralKey = EphemeralKey Integer
     deriving (NFData)
 
--- | generate a private number with no specific property
--- this number is usually called a and need to be between
--- 0 and q (order of the group G).
+-- | generate a private number, in @[1, q-1]@ where @q@ is the order of the
+-- group.  Zero is excluded: it would make the public number 1 and the shared
+-- value constant.
 generatePrivate :: MonadRandom m => Integer -> m PrivateNumber
-generatePrivate q = PrivateNumber <$> generateMax q
-
--- | generate an ephemeral key which is a number with no specific property,
--- and need to be between 0 and q (order of the group G).
-generateEphemeral :: MonadRandom m => Integer -> m EphemeralKey
-generateEphemeral q = toEphemeral <$> generatePrivate q
-  where
-    toEphemeral (PrivateNumber n) = EphemeralKey n
+generatePrivate q = PrivateNumber <$> generateBetween 1 (q - 1)
 
 -- | generate a public number that is for the other party benefits.
 -- this number is usually called h=g^a
 generatePublic :: Params -> PrivateNumber -> PublicNumber
 generatePublic (Params p g _) (PrivateNumber a) = PublicNumber $ expSafe g a p
 
+-- | Is the other party's public number usable?
+--
+-- @1@ and @p-1@ generate a group of one or two elements, so the value they
+-- mask the message with is one of a handful of constants.
+validPublic :: Integer -> Integer -> Bool
+validPublic p h = h > 1 && h < p - 1
+
 -- | encrypt with a specified ephemeral key
--- do not reuse ephemeral key.
+--
+-- The ephemeral key must lie in @[1, p-2]@ and must never be reused: zero
+-- would leave the message unmasked, and a repeat lets anyone who learns one
+-- plaintext recover the other.  A message must be below the modulus, or
+-- decryption would return it reduced.
 encryptWith
-    :: EphemeralKey -> Params -> PublicNumber -> Integer -> (Integer, Integer)
-encryptWith (EphemeralKey b) (Params p g _) (PublicNumber h) m = (c1, c2)
+    :: EphemeralKey
+    -> Params
+    -> PublicNumber
+    -> Integer
+    -> CryptoFailable (Integer, Integer)
+encryptWith (EphemeralKey b) (Params p g _) (PublicNumber h) m
+    | b < 1 || b > p - 2 = CryptoFailed CryptoError_ParameterInvalid
+    | not (validPublic p h) = CryptoFailed CryptoError_ParameterInvalid
+    | m < 0 || m >= p = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed (c1, c2)
   where
     s = expSafe h b p
     c1 = expSafe g b p
@@ -91,17 +124,31 @@ encryptWith (EphemeralKey b) (Params p g _) (PublicNumber h) m = (c1, c2)
 -- | encrypt a message using params and public keys
 -- will generate b (called the ephemeral key)
 encrypt
-    :: MonadRandom m => Params -> PublicNumber -> Integer -> m (Integer, Integer)
-encrypt params@(Params p _ _) public m = (\b -> encryptWith b params public m) <$> generateEphemeral q
-  where
-    q = p - 1 -- p is prime, hence order of the group is p-1
+    :: MonadRandom m
+    => Params
+    -> PublicNumber
+    -> Integer
+    -> m (CryptoFailable (Integer, Integer))
+encrypt params@(Params p _ _) public m
+    | p < 5 = return (CryptoFailed CryptoError_ParameterInvalid)
+    | otherwise = do
+        b <- generateBetween 1 (p - 2)
+        return $ encryptWith (EphemeralKey b) params public m
 
 -- | decrypt message
-decrypt :: Params -> PrivateNumber -> (Integer, Integer) -> Integer
-decrypt (Params p _ _) (PrivateNumber a) (c1, c2) = (c2 * sm1) `mod` p
+--
+-- @c1@ must be a unit modulo @p@; a ciphertext whose first component is zero
+-- or out of range is rejected rather than raising.
+decrypt
+    :: Params -> PrivateNumber -> (Integer, Integer) -> CryptoFailable Integer
+decrypt (Params p _ _) (PrivateNumber a) (c1, c2)
+    | c1 <= 0 || c1 >= p = CryptoFailed CryptoError_ParameterInvalid
+    | c2 < 0 || c2 >= p = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = case inverse s p of
+        Nothing -> CryptoFailed CryptoError_ParameterInvalid
+        Just sm1 -> CryptoPassed ((c2 * sm1) `mod` p)
   where
     s = expSafe c1 a p
-    sm1 = fromJust $ inverse s p -- always inversible in Zp
 
 -- | sign a message with an explicit k number
 --
@@ -124,9 +171,9 @@ signWith
     -- ^ message to sign
     -> Maybe Signature
 signWith k (Params p g _) (PrivateNumber x) hashAlg msg
-    | k >= p - 1 || d > 1 = Nothing -- gcd(k,p-1) is not 1
+    | k <= 0 || k >= p - 1 || d > 1 = Nothing -- gcd(k,p-1) is not 1
     | s == 0 = Nothing
-    | otherwise = Just $ Signature (r, s)
+    | otherwise = Just $ Signature r s
   where
     r = expSafe g k p
     h = os2ip $ hashWith hashAlg msg
@@ -164,7 +211,7 @@ verify
     -> msg
     -> Signature
     -> Bool
-verify (Params p g _) (PublicNumber y) hashAlg msg (Signature (r, s))
+verify (Params p g _) (PublicNumber y) hashAlg msg (Signature r s)
     | or [r <= 0, r >= p, s <= 0, s >= (p - 1)] = False
     | otherwise = lhs == rhs
   where
