@@ -144,6 +144,22 @@ aeadTagLengthTests =
         , testCase "3-byte tag rejected" $ Nothing @=? openWith (B.take 3 fullTag)
         , testCase "wrong tag rejected" $
             Nothing @=? openWith (B.map (+ 1) fullTag)
+        , -- a truncated tag is still at or above the minimum, so the length
+          -- taken from the tag is the peer's choice of how much to verify
+          testCase "4-byte tag accepted, since the tag sets the length" $
+            Just message @=? openWith (B.take 4 fullTag)
+        , testCase "aeadSimpleDecrypt' verifies the full tag" $
+            Just message @=? openWith' 16 fullTag
+        , testCase "aeadSimpleDecrypt' refuses a truncated tag" $
+            Nothing @=? openWith' 16 (B.take 4 fullTag)
+        , testCase "aeadSimpleDecrypt' refuses an overlong tag" $
+            Nothing @=? openWith' 16 (fullTag `B.append` B.singleton 0)
+        , testCase "aeadSimpleDecrypt' refuses a length below the minimum" $
+            Nothing @=? openWith' 3 (B.take 3 fullTag)
+        , testCase "aeadSimpleDecrypt' verifies a short tag the caller asked for" $
+            Just message @=? openWith' 8 (B.take 8 fullTag)
+        , testCase "aeadSimpleDecrypt' refuses a wrong tag" $
+            Nothing @=? openWith' 16 (B.map (+ 1) fullTag)
         ]
   where
     key = B.replicate 16 0
@@ -155,6 +171,7 @@ aeadTagLengthTests =
     (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead aad message 16
     fullTag = BA.convert tag :: ByteString
     openWith t = aeadSimpleDecrypt aead aad ciphertext (AuthTag (BA.convert t))
+    openWith' n t = aeadSimpleDecrypt' aead aad ciphertext n (AuthTag (BA.convert t))
 
 tests =
     testGroup
