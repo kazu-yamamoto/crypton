@@ -44,6 +44,5 @@ katTests =
     ]
 
 spec :: Spec
-spec =
-    describe "Curve448" $ do
-        describe "KATs" $ sequence_ katTests
+spec = do
+    describe "KATs" $ sequence_ katTests

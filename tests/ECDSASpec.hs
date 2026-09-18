@@ -77,33 +77,32 @@ testNormalize name = prop (show name) $ \(ArbitraryBS0_2901 msg) -> do
     pure $ propertyHold [eqTest "normalized" (Just True) check]
 
 spec :: Spec
-spec =
-    describe "ECDSA" $ do
-        modifyMaxSuccess (const 5) $
-            describe "verification" $ do
-                prop "SHA1" $ propertyECDSA SHA1
-                prop "SHA224" $ propertyECDSA SHA224
-                prop "SHA256" $ propertyECDSA SHA256
-                prop "SHA384" $ propertyECDSA SHA384
-                prop "SHA512" $ propertyECDSA SHA512
-        describe "recovery" $ do
-            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r1
-            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r2
-            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256k1
-            modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256r1
-            modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r1
-            modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r2
-            modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233k1
-            modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233r1
-        describe "normalize" $ do
-            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r1
-            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r2
-            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256k1
-            modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256r1
-            modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r1
-            modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r2
-            modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233k1
-            modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233r1
+spec = do
+    modifyMaxSuccess (const 5) $
+        describe "verification" $ do
+            prop "SHA1" $ propertyECDSA SHA1
+            prop "SHA224" $ propertyECDSA SHA224
+            prop "SHA256" $ propertyECDSA SHA256
+            prop "SHA384" $ propertyECDSA SHA384
+            prop "SHA512" $ propertyECDSA SHA512
+    describe "recovery" $ do
+        modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r1
+        modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r2
+        modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256k1
+        modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256r1
+        modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r1
+        modifyMaxSuccess (const 50) $ testRecover ECC.SEC_t131r2
+        modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233k1
+        modifyMaxSuccess (const 20) $ testRecover ECC.SEC_t233r1
+    describe "normalize" $ do
+        modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r1
+        modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p128r2
+        modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256k1
+        modifyMaxSuccess (const 100) $ testNormalize ECC.SEC_p256r1
+        modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r1
+        modifyMaxSuccess (const 50) $ testNormalize ECC.SEC_t131r2
+        modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233k1
+        modifyMaxSuccess (const 20) $ testNormalize ECC.SEC_t233r1
   where
     propertyECDSA hashAlg (Curve c curve _) (ArbitraryBS0_2901 msg) = do
         d <- arbitraryScalar curve

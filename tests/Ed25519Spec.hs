@@ -129,10 +129,9 @@ doNegVerifyTest NegVec{..} =
     !pub = throwCryptoError $ Ed25519.publicKey negPub
 
 spec :: Spec
-spec =
-    describe "Ed25519" $ do
-        it "gen secretkey" (Ed25519.generateSecretKey *> pure () :: Expectation)
-        describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
-        describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
-        describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
-        describe "reject non-canonical scalar" $ mapM_ doNegVerifyTest negVectors
+spec = do
+    it "gen secretkey" (Ed25519.generateSecretKey *> pure () :: Expectation)
+    describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
+    describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
+    describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
+    describe "reject non-canonical scalar" $ mapM_ doNegVerifyTest negVectors

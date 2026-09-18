@@ -237,9 +237,8 @@ doNegVerifyTest NegVec{..} =
     !pub = throwCryptoError $ EdDSA.publicKey negPrx negAlg negPub
 
 spec :: Spec
-spec =
-    describe "EdDSA" $ do
-        describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
-        describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
-        describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
-        describe "reject non-canonical encoding" $ mapM_ doNegVerifyTest negVectors
+spec = do
+    describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
+    describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
+    describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
+    describe "reject non-canonical encoding" $ mapM_ doNegVerifyTest negVectors

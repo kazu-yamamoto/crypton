@@ -180,16 +180,15 @@ unpadTests =
             )
 
 spec :: Spec
-spec =
-    describe "RSA" $ do
-        describe "SHA1" $ do
-            describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
-            describe "verify" $
-                sequence_ $
-                    zipWith doVerifyTest [katZero ..] $
-                        filter vectorHasSignature vectorsSHA1
-            describe "malleability" $
-                sequence_ $
-                    zipWith doMalleabilityTest [katZero ..] $
-                        filter vectorHasSignature vectorsSHA1
-        unpadTests
+spec = do
+    describe "SHA1" $ do
+        describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
+        describe "verify" $
+            sequence_ $
+                zipWith doVerifyTest [katZero ..] $
+                    filter vectorHasSignature vectorsSHA1
+        describe "malleability" $
+            sequence_ $
+                zipWith doMalleabilityTest [katZero ..] $
+                    filter vectorHasSignature vectorsSHA1
+    unpadTests

@@ -112,6 +112,6 @@ ffdhTests =
     xb = DH.PrivateNumber 0x2c4e60813579bdf2468ace01f3b5d79a
 
 spec :: Spec
-spec = describe "DH" $ do
+spec = do
     ecdhTests
     ffdhTests

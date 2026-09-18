@@ -99,21 +99,20 @@ instance Arbitrary Vector where
     arbitrary = Vector 20 <$> arbitraryBS 16 <*> arbitraryBS 12
 
 spec :: Spec
-spec =
-    describe "ChaCha" $ do
-        it "8-128-K0-I0" (chachaRunSimple b8_128_k0_i0 8 16 8)
-        it "12-128-K0-I0" (chachaRunSimple b12_128_k0_i0 12 16 8)
-        it "20-128-K0-I0" (chachaRunSimple b20_128_k0_i0 20 16 8)
-        it "8-256-K0-I0" (chachaRunSimple b8_256_k0_i0 8 32 8)
-        it "12-256-K0-I0" (chachaRunSimple b12_256_k0_i0 12 32 8)
-        it "20-256-K0-I0" (chachaRunSimple b20_256_k0_i0 20 32 8)
-        it "XChaCha20 example KAT" xChaCha20_ExampleKAT
-        it "RFC 8439 A2 #1 ChaCha20" rfc8439A2_1
-        it "RFC 8439 A2 #2 ChaCha20" rfc8439A2_2
-        it "RFC 8439 A2 #3 ChaCha20" rfc8439A2_3
-        prop "generate-combine" chachaGenerateCombine
-        prop "chunking-generate" chachaGenerateChunks
-        prop "chunking-combine" chachaCombineChunks
+spec = do
+    it "8-128-K0-I0" (chachaRunSimple b8_128_k0_i0 8 16 8)
+    it "12-128-K0-I0" (chachaRunSimple b12_128_k0_i0 12 16 8)
+    it "20-128-K0-I0" (chachaRunSimple b20_128_k0_i0 20 16 8)
+    it "8-256-K0-I0" (chachaRunSimple b8_256_k0_i0 8 32 8)
+    it "12-256-K0-I0" (chachaRunSimple b12_256_k0_i0 12 32 8)
+    it "20-256-K0-I0" (chachaRunSimple b20_256_k0_i0 20 32 8)
+    it "XChaCha20 example KAT" xChaCha20_ExampleKAT
+    it "RFC 8439 A2 #1 ChaCha20" rfc8439A2_1
+    it "RFC 8439 A2 #2 ChaCha20" rfc8439A2_2
+    it "RFC 8439 A2 #3 ChaCha20" rfc8439A2_3
+    prop "generate-combine" chachaGenerateCombine
+    prop "chunking-generate" chachaGenerateChunks
+    prop "chunking-combine" chachaCombineChunks
   where
     chachaRunSimple expected rounds klen nonceLen =
         let chacha = ChaCha.initialize rounds (B.replicate klen 0) (B.replicate nonceLen 0)

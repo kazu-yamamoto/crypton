@@ -110,9 +110,8 @@ doVerifyTest i vec = it (show i) (Ed448.verify pub (vecMsg vec) sig `shouldBe` T
     !pub = throwCryptoError $ Ed448.publicKey (vecPub vec)
 
 spec :: Spec
-spec =
-    describe "Ed448" $ do
-        it "gen secretkey" (Ed448.generateSecretKey *> pure () :: Expectation)
-        describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
-        describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
-        describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors
+spec = do
+    it "gen secretkey" (Ed448.generateSecretKey *> pure () :: Expectation)
+    describe "gen publickey" $ zipWithM_ doPublicKeyTest [katZero ..] vectors
+    describe "gen signature" $ zipWithM_ doSignatureTest [katZero ..] vectors
+    describe "verify sig" $ zipWithM_ doVerifyTest [katZero ..] vectors

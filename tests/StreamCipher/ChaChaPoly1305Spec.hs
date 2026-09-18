@@ -90,15 +90,14 @@ rfc8439decrypt = mpt `shouldBe` Just a5plain
         _ -> Nothing
 
 spec :: Spec
-spec =
-    describe "ChaChaPoly1305" $ do
-        it "V1" runEncrypt
-        it "V1-decrypt" runDecrypt
-        it "V1-extended" runEncryptX
-        it "V1-extended-decrypt" runDecryptX
-        it "nonce increment" runNonceInc
-        it "RFC8439 A5 enc" rfc8439encrypt
-        it "RFC8439 A5 dec" rfc8439decrypt
+spec = do
+    it "V1" runEncrypt
+    it "V1-decrypt" runDecrypt
+    it "V1-extended" runEncryptX
+    it "V1-extended-decrypt" runDecryptX
+    it "nonce increment" runNonceInc
+    it "RFC8439 A5 enc" rfc8439encrypt
+    it "RFC8439 A5 dec" rfc8439decrypt
   where
     runEncrypt =
         let ini =

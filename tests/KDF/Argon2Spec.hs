@@ -97,7 +97,6 @@ optionTests =
     ]
 
 spec :: Spec
-spec =
-    describe "Argon2" $ do
-        describe "KATs" $ sequence_ kdfTests
-        describe "options" $ sequence_ optionTests
+spec = do
+    describe "KATs" $ sequence_ kdfTests
+    describe "options" $ sequence_ optionTests

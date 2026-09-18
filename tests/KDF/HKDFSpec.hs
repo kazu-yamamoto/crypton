@@ -405,7 +405,6 @@ boundTests =
         maxLen = 255 * hashLen
 
 spec :: Spec
-spec =
-    describe "HKDF" $ do
-        describe "KATs" $ sequence_ kdfTests
-        describe "output bound" $ sequence_ boundTests
+spec = do
+    describe "KATs" $ sequence_ kdfTests
+    describe "output bound" $ sequence_ boundTests

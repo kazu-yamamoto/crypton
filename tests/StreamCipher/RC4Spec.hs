@@ -31,9 +31,8 @@ vectors =
 
 spec :: Spec
 spec =
-    describe "RC4" $
-        sequence_ $
-            zipWith toKatTest is vectors
+    sequence_ $
+        zipWith toKatTest is vectors
   where
     toKatTest i (key, plainText, cipherText) =
         it

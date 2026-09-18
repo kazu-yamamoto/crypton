@@ -170,13 +170,12 @@ aeadTagLengthTests =
     openWith' n t = aeadSimpleDecrypt' aead aad ciphertext n (AuthTag (BA.convert t))
 
 spec :: Spec
-spec =
-    describe "AES" $ do
-        testBlockCipher kats128 (undefined :: AES.AES128)
-        testBlockCipher kats192 (undefined :: AES.AES192)
-        testBlockCipher kats256 (undefined :: AES.AES256)
-        aeadIVLengthTests
-        aeadTagLengthTests
+spec = do
+    testBlockCipher kats128 (undefined :: AES.AES128)
+    testBlockCipher kats192 (undefined :: AES.AES192)
+    testBlockCipher kats256 (undefined :: AES.AES256)
+    aeadIVLengthTests
+    aeadTagLengthTests
 
 {-
   , prop "genCtr" $ \(key, iv1) ->

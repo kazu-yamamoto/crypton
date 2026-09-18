@@ -48,7 +48,6 @@ instance Arbitrary ChaChaDRG where
     arbitrary = drgNewTest <$> arbitrary
 
 spec :: Spec
-spec =
-    describe "AFIS" $ do
-        describe "KAT merge" $ sequence_ mergeKATs
-        prop "merge.split == id" $ \(AFISParams bs e hf rng) -> bs == (AFIS.merge hf e $ fst (AFIS.split hf rng e bs))
+spec = do
+    describe "KAT merge" $ sequence_ mergeKATs
+    prop "merge.split == id" $ \(AFISParams bs e hf rng) -> bs == (AFIS.merge hf e $ fst (AFIS.split hf rng e bs))

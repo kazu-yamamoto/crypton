@@ -13,14 +13,13 @@ import Crypto.KDF.BCryptPBKDF (
  )
 
 spec :: Spec
-spec =
-    describe "BCryptPBKDF" $ do
-        describe "generate" $ do
-            it "1" generate1
-            it "2" generate2
-            it "3" generate3
-        describe "hashInternal" $ do
-            it "1" hashInternal1
+spec = do
+    describe "generate" $ do
+        it "1" generate1
+        it "2" generate2
+        it "3" generate3
+    describe "hashInternal" $ do
+        it "1" hashInternal1
   where
     -- test vector taken from the go implementation by @dchest
     generate1 = generate params pass salt `shouldBe` expected

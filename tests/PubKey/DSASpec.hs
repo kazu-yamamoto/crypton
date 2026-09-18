@@ -451,29 +451,28 @@ nonInvertibleTests =
         left result `shouldBe` Right expected
 
 spec :: Spec
-spec =
-    describe "DSA" $ do
-        describe "SHA1" $ do
-            describe "signature" $ zipWithM_ (doSignatureTest SHA1) [katZero ..] vectorsSHA1
-            describe "verify" $ zipWithM_ (doVerifyTest SHA1) [katZero ..] vectorsSHA1
-        describe "SHA224" $ do
-            describe "signature" $
-                sequence_ $
-                    zipWith (doSignatureTest SHA224) [katZero ..] vectorsSHA224
-            describe "verify" $ zipWithM_ (doVerifyTest SHA224) [katZero ..] vectorsSHA224
-        describe "SHA256" $ do
-            describe "signature" $
-                sequence_ $
-                    zipWith (doSignatureTest SHA256) [katZero ..] vectorsSHA256
-            describe "verify" $ zipWithM_ (doVerifyTest SHA256) [katZero ..] vectorsSHA256
-        describe "SHA384" $ do
-            describe "signature" $
-                sequence_ $
-                    zipWith (doSignatureTest SHA384) [katZero ..] vectorsSHA384
-            describe "verify" $ zipWithM_ (doVerifyTest SHA384) [katZero ..] vectorsSHA384
-        describe "SHA512" $ do
-            describe "signature" $
-                sequence_ $
-                    zipWith (doSignatureTest SHA512) [katZero ..] vectorsSHA512
-            describe "verify" $ zipWithM_ (doVerifyTest SHA512) [katZero ..] vectorsSHA512
-        nonInvertibleTests
+spec = do
+    describe "SHA1" $ do
+        describe "signature" $ zipWithM_ (doSignatureTest SHA1) [katZero ..] vectorsSHA1
+        describe "verify" $ zipWithM_ (doVerifyTest SHA1) [katZero ..] vectorsSHA1
+    describe "SHA224" $ do
+        describe "signature" $
+            sequence_ $
+                zipWith (doSignatureTest SHA224) [katZero ..] vectorsSHA224
+        describe "verify" $ zipWithM_ (doVerifyTest SHA224) [katZero ..] vectorsSHA224
+    describe "SHA256" $ do
+        describe "signature" $
+            sequence_ $
+                zipWith (doSignatureTest SHA256) [katZero ..] vectorsSHA256
+        describe "verify" $ zipWithM_ (doVerifyTest SHA256) [katZero ..] vectorsSHA256
+    describe "SHA384" $ do
+        describe "signature" $
+            sequence_ $
+                zipWith (doSignatureTest SHA384) [katZero ..] vectorsSHA384
+        describe "verify" $ zipWithM_ (doVerifyTest SHA384) [katZero ..] vectorsSHA384
+    describe "SHA512" $ do
+        describe "signature" $
+            sequence_ $
+                zipWith (doSignatureTest SHA512) [katZero ..] vectorsSHA512
+        describe "verify" $ zipWithM_ (doVerifyTest SHA512) [katZero ..] vectorsSHA512
+    nonInvertibleTests

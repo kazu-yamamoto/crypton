@@ -1628,9 +1628,8 @@ testEntryNonce entry = describe (show entry) $ sequence_ tests
     curve = getCurveByName $ curveName entry
 
 spec :: Spec
-spec =
-    describe "ECDSA" $ do
-        describe "GEC 2" $ sequence_ $ testEntry . normalize <$> gec2Entries
-        describe "RFC 6979" $
-            sequence_ $
-                testEntryNonce . normalize <$> flatten rfc6979Entries
+spec = do
+    describe "GEC 2" $ sequence_ $ testEntry . normalize <$> gec2Entries
+    describe "RFC 6979" $
+        sequence_ $
+            testEntryNonce . normalize <$> flatten rfc6979Entries

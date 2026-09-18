@@ -188,57 +188,56 @@ doRwVerifyTest key i vector = it (show i) (actual `shouldBe` True)
     actual = RW.verify key SHA1 (message vector) (signature vector)
 
 spec :: Spec
-spec =
-    describe "Rabin" $ do
-        describe "Basic" $ do
-            describe "encrypt" $
-                sequence_ $
-                    zipWith
-                        (doBasicRabinEncryptTest $ BRabin.private_pub basicRabinKey)
-                        [katZero ..]
-                        basicRabinEncryptionVectors
-            describe "decrypt" $
-                sequence_ $
-                    zipWith
-                        (doBasicRabinDecryptTest basicRabinKey)
-                        [katZero ..]
-                        basicRabinEncryptionVectors
-            describe "sign" $
-                sequence_ $
-                    zipWith
-                        (doBasicRabinSignTest basicRabinKey)
-                        [katZero ..]
-                        basicRabinSignatureVectors
-            describe "verify" $
-                sequence_ $
-                    zipWith
-                        (doBasicRabinVerifyTest $ BRabin.private_pub basicRabinKey)
-                        [katZero ..]
-                        basicRabinSignatureVectors
-        describe "Modified" $ do
-            describe "sign" $
-                sequence_ $
-                    zipWith
-                        (doModifiedRabinSignTest modifiedRabinKey)
-                        [katZero ..]
-                        modifiedRabinSignatureVectors
-            describe "verify" $
-                sequence_ $
-                    zipWith
-                        (doModifiedRabinVerifyTest $ MRabin.private_pub modifiedRabinKey)
-                        [katZero ..]
-                        modifiedRabinSignatureVectors
-        describe "RW" $ do
-            describe "encrypt" $
-                sequence_ $
-                    zipWith
-                        (doRwEncryptTest $ RW.private_pub rwKey)
-                        [katZero ..]
-                        rwEncryptionVectors
-            describe "decrypt" $
-                sequence_ $
-                    zipWith (doRwDecryptTest rwKey) [katZero ..] rwEncryptionVectors
-            describe "sign" $ zipWithM_ (doRwSignTest rwKey) [katZero ..] rwSignatureVectors
-            describe "verify" $
-                sequence_ $
-                    zipWith (doRwVerifyTest $ RW.private_pub rwKey) [katZero ..] rwSignatureVectors
+spec = do
+    describe "Basic" $ do
+        describe "encrypt" $
+            sequence_ $
+                zipWith
+                    (doBasicRabinEncryptTest $ BRabin.private_pub basicRabinKey)
+                    [katZero ..]
+                    basicRabinEncryptionVectors
+        describe "decrypt" $
+            sequence_ $
+                zipWith
+                    (doBasicRabinDecryptTest basicRabinKey)
+                    [katZero ..]
+                    basicRabinEncryptionVectors
+        describe "sign" $
+            sequence_ $
+                zipWith
+                    (doBasicRabinSignTest basicRabinKey)
+                    [katZero ..]
+                    basicRabinSignatureVectors
+        describe "verify" $
+            sequence_ $
+                zipWith
+                    (doBasicRabinVerifyTest $ BRabin.private_pub basicRabinKey)
+                    [katZero ..]
+                    basicRabinSignatureVectors
+    describe "Modified" $ do
+        describe "sign" $
+            sequence_ $
+                zipWith
+                    (doModifiedRabinSignTest modifiedRabinKey)
+                    [katZero ..]
+                    modifiedRabinSignatureVectors
+        describe "verify" $
+            sequence_ $
+                zipWith
+                    (doModifiedRabinVerifyTest $ MRabin.private_pub modifiedRabinKey)
+                    [katZero ..]
+                    modifiedRabinSignatureVectors
+    describe "RW" $ do
+        describe "encrypt" $
+            sequence_ $
+                zipWith
+                    (doRwEncryptTest $ RW.private_pub rwKey)
+                    [katZero ..]
+                    rwEncryptionVectors
+        describe "decrypt" $
+            sequence_ $
+                zipWith (doRwDecryptTest rwKey) [katZero ..] rwEncryptionVectors
+        describe "sign" $ zipWithM_ (doRwSignTest rwKey) [katZero ..] rwSignatureVectors
+        describe "verify" $
+            sequence_ $
+                zipWith (doRwVerifyTest $ RW.private_pub rwKey) [katZero ..] rwSignatureVectors

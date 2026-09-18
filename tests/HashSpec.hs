@@ -490,13 +490,12 @@ makeTestSHAKE128Truncation i byte =
         Just (SomeNat p) -> convert (hashEmpty p)
 
 spec :: Spec
-spec =
-    describe "hash" $ do
-        describe "KATs" $ mapM_ makeTestAlg expected
-        describe "Chunking" $ mapM_ makeTestChunk expected
-        describe "Prefix" $ mapM_ makeTestPrefix expectedPrefix
-        describe "Hybrid" $ mapM_ makeTestHybrid expectedPrefix
-        describe "Truncating" $ do
-            describe "SHAKE128" $
-                sequence_ $
-                    (zipWith makeTestSHAKE128Truncation [1 ..] shake128TruncationBytes)
+spec = do
+    describe "KATs" $ mapM_ makeTestAlg expected
+    describe "Chunking" $ mapM_ makeTestChunk expected
+    describe "Prefix" $ mapM_ makeTestPrefix expectedPrefix
+    describe "Hybrid" $ mapM_ makeTestHybrid expectedPrefix
+    describe "Truncating" $ do
+        describe "SHAKE128" $
+            sequence_ $
+                (zipWith makeTestSHAKE128Truncation [1 ..] shake128TruncationBytes)

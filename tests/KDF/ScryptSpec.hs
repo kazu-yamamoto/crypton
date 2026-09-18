@@ -32,9 +32,8 @@ vectors =
 
 spec :: Spec
 spec =
-    describe "Scrypt" $
-        sequence_ $
-            zipWith toCase [(1 :: Int) ..] vectors
+    sequence_ $
+        zipWith toCase [(1 :: Int) ..] vectors
   where
     toCase i ((pass, salt, n, r, p, dklen), output) =
         it

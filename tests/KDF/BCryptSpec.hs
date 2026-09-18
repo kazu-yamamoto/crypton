@@ -84,25 +84,24 @@ makeKATs = concatMap maketest (zip3 is passwords hashes)
         ]
 
 spec :: Spec
-spec =
-    describe "bcrypt" $ do
-        describe "KATs" $ sequence_ makeKATs
-        it
-            "Invalid hash length"
-            ( assertEqual
-                ""
-                (Left "Invalid hash format")
-                ( validatePasswordEither
-                    B.empty
-                    ("$2a$06$DCq7YPn5Rq63x1Lad4cll.TV4S6ytwfsfvkgY8jIucDrjc8deX1s" :: B.ByteString)
-                )
+spec = do
+    describe "KATs" $ sequence_ makeKATs
+    it
+        "Invalid hash length"
+        ( assertEqual
+            ""
+            (Left "Invalid hash format")
+            ( validatePasswordEither
+                B.empty
+                ("$2a$06$DCq7YPn5Rq63x1Lad4cll.TV4S6ytwfsfvkgY8jIucDrjc8deX1s" :: B.ByteString)
             )
-        it
-            "Hash and validate"
-            ( assertBool
-                "Hashed password should validate"
-                (validatePassword somePassword (bcrypt 5 aSalt somePassword :: B.ByteString))
-            )
+        )
+    it
+        "Hash and validate"
+        ( assertBool
+            "Hashed password should validate"
+            (validatePassword somePassword (bcrypt 5 aSalt somePassword :: B.ByteString))
+        )
   where
     somePassword = "some password" :: B.ByteString
     aSalt =

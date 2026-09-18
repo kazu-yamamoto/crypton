@@ -101,12 +101,11 @@ divTests =
                 isNothing (invF2m m b) || divF2m m (mulF2m m a b) b == Just (modF2m m a)
 
 spec :: Spec
-spec =
-    describe "number.F2m" $ do
-        addTests
-        modTests
-        mulTests
-        squareTests
-        powTests
-        invTests
-        divTests
+spec = do
+    addTests
+    modTests
+    mulTests
+    squareTests
+    powTests
+    invTests
+    divTests

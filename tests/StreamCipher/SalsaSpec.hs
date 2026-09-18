@@ -64,17 +64,16 @@ instance Arbitrary RandomVector where
     arbitrary = RandomVector <$> elements vectors
 
 spec :: Spec
-spec =
-    describe "Salsa" $ do
-        describe "KAT" $
-            sequence_ $
-                zipWith
-                    (\i (r, k, n, e) -> it (show (i :: Int)) $ salsaRunSimple e r k n)
-                    [1 ..]
-                    vectors
-        prop "generate-combine" salsaGenerateCombine
-        prop "chunking-generate" salsaGenerateChunks
-        prop "chunking-combine" salsaCombineChunks
+spec = do
+    describe "KAT" $
+        sequence_ $
+            zipWith
+                (\i (r, k, n, e) -> it (show (i :: Int)) $ salsaRunSimple e r k n)
+                [1 ..]
+                vectors
+    prop "generate-combine" salsaGenerateCombine
+    prop "chunking-generate" salsaGenerateChunks
+    prop "chunking-combine" salsaCombineChunks
   where
     salsaRunSimple expected rounds key nonce =
         let salsa = Salsa.initialize rounds key nonce

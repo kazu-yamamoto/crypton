@@ -66,24 +66,23 @@ vectors_hmac_sha512 =
     ]
 
 spec :: Spec
-spec =
-    describe "PBKDF2" $ do
-        describe "KATs-HMAC-SHA1" $
-            sequence_ (katTests (PBKDF2.prfHMAC SHA1) vectors_hmac_sha1)
-        describe "KATs-HMAC-SHA1 (fast)" $
-            sequence_ (katTestFastPBKDF2_SHA1 vectors_hmac_sha1)
-        describe "KATs-HMAC-SHA256" $
-            sequence_ $
-                (katTests (PBKDF2.prfHMAC SHA256) vectors_hmac_sha256)
-        describe "KATs-HMAC-SHA256 (fast)" $
-            sequence_ $
-                (katTestFastPBKDF2_SHA256 vectors_hmac_sha256)
-        describe "KATs-HMAC-SHA512" $
-            sequence_ $
-                (katTests (PBKDF2.prfHMAC SHA512) vectors_hmac_sha512)
-        describe "KATs-HMAC-SHA512 (fast)" $
-            sequence_ $
-                (katTestFastPBKDF2_SHA512 vectors_hmac_sha512)
+spec = do
+    describe "KATs-HMAC-SHA1" $
+        sequence_ (katTests (PBKDF2.prfHMAC SHA1) vectors_hmac_sha1)
+    describe "KATs-HMAC-SHA1 (fast)" $
+        sequence_ (katTestFastPBKDF2_SHA1 vectors_hmac_sha1)
+    describe "KATs-HMAC-SHA256" $
+        sequence_ $
+            (katTests (PBKDF2.prfHMAC SHA256) vectors_hmac_sha256)
+    describe "KATs-HMAC-SHA256 (fast)" $
+        sequence_ $
+            (katTestFastPBKDF2_SHA256 vectors_hmac_sha256)
+    describe "KATs-HMAC-SHA512" $
+        sequence_ $
+            (katTests (PBKDF2.prfHMAC SHA512) vectors_hmac_sha512)
+    describe "KATs-HMAC-SHA512 (fast)" $
+        sequence_ $
+            (katTestFastPBKDF2_SHA512 vectors_hmac_sha512)
   where
     katTests prf = zipWith (toKatTest prf) is
 

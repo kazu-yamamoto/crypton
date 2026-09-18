@@ -204,7 +204,6 @@ macIncrementalTests =
             `assertEq` HMAC.finalize (foldl' HMAC.update (HMAC.initialize secret) msgs)
 
 spec :: Spec
-spec =
-    describe "HMAC" $ do
-        describe "KATs" $ sequence_ macTests
-        describe "properties" $ sequence_ macIncrementalTests
+spec = do
+    describe "KATs" $ sequence_ macTests
+    describe "properties" $ sequence_ macIncrementalTests

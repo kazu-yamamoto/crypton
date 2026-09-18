@@ -180,21 +180,20 @@ verifyTests =
     at steps = fromInteger (toInteger now + 30 * steps)
 
 spec :: Spec
-spec =
-    describe "OTP" $ do
-        describe "HOTP" $ do
-            describe "KATs" $ sequence_ (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
-            describe "digest size" $ sequence_ digestSizeTests
-            describe "properties" $ do
-                prop "resync-expected" prop_resyncExpected
-        describe "TOTP" $ do
-            describe "KATs" $ do
-                describe "SHA1" $
-                    sequence_ (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
-                describe "SHA256" $
-                    sequence_ $
-                        (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
-                describe "SHA512" $
-                    sequence_ $
-                        (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
-            describe "verify" $ sequence_ verifyTests
+spec = do
+    describe "HOTP" $ do
+        describe "KATs" $ sequence_ (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
+        describe "digest size" $ sequence_ digestSizeTests
+        describe "properties" $ do
+            prop "resync-expected" prop_resyncExpected
+    describe "TOTP" $ do
+        describe "KATs" $ do
+            describe "SHA1" $
+                sequence_ (makeKATs (totp totpSHA1Params otpKey) totpSHA1Expected)
+            describe "SHA256" $
+                sequence_ $
+                    (makeKATs (totp totpSHA256Params totpSHA256Key) totpSHA256Expected)
+            describe "SHA512" $
+                sequence_ $
+                    (makeKATs (totp totpSHA512Params totpSHA512Key) totpSHA512Expected)
+        describe "verify" $ sequence_ verifyTests

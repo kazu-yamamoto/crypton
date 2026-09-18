@@ -48,6 +48,5 @@ vectors =
         gAES128
 
 spec :: Spec
-spec =
-    describe "MiyaguchiPreneel" $ do
-        vectors
+spec = do
+    vectors

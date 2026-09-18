@@ -193,7 +193,6 @@ macIncrementalTests =
         result `assertEq` KB.finalize (foldl' KB.update (KB.initialize secret) msgs)
 
 spec :: Spec
-spec =
-    describe "Blake2" $ do
-        describe "KATs" $ sequence_ macTests
-        describe "properties" $ sequence_ macIncrementalTests
+spec = do
+    describe "KATs" $ sequence_ macTests
+    describe "properties" $ sequence_ macIncrementalTests

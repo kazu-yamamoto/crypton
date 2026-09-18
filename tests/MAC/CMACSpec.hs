@@ -210,6 +210,5 @@ nistVectors =
         sequence_ [gAES128, gAES192, gAES256, gTDEA3, gTDEA2]
 
 spec :: Spec
-spec =
-    describe "CMAC" $ do
-        nistVectors
+spec = do
+    nistVectors

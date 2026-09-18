@@ -39,7 +39,6 @@ testZeroPad n (inp, sz, padded, unpadded) =
             ]
 
 spec :: Spec
-spec =
-    describe "Padding" $ do
-        describe "Cases" $ zipWithM_ testPad [1 ..] cases
-        describe "ZeroCases" $ zipWithM_ testZeroPad [1 ..] zeroCases
+spec = do
+    describe "Cases" $ zipWithM_ testPad [1 ..] cases
+    describe "ZeroCases" $ zipWithM_ testZeroPad [1 ..] zeroCases

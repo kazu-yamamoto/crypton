@@ -146,7 +146,6 @@ macIncrementalTests =
             `assertEq` KMAC.finalize (foldl' KMAC.update (KMAC.initialize str secret) msgs)
 
 spec :: Spec
-spec =
-    describe "KMAC" $ do
-        describe "KATs" $ sequence_ macTests
-        describe "properties" $ sequence_ macIncrementalTests
+spec = do
+    describe "KATs" $ sequence_ macTests
+    describe "properties" $ sequence_ macIncrementalTests

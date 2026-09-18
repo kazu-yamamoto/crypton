@@ -146,20 +146,19 @@ vectorsCB =
     ]
 
 spec :: Spec
-spec =
-    describe "XSalsa" $ do
-        describe "KAT" $
-            sequence_ $
-                zipWith
-                    (\i (r, k, n, p, e) -> it (show (i :: Int)) $ salsaRunSimple r k n p e)
-                    [1 ..]
-                    vectors
-        describe "crypto_box encryption" $
-            sequence_ $
-                zipWith
-                    (\i (r, k, n, p, e) -> it (show (i :: Int)) $ cryptoBoxEnc r k n p e)
-                    [1 ..]
-                    vectorsCB
+spec = do
+    describe "KAT" $
+        sequence_ $
+            zipWith
+                (\i (r, k, n, p, e) -> it (show (i :: Int)) $ salsaRunSimple r k n p e)
+                [1 ..]
+                vectors
+    describe "crypto_box encryption" $
+        sequence_ $
+            zipWith
+                (\i (r, k, n, p, e) -> it (show (i :: Int)) $ cryptoBoxEnc r k n p e)
+                [1 ..]
+                vectorsCB
   where
     salsaRunSimple rounds key nonce plain expected =
         let salsa = XSalsa.initialize rounds key nonce

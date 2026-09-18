@@ -106,99 +106,98 @@ validPointEdgeCases =
     ]
 
 spec :: Spec
-spec =
-    describe "P256" $ do
-        describe "scalar" $ do
-            prop "marshalling" $ \(QAInteger r) ->
-                let rBytes = i2ospScalar r
-                 in case P256.scalarFromBinary rBytes of
-                        CryptoFailed err -> error (show err)
-                        CryptoPassed scalar -> rBytes `propertyEq` P256.scalarToBinary scalar
-            prop "add" $ \r1 r2 ->
-                let r = (unP256 r1 + unP256 r2) `mod` curveN
-                    r' = P256.scalarAdd (unP256Scalar r1) (unP256Scalar r2)
-                 in r `propertyEq` p256ScalarToInteger r'
-            prop "add0" $ \r ->
-                let v = unP256 r `mod` curveN
-                    v' = P256.scalarAdd (unP256Scalar r) P256.scalarZero
-                 in v `propertyEq` p256ScalarToInteger v'
-            prop "sub" $ \r1 r2 ->
-                let r = (unP256 r1 - unP256 r2) `mod` curveN
-                    r' = P256.scalarSub (unP256Scalar r1) (unP256Scalar r2)
-                    v = (unP256 r2 - unP256 r1) `mod` curveN
-                    v' = P256.scalarSub (unP256Scalar r2) (unP256Scalar r1)
-                 in propertyHold
-                        [ eqTest "r1-r2" r (p256ScalarToInteger r')
-                        , eqTest "r2-r1" v (p256ScalarToInteger v')
-                        ]
-            prop "sub0" $ \r ->
-                let v = unP256 r `mod` curveN
-                    v' = P256.scalarSub (unP256Scalar r) P256.scalarZero
-                 in v `propertyEq` p256ScalarToInteger v'
-            prop "mul" $ \r1 r2 ->
-                let r = (unP256 r1 * unP256 r2) `mod` curveN
-                    r' = P256.scalarMul (unP256Scalar r1) (unP256Scalar r2)
-                 in r `propertyEq` p256ScalarToInteger r'
-            prop "inv" $ \r' ->
-                let inv = inverseCoprimes (unP256 r') curveN
-                    inv' = P256.scalarInv (unP256Scalar r')
-                 in unP256 r' /= 0 ==> inv `propertyEq` p256ScalarToInteger inv'
-            prop "inv-safe" $ \r' ->
-                let inv = P256.scalarInv (unP256Scalar r')
-                    inv' = P256.scalarInvSafe (unP256Scalar r')
-                 in unP256 r' /= 0 ==> inv `propertyEq` inv'
-            prop "inv-safe-mul" $ \r' ->
-                let inv = P256.scalarInvSafe (unP256Scalar r')
-                    res = P256.scalarMul (unP256Scalar r') inv
-                 in unP256 r' /= 0 ==> 1 `propertyEq` p256ScalarToInteger res
-            prop "inv-safe-zero" $
-                let inv0 = P256.scalarInvSafe P256.scalarZero
-                    invN = P256.scalarInvSafe P256.scalarN
-                 in propertyHold
-                        [ eqTest "scalarZero" P256.scalarZero inv0
-                        , eqTest "scalarN" P256.scalarZero invN
-                        ]
-        describe "point" $ do
-            prop "marshalling" $ \rx ry ->
-                let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
-                    b = P256.pointToBinary p :: Bytes
-                    p' = P256.unsafePointFromBinary b
-                 in propertyHold [eqTest "point" (CryptoPassed p) p']
-            prop "marshalling-integer" $ \rx ry ->
-                let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
-                    (x, y) = P256.pointToIntegers p
-                 in propertyHold [eqTest "x" (unP256 rx) x, eqTest "y" (unP256 ry) y]
-            it "valid-point-1" $ casePointIsValid (xS, yS)
-            it "valid-point-2" $ casePointIsValid (xR, yR)
-            it "valid-point-3" $ casePointIsValid (xT, yT)
-            -- The quotient estimate in crypton_p256_modmul can exceed the
-            -- true quotient, and the resulting borrow used to abort the
-            -- process on an assertion inside the reduction rather than
-            -- being corrected.  Both points below are on the curve.
-            it "valid-point-reduction-1" $ casePointIsValid (xU, yU)
-            it "valid-point-reduction-2" $ casePointIsValid (xV, yV)
-            describe "valid-point-edge-cases" $
-                sequence_ $
-                    map (\(name, point) -> it name $ casePointIsValid point) validPointEdgeCases
-            it "point-add-1" $
-                let s = P256.pointFromIntegers (xS, yS)
-                    t = P256.pointFromIntegers (xT, yT)
-                    r = P256.pointFromIntegers (xR, yR)
-                 in P256.pointAdd s t `shouldBe` r
-            prop "point-add-infinity" casePointAddInfinity
-            prop "lift-to-curve" propertyLiftToCurve
-            prop "point-add" propertyPointAdd
-            prop "point-add-infinity-identity" propertyPointAddInfinityIdentity
-            prop "point-add-inverse" propertyPointAddInverse
-            prop "point-negate" propertyPointNegate
-            prop "point-mul" propertyPointMul
-            prop "infinity" $
-                let gN = P256.toPoint P256.scalarN
-                    g1 = P256.pointBase
-                 in propertyHold
-                        [ eqTest "zero" True (P256.pointIsAtInfinity gN)
-                        , eqTest "base" False (P256.pointIsAtInfinity g1)
-                        ]
+spec = do
+    describe "scalar" $ do
+        prop "marshalling" $ \(QAInteger r) ->
+            let rBytes = i2ospScalar r
+             in case P256.scalarFromBinary rBytes of
+                    CryptoFailed err -> error (show err)
+                    CryptoPassed scalar -> rBytes `propertyEq` P256.scalarToBinary scalar
+        prop "add" $ \r1 r2 ->
+            let r = (unP256 r1 + unP256 r2) `mod` curveN
+                r' = P256.scalarAdd (unP256Scalar r1) (unP256Scalar r2)
+             in r `propertyEq` p256ScalarToInteger r'
+        prop "add0" $ \r ->
+            let v = unP256 r `mod` curveN
+                v' = P256.scalarAdd (unP256Scalar r) P256.scalarZero
+             in v `propertyEq` p256ScalarToInteger v'
+        prop "sub" $ \r1 r2 ->
+            let r = (unP256 r1 - unP256 r2) `mod` curveN
+                r' = P256.scalarSub (unP256Scalar r1) (unP256Scalar r2)
+                v = (unP256 r2 - unP256 r1) `mod` curveN
+                v' = P256.scalarSub (unP256Scalar r2) (unP256Scalar r1)
+             in propertyHold
+                    [ eqTest "r1-r2" r (p256ScalarToInteger r')
+                    , eqTest "r2-r1" v (p256ScalarToInteger v')
+                    ]
+        prop "sub0" $ \r ->
+            let v = unP256 r `mod` curveN
+                v' = P256.scalarSub (unP256Scalar r) P256.scalarZero
+             in v `propertyEq` p256ScalarToInteger v'
+        prop "mul" $ \r1 r2 ->
+            let r = (unP256 r1 * unP256 r2) `mod` curveN
+                r' = P256.scalarMul (unP256Scalar r1) (unP256Scalar r2)
+             in r `propertyEq` p256ScalarToInteger r'
+        prop "inv" $ \r' ->
+            let inv = inverseCoprimes (unP256 r') curveN
+                inv' = P256.scalarInv (unP256Scalar r')
+             in unP256 r' /= 0 ==> inv `propertyEq` p256ScalarToInteger inv'
+        prop "inv-safe" $ \r' ->
+            let inv = P256.scalarInv (unP256Scalar r')
+                inv' = P256.scalarInvSafe (unP256Scalar r')
+             in unP256 r' /= 0 ==> inv `propertyEq` inv'
+        prop "inv-safe-mul" $ \r' ->
+            let inv = P256.scalarInvSafe (unP256Scalar r')
+                res = P256.scalarMul (unP256Scalar r') inv
+             in unP256 r' /= 0 ==> 1 `propertyEq` p256ScalarToInteger res
+        prop "inv-safe-zero" $
+            let inv0 = P256.scalarInvSafe P256.scalarZero
+                invN = P256.scalarInvSafe P256.scalarN
+             in propertyHold
+                    [ eqTest "scalarZero" P256.scalarZero inv0
+                    , eqTest "scalarN" P256.scalarZero invN
+                    ]
+    describe "point" $ do
+        prop "marshalling" $ \rx ry ->
+            let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
+                b = P256.pointToBinary p :: Bytes
+                p' = P256.unsafePointFromBinary b
+             in propertyHold [eqTest "point" (CryptoPassed p) p']
+        prop "marshalling-integer" $ \rx ry ->
+            let p = P256.pointFromIntegers (unP256 rx, unP256 ry)
+                (x, y) = P256.pointToIntegers p
+             in propertyHold [eqTest "x" (unP256 rx) x, eqTest "y" (unP256 ry) y]
+        it "valid-point-1" $ casePointIsValid (xS, yS)
+        it "valid-point-2" $ casePointIsValid (xR, yR)
+        it "valid-point-3" $ casePointIsValid (xT, yT)
+        -- The quotient estimate in crypton_p256_modmul can exceed the
+        -- true quotient, and the resulting borrow used to abort the
+        -- process on an assertion inside the reduction rather than
+        -- being corrected.  Both points below are on the curve.
+        it "valid-point-reduction-1" $ casePointIsValid (xU, yU)
+        it "valid-point-reduction-2" $ casePointIsValid (xV, yV)
+        describe "valid-point-edge-cases" $
+            sequence_ $
+                map (\(name, point) -> it name $ casePointIsValid point) validPointEdgeCases
+        it "point-add-1" $
+            let s = P256.pointFromIntegers (xS, yS)
+                t = P256.pointFromIntegers (xT, yT)
+                r = P256.pointFromIntegers (xR, yR)
+             in P256.pointAdd s t `shouldBe` r
+        prop "point-add-infinity" casePointAddInfinity
+        prop "lift-to-curve" propertyLiftToCurve
+        prop "point-add" propertyPointAdd
+        prop "point-add-infinity-identity" propertyPointAddInfinityIdentity
+        prop "point-add-inverse" propertyPointAddInverse
+        prop "point-negate" propertyPointNegate
+        prop "point-mul" propertyPointMul
+        prop "infinity" $
+            let gN = P256.toPoint P256.scalarN
+                g1 = P256.pointBase
+             in propertyHold
+                    [ eqTest "zero" True (P256.pointIsAtInfinity gN)
+                    , eqTest "base" False (P256.pointIsAtInfinity g1)
+                    ]
   where
     casePointIsValid pointTuple =
         let s = P256.pointFromIntegers pointTuple in P256.pointIsValid s `shouldBe` True

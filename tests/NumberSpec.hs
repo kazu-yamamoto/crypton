@@ -44,75 +44,74 @@ serializationVectors =
     ]
 
 spec :: Spec
-spec =
-    describe "number" $ do
-        prop "num-bits" $ \(Int1_2901 i) ->
-            and
-                [ (numBits (2 ^ i - 1) == i)
-                , (numBits (2 ^ i) == i + 1)
-                , (numBits (2 ^ i + (2 ^ i - 1)) == i + 1)
-                ]
-        prop "num-bits2" $ \(Positive i) ->
-            not (i `testBit` numBits i) && (i `testBit` (numBits i - 1))
-        prop "generate-param" $ \testDRG (Int1_2901 bits) ->
-            let r = withTestDRG testDRG $ generateParams bits (Just SetHighest) False
-             in r >= 0 && numBits r == bits && testBit r (bits - 1)
-        prop "generate-param2" $ \testDRG (Int1_2901 m1bits) ->
-            let bits = m1bits + 1 -- make sure minimum is 2
-                r = withTestDRG testDRG $ generateParams bits (Just SetTwoHighest) False
-             in r >= 0 && numBits r == bits && testBit r (bits - 1) && testBit r (bits - 2)
-        prop "generate-param-odd" $ \testDRG (Int1_2901 bits) ->
-            let r = withTestDRG testDRG $ generateParams bits Nothing True
-             in r >= 0 && odd r
-        prop "generate-range" $ \testDRG (Positive range) ->
-            let r = withTestDRG testDRG $ generateMax range
-             in 0 <= r && r < range
-        prop "generate-prime" $ \testDRG (Int0_2901 baseBits') ->
-            let baseBits = baseBits' `mod` 800
-                bits = 5 + baseBits -- generating lower than 5 bits causes an error ..
-                prime = withTestDRG testDRG $ generatePrime bits
-             in bits == numBits prime
-        prop "generate-safe-prime" $ \testDRG (Int0_2901 baseBits') ->
-            let baseBits = baseBits' `mod` 200
-                bits = 6 + baseBits
-                prime = withTestDRG testDRG $ generateSafePrime bits
-             in bits == numBits prime
-        prop "as-power-of-2-and-odd" $ \n ->
-            let (e, a1) = asPowerOf2AndOdd n
-             in n == (2 ^ e) * a1
-        prop "squareRoot" $ \testDRG (Int0_2901 baseBits') -> do
-            let baseBits = baseBits' `mod` 500
-                bits = 5 + baseBits -- generating lower than 5 bits causes an error ..
-                p = withTestDRG testDRG $ generatePrime bits
-            g <- choose (1, p - 1)
-            let square x = (x * x) `mod` p
-                r = square <$> squareRoot p g
-            case jacobi g p of
-                Just 1 -> return $ Just g `assertEq` r
-                Just (-1) -> return $ Nothing `assertEq` r
-                _ -> error "invalid jacobi result"
-        prop "marshalling-be" $ \qaInt ->
-            getQAInteger qaInt == BE.os2ip (BE.i2osp (getQAInteger qaInt) :: Bytes)
-        prop "marshalling-le" $ \qaInt ->
-            getQAInteger qaInt == LE.os2ip (LE.i2osp (getQAInteger qaInt) :: Bytes)
-        prop "be-rev-le" $ \qaInt ->
-            getQAInteger qaInt
-                == LE.os2ip (B.reverse (BE.i2osp (getQAInteger qaInt) :: Bytes))
-        prop "be-rev-le-40" $ \qaInt ->
-            getQAInteger qaInt
-                == LE.os2ip (B.reverse (BE.i2ospOf_ 40 (getQAInteger qaInt) :: Bytes))
-        prop "le-rev-be" $ \qaInt ->
-            getQAInteger qaInt
-                == BE.os2ip (B.reverse (LE.i2osp (getQAInteger qaInt) :: Bytes))
-        prop "le-rev-be-40" $ \qaInt ->
-            getQAInteger qaInt
-                == BE.os2ip (B.reverse (LE.i2ospOf_ 40 (getQAInteger qaInt) :: Bytes))
-        describe "marshalling-kat-to-bytearray" $
-            sequence_ $
-                zipWith toSerializationKat [katZero ..] serializationVectors
-        describe "marshalling-kat-to-integer" $
-            sequence_ $
-                zipWith toSerializationKatInteger [katZero ..] serializationVectors
+spec = do
+    prop "num-bits" $ \(Int1_2901 i) ->
+        and
+            [ (numBits (2 ^ i - 1) == i)
+            , (numBits (2 ^ i) == i + 1)
+            , (numBits (2 ^ i + (2 ^ i - 1)) == i + 1)
+            ]
+    prop "num-bits2" $ \(Positive i) ->
+        not (i `testBit` numBits i) && (i `testBit` (numBits i - 1))
+    prop "generate-param" $ \testDRG (Int1_2901 bits) ->
+        let r = withTestDRG testDRG $ generateParams bits (Just SetHighest) False
+         in r >= 0 && numBits r == bits && testBit r (bits - 1)
+    prop "generate-param2" $ \testDRG (Int1_2901 m1bits) ->
+        let bits = m1bits + 1 -- make sure minimum is 2
+            r = withTestDRG testDRG $ generateParams bits (Just SetTwoHighest) False
+         in r >= 0 && numBits r == bits && testBit r (bits - 1) && testBit r (bits - 2)
+    prop "generate-param-odd" $ \testDRG (Int1_2901 bits) ->
+        let r = withTestDRG testDRG $ generateParams bits Nothing True
+         in r >= 0 && odd r
+    prop "generate-range" $ \testDRG (Positive range) ->
+        let r = withTestDRG testDRG $ generateMax range
+         in 0 <= r && r < range
+    prop "generate-prime" $ \testDRG (Int0_2901 baseBits') ->
+        let baseBits = baseBits' `mod` 800
+            bits = 5 + baseBits -- generating lower than 5 bits causes an error ..
+            prime = withTestDRG testDRG $ generatePrime bits
+         in bits == numBits prime
+    prop "generate-safe-prime" $ \testDRG (Int0_2901 baseBits') ->
+        let baseBits = baseBits' `mod` 200
+            bits = 6 + baseBits
+            prime = withTestDRG testDRG $ generateSafePrime bits
+         in bits == numBits prime
+    prop "as-power-of-2-and-odd" $ \n ->
+        let (e, a1) = asPowerOf2AndOdd n
+         in n == (2 ^ e) * a1
+    prop "squareRoot" $ \testDRG (Int0_2901 baseBits') -> do
+        let baseBits = baseBits' `mod` 500
+            bits = 5 + baseBits -- generating lower than 5 bits causes an error ..
+            p = withTestDRG testDRG $ generatePrime bits
+        g <- choose (1, p - 1)
+        let square x = (x * x) `mod` p
+            r = square <$> squareRoot p g
+        case jacobi g p of
+            Just 1 -> return $ Just g `assertEq` r
+            Just (-1) -> return $ Nothing `assertEq` r
+            _ -> error "invalid jacobi result"
+    prop "marshalling-be" $ \qaInt ->
+        getQAInteger qaInt == BE.os2ip (BE.i2osp (getQAInteger qaInt) :: Bytes)
+    prop "marshalling-le" $ \qaInt ->
+        getQAInteger qaInt == LE.os2ip (LE.i2osp (getQAInteger qaInt) :: Bytes)
+    prop "be-rev-le" $ \qaInt ->
+        getQAInteger qaInt
+            == LE.os2ip (B.reverse (BE.i2osp (getQAInteger qaInt) :: Bytes))
+    prop "be-rev-le-40" $ \qaInt ->
+        getQAInteger qaInt
+            == LE.os2ip (B.reverse (BE.i2ospOf_ 40 (getQAInteger qaInt) :: Bytes))
+    prop "le-rev-be" $ \qaInt ->
+        getQAInteger qaInt
+            == BE.os2ip (B.reverse (LE.i2osp (getQAInteger qaInt) :: Bytes))
+    prop "le-rev-be-40" $ \qaInt ->
+        getQAInteger qaInt
+            == BE.os2ip (B.reverse (LE.i2ospOf_ 40 (getQAInteger qaInt) :: Bytes))
+    describe "marshalling-kat-to-bytearray" $
+        sequence_ $
+            zipWith toSerializationKat [katZero ..] serializationVectors
+    describe "marshalling-kat-to-integer" $
+        sequence_ $
+            zipWith toSerializationKatInteger [katZero ..] serializationVectors
   where
     toSerializationKat i (sz, n, ba) = it (show i) (BE.i2ospOf_ sz n `shouldBe` ba)
     toSerializationKatInteger i (_, n, ba) = it (show i) (BE.os2ip ba `shouldBe` n)

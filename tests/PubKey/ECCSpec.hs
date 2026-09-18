@@ -145,33 +145,32 @@ arbitraryPoint aCurve =
     pointGen = ECC.pointBaseMul aCurve <$> choose (1, n - 1)
 
 spec :: Spec
-spec =
-    describe "ECC" $ do
-        describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
-        modifyMaxSuccess (const 20) $
-            describe "property" $ do
-                prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
-                    let curveN = ECC.ecc_n . ECC.common_curve $ aCurve
-                        curveGen = ECC.ecc_g . ECC.common_curve $ aCurve
-                        p1 = ECC.pointMul aCurve r1 curveGen
-                        p2 = ECC.pointMul aCurve r2 curveGen
-                        pR = ECC.pointMul aCurve ((r1 + r2) `mod` curveN) curveGen
-                     in pR `propertyEq` ECC.pointAdd aCurve p1 p2
-                prop "point-negate-add" $ \aCurve -> do
-                    p <- arbitraryPoint aCurve
-                    let o = ECC.pointAdd aCurve p (ECC.pointNegate aCurve p)
-                    return $ ECC.PointO `propertyEq` o
-                prop "point-negate-negate" $ \aCurve -> do
-                    p <- arbitraryPoint aCurve
-                    return $ p `propertyEq` ECC.pointNegate aCurve (ECC.pointNegate aCurve p)
-                prop "point-mul-mul" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
-                    p <- arbitraryPoint aCurve
-                    let pRes = ECC.pointMul aCurve (n1 * n2) p
-                    let pDef = ECC.pointMul aCurve n1 (ECC.pointMul aCurve n2 p)
-                    return $ pRes `propertyEq` pDef
-                prop "double-scalar-mult" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
-                    p1 <- arbitraryPoint aCurve
-                    p2 <- arbitraryPoint aCurve
-                    let pRes = ECC.pointAddTwoMuls aCurve n1 p1 n2 p2
-                    let pDef = ECC.pointAdd aCurve (ECC.pointMul aCurve n1 p1) (ECC.pointMul aCurve n2 p2)
-                    return $ pRes `propertyEq` pDef
+spec = do
+    describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
+    modifyMaxSuccess (const 20) $
+        describe "property" $ do
+            prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
+                let curveN = ECC.ecc_n . ECC.common_curve $ aCurve
+                    curveGen = ECC.ecc_g . ECC.common_curve $ aCurve
+                    p1 = ECC.pointMul aCurve r1 curveGen
+                    p2 = ECC.pointMul aCurve r2 curveGen
+                    pR = ECC.pointMul aCurve ((r1 + r2) `mod` curveN) curveGen
+                 in pR `propertyEq` ECC.pointAdd aCurve p1 p2
+            prop "point-negate-add" $ \aCurve -> do
+                p <- arbitraryPoint aCurve
+                let o = ECC.pointAdd aCurve p (ECC.pointNegate aCurve p)
+                return $ ECC.PointO `propertyEq` o
+            prop "point-negate-negate" $ \aCurve -> do
+                p <- arbitraryPoint aCurve
+                return $ p `propertyEq` ECC.pointNegate aCurve (ECC.pointNegate aCurve p)
+            prop "point-mul-mul" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
+                p <- arbitraryPoint aCurve
+                let pRes = ECC.pointMul aCurve (n1 * n2) p
+                let pDef = ECC.pointMul aCurve n1 (ECC.pointMul aCurve n2 p)
+                return $ pRes `propertyEq` pDef
+            prop "double-scalar-mult" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
+                p1 <- arbitraryPoint aCurve
+                p2 <- arbitraryPoint aCurve
+                let pRes = ECC.pointAddTwoMuls aCurve n1 p1 n2 p2
+                let pDef = ECC.pointAdd aCurve (ECC.pointMul aCurve n1 p1) (ECC.pointMul aCurve n2 p2)
+                return $ pRes `propertyEq` pDef
