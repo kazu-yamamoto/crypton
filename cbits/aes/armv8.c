@@ -26,6 +26,7 @@
 #endif
 #include "crypton_aes.h"
 #include "aes/generic.h"
+#include "crypton_bitfn.h"
 
 /* forward round keys: nbr + 1 of them, written by the generic key expansion */
 #define FWD(key)  ((const uint8_t *) (key)->data)
@@ -131,6 +132,141 @@ int crypton_aes_armv8_available(void)
 	return 1;
 #elif defined(__linux__)
 	return (getauxval(AT_HWCAP) & HWCAP_AES) != 0;
+#else
+	return 0;
+#endif
+}
+
+/*
+ * GHASH using PMULL, the AArch64 counterpart to PCLMULQDQ.
+ *
+ * This is a transliteration of gfmul_pclmuldq in x86ni.c rather than a fresh
+ * formulation: that code is already pinned by the GCM known-answer tests, and
+ * every operation it uses has a direct NEON equivalent, so translating it is
+ * easier to check than reasoning about a new reduction from scratch.
+ *
+ *   _mm_shuffle_epi8 with a reversing mask  ->  vrev64q_u8 then vextq_u8
+ *   _mm_clmulepi64_si128                    ->  vmull_p64 / vmull_high_p64
+ *   _mm_slli_si128 / _mm_srli_si128         ->  vextq_u8 against zero
+ *   _mm_slli_epi32 / _mm_srli_epi32         ->  vshlq_n_u32 / vshrq_n_u32
+ */
+
+/* reverse all 16 bytes */
+static inline uint8x16_t bswap128(uint8x16_t v)
+{
+	return vextq_u8(vrev64q_u8(v), vrev64q_u8(v), 8);
+}
+
+/* shift the whole register left by n bytes, as _mm_slli_si128 does */
+#define SHIFT_LEFT_BYTES(v, n)  vextq_u8(vdupq_n_u8(0), (v), 16 - (n))
+/* and right, as _mm_srli_si128 does */
+#define SHIFT_RIGHT_BYTES(v, n) vextq_u8((v), vdupq_n_u8(0), (n))
+
+#define SHL32(v, n) vreinterpretq_u8_u32(vshlq_n_u32(vreinterpretq_u32_u8(v), (n)))
+#define SHR32(v, n) vreinterpretq_u8_u32(vshrq_n_u32(vreinterpretq_u32_u8(v), (n)))
+
+static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
+{
+	return vreinterpretq_u8_p128(vmull_p64(
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 0),
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
+}
+
+static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
+{
+	return vreinterpretq_u8_p128(vmull_p64(
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 0),
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 1)));
+}
+
+static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
+{
+	return vreinterpretq_u8_p128(vmull_p64(
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 1),
+	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
+}
+
+static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
+{
+	return vreinterpretq_u8_p128(vmull_high_p64(
+	    vreinterpretq_p64_u8(a), vreinterpretq_p64_u8(b)));
+}
+
+static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
+{
+	uint8x16_t b, t3, t4, t5, t6, t7, t8, t9, t2;
+
+	a = bswap128(a);
+	b = vld1q_u8(htable);
+
+	t3 = clmul_ll(a, b);
+	t4 = clmul_lh(a, b);
+	t5 = clmul_hl(a, b);
+	t6 = clmul_hh(a, b);
+
+	t4 = veorq_u8(t4, t5);
+	t5 = SHIFT_LEFT_BYTES(t4, 8);
+	t4 = SHIFT_RIGHT_BYTES(t4, 8);
+	t3 = veorq_u8(t3, t5);
+	t6 = veorq_u8(t6, t4);
+
+	t7 = SHR32(t3, 31);
+	t8 = SHR32(t6, 31);
+	t3 = SHL32(t3, 1);
+	t6 = SHL32(t6, 1);
+
+	t9 = SHIFT_RIGHT_BYTES(t7, 12);
+	t8 = SHIFT_LEFT_BYTES(t8, 4);
+	t7 = SHIFT_LEFT_BYTES(t7, 4);
+	t3 = vorrq_u8(t3, t7);
+	t6 = vorrq_u8(t6, t8);
+	t6 = vorrq_u8(t6, t9);
+
+	t7 = SHL32(t3, 31);
+	t8 = SHL32(t3, 30);
+	t9 = SHL32(t3, 25);
+
+	t7 = veorq_u8(t7, t8);
+	t7 = veorq_u8(t7, t9);
+	t8 = SHIFT_RIGHT_BYTES(t7, 4);
+	t7 = SHIFT_LEFT_BYTES(t7, 12);
+	t3 = veorq_u8(t3, t7);
+
+	t2 = SHR32(t3, 1);
+	t4 = SHR32(t3, 2);
+	t5 = SHR32(t3, 7);
+	t2 = veorq_u8(t2, t4);
+	t2 = veorq_u8(t2, t5);
+	t2 = veorq_u8(t2, t8);
+	t3 = veorq_u8(t3, t2);
+	t6 = veorq_u8(t6, t3);
+
+	return bswap128(t6);
+}
+
+/*
+ * With PMULL there is no 4-bit table to fill: H goes in at index 0, byte
+ * reversed, so that gfmul_pmull does not have to swap it every time.  This
+ * mirrors crypton_aesni_hinit_pclmul.
+ */
+void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
+{
+	htable->q[0] = bitfn_swap64(h->q[1]);
+	htable->q[1] = bitfn_swap64(h->q[0]);
+}
+
+void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
+{
+	vst1q_u8((uint8_t *) a,
+	         gfmul_pmull(vld1q_u8((const uint8_t *) a), (const uint8_t *) htable));
+}
+
+int crypton_aes_armv8_pmull_available(void)
+{
+#if defined(__APPLE__)
+	return 1;
+#elif defined(__linux__)
+	return (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
 #else
 	return 0;
 #endif
