@@ -128,7 +128,7 @@ static void core4(int rounds, block out[4], const crypton_chacha_state *in)
  * with the plaintext is sixteen more vector operations rather than a loop
  * over bytes.
  */
-void crypton_chacha_neon_combine4(int rounds, uint8_t *dst, const uint8_t *src,
+void crypton_chacha_simd_combine4(int rounds, uint8_t *dst, const uint8_t *src,
                                   const crypton_chacha_state *in)
 {
 	block k[4];
@@ -140,7 +140,7 @@ void crypton_chacha_neon_combine4(int rounds, uint8_t *dst, const uint8_t *src,
 		vst1q_u8(dst + i, veorq_u8(vld1q_u8(src + i), vld1q_u8(ks + i)));
 }
 
-void crypton_chacha_neon_generate4(int rounds, uint8_t *dst, const crypton_chacha_state *in)
+void crypton_chacha_simd_generate4(int rounds, uint8_t *dst, const crypton_chacha_state *in)
 {
 	block k[4];
 	const uint8_t *ks = (const uint8_t *) k;
