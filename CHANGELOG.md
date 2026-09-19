@@ -2,6 +2,47 @@
 
 ## 1.2.0
 
+* perf(aes): build the AES-NI paths on Windows, which was missing from the list of
+  systems that compile them.  Windows builds have been doing AES, and GHASH with it,
+  in the generic C
+  [#107](https://github.com/kazu-yamamoto/crypton/pull/107)
+* fix(armv8): compile the AArch64 sources on a toolchain whose baseline lacks the
+  crypto extensions.  They had not built with GCC on AArch64 Linux since #100; CI now
+  builds and tests there
+  [#106](https://github.com/kazu-yamamoto/crypton/pull/106)
+* perf(gcm): fold four GHASH blocks into one reduction.  AES-256-GCM is 1.6x at 1 KiB
+  and 2.6x at 64 KiB on Apple silicon, and the x86 paths gain the same structure
+  [#105](https://github.com/kazu-yamamoto/crypton/pull/105)
+* perf(sha256): use the ARMv8 SHA-2 instructions on AArch64.  SHA-256 and SHA-224 are
+  5.5x
+  [#104](https://github.com/kazu-yamamoto/crypton/pull/104)
+* ci: keep the macOS jobs from queueing behind each other, and supersede a branch's
+  earlier run
+  [#103](https://github.com/kazu-yamamoto/crypton/pull/103)
+* perf(aes): use PMULL for GHASH on AArch64
+  [#102](https://github.com/kazu-yamamoto/crypton/pull/102)
+* ci: ask cabal where its caches live rather than assuming, and keep the build
+  products in the cache
+  [#101](https://github.com/kazu-yamamoto/crypton/pull/101)
+* perf(aes): use the ARMv8 cryptographic extensions on AArch64.  With the GHASH work
+  in #102 and #105, AES-256-ECB goes from 121 to 2992 MiB/s and AES-256-GCM from 92 to
+  2318 MiB/s on Apple silicon
+  [#100](https://github.com/kazu-yamamoto/crypton/pull/100)
+* build(bench): move the benchmarks from gauge, which is no longer maintained, to
+  tasty-bench, and let them resolve on a current GHC
+  [#99](https://github.com/kazu-yamamoto/crypton/pull/99)
+* Breaking change: fix(padding): reject a `PKCS7` block size outside 1..255.  `pad`
+  raises and `unpad` returns `Nothing`, where both previously narrowed the size to a
+  `Word8` and silently agreed on the wrong value
+  [#98](https://github.com/kazu-yamamoto/crypton/pull/98)
+* feat(elgamal): fix `Crypto.PubKey.ElGamal` and expose it
+  [#97](https://github.com/kazu-yamamoto/crypton/pull/97)
+* docs(bcrypt): say that only the first 72 bytes of a password count
+  [#96](https://github.com/kazu-yamamoto/crypton/pull/96)
+* test: move the test suite from tasty to hspec, with hspec-discover.  `cabal-version`
+  is now 2.0
+  [#95](https://github.com/kazu-yamamoto/crypton/pull/95)
+
 * feat(aead): add `aeadSimpleDecrypt'`, which takes the tag length as its own argument instead of reading it off the supplied tag
   [#94](https://github.com/kazu-yamamoto/crypton/pull/94)
 * Breaking change: feat(dh): add `getShared'` to `Crypto.PubKey.DH` and `Crypto.PubKey.ECC.DH`, reporting a rejected peer value as `CryptoFailable`; `getShared` is now defined in terms of it and so raises a `CryptoError` rather than an `ErrorCall`
@@ -36,7 +77,8 @@
 ### API changes
 
 * New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.getShared'`,
-  `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`.
+  `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`,
+  and the whole of `Crypto.PubKey.ElGamal`, which was present but not exposed.
   These are additions and break nothing.
 * Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
   appended, so the `Enum` values of the existing constructors are unchanged, but an
@@ -51,6 +93,9 @@
   outside `1 < y < p-1` in `getShared`, an output beyond 255 blocks in
   `Crypto.KDF.HKDF.expand`, a non-canonical Ed25519 signature, and `Options` the
   implementation refuses in `Crypto.KDF.Argon2.hash`.
+* Breaking change: `Crypto.Data.Padding.pad` raises on a `PKCS7` block size outside
+  1..255, and `unpad` returns `Nothing` for one, where both used to narrow the size to
+  a `Word8` and hand back something other than what was padded.
 * No exported function changed its signature.
 
 ## 1.1.5
