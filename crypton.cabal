@@ -45,6 +45,7 @@ extra-source-files:
     cbits/aes/*.h
     cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
+    cbits/chacha_sse_impl.c
     cbits/argon2/*.c
     cbits/argon2/*.h
     cbits/blake2/ref/*.h
@@ -365,7 +366,9 @@ library
     -- runtime check; i386 keeps the scalar code.
     if arch(x86_64)
         cc-options: -DWITH_X86_SSE2
-        c-sources:  cbits/chacha_sse2.c
+        c-sources:
+            cbits/chacha_avx2.c
+            cbits/chacha_sse2.c
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND

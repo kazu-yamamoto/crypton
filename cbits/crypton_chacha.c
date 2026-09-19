@@ -46,13 +46,14 @@
  */
 #if (defined(WITH_ARMV8_NEON) && !defined(__AARCH64EB__)) || defined(WITH_X86_SSE2)
 #define CHACHA_SIMD 1
-void crypton_chacha_simd_combine4(int rounds, uint8_t *dst, const uint8_t *src,
+int crypton_chacha_simd_width(void);
+void crypton_chacha_simd_combine(int rounds, uint8_t *dst, const uint8_t *src,
+                                 const crypton_chacha_state *in);
+void crypton_chacha_simd_generate(int rounds, uint8_t *dst,
                                   const crypton_chacha_state *in);
-void crypton_chacha_simd_generate4(int rounds, uint8_t *dst,
-                                   const crypton_chacha_state *in);
-/* The four counters must not carry into d[13], which the block loop below
- * handles and the vector one does not; that is one run in 2^30. */
-#define CHACHA_SIMD_OK(st) ((st)->d[12] < 0xfffffffcU)
+/* The counters in a group must not carry into d[13], which the block loop
+ * below handles and the vector one does not; that is one run in 2^29. */
+#define CHACHA_SIMD_OK(st, n) ((st)->d[12] <= 0xffffffffU - (uint32_t) (n))
 #endif
 
 #define QR(a,b,c,d) \
@@ -277,10 +278,15 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 	st = &ctx->st;
 
 #ifdef CHACHA_SIMD
-	while (bytes >= 256 && CHACHA_SIMD_OK(st)) {
-		crypton_chacha_simd_combine4(ctx->nb_rounds, dst, src, st);
-		st->d[12] += 4;
-		bytes -= 256; src += 256; dst += 256;
+	{
+		const uint32_t nb = (uint32_t) crypton_chacha_simd_width();
+		const uint32_t step = 64 * nb;
+
+		while (bytes >= step && CHACHA_SIMD_OK(st, nb)) {
+			crypton_chacha_simd_combine(ctx->nb_rounds, dst, src, st);
+			st->d[12] += nb;
+			bytes -= step; src += step; dst += step;
+		}
 	}
 #endif
 
@@ -384,10 +390,15 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 	st = &ctx->st;
 
 #ifdef CHACHA_SIMD
-	while (bytes >= 256 && CHACHA_SIMD_OK(st)) {
-		crypton_chacha_simd_generate4(ctx->nb_rounds, dst, st);
-		st->d[12] += 4;
-		bytes -= 256; dst += 256;
+	{
+		const uint32_t nb = (uint32_t) crypton_chacha_simd_width();
+		const uint32_t step = 64 * nb;
+
+		while (bytes >= step && CHACHA_SIMD_OK(st, nb)) {
+			crypton_chacha_simd_generate(ctx->nb_rounds, dst, st);
+			st->d[12] += nb;
+			bytes -= step; dst += step;
+		}
 	}
 #endif
 
