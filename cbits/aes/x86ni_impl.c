@@ -248,6 +248,27 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	PRELOAD_ENC(k);
 
+	/* four blocks at a time, so GHASH can fold them into one reduction */
+	for (; nb_blocks >= 4; nb_blocks -= 4, output += 64, input += 64) {
+		__m128i m[4];
+		int i;
+
+		for (i = 0; i < 4; i++) {
+			/* iv += 1 */
+			iv = _mm_add_epi32(iv, one);
+
+			/* put back iv in big endian, encrypt it,
+			 * and xor it to input */
+			__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
+			DO_ENC_BLOCK(tmp);
+			m[i] = _mm_xor_si128(_mm_loadu_si128((__m128i *) (input + 16 * i)), tmp);
+
+			/* store it out */
+			_mm_storeu_si128((__m128i *) (output + 16 * i), m[i]);
+		}
+
+		tag = ghash_add4(tag, gcm->htable, m);
+	}
 	for (; nb_blocks-- > 0; output += 16, input += 16) {
 		/* iv += 1 */
 		iv = _mm_add_epi32(iv, one);

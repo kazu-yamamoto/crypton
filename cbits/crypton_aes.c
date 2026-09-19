@@ -68,6 +68,7 @@ int crypton_aes_armv8_available(void);
 int crypton_aes_armv8_pmull_available(void);
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h);
 void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable);
+void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks, const block128 *htable);
 #endif
 
 enum {
@@ -99,7 +100,7 @@ enum {
 	ENCRYPT_CCM_128, ENCRYPT_CCM_192, ENCRYPT_CCM_256,
 	DECRYPT_CCM_128, DECRYPT_CCM_192, DECRYPT_CCM_256,
 	/* ghash */
-	GHASH_HINIT, GHASH_GF_MUL,
+	GHASH_HINIT, GHASH_GF_MUL, GHASH_GF_MUL4,
 };
 
 void *crypton_aes_branch_table[] = {
@@ -167,6 +168,7 @@ void *crypton_aes_branch_table[] = {
 	/* GHASH */
 	[GHASH_HINIT]       = crypton_aes_generic_hinit,
 	[GHASH_GF_MUL]      = crypton_aes_generic_gf_mul,
+	[GHASH_GF_MUL4]     = crypton_aes_generic_gf_mul4,
 };
 
 typedef void (*init_f)(aes_key *, uint8_t *, uint8_t);
@@ -180,6 +182,7 @@ typedef void (*ccm_crypt_f)(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t
 typedef void (*block_f)(aes_block *output, aes_key *key, aes_block *input);
 typedef void (*hinit_f)(table_4bit htable, const block128 *h);
 typedef void (*gf_mul_f)(block128 *a, const table_4bit htable);
+typedef void (*gf_mul4_f)(block128 *a, const block128 *blocks, const table_4bit htable);
 
 #if defined(WITH_AESNI) || defined(WITH_ARMV8_CRYPTO)
 #define GET_INIT(strength) \
@@ -220,6 +223,8 @@ typedef void (*gf_mul_f)(block128 *a, const table_4bit htable);
 	(((hinit_f) (crypton_aes_branch_table[GHASH_HINIT]))(t,h))
 #define crypton_gf_mul(a,t) \
 	(((gf_mul_f) (crypton_aes_branch_table[GHASH_GF_MUL]))(a,t))
+#define crypton_gf_mul4(a,b,t) \
+	(((gf_mul4_f) (crypton_aes_branch_table[GHASH_GF_MUL4]))(a,b,t))
 #else
 #define GET_INIT(strenght) crypton_aes_generic_init
 #define GET_ECB_ENCRYPT(strength) crypton_aes_generic_encrypt_ecb
@@ -240,6 +245,7 @@ typedef void (*gf_mul_f)(block128 *a, const table_4bit htable);
 #define crypton_aes_decrypt_block(o,k,i) crypton_aes_generic_decrypt_block(o,k,i)
 #define crypton_hinit(t,h) crypton_aes_generic_hinit(t,h)
 #define crypton_gf_mul(a,t) crypton_aes_generic_gf_mul(a,t)
+#define crypton_gf_mul4(a,b,t) crypton_aes_generic_gf_mul4(a,b,t)
 #endif
 
 #define CPU_AESNI        0
@@ -297,6 +303,7 @@ static void initialize_table_ni(int aesni, int pclmul)
 	/* GHASH */
 	crypton_aes_branch_table[GHASH_HINIT]     = crypton_aesni_hinit_pclmul,
 	crypton_aes_branch_table[GHASH_GF_MUL]    = crypton_aesni_gf_mul_pclmul,
+	crypton_aes_branch_table[GHASH_GF_MUL4]   = crypton_aesni_gf_mul4_pclmul,
 	crypton_aesni_init_pclmul();
 #endif
 }
@@ -333,7 +340,8 @@ static void initialize_table_armv8(void)
 		return;
 	crypton_aes_cpu_options[CPU_PCLMUL] = 1;
 	crypton_aes_branch_table[GHASH_HINIT]  = crypton_aes_armv8_hinit_pmull;
-	crypton_aes_branch_table[GHASH_GF_MUL] = crypton_aes_armv8_gf_mul_pmull;
+	crypton_aes_branch_table[GHASH_GF_MUL]  = crypton_aes_armv8_gf_mul_pmull;
+	crypton_aes_branch_table[GHASH_GF_MUL4] = crypton_aes_armv8_gf_mul4_pmull;
 }
 #endif
 
@@ -478,6 +486,13 @@ static void gcm_ghash_add(aes_gcm *gcm, block128 *b)
 	crypton_gf_mul(&gcm->tag, gcm->htable);
 }
 
+/* Same, for four consecutive blocks.  Where the multiply is a carry-less
+ * instruction this costs one reduction instead of four. */
+static void gcm_ghash_add4(aes_gcm *gcm, const block128 *b)
+{
+	crypton_gf_mul4(&gcm->tag, b, gcm->htable);
+}
+
 void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 {
 	block128 h;
@@ -517,6 +532,9 @@ void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length)
 {
 	gcm->length_aad += length;
+	for (; length >= 64; input += 64, length -= 64) {
+		gcm_ghash_add4(gcm, (const block128 *) input);
+	}
 	for (; length >= 16; input += 16, length -= 16) {
 		gcm_ghash_add(gcm, (block128 *) input);
 	}
@@ -934,6 +952,20 @@ void crypton_aes_generic_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key
 	aes_block out;
 
 	gcm->length_input += length;
+	/* four blocks at a time, so GHASH can fold them into one reduction */
+	for (; length >= 64; input += 64, output += 64, length -= 64) {
+		aes_block buf[4];
+		int i;
+
+		for (i = 0; i < 4; i++) {
+			block128_inc32_be(&gcm->civ);
+			crypton_aes_encrypt_block(&buf[i], key, &gcm->civ);
+			block128_xor(&buf[i], (block128 *) (input + 16 * i));
+		}
+		gcm_ghash_add4(gcm, buf);
+		for (i = 0; i < 4; i++)
+			block128_copy((block128 *) (output + 16 * i), &buf[i]);
+	}
 	for (; length >= 16; input += 16, output += 16, length -= 16) {
 		block128_inc32_be(&gcm->civ);
 
@@ -967,6 +999,19 @@ void crypton_aes_generic_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key
 	aes_block out;
 
 	gcm->length_input += length;
+	/* GHASH all four ciphertext blocks before writing any plaintext, since
+	 * output may be input */
+	for (; length >= 64; input += 64, output += 64, length -= 64) {
+		int i;
+
+		gcm_ghash_add4(gcm, (const block128 *) input);
+		for (i = 0; i < 4; i++) {
+			block128_inc32_be(&gcm->civ);
+			crypton_aes_encrypt_block(&out, key, &gcm->civ);
+			block128_xor(&out, (block128 *) (input + 16 * i));
+			block128_copy((block128 *) (output + 16 * i), &out);
+		}
+	}
 	for (; length >= 16; input += 16, output += 16, length -= 16) {
 		block128_inc32_be(&gcm->civ);
 

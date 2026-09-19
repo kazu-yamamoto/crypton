@@ -87,6 +87,7 @@ void crypton_aesni_gcm_encrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint
 void crypton_aesni_init_pclmul(void);
 void crypton_aesni_hinit_pclmul(table_4bit htable, const block128 *h);
 void crypton_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable);
+void crypton_aesni_gf_mul4_pclmul(block128 *a, const block128 *blocks, const table_4bit htable);
 #endif
 
 #endif

@@ -172,24 +172,44 @@ static __m128i gfmul_generic(__m128i tag, const table_4bit htable)
 	return tag;
 }
 
+/* Four GHASH steps.  The table-driven multiply gains nothing from seeing
+ * them together; the PCLMUL version below folds them into one reduction. */
+TARGET_AESNI
+static __m128i gfmul4_generic(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	int i;
+
+	for (i = 0; i < 4; i++)
+		tag = gfmul_generic(_mm_xor_si128(tag, m[i]), htable);
+	return tag;
+}
+
 #ifdef WITH_PCLMUL
 
 __m128i (*crypton_gfmul_branch_ptr)(__m128i a, const table_4bit t) = gfmul_generic;
 #define gfmul(a,t) ((*crypton_gfmul_branch_ptr)(a,t))
+
+__m128i (*crypton_gfmul4_branch_ptr)(__m128i a, const table_4bit t, const __m128i *m) = gfmul4_generic;
+#define gfmul4(a,t,m) ((*crypton_gfmul4_branch_ptr)(a,t,m))
 
 /* See Intel carry-less-multiplication-instruction-in-gcm-mode-paper.pdf
  *
  * Adapted from figure 5, with additional byte swapping so that interface
  * is simimar to crypton_aes_generic_gf_mul.
  */
+/*
+ * The 256-bit carry-less product, before the reflection fixup and the
+ * reduction.  Split out from the reduction because both of those are linear
+ * over XOR: several products can be added together and fixed up just once,
+ * which is what gf_mul4 below does.
+ */
 TARGET_AESNI_PCLMUL
-static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
+static inline void clmul_pclmuldq(__m128i a, __m128i b, __m128i *lo, __m128i *hi)
 {
-	__m128i b, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9;
+	__m128i tmp3, tmp4, tmp5, tmp6;
 	__m128i bswap_mask = _mm_set_epi8(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
 
 	a = _mm_shuffle_epi8(a, bswap_mask);
-	b = _mm_loadu_si128((__m128i *) htable);
 
 	tmp3 = _mm_clmulepi64_si128(a, b, 0x00);
 	tmp4 = _mm_clmulepi64_si128(a, b, 0x10);
@@ -199,8 +219,18 @@ static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
 	tmp4 = _mm_xor_si128(tmp4, tmp5);
 	tmp5 = _mm_slli_si128(tmp4, 8);
 	tmp4 = _mm_srli_si128(tmp4, 8);
-	tmp3 = _mm_xor_si128(tmp3, tmp5);
-	tmp6 = _mm_xor_si128(tmp6, tmp4);
+
+	*lo = _mm_xor_si128(tmp3, tmp5);
+	*hi = _mm_xor_si128(tmp6, tmp4);
+}
+
+/* Shift the 256-bit product left by one to undo GCM's bit reflection, then
+ * reduce modulo the GCM polynomial.  This is the expensive half. */
+TARGET_AESNI_PCLMUL
+static inline __m128i gfred_pclmuldq(__m128i tmp3, __m128i tmp6)
+{
+	__m128i tmp2, tmp4, tmp5, tmp7, tmp8, tmp9;
+	__m128i bswap_mask = _mm_set_epi8(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
 
 	tmp7 = _mm_srli_epi32(tmp3, 31);
 	tmp8 = _mm_srli_epi32(tmp6, 31);
@@ -236,14 +266,37 @@ static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
 	return _mm_shuffle_epi8(tmp6, bswap_mask);
 }
 
+TARGET_AESNI_PCLMUL
+static __m128i gfmul_pclmuldq(__m128i a, const table_4bit htable)
+{
+	__m128i lo, hi;
+
+	clmul_pclmuldq(a, _mm_loadu_si128((__m128i *) htable), &lo, &hi);
+	return gfred_pclmuldq(lo, hi);
+}
+
+TARGET_AESNI_PCLMUL
 void crypton_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
 {
+	__m128i bswap_mask = _mm_set_epi8(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15);
+	__m128i p;
+	int i;
+
 	/* When pclmul is active we don't need to fill the table.  Instead we just
 	 * store H at index 0.  It is written in reverse order, so function
 	 * gfmul_pclmuldq will not byte-swap this value.
 	 */
-	htable->q[0] = bitfn_swap64(h->q[1]);
-	htable->q[1] = bitfn_swap64(h->q[0]);
+	htable[0].q[0] = bitfn_swap64(h->q[1]);
+	htable[0].q[1] = bitfn_swap64(h->q[0]);
+
+	/* Indices 1..3 get H^2, H^3 and H^4, which is what lets gf_mul4 fold
+	 * four blocks into one reduction.  The table has sixteen slots. */
+	p = _mm_loadu_si128((const __m128i *) h);
+	for (i = 1; i < 4; i++) {
+		p = gfmul_pclmuldq(p, htable);
+		_mm_storeu_si128((__m128i *) &htable[i],
+		                 _mm_shuffle_epi8(p, bswap_mask));
+	}
 }
 
 TARGET_AESNI_PCLMUL
@@ -255,13 +308,53 @@ void crypton_aesni_gf_mul_pclmul(block128 *a, const table_4bit htable)
 	_mm_storeu_si128((__m128i *) a, _b);
 }
 
+/*
+ * Four GHASH steps -- ((((a^b0)H ^ b1)H ^ b2)H ^ b3)H -- with a single
+ * reduction.  Expanded that is (a^b0)H^4 ^ b1*H^3 ^ b2*H^2 ^ b3*H, so the
+ * four products can be summed first and reduced once, which is where the
+ * time goes.  Aggregated reduction, from the Intel GCM paper.
+ */
+TARGET_AESNI_PCLMUL
+static __m128i gfmul4_pclmul(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	__m128i lo, hi, l, h;
+	int i;
+
+	clmul_pclmuldq(_mm_xor_si128(tag, m[0]),
+	               _mm_loadu_si128((const __m128i *) &htable[3]), &lo, &hi);
+
+	for (i = 1; i < 4; i++) {
+		clmul_pclmuldq(m[i], _mm_loadu_si128((const __m128i *) &htable[3 - i]),
+		               &l, &h);
+		lo = _mm_xor_si128(lo, l);
+		hi = _mm_xor_si128(hi, h);
+	}
+
+	return gfred_pclmuldq(lo, hi);
+}
+
+TARGET_AESNI_PCLMUL
+void crypton_aesni_gf_mul4_pclmul(block128 *a, const block128 *blocks, const table_4bit htable)
+{
+	__m128i m[4];
+	int i;
+
+	for (i = 0; i < 4; i++)
+		m[i] = _mm_loadu_si128((const __m128i *) &blocks[i]);
+
+	_mm_storeu_si128((__m128i *) a,
+	                 gfmul4_pclmul(_mm_loadu_si128((const __m128i *) a), htable, m));
+}
+
 void crypton_aesni_init_pclmul(void)
 {
 	crypton_gfmul_branch_ptr = gfmul_pclmuldq;
+	crypton_gfmul4_branch_ptr = gfmul4_pclmul;
 }
 
 #else
 #define gfmul(a,t) (gfmul_generic(a,t))
+#define gfmul4(a,t,m) (gfmul4_generic(a,t,m))
 #endif
 
 TARGET_AESNI
@@ -269,6 +362,12 @@ static inline __m128i ghash_add(__m128i tag, const table_4bit htable, __m128i m)
 {
 	tag = _mm_xor_si128(tag, m);
 	return gfmul(tag, htable);
+}
+
+TARGET_AESNI
+static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	return gfmul4(tag, htable, m);
 }
 
 #define PRELOAD_ENC_KEYS128(k) \

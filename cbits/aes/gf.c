@@ -144,3 +144,19 @@ void crypton_aes_generic_gf_mul(block128 *a, const table_4bit htable)
 			block128_cpu_swap_be(a, &b); /* restore BE order when done */
 	}
 }
+
+/*
+ * Four GHASH steps at once.  The generic table-driven multiply has no cheaper
+ * way to do this than one block at a time; the point of the entry is that the
+ * PMULL and PCLMUL versions can fold the four products into one reduction, so
+ * the GCM loops hand over four blocks whenever they have them.
+ */
+void crypton_aes_generic_gf_mul4(block128 *a, const block128 *blocks, const table_4bit htable)
+{
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		block128_xor(a, &blocks[i]);
+		crypton_aes_generic_gf_mul(a, htable);
+	}
+}
