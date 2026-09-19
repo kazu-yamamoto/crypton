@@ -65,6 +65,9 @@ void crypton_aes_armv8_decrypt_ecb(aes_block *output, aes_key *key, aes_block *i
 void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
 void crypton_aes_armv8_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
 int crypton_aes_armv8_available(void);
+int crypton_aes_armv8_pmull_available(void);
+void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h);
+void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable);
 #endif
 
 enum {
@@ -324,6 +327,13 @@ static void initialize_table_armv8(void)
 	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aes_armv8_decrypt_cbc;
 	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aes_armv8_encrypt_cbc;
 	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aes_armv8_decrypt_cbc;
+
+	/* GHASH, which GCM spends its time in once AES itself is fast */
+	if (!crypton_aes_armv8_pmull_available())
+		return;
+	crypton_aes_cpu_options[CPU_PCLMUL] = 1;
+	crypton_aes_branch_table[GHASH_HINIT]  = crypton_aes_armv8_hinit_pmull;
+	crypton_aes_branch_table[GHASH_GF_MUL] = crypton_aes_armv8_gf_mul_pmull;
 }
 #endif
 
