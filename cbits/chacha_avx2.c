@@ -127,7 +127,6 @@ void crypton_chacha_avx2_combine(int rounds, uint8_t *dst, const uint8_t *src,
 		_mm256_storeu_si256((__m256i *) (dst + i),
 		    _mm256_xor_si256(_mm256_loadu_si256((const __m256i *) (src + i)),
 		                     _mm256_loadu_si256((const __m256i *) (ks + i))));
-	_mm256_zeroupper();
 }
 
 TARGET
@@ -141,7 +140,6 @@ void crypton_chacha_avx2_generate(int rounds, uint8_t *dst, const crypton_chacha
 	for (i = 0; i < 512; i += 32)
 		_mm256_storeu_si256((__m256i *) (dst + i),
 		                    _mm256_loadu_si256((const __m256i *) (ks + i)));
-	_mm256_zeroupper();
 }
 
 #endif /* WITH_TARGET_ATTRIBUTES */

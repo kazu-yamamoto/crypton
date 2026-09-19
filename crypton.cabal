@@ -365,10 +365,11 @@ library
     -- SSE2 is part of the x86-64 baseline, so this needs no flag and no
     -- runtime check; i386 keeps the scalar code.
     if arch(x86_64)
-        cc-options: -DWITH_X86_SSE2
+        cc-options: -DWITH_X86_SSE2 -DWITH_X86_AVX2
         c-sources:
             cbits/chacha_avx2.c
             cbits/chacha_sse2.c
+            cbits/poly1305_avx2.c
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND

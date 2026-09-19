@@ -39,6 +39,28 @@
 #include "crypton_bitfn.h"
 #include "crypton_align.h"
 
+/*
+ * Four blocks at a time with AVX2; see poly1305_avx2.c.  It is reached only
+ * where the CPU and the OS both allow the wider registers, and only for whole
+ * groups of four blocks that are not the last of a message -- the last one
+ * has no high bit, which the vector code does not carry.
+ */
+#if defined(WITH_X86_AVX2) && defined(WITH_TARGET_ATTRIBUTES)
+#define POLY1305_AVX2 1
+#include "crypton_cpu.h"
+void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32_t groups);
+
+static int poly1305_avx2 = -1;
+
+/* Two threads racing to answer this both write the same value. */
+static int use_avx2(void)
+{
+	if (poly1305_avx2 < 0)
+		poly1305_avx2 = (crypton_x86_simd_features() & CRYPTON_X86_AVX2) != 0;
+	return poly1305_avx2;
+}
+#endif
+
 static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int final)
 {
 	/* following is a cleanup copy of code available poly1305-donna */
@@ -48,6 +70,18 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 	uint32_t h0,h1,h2,h3,h4;
 	uint64_t d0,d1,d2,d3,d4;
 	uint32_t c;
+
+#ifdef POLY1305_AVX2
+	if (!final && blocks >= 4 && use_avx2()) {
+		uint32_t groups = (uint32_t) blocks / 4;
+
+		crypton_poly1305_avx2_blocks(ctx, data, groups);
+		data += (size_t) groups * 64;
+		blocks -= (int) groups * 4;
+		if (blocks == 0)
+			return;
+	}
+#endif
 
 	/* load r[i], h[i] */
 	h0 = ctx->h[0]; h1 = ctx->h[1]; h2 = ctx->h[2]; h3 = ctx->h[3]; h4 = ctx->h[4];
