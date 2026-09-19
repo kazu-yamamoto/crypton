@@ -21,22 +21,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
+        os:  [ 'ubuntu-latest', 'ubuntu-24.04-arm', 'macOS-latest', 'windows-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12', '9.14' ]
         # GitHub runs at most five macOS jobs at once, so two of the seven sat
         # waiting for the others to finish and held up the whole workflow --
         # the last one started eight and a half minutes in.  Keep the oldest
         # and newest compiler there and let Linux and Windows cover the range.
         #
-        # macOS-latest is the only aarch64 image in the matrix, so it is what
-        # exercises cbits/aes/armv8.c; that is a property of the runner rather
-        # than of the compiler, and either remaining job covers it.
+        # ubuntu-24.04-arm is here for the C, not for the compiler.
+        # macOS-latest already runs cbits/aes/armv8.c, but it decides to by a
+        # branch that is compiled out on Apple; the checks that read the
+        # auxiliary vector -- which is how every other AArch64 system answers
+        # the same question for AES, PMULL and SHA-2 -- had no job to run in
+        # at all.  One compiler exercises that as well as seven would, so
+        # keep the newest two for the same reason as macOS.
         exclude:
           - { os: macOS-latest, ghc: '9.4'  }
           - { os: macOS-latest, ghc: '9.6'  }
           - { os: macOS-latest, ghc: '9.8'  }
           - { os: macOS-latest, ghc: '9.10' }
           - { os: macOS-latest, ghc: '9.12' }
+          - { os: ubuntu-24.04-arm, ghc: '9.2'  }
+          - { os: ubuntu-24.04-arm, ghc: '9.4'  }
+          - { os: ubuntu-24.04-arm, ghc: '9.6'  }
+          - { os: ubuntu-24.04-arm, ghc: '9.8'  }
+          - { os: ubuntu-24.04-arm, ghc: '9.10' }
 
     env:
       cache-name: cabal-ghc
@@ -62,7 +71,12 @@ jobs:
         # module is added or a bound is touched, and keying on it threw the
         # whole cache away each time.  restore-keys picks up the most recent
         # entry with this prefix instead, and cabal works out what is stale.
-        prefix="${{ runner.os }}-${{ env.cache-name }}-${ghc_version}-"
+        # runner.arch, not just runner.os: the two Linux images share an os
+        # but not a machine.  Without it both would key on Linux-...-<sha>,
+        # the second save of a commit would be refused as a duplicate, and
+        # each would restore the other's store and dist-newstyle -- built for
+        # the wrong architecture and so of no use to it.
+        prefix="${{ runner.os }}-${{ runner.arch }}-${{ env.cache-name }}-${ghc_version}-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "cache=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
@@ -85,7 +99,7 @@ jobs:
       if: ${{ github.ref_name != 'ci-uc' }}
       with:
         # One entry per job rather than two.  The repository cache is capped
-        # at 10 GB and 21 jobs of dependencies already reach it, so build
+        # at 10 GB and eighteen jobs of dependencies already reach it, so build
         # products ride along with the dependencies instead of doubling the
         # number of entries.
         path: ${{ steps.params.outputs.paths }}
@@ -106,6 +120,37 @@ jobs:
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
+    # Which implementation the C actually picked is invisible to the test
+    # suite: when a runtime check answers no, everything still passes on the
+    # generic code, just slower.  So ask, and on aarch64 Linux -- the one job
+    # whose answer comes from the auxiliary vector, and the reason that job
+    # exists -- insist on the answer.  This covers the AES and PMULL checks;
+    # the SHA-2 one is not reported through this interface.
+    - name: Report the implementations crypton selected
+      shell: bash
+      run: |
+        cat > ci-cpu-check.hs <<'EOF'
+        import Crypto.System.CPU
+        main = print processorOptions
+        EOF
+        # Compiled and linked rather than run through runghc: the answer comes
+        # from a foreign call, and the bytecode interpreter cannot resolve
+        # crypton_aes_cpu_init.  -i keeps the source tree we are standing in
+        # from shadowing the built library, and -package crypton exposes it,
+        # since cabal exec puts the project's package-db on the path without
+        # exposing anything out of it.
+        cabal exec --enable-tests --disable-benchmarks -- \
+          ghc -v0 -O0 -i -package crypton ci-cpu-check.hs -o ci-cpu-check
+        options=$(./ci-cpu-check 2>/dev/null || ./ci-cpu-check.exe)
+        echo "processorOptions = $options"
+        if [ '${{ matrix.os }}' = 'ubuntu-24.04-arm' ]; then
+          case "$options" in
+            *AESNI*PCLMUL*) ;;
+            *) echo "::error::expected AESNI and PCLMUL on aarch64 Linux, got $options"
+               exit 1 ;;
+          esac
+        fi
+
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
 
@@ -113,7 +158,7 @@ jobs:
     # only from the default branch: a cache written on a branch is visible
     # only to that branch, while one written on the default branch is visible
     # to every branch and pull request.  Writing from pull requests as well
-    # would multiply 21 jobs by every open branch against a 10 GB cap.
+    # would multiply eighteen jobs by every open branch against a 10 GB cap.
     - name: Save Cache
       uses: actions/cache/save@v5
       if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
