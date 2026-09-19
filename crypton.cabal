@@ -43,6 +43,7 @@ build-type:         Simple
 extra-source-files:
     cbits/*.h
     cbits/aes/*.h
+    cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
     cbits/argon2/*.c
     cbits/argon2/*.h
