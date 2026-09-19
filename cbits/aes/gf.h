@@ -38,5 +38,6 @@ void crypton_aes_generic_gf_mulx(block128 *a);
 
 void crypton_aes_generic_hinit(table_4bit htable, const block128 *h);
 void crypton_aes_generic_gf_mul(block128 *a, const table_4bit htable);
+void crypton_aes_generic_gf_mul4(block128 *a, const block128 *blocks, const table_4bit htable);
 
 #endif

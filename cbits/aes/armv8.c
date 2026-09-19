@@ -192,12 +192,19 @@ static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
 	    vreinterpretq_p64_u8(a), vreinterpretq_p64_u8(b)));
 }
 
-static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
+/*
+ * The 256-bit carry-less product of a (normal byte order) and b (already
+ * reversed, as it sits in the table), before the reflection fixup and the
+ * reduction.  Split out from the reduction because both of those are linear
+ * over XOR: several products can be added together and fixed up just once,
+ * which is what gf_mul4 below does.
+ */
+static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
+                               uint8x16_t *lo, uint8x16_t *hi)
 {
-	uint8x16_t b, t3, t4, t5, t6, t7, t8, t9, t2;
+	uint8x16_t t3, t4, t5, t6;
 
 	a = bswap128(a);
-	b = vld1q_u8(htable);
 
 	t3 = clmul_ll(a, b);
 	t4 = clmul_lh(a, b);
@@ -207,8 +214,16 @@ static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
 	t4 = veorq_u8(t4, t5);
 	t5 = SHIFT_LEFT_BYTES(t4, 8);
 	t4 = SHIFT_RIGHT_BYTES(t4, 8);
-	t3 = veorq_u8(t3, t5);
-	t6 = veorq_u8(t6, t4);
+
+	*lo = veorq_u8(t3, t5);
+	*hi = veorq_u8(t6, t4);
+}
+
+/* Shift the 256-bit product left by one to undo GCM's bit reflection, then
+ * reduce modulo the GCM polynomial.  This is the expensive half. */
+static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
+{
+	uint8x16_t t2, t4, t5, t7, t8, t9;
 
 	t7 = SHR32(t3, 31);
 	t8 = SHR32(t6, 31);
@@ -244,21 +259,67 @@ static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
 	return bswap128(t6);
 }
 
+static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
+{
+	uint8x16_t lo, hi;
+
+	clmul_pmull(a, vld1q_u8(htable), &lo, &hi);
+	return gfred_pmull(lo, hi);
+}
+
 /*
  * With PMULL there is no 4-bit table to fill: H goes in at index 0, byte
  * reversed, so that gfmul_pmull does not have to swap it every time.  This
  * mirrors crypton_aesni_hinit_pclmul.
+ *
+ * Indices 1..3 get H^2, H^3 and H^4, which is what lets gf_mul4 fold four
+ * blocks into one reduction.  The table has sixteen slots, so they are free.
  */
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 {
-	htable->q[0] = bitfn_swap64(h->q[1]);
-	htable->q[1] = bitfn_swap64(h->q[0]);
+	uint8x16_t p;
+	int i;
+
+	htable[0].q[0] = bitfn_swap64(h->q[1]);
+	htable[0].q[1] = bitfn_swap64(h->q[0]);
+
+	p = vld1q_u8((const uint8_t *) h);
+	for (i = 1; i < 4; i++) {
+		p = gfmul_pmull(p, (const uint8_t *) &htable[0]);
+		vst1q_u8((uint8_t *) &htable[i], bswap128(p));
+	}
 }
 
 void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
 {
 	vst1q_u8((uint8_t *) a,
 	         gfmul_pmull(vld1q_u8((const uint8_t *) a), (const uint8_t *) htable));
+}
+
+/*
+ * Four GHASH steps -- ((((a^b0)H ^ b1)H ^ b2)H ^ b3)H -- with a single
+ * reduction.  Expanded that is (a^b0)H^4 ^ b1*H^3 ^ b2*H^2 ^ b3*H, so the
+ * four products can be summed first and reduced once, which is where the
+ * time goes.  Aggregated reduction, from the Intel GCM paper.
+ */
+void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks,
+                                     const block128 *htable)
+{
+	uint8x16_t lo, hi, l, h;
+	int i;
+
+	clmul_pmull(veorq_u8(vld1q_u8((const uint8_t *) a),
+	                     vld1q_u8((const uint8_t *) &blocks[0])),
+	            vld1q_u8((const uint8_t *) &htable[3]), &lo, &hi);
+
+	for (i = 1; i < 4; i++) {
+		clmul_pmull(vld1q_u8((const uint8_t *) &blocks[i]),
+		            vld1q_u8((const uint8_t *) &htable[3 - i]), &l, &h);
+		lo = veorq_u8(lo, l);
+		hi = veorq_u8(hi, h);
+	}
+
+	vst1q_u8((uint8_t *) a, gfred_pmull(lo, hi));
 }
 
 int crypton_aes_armv8_pmull_available(void)
