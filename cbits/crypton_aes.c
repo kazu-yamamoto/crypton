@@ -296,6 +296,8 @@ static void initialize_table_ni(int aesni, int pclmul)
 	/* GCM */
 	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aesni_gcm_encrypt128;
 	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aesni_gcm_encrypt256;
+	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aesni_gcm_decrypt128;
+	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aesni_gcm_decrypt256;
 	/* OCB */
 	/*
 	crypton_aes_branch_table[ENCRYPT_OCB_128] = crypton_aesni_ocb_encrypt128;

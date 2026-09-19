@@ -82,6 +82,8 @@ void crypton_aesni_encrypt_xts256(aes_block *out, aes_key *key1, aes_key *key2,
 
 void crypton_aesni_gcm_encrypt128(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
 void crypton_aesni_gcm_encrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
+void crypton_aesni_gcm_decrypt128(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
+void crypton_aesni_gcm_decrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
 
 #ifdef WITH_PCLMUL
 void crypton_aesni_init_pclmul(void);

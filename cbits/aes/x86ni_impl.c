@@ -248,26 +248,29 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	PRELOAD_ENC(k);
 
-	/* four blocks at a time, so GHASH can fold them into one reduction */
-	for (; nb_blocks >= 4; nb_blocks -= 4, output += 64, input += 64) {
-		__m128i m[4];
+	/*
+	 * Eight blocks at a time: the counters go through the rounds together
+	 * so the pipeline has something to do while AESENC is in flight, and
+	 * their GHASH folds into one reduction against H^8 .. H^1 rather than
+	 * eight.
+	 */
+	for (; nb_blocks >= 8; nb_blocks -= 8, output += 128, input += 128) {
+		__m128i m[8];
 		int i;
 
-		for (i = 0; i < 4; i++) {
-			/* iv += 1 */
+		for (i = 0; i < 8; i++) {
+			/* iv += 1, put back in big endian */
 			iv = _mm_add_epi32(iv, one);
-
-			/* put back iv in big endian, encrypt it,
-			 * and xor it to input */
-			__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
-			DO_ENC_BLOCK(tmp);
-			m[i] = _mm_xor_si128(_mm_loadu_si128((__m128i *) (input + 16 * i)), tmp);
-
-			/* store it out */
+			m[i] = _mm_shuffle_epi8(iv, bswap_mask);
+		}
+		DO_ENC_BLOCK8(m);
+		for (i = 0; i < 8; i++) {
+			m[i] = _mm_xor_si128(m[i],
+			                     _mm_loadu_si128((__m128i *) (input + 16 * i)));
 			_mm_storeu_si128((__m128i *) (output + 16 * i), m[i]);
 		}
 
-		tag = ghash_add4(tag, gcm->htable, m);
+		tag = ghash_add8(tag, gcm->htable, m);
 	}
 	for (; nb_blocks-- > 0; output += 16, input += 16) {
 		/* iv += 1 */
@@ -325,6 +328,86 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 		/* make output */
 		_mm_storeu_si128((__m128i *) &block.b, m);
+		memcpy(output, &block.b, part_block_len);
+	}
+	/* store back IV & tag */
+	__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
+	_mm_storeu_si128((__m128i *) &gcm->civ, tmp);
+	_mm_storeu_si128((__m128i *) &gcm->tag, tag);
+}
+
+/*
+ * GCM decryption, which until now fell to the generic loop: that advances
+ * the counter and calls the block function once per block through the
+ * branch table, and measured a quarter the speed of encryption on the same
+ * machine.  The shape is the encryption loop with two differences -- the
+ * tag is taken over the ciphertext, which is the input rather than the
+ * output, and the ciphertext is read before anything is written, since
+ * output may be input.
+ */
+TARGET_AESNI
+void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	__m128i *k = (__m128i *) key->data;
+	__m128i bswap_mask = _mm_setr_epi8(7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8);
+	__m128i one        = _mm_set_epi32(0,1,0,0);
+	uint32_t nb_blocks = length / 16;
+	uint32_t part_block_len = length % 16;
+
+	gcm->length_input += length;
+
+	__m128i tag = _mm_loadu_si128((__m128i *) &gcm->tag);
+	__m128i iv = _mm_loadu_si128((__m128i *) &gcm->civ);
+	iv = _mm_shuffle_epi8(iv, bswap_mask);
+
+	PRELOAD_ENC(k);
+
+	for (; nb_blocks >= 8; nb_blocks -= 8, output += 128, input += 128) {
+		__m128i m[8], c[8];
+		int i;
+
+		for (i = 0; i < 8; i++) {
+			/* iv += 1, put back in big endian */
+			iv = _mm_add_epi32(iv, one);
+			m[i] = _mm_shuffle_epi8(iv, bswap_mask);
+		}
+		for (i = 0; i < 8; i++)
+			c[i] = _mm_loadu_si128((__m128i *) (input + 16 * i));
+		DO_ENC_BLOCK8(m);
+		for (i = 0; i < 8; i++)
+			_mm_storeu_si128((__m128i *) (output + 16 * i),
+			                 _mm_xor_si128(m[i], c[i]));
+
+		tag = ghash_add8(tag, gcm->htable, c);
+	}
+	for (; nb_blocks-- > 0; output += 16, input += 16) {
+		__m128i c = _mm_loadu_si128((__m128i *) input);
+
+		iv = _mm_add_epi32(iv, one);
+		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
+		DO_ENC_BLOCK(tmp);
+
+		tag = ghash_add(tag, gcm->htable, c);
+		_mm_storeu_si128((__m128i *) output, _mm_xor_si128(tmp, c));
+	}
+	if (part_block_len > 0) {
+		aes_block block;
+
+		/* the ciphertext padded with zeros is what the tag is taken
+		 * over, so no mask is needed the way encryption needs one */
+		block128_zero(&block);
+		block128_copy_bytes(&block, input, part_block_len);
+		__m128i c = _mm_loadu_si128((__m128i *) &block);
+
+		/* iv += 1 */
+		iv = _mm_add_epi32(iv, one);
+
+		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
+		DO_ENC_BLOCK(tmp);
+
+		tag = ghash_add(tag, gcm->htable, c);
+
+		_mm_storeu_si128((__m128i *) &block.b, _mm_xor_si128(tmp, c));
 		memcpy(output, &block.b, part_block_len);
 	}
 	/* store back IV & tag */
