@@ -91,7 +91,7 @@ static const uint64_t k[] = {
 #define s0(x)       (ror64(x, 1) ^ ror64(x, 8) ^ (x >> 7))
 #define s1(x)       (ror64(x, 19) ^ ror64(x, 61) ^ (x >> 6))
 
-static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
+static void sha512_do_chunk_generic(struct sha512_ctx *ctx, uint64_t *buf)
 {
 	uint64_t a, b, c, d, e, f, g, h, t1, t2;
 	int i;
@@ -126,6 +126,32 @@ static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
 
 	ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c; ctx->h[3] += d;
 	ctx->h[4] += e; ctx->h[5] += f; ctx->h[6] += g; ctx->h[7] += h;
+}
+
+#ifdef WITH_ARMV8_SHA512
+/*
+ * AArch64 can do two rounds at a time with the SHA-512 instructions; see
+ * sha512_armv8.c.  They are an optional ARMv8.2 extension and much less
+ * widespread than the SHA-256 ones, so ask before using them.  Two threads
+ * racing to answer here both write the same value.
+ */
+extern void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint64_t buf[16]);
+extern int crypton_sha512_armv8_available(void);
+
+static int sha512_use_armv8 = -1;
+#endif
+
+static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
+{
+#ifdef WITH_ARMV8_SHA512
+	if (sha512_use_armv8 < 0)
+		sha512_use_armv8 = crypton_sha512_armv8_available();
+	if (sha512_use_armv8) {
+		crypton_sha512_armv8_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
+	sha512_do_chunk_generic(ctx, buf);
 }
 
 void crypton_sha384_update(struct sha384_ctx *ctx, const uint8_t *data, uint32_t len)
