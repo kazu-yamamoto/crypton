@@ -172,14 +172,25 @@ static __m128i gfmul_generic(__m128i tag, const table_4bit htable)
 	return tag;
 }
 
-/* Four GHASH steps.  The table-driven multiply gains nothing from seeing
- * them together; the PCLMUL version below folds them into one reduction. */
+/* Four or eight GHASH steps.  The table-driven multiply gains nothing from
+ * seeing them together; the PCLMUL versions below fold them into one
+ * reduction. */
 TARGET_AESNI
 static __m128i gfmul4_generic(__m128i tag, const table_4bit htable, const __m128i *m)
 {
 	int i;
 
 	for (i = 0; i < 4; i++)
+		tag = gfmul_generic(_mm_xor_si128(tag, m[i]), htable);
+	return tag;
+}
+
+TARGET_AESNI
+static __m128i gfmul8_generic(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	int i;
+
+	for (i = 0; i < 8; i++)
 		tag = gfmul_generic(_mm_xor_si128(tag, m[i]), htable);
 	return tag;
 }
@@ -191,6 +202,9 @@ __m128i (*crypton_gfmul_branch_ptr)(__m128i a, const table_4bit t) = gfmul_gener
 
 __m128i (*crypton_gfmul4_branch_ptr)(__m128i a, const table_4bit t, const __m128i *m) = gfmul4_generic;
 #define gfmul4(a,t,m) ((*crypton_gfmul4_branch_ptr)(a,t,m))
+
+__m128i (*crypton_gfmul8_branch_ptr)(__m128i a, const table_4bit t, const __m128i *m) = gfmul8_generic;
+#define gfmul8(a,t,m) ((*crypton_gfmul8_branch_ptr)(a,t,m))
 
 /* See Intel carry-less-multiplication-instruction-in-gcm-mode-paper.pdf
  *
@@ -211,12 +225,21 @@ static inline void clmul_pclmuldq(__m128i a, __m128i b, __m128i *lo, __m128i *hi
 
 	a = _mm_shuffle_epi8(a, bswap_mask);
 
+	/*
+	 * Karatsuba: the middle term of the product is
+	 * (a0^a1)(b0^b1) ^ a0b0 ^ a1b1, which is one carry-less multiply
+	 * where the direct form needs two.  Three PCLMULQDQ rather than
+	 * four, at the cost of a few shuffles and exclusive ors -- worth it
+	 * wherever the multiply is the narrower port, which is every part
+	 * this has been measured on.
+	 */
 	tmp3 = _mm_clmulepi64_si128(a, b, 0x00);
-	tmp4 = _mm_clmulepi64_si128(a, b, 0x10);
-	tmp5 = _mm_clmulepi64_si128(a, b, 0x01);
 	tmp6 = _mm_clmulepi64_si128(a, b, 0x11);
+	tmp4 = _mm_clmulepi64_si128(_mm_xor_si128(a, _mm_shuffle_epi32(a, 0x4e)),
+	                            _mm_xor_si128(b, _mm_shuffle_epi32(b, 0x4e)),
+	                            0x00);
+	tmp4 = _mm_xor_si128(tmp4, _mm_xor_si128(tmp3, tmp6));
 
-	tmp4 = _mm_xor_si128(tmp4, tmp5);
 	tmp5 = _mm_slli_si128(tmp4, 8);
 	tmp4 = _mm_srli_si128(tmp4, 8);
 
@@ -289,10 +312,11 @@ void crypton_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
 	htable[0].q[0] = bitfn_swap64(h->q[1]);
 	htable[0].q[1] = bitfn_swap64(h->q[0]);
 
-	/* Indices 1..3 get H^2, H^3 and H^4, which is what lets gf_mul4 fold
-	 * four blocks into one reduction.  The table has sixteen slots. */
+	/* Indices 1..7 get H^2 .. H^8, which is what lets a group of blocks
+	 * fold into one reduction: gf_mul4 uses the first four, the GCM loop
+	 * all eight.  The table has sixteen slots. */
 	p = _mm_loadu_si128((const __m128i *) h);
-	for (i = 1; i < 4; i++) {
+	for (i = 1; i < 8; i++) {
 		p = gfmul_pclmuldq(p, htable);
 		_mm_storeu_si128((__m128i *) &htable[i],
 		                 _mm_shuffle_epi8(p, bswap_mask));
@@ -334,6 +358,25 @@ static __m128i gfmul4_pclmul(__m128i tag, const table_4bit htable, const __m128i
 }
 
 TARGET_AESNI_PCLMUL
+static __m128i gfmul8_pclmul(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	__m128i lo, hi, l, h;
+	int i;
+
+	clmul_pclmuldq(_mm_xor_si128(tag, m[0]),
+	               _mm_loadu_si128((const __m128i *) &htable[7]), &lo, &hi);
+
+	for (i = 1; i < 8; i++) {
+		clmul_pclmuldq(m[i], _mm_loadu_si128((const __m128i *) &htable[7 - i]),
+		               &l, &h);
+		lo = _mm_xor_si128(lo, l);
+		hi = _mm_xor_si128(hi, h);
+	}
+
+	return gfred_pclmuldq(lo, hi);
+}
+
+TARGET_AESNI_PCLMUL
 void crypton_aesni_gf_mul4_pclmul(block128 *a, const block128 *blocks, const table_4bit htable)
 {
 	__m128i m[4];
@@ -350,11 +393,13 @@ void crypton_aesni_init_pclmul(void)
 {
 	crypton_gfmul_branch_ptr = gfmul_pclmuldq;
 	crypton_gfmul4_branch_ptr = gfmul4_pclmul;
+	crypton_gfmul8_branch_ptr = gfmul8_pclmul;
 }
 
 #else
 #define gfmul(a,t) (gfmul_generic(a,t))
 #define gfmul4(a,t,m) (gfmul4_generic(a,t,m))
+#define gfmul8(a,t,m) (gfmul8_generic(a,t,m))
 #endif
 
 TARGET_AESNI
@@ -368,6 +413,12 @@ TARGET_AESNI
 static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m128i *m)
 {
 	return gfmul4(tag, htable, m);
+}
+
+TARGET_AESNI
+static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	return gfmul8(tag, htable, m);
 }
 
 #define PRELOAD_ENC_KEYS128(k) \
@@ -433,6 +484,40 @@ static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m
 	__m128i K8  = _mm_loadu_si128(((__m128i *) k)+at+8); \
 	__m128i K9  = _mm_loadu_si128(((__m128i *) k)+at+9); \
 
+/*
+ * Eight blocks through the rounds together, which is what covers the
+ * latency of AESENC.  Written out one line per block rather than left to a
+ * loop over m[i]: a loop is only as good as the compiler's willingness to
+ * unroll it, and when it declines the blocks go to the stack and each
+ * round becomes a load and a store.
+ */
+#define XOR8(KK) \
+	m[0] = _mm_xor_si128(m[0], KK); m[1] = _mm_xor_si128(m[1], KK); \
+	m[2] = _mm_xor_si128(m[2], KK); m[3] = _mm_xor_si128(m[3], KK); \
+	m[4] = _mm_xor_si128(m[4], KK); m[5] = _mm_xor_si128(m[5], KK); \
+	m[6] = _mm_xor_si128(m[6], KK); m[7] = _mm_xor_si128(m[7], KK);
+
+#define AESENC8(KK) \
+	m[0] = _mm_aesenc_si128(m[0], KK); m[1] = _mm_aesenc_si128(m[1], KK); \
+	m[2] = _mm_aesenc_si128(m[2], KK); m[3] = _mm_aesenc_si128(m[3], KK); \
+	m[4] = _mm_aesenc_si128(m[4], KK); m[5] = _mm_aesenc_si128(m[5], KK); \
+	m[6] = _mm_aesenc_si128(m[6], KK); m[7] = _mm_aesenc_si128(m[7], KK);
+
+#define AESENCLAST8(KK) \
+	m[0] = _mm_aesenclast_si128(m[0], KK); m[1] = _mm_aesenclast_si128(m[1], KK); \
+	m[2] = _mm_aesenclast_si128(m[2], KK); m[3] = _mm_aesenclast_si128(m[3], KK); \
+	m[4] = _mm_aesenclast_si128(m[4], KK); m[5] = _mm_aesenclast_si128(m[5], KK); \
+	m[6] = _mm_aesenclast_si128(m[6], KK); m[7] = _mm_aesenclast_si128(m[7], KK);
+
+#define DO_ENC_BLOCK8_128(m) \
+	XOR8(K0) AESENC8(K1) AESENC8(K2) AESENC8(K3) AESENC8(K4) AESENC8(K5) \
+	AESENC8(K6) AESENC8(K7) AESENC8(K8) AESENC8(K9) AESENCLAST8(K10)
+
+#define DO_ENC_BLOCK8_256(m) \
+	XOR8(K0) AESENC8(K1) AESENC8(K2) AESENC8(K3) AESENC8(K4) AESENC8(K5) \
+	AESENC8(K6) AESENC8(K7) AESENC8(K8) AESENC8(K9) AESENC8(K10) \
+	AESENC8(K11) AESENC8(K12) AESENC8(K13) AESENCLAST8(K14)
+
 #define PRELOAD_DEC_KEYS128(k) \
 	PRELOAD_DEC_KEYS_AT(k, 10) \
 	__m128i K10 = _mm_loadu_si128(((__m128i *) k)+0);
@@ -479,6 +564,7 @@ static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m
 #define SIZED(m) m##128
 #define PRELOAD_ENC PRELOAD_ENC_KEYS128
 #define DO_ENC_BLOCK DO_ENC_BLOCK128
+#define DO_ENC_BLOCK8 DO_ENC_BLOCK8_128
 #define PRELOAD_DEC PRELOAD_DEC_KEYS128
 #define DO_DEC_BLOCK DO_DEC_BLOCK128
 #include <aes/x86ni_impl.c>
@@ -488,12 +574,14 @@ static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m
 #undef PRELOAD_ENC
 #undef PRELOAD_DEC
 #undef DO_ENC_BLOCK
+#undef DO_ENC_BLOCK8
 #undef DO_DEC_BLOCK
 
 #define SIZED(m) m##256
 #define SIZE 256
 #define PRELOAD_ENC PRELOAD_ENC_KEYS256
 #define DO_ENC_BLOCK DO_ENC_BLOCK256
+#define DO_ENC_BLOCK8 DO_ENC_BLOCK8_256
 #define PRELOAD_DEC PRELOAD_DEC_KEYS256
 #define DO_DEC_BLOCK DO_DEC_BLOCK256
 #include <aes/x86ni_impl.c>
@@ -503,6 +591,7 @@ static inline __m128i ghash_add4(__m128i tag, const table_4bit htable, const __m
 #undef PRELOAD_ENC
 #undef PRELOAD_DEC
 #undef DO_ENC_BLOCK
+#undef DO_ENC_BLOCK8
 #undef DO_DEC_BLOCK
 
 #endif
