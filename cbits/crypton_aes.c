@@ -56,6 +56,17 @@ void crypton_aes_generic_ocb_decrypt(uint8_t *output, aes_ocb *ocb, aes_key *key
 void crypton_aes_generic_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_generic_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
 
+#ifdef WITH_ARMV8_CRYPTO
+void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
+void crypton_aes_armv8_encrypt_block(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_armv8_decrypt_block(aes_block *output, aes_key *key, aes_block *input);
+void crypton_aes_armv8_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_armv8_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
+void crypton_aes_armv8_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
+int crypton_aes_armv8_available(void);
+#endif
+
 enum {
 	/* init */
 	INIT_128, INIT_192, INIT_256,
@@ -167,7 +178,7 @@ typedef void (*block_f)(aes_block *output, aes_key *key, aes_block *input);
 typedef void (*hinit_f)(table_4bit htable, const block128 *h);
 typedef void (*gf_mul_f)(block128 *a, const table_4bit htable);
 
-#ifdef WITH_AESNI
+#if defined(WITH_AESNI) || defined(WITH_ARMV8_CRYPTO)
 #define GET_INIT(strength) \
 	((init_f) (crypton_aes_branch_table[INIT_128 + strength]))
 #define GET_ECB_ENCRYPT(strength) \
@@ -288,10 +299,41 @@ static void initialize_table_ni(int aesni, int pclmul)
 }
 #endif
 
+#ifdef WITH_ARMV8_CRYPTO
+static void initialize_table_armv8(void)
+{
+	if (!crypton_aes_armv8_available())
+		return;
+	crypton_aes_cpu_options[CPU_AESNI] = 1;
+
+	/* AES-192 is left to the generic code, as it is on x86 */
+	crypton_aes_branch_table[INIT_128] = crypton_aes_armv8_init;
+	crypton_aes_branch_table[INIT_256] = crypton_aes_armv8_init;
+
+	crypton_aes_branch_table[ENCRYPT_BLOCK_128] = crypton_aes_armv8_encrypt_block;
+	crypton_aes_branch_table[DECRYPT_BLOCK_128] = crypton_aes_armv8_decrypt_block;
+	crypton_aes_branch_table[ENCRYPT_BLOCK_256] = crypton_aes_armv8_encrypt_block;
+	crypton_aes_branch_table[DECRYPT_BLOCK_256] = crypton_aes_armv8_decrypt_block;
+	/* ECB */
+	crypton_aes_branch_table[ENCRYPT_ECB_128] = crypton_aes_armv8_encrypt_ecb;
+	crypton_aes_branch_table[DECRYPT_ECB_128] = crypton_aes_armv8_decrypt_ecb;
+	crypton_aes_branch_table[ENCRYPT_ECB_256] = crypton_aes_armv8_encrypt_ecb;
+	crypton_aes_branch_table[DECRYPT_ECB_256] = crypton_aes_armv8_decrypt_ecb;
+	/* CBC */
+	crypton_aes_branch_table[ENCRYPT_CBC_128] = crypton_aes_armv8_encrypt_cbc;
+	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aes_armv8_decrypt_cbc;
+	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aes_armv8_encrypt_cbc;
+	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aes_armv8_decrypt_cbc;
+}
+#endif
+
 uint8_t *crypton_aes_cpu_init(void)
 {
 #if defined(ARCH_X86) && defined(WITH_AESNI)
 	crypton_aesni_initialize_hw(initialize_table_ni);
+#endif
+#ifdef WITH_ARMV8_CRYPTO
+	initialize_table_armv8();
 #endif
 	return crypton_aes_cpu_options;
 }
