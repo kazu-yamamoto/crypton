@@ -2,6 +2,36 @@
 
 ## 1.2.0
 
+* perf(gcm): give x86 its own GCM decryption loop.  It fell to the generic one,
+  which calls the block function once per block, and ran at a quarter the speed
+  of encryption; both directions now take eight blocks at a time and fold their
+  GHASH into one reduction.  AES-256-GCM decryption goes from 561 to 2733 MiB/s
+  and AES-128 from 667 to 3150
+  [#114](https://github.com/kazu-yamamoto/crypton/pull/114)
+* perf(chacha): take eight blocks at a time with AVX2 where the machine has it,
+  with the cpuid and XGETBV checks that decide.  ChaCha20 on x86-64 goes from
+  900 to 2074 MiB/s
+  [#113](https://github.com/kazu-yamamoto/crypton/pull/113)
+* perf(chacha): do four blocks at a time with SSE2 on x86-64, where the cipher
+  had no vector code at all.  ChaCha20 goes from 493 to 900 MiB/s
+  [#112](https://github.com/kazu-yamamoto/crypton/pull/112)
+* perf(chacha): do four blocks at a time with NEON on AArch64.  ChaCha20 goes
+  from 1025 to 1955 MiB/s
+  [#111](https://github.com/kazu-yamamoto/crypton/pull/111)
+* feat(sha512): use the ARMv8.2 SHA-512 instructions on AArch64, which SHA-384
+  and the truncated SHA-512/t variants share.  Hashing 1 MiB goes from 1.53 ms
+  to 597 us.  The extension is optional, so it is asked for at runtime on both
+  Apple and Linux rather than assumed
+  [#110](https://github.com/kazu-yamamoto/crypton/pull/110)
+* perf(gcm): drive GCM from AArch64 rather than the generic loop, with a group
+  of eight blocks folding into a single GHASH reduction.  AES-128-GCM goes from
+  4030 to 8266 MiB/s and AES-256 from 4043 to 7172
+  [#109](https://github.com/kazu-yamamoto/crypton/pull/109)
+* perf(aes): specialise the AArch64 code by key size and interleave eight
+  blocks, and give CTR its own loop.  AES-256 ECB goes from 3886 to 15991
+  MiB/s, CTR from 2935 to 13567 and CBC decryption from 4366 to 15807
+  [#108](https://github.com/kazu-yamamoto/crypton/pull/108)
+
 * perf(aes): build the AES-NI paths on Windows, which was missing from the list of
   systems that compile them.  Windows builds have been doing AES, and GHASH with it,
   in the generic C
