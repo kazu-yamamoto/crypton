@@ -15,6 +15,20 @@ jobs:
       matrix:
         os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12', '9.14' ]
+        # GitHub runs at most five macOS jobs at once, so two of the seven sat
+        # waiting for the others to finish and held up the whole workflow --
+        # the last one started eight and a half minutes in.  Keep the oldest
+        # and newest compiler there and let Linux and Windows cover the range.
+        #
+        # macOS-latest is the only aarch64 image in the matrix, so it is what
+        # exercises cbits/aes/armv8.c; that is a property of the runner rather
+        # than of the compiler, and either remaining job covers it.
+        exclude:
+          - { os: macOS-latest, ghc: '9.4'  }
+          - { os: macOS-latest, ghc: '9.6'  }
+          - { os: macOS-latest, ghc: '9.8'  }
+          - { os: macOS-latest, ghc: '9.10' }
+          - { os: macOS-latest, ghc: '9.12' }
 
     env:
       cache-name: cabal-ghc
