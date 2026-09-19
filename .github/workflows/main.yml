@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [ 'main' ]
 
+# Pushing again to a branch that is still building leaves the earlier run
+# occupying macOS slots to produce a result nobody will read, so supersede it.
+# Not on main, though: that is the only place the cache is written, and a run
+# cancelled partway never reaches the save step.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
