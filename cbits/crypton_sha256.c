@@ -75,7 +75,7 @@ static const uint32_t k[] = {
 #define s0(x)       (ror32(x, 7) ^ ror32(x,18) ^ (x >> 3))
 #define s1(x)       (ror32(x,17) ^ ror32(x,19) ^ (x >> 10))
 
-static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
+static void sha256_do_chunk_generic(struct sha256_ctx *ctx, uint32_t buf[])
 {
 	uint32_t a, b, c, d, e, f, g, h, t1, t2;
 	int i;
@@ -109,6 +109,31 @@ static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 
 	ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c; ctx->h[3] += d;
 	ctx->h[4] += e; ctx->h[5] += f; ctx->h[6] += g; ctx->h[7] += h;
+}
+
+#ifdef WITH_ARMV8_SHA2
+/*
+ * AArch64 can do four rounds at a time with the SHA-2 instructions; see
+ * sha256_armv8.c.  They are optional in ARMv8.0, so ask before using them.
+ * Two threads racing to answer here both write the same value.
+ */
+extern void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint32_t buf[16]);
+extern int crypton_sha256_armv8_available(void);
+
+static int sha256_use_armv8 = -1;
+#endif
+
+static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
+{
+#ifdef WITH_ARMV8_SHA2
+	if (sha256_use_armv8 < 0)
+		sha256_use_armv8 = crypton_sha256_armv8_available();
+	if (sha256_use_armv8) {
+		crypton_sha256_armv8_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
+	sha256_do_chunk_generic(ctx, buf);
 }
 
 void crypton_sha224_update(struct sha224_ctx *ctx, const uint8_t *data, uint32_t len)

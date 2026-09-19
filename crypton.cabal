@@ -376,6 +376,13 @@ library
         if !flag(use_target_attributes)
             cc-options: -march=armv8-a+crypto
 
+    if arch(aarch64)
+        cc-options: -DWITH_ARMV8_SHA2
+        c-sources:  cbits/sha256_armv8.c
+
+        if !flag(use_target_attributes)
+            cc-options: -march=armv8-a+crypto
+
     if ((flag(support_aesni) && ((os(linux) || os(freebsd)) || os(osx))) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
         c-sources:
