@@ -28,11 +28,30 @@
 #include "aes/generic.h"
 #include "crypton_bitfn.h"
 
+/*
+ * The AES and PMULL instructions are extensions, so a translation unit
+ * compiled for baseline ARMv8-A may not use them.  Mark the functions that do,
+ * the way cbits/aes/x86ni.h marks their x86 counterparts, rather than raising
+ * -march for every file in the library: the flag use_target_attributes picks
+ * between the two, and with it set -- which is the default -- nothing else
+ * enables the extensions, so without these the file does not compile at all on
+ * a toolchain whose baseline lacks them.  Apple's does not lack them, which is
+ * why only Linux noticed.
+ *
+ * "+crypto" rather than "crypto": GCC rejects the latter.
+ */
+#ifdef WITH_TARGET_ATTRIBUTES
+#define TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
+#else
+#define TARGET_ARMV8_CRYPTO
+#endif
+
 /* forward round keys: nbr + 1 of them, written by the generic key expansion */
 #define FWD(key)  ((const uint8_t *) (key)->data)
 /* InvMixColumns(k[nbr-1]) .. InvMixColumns(k[1]): nbr - 1 of them */
 #define INV(key)  (((const uint8_t *) (key)->data) + 16 * ((key)->nbr + 1))
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 {
 	int i;
@@ -48,6 +67,7 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 	}
 }
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t aes_encrypt_block_armv8(uint8x16_t s, const aes_key *key)
 {
 	const uint8_t *rk = FWD(key);
@@ -59,6 +79,7 @@ static inline uint8x16_t aes_encrypt_block_armv8(uint8x16_t s, const aes_key *ke
 	return veorq_u8(s, vld1q_u8(rk + 16 * key->nbr));
 }
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t aes_decrypt_block_armv8(uint8x16_t s, const aes_key *key)
 {
 	const uint8_t *fwd = FWD(key);
@@ -74,30 +95,35 @@ static inline uint8x16_t aes_decrypt_block_armv8(uint8x16_t s, const aes_key *ke
 	return veorq_u8(s, vld1q_u8(fwd));
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_encrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
 	vst1q_u8((uint8_t *) output,
 	         aes_encrypt_block_armv8(vld1q_u8((const uint8_t *) input), key));
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_decrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
 	vst1q_u8((uint8_t *) output,
 	         aes_decrypt_block_armv8(vld1q_u8((const uint8_t *) input), key));
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
 	for (; nb_blocks-- > 0; input++, output++)
 		crypton_aes_armv8_encrypt_block(output, key, input);
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
 	for (; nb_blocks-- > 0; input++, output++)
 		crypton_aes_armv8_decrypt_block(output, key, input);
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
 {
 	uint8x16_t iv = vld1q_u8((const uint8_t *) _iv);
@@ -108,6 +134,7 @@ void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *_
 	}
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_decrypt_cbc(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
 {
 	uint8x16_t iv = vld1q_u8((const uint8_t *) _iv);
@@ -152,6 +179,7 @@ int crypton_aes_armv8_available(void)
  */
 
 /* reverse all 16 bytes */
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t bswap128(uint8x16_t v)
 {
 	return vextq_u8(vrev64q_u8(v), vrev64q_u8(v), 8);
@@ -165,6 +193,7 @@ static inline uint8x16_t bswap128(uint8x16_t v)
 #define SHL32(v, n) vreinterpretq_u8_u32(vshlq_n_u32(vreinterpretq_u32_u8(v), (n)))
 #define SHR32(v, n) vreinterpretq_u8_u32(vshrq_n_u32(vreinterpretq_u32_u8(v), (n)))
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -172,6 +201,7 @@ static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
 }
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -179,6 +209,7 @@ static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 1)));
 }
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -186,6 +217,7 @@ static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
 }
 
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_high_p64(
@@ -199,6 +231,7 @@ static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
  * over XOR: several products can be added together and fixed up just once,
  * which is what gf_mul4 below does.
  */
+TARGET_ARMV8_CRYPTO
 static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
                                uint8x16_t *lo, uint8x16_t *hi)
 {
@@ -221,6 +254,7 @@ static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
 
 /* Shift the 256-bit product left by one to undo GCM's bit reflection, then
  * reduce modulo the GCM polynomial.  This is the expensive half. */
+TARGET_ARMV8_CRYPTO
 static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
 {
 	uint8x16_t t2, t4, t5, t7, t8, t9;
@@ -259,6 +293,7 @@ static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
 	return bswap128(t6);
 }
 
+TARGET_ARMV8_CRYPTO
 static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
 {
 	uint8x16_t lo, hi;
@@ -275,6 +310,7 @@ static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
  * Indices 1..3 get H^2, H^3 and H^4, which is what lets gf_mul4 fold four
  * blocks into one reduction.  The table has sixteen slots, so they are free.
  */
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 {
 	uint8x16_t p;
@@ -290,6 +326,7 @@ void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 	}
 }
 
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
 {
 	vst1q_u8((uint8_t *) a,
@@ -302,6 +339,7 @@ void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
  * four products can be summed first and reduced once, which is where the
  * time goes.  Aggregated reduction, from the Intel GCM paper.
  */
+TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks,
                                      const block128 *htable)
 {
