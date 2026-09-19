@@ -17,6 +17,24 @@
 #include <asm/hwcap.h>
 #endif
 
+/*
+ * The SHA-2 instructions are an extension, so a translation unit compiled for
+ * baseline ARMv8-A may not use them.  Mark the function that does, the way
+ * cbits/aes/x86ni.h marks its x86 counterparts, rather than raising
+ * -march for every file in the library: the flag use_target_attributes picks
+ * between the two, and with it set -- which is the default -- nothing else
+ * enables the extensions, so without these the file does not compile at all on
+ * a toolchain whose baseline lacks them.  Apple's does not lack them, which is
+ * why only Linux noticed.
+ *
+ * "+crypto" rather than "crypto": GCC rejects the latter.
+ */
+#ifdef WITH_TARGET_ATTRIBUTES
+#define TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
+#else
+#define TARGET_ARMV8_CRYPTO
+#endif
+
 static const uint32_t K[64] = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
 	0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -40,6 +58,7 @@ static const uint32_t K[64] = {
  * One 64-byte block.  `state` is the eight words of chaining value in host
  * order, `buf` the block as it arrived, which SHA-256 reads big-endian.
  */
+TARGET_ARMV8_CRYPTO
 void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint32_t buf[16])
 {
 	uint32x4_t abcd, efgh, abcd_prev, efgh_prev, abcd_save, tmp;
