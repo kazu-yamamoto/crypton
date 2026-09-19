@@ -365,6 +365,17 @@ library
         c-sources:     cbits/crypton_rdrand.c
         other-modules: Crypto.Random.Entropy.RDRand
 
+    if (flag(support_aesni) && arch(aarch64))
+        cc-options: -DWITH_ARMV8_CRYPTO
+        c-sources:
+            cbits/aes/generic.c
+            cbits/aes/gf.c
+            cbits/aes/armv8.c
+            cbits/crypton_aes.c
+
+        if !flag(use_target_attributes)
+            cc-options: -march=armv8-a+crypto
+
     if ((flag(support_aesni) && ((os(linux) || os(freebsd)) || os(osx))) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
         c-sources:
