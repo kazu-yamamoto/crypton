@@ -36,20 +36,23 @@
 #include <stdio.h>
 
 /*
- * Four blocks at a time with NEON; see chacha_neon.c.  The state words are
- * held little-endian here -- the core reads them without converting -- so
- * the vector version, which also does not convert, is only right on a
- * little-endian machine.
+ * Four blocks at a time with whichever vector unit the target has: NEON in
+ * chacha_neon.c, SSE2 in chacha_sse2.c.  Both present the same two entry
+ * points, so there is one path here.
+ *
+ * The state words are held little-endian -- the core below reads them
+ * without converting -- so the vector versions, which also do not convert,
+ * are left out on a big-endian machine.
  */
-#if defined(WITH_ARMV8_NEON) && !defined(__AARCH64EB__)
-#define CHACHA_NEON 1
-void crypton_chacha_neon_combine4(int rounds, uint8_t *dst, const uint8_t *src,
+#if (defined(WITH_ARMV8_NEON) && !defined(__AARCH64EB__)) || defined(WITH_X86_SSE2)
+#define CHACHA_SIMD 1
+void crypton_chacha_simd_combine4(int rounds, uint8_t *dst, const uint8_t *src,
                                   const crypton_chacha_state *in);
-void crypton_chacha_neon_generate4(int rounds, uint8_t *dst,
+void crypton_chacha_simd_generate4(int rounds, uint8_t *dst,
                                    const crypton_chacha_state *in);
 /* The four counters must not carry into d[13], which the block loop below
  * handles and the vector one does not; that is one run in 2^30. */
-#define CHACHA_NEON_OK(st) ((st)->d[12] < 0xfffffffcU)
+#define CHACHA_SIMD_OK(st) ((st)->d[12] < 0xfffffffcU)
 #endif
 
 #define QR(a,b,c,d) \
@@ -273,9 +276,9 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 
 	st = &ctx->st;
 
-#ifdef CHACHA_NEON
-	while (bytes >= 256 && CHACHA_NEON_OK(st)) {
-		crypton_chacha_neon_combine4(ctx->nb_rounds, dst, src, st);
+#ifdef CHACHA_SIMD
+	while (bytes >= 256 && CHACHA_SIMD_OK(st)) {
+		crypton_chacha_simd_combine4(ctx->nb_rounds, dst, src, st);
 		st->d[12] += 4;
 		bytes -= 256; src += 256; dst += 256;
 	}
@@ -380,9 +383,9 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 
 	st = &ctx->st;
 
-#ifdef CHACHA_NEON
-	while (bytes >= 256 && CHACHA_NEON_OK(st)) {
-		crypton_chacha_neon_generate4(ctx->nb_rounds, dst, st);
+#ifdef CHACHA_SIMD
+	while (bytes >= 256 && CHACHA_SIMD_OK(st)) {
+		crypton_chacha_simd_generate4(ctx->nb_rounds, dst, st);
 		st->d[12] += 4;
 		bytes -= 256; dst += 256;
 	}
