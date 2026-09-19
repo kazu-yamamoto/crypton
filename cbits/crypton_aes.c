@@ -65,7 +65,9 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
 	void crypton_aes_armv8_decrypt_ecb##sz(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks); \
 	void crypton_aes_armv8_encrypt_cbc##sz(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks); \
 	void crypton_aes_armv8_decrypt_cbc##sz(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks); \
-	void crypton_aes_armv8_encrypt_ctr##sz(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len);
+	void crypton_aes_armv8_encrypt_ctr##sz(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len); \
+	void crypton_aes_armv8_gcm_encrypt##sz(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length); \
+	void crypton_aes_armv8_gcm_decrypt##sz(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
 ARMV8_DECLS(128)
 ARMV8_DECLS(256)
 int crypton_aes_armv8_available(void);
@@ -349,6 +351,13 @@ static void initialize_table_armv8(void)
 	crypton_aes_branch_table[GHASH_HINIT]  = crypton_aes_armv8_hinit_pmull;
 	crypton_aes_branch_table[GHASH_GF_MUL]  = crypton_aes_armv8_gf_mul_pmull;
 	crypton_aes_branch_table[GHASH_GF_MUL4] = crypton_aes_armv8_gf_mul4_pmull;
+
+	/* GCM, which needs both halves and so waits until PMULL is known to
+	 * be there; the generic loop stands in otherwise */
+	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aes_armv8_gcm_encrypt128;
+	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aes_armv8_gcm_decrypt128;
+	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aes_armv8_gcm_encrypt256;
+	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aes_armv8_gcm_decrypt256;
 }
 #endif
 

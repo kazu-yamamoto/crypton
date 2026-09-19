@@ -68,23 +68,6 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 }
 
 /*
- * The modes, generated once per key size.  See armv8_impl.c for why the
- * round count has to be a compile-time constant.  AES-192 is left to the
- * generic code, as it is on x86.
- */
-#define SIZED(m) m##128
-#define NBR 10
-#include <aes/armv8_impl.c>
-#undef SIZED
-#undef NBR
-
-#define SIZED(m) m##256
-#define NBR 14
-#include <aes/armv8_impl.c>
-#undef SIZED
-#undef NBR
-
-/*
  * Whether the extensions are actually present.
  *
  * They are mandatory on Apple silicon, and on other AArch64 systems the
@@ -245,8 +228,9 @@ static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
  * reversed, so that gfmul_pmull does not have to swap it every time.  This
  * mirrors crypton_aesni_hinit_pclmul.
  *
- * Indices 1..3 get H^2, H^3 and H^4, which is what lets gf_mul4 fold four
- * blocks into one reduction.  The table has sixteen slots, so they are free.
+ * Indices 1..7 get H^2 .. H^8, which is what lets a group of blocks fold
+ * into one reduction: gf_mul4 uses the first four, the GCM loop all eight.
+ * The table has sixteen slots, so they are free.
  */
 TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
@@ -258,7 +242,7 @@ void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 	htable[0].q[1] = bitfn_swap64(h->q[0]);
 
 	p = vld1q_u8((const uint8_t *) h);
-	for (i = 1; i < 4; i++) {
+	for (i = 1; i < 8; i++) {
 		p = gfmul_pmull(p, (const uint8_t *) &htable[0]);
 		vst1q_u8((uint8_t *) &htable[i], bswap128(p));
 	}
@@ -308,3 +292,20 @@ int crypton_aes_armv8_pmull_available(void)
 	return 0;
 #endif
 }
+
+/*
+ * The modes, generated once per key size.  See armv8_impl.c for why the
+ * round count has to be a compile-time constant.  AES-192 is left to the
+ * generic code, as it is on x86.
+ */
+#define SIZED(m) m##128
+#define NBR 10
+#include <aes/armv8_impl.c>
+#undef SIZED
+#undef NBR
+
+#define SIZED(m) m##256
+#define NBR 14
+#include <aes/armv8_impl.c>
+#undef SIZED
+#undef NBR
