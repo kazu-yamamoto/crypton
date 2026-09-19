@@ -6,7 +6,7 @@ module Main where
 
 import Crypto.Hash.Algorithms as Crypto
 import Data.ByteString as B
-import Gauge.Main
+import Test.Tasty.Bench
 import "cryptonite" Crypto.KDF.PBKDF2 as Crypto
 import "fastpbkdf2" Crypto.KDF.PBKDF2 as Fast
 

@@ -1,8 +1,3 @@
 packages: .
 tests: True
 benchmarks: True
-
--- gauge's `analysis` flag pins base < 4.20, which rules out GHC 9.10 and
--- later.  The flag only adds the statistical regression reporting; the
--- timings themselves do not need it.
-constraints: gauge -analysis
