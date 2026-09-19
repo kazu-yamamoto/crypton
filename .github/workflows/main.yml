@@ -30,43 +30,71 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: latest
 
-    - name: Hackage index, Cache Key
+    - name: Cache Key
       id: params
       shell: bash
       run: |
         ghc_version=$(ghc --numeric-version)
-        cabal update
-        echo "cache=${{ runner.os }}-build-${{ env.cache-name }}-${ghc_version}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}" > "$GITHUB_OUTPUT"
+        # The prefix is everything a cache may be shared across.  It
+        # deliberately leaves out the .cabal hash: that changes whenever a
+        # module is added or a bound is touched, and keying on it threw the
+        # whole cache away each time.  restore-keys picks up the most recent
+        # entry with this prefix instead, and cabal works out what is stale.
+        prefix="${{ runner.os }}-${{ env.cache-name }}-${ghc_version}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "cache=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
+        # Ask cabal where it keeps things rather than assuming ~/.cabal.
+        # That is only the right answer when the legacy layout is in use --
+        # cabal 3.12 and later move to XDG directories when ~/.cabal does not
+        # already exist -- and it is never the right answer on Windows, which
+        # is why no Windows job has ever saved a cache.  `cabal path` prints
+        # without a trailing newline, hence the echo after each one.
+        {
+          echo "paths<<PATHS_EOF"
+          cabal path --remote-repo-cache; echo
+          cabal path --store-dir; echo
+          echo "dist-newstyle"
+          echo "PATHS_EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Restore Cache
       uses: actions/cache/restore@v5
       if: ${{ github.ref_name != 'ci-uc' }}
       with:
-        path: ~/.cabal
+        # One entry per job rather than two.  The repository cache is capped
+        # at 10 GB and 21 jobs of dependencies already reach it, so build
+        # products ride along with the dependencies instead of doubling the
+        # number of entries.
+        path: ${{ steps.params.outputs.paths }}
         key: ${{ steps.params.outputs.cache }}
+        restore-keys: ${{ steps.params.outputs.prefix }}
 
+    - name: Update the Hackage index
+      run: cabal update
+
+    # Try the restored cache first so a warm run does not talk to Hackage
+    # at all, and fall back to fetching when it is cold or incomplete.
     - name: Install dependencies
-      id: inst-dep
       shell: bash
       run: |
-        if cabal build --offline --only-dependencies ${{ env.target-config }} all
-        then
-          echo "installed=false" >> "$GITHUB_OUTPUT"
-        else
+        cabal build --offline --only-dependencies ${{ env.target-config }} all ||
           cabal build --only-dependencies ${{ env.target-config }} all
-          echo "installed=true" >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: Save Cache
-      uses: actions/cache/save@v5
-      if: ${{ steps.inst-dep.outputs.installed == 'true' || steps.doctest-dep.outputs.installed == 'true' }}
-      with:
-        path: ~/.cabal
-        key: ${{ steps.params.outputs.cache }}
 
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
+
+    # Saved after the build, so the entry holds the build products too, and
+    # only from the default branch: a cache written on a branch is visible
+    # only to that branch, while one written on the default branch is visible
+    # to every branch and pull request.  Writing from pull requests as well
+    # would multiply 21 jobs by every open branch against a 10 GB cap.
+    - name: Save Cache
+      uses: actions/cache/save@v5
+      if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+      with:
+        path: ${{ steps.params.outputs.paths }}
+        key: ${{ steps.params.outputs.cache }}
