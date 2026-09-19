@@ -53,6 +53,68 @@ static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, ui
 		 : :"edi");
 }
 
+/*
+ * What the machine will let us use beyond the x86-64 baseline.  AVX2 needs
+ * three things to agree: the CPU has it, the CPU has XSAVE enabled by the
+ * OS, and the OS has said it will save the wider registers -- without that
+ * last one the upper halves are lost across a context switch.  XGETBV is
+ * spelled out in bytes because it predates some assemblers that are still
+ * in use.
+ */
+static void cpuid_count(uint32_t info, uint32_t sub, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
+{
+	*eax = info;
+	*ecx = sub;
+	__asm__ volatile
+		(
+#ifdef __x86_64__
+		 "mov %%rbx, %%rdi;"
+#else
+		 "mov %%ebx, %%edi;"
+#endif
+		 "cpuid;"
+		 "mov %%ebx, %%esi;"
+#ifdef __x86_64__
+		 "mov %%rdi, %%rbx;"
+#else
+		 "mov %%edi, %%ebx;"
+#endif
+		 :"+a" (*eax), "=S" (*ebx), "+c" (*ecx), "=d" (*edx)
+		 : :"edi");
+}
+
+static uint64_t xcr0(void)
+{
+	uint32_t lo, hi;
+
+	__asm__ volatile(".byte 0x0f, 0x01, 0xd0" : "=a" (lo), "=d" (hi) : "c" (0));
+	return ((uint64_t) hi << 32) | lo;
+}
+
+uint32_t crypton_x86_simd_features(void)
+{
+	static int resolved = 0;
+	static uint32_t features = 0;
+
+	if (!resolved) {
+		uint32_t eax, ebx, ecx, edx, f = 0;
+
+		cpuid(1, &eax, &ebx, &ecx, &edx);
+		if (ecx & (1 << 9))
+			f |= CRYPTON_X86_SSSE3;
+		/* OSXSAVE, then AVX, then the XCR0 bits for the SSE and AVX
+		 * register state, and only then ask leaf 7 about AVX2 */
+		if ((ecx & (1 << 27)) && (ecx & (1 << 28)) && ((xcr0() & 6) == 6)) {
+			cpuid_count(7, 0, &eax, &ebx, &ecx, &edx);
+			if (ebx & (1 << 5))
+				f |= CRYPTON_X86_AVX2;
+		}
+		features = f;
+		resolved = 1;
+	}
+	return features;
+}
+
 #ifdef USE_AESNI
 void crypton_aesni_initialize_hw(void (*init_table)(int, int))
 {
