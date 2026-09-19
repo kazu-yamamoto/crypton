@@ -44,6 +44,19 @@ jobs:
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "cache=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
+        # Ask cabal where it keeps things rather than assuming ~/.cabal.
+        # That is only the right answer when the legacy layout is in use --
+        # cabal 3.12 and later move to XDG directories when ~/.cabal does not
+        # already exist -- and it is never the right answer on Windows, which
+        # is why no Windows job has ever saved a cache.  `cabal path` prints
+        # without a trailing newline, hence the echo after each one.
+        {
+          echo "paths<<PATHS_EOF"
+          cabal path --remote-repo-cache; echo
+          cabal path --store-dir; echo
+          echo "dist-newstyle"
+          echo "PATHS_EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Restore Cache
       uses: actions/cache/restore@v5
@@ -53,9 +66,7 @@ jobs:
         # at 10 GB and 21 jobs of dependencies already reach it, so build
         # products ride along with the dependencies instead of doubling the
         # number of entries.
-        path: |
-          ~/.cabal
-          dist-newstyle
+        path: ${{ steps.params.outputs.paths }}
         key: ${{ steps.params.outputs.cache }}
         restore-keys: ${{ steps.params.outputs.prefix }}
 
@@ -85,7 +96,5 @@ jobs:
       uses: actions/cache/save@v5
       if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
       with:
-        path: |
-          ~/.cabal
-          dist-newstyle
+        path: ${{ steps.params.outputs.paths }}
         key: ${{ steps.params.outputs.cache }}
