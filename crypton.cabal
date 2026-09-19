@@ -529,6 +529,6 @@ benchmark bench-crypton
         bytestring,
         crypton,
         deepseq,
-        gauge,
         ram,
-        random
+        random,
+        tasty-bench

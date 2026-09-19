@@ -2,8 +2,8 @@
 
 module Number.F2m (benchF2m) where
 
-import Gauge.Main
 import System.Random
+import Test.Tasty.Bench
 
 import Crypto.Number.Basic (log2)
 import Crypto.Number.F2m

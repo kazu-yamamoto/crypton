@@ -4,7 +4,7 @@
 module Main where
 
 import Control.Monad
-import Gauge.Main
+import Test.Tasty.Bench
 
 import "cryptonite" Crypto.Random
 
