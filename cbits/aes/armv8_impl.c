@@ -25,6 +25,8 @@
 
 #define EACH1(m) m(0)
 #define EACH8(m) m(0) m(1) m(2) m(3) m(4) m(5) m(6) m(7)
+/* the blocks after the first; GHASH folds block 0 in with the tag */
+#define EACH7(m) m(1) m(2) m(3) m(4) m(5) m(6) m(7)
 
 #define LOAD_IN(i)   s[i] = vld1q_u8((const uint8_t *) (input + (i)));
 #define STORE_OUT(i) vst1q_u8((uint8_t *) (output + (i)), s[i]);
@@ -250,8 +252,144 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
 	}
 }
 
+
+/*
+ * GCM, rather than the generic loop calling the block function once per
+ * block through the branch table.  Eight counter blocks go through the
+ * rounds together, and their GHASH folds into a single reduction with
+ * H^8 .. H^1, so a group costs one reduction instead of eight.  The tag
+ * and the counter stay in registers across the whole run.
+ *
+ * GCM's counter is the low 32 bits only and wraps there, so unlike CTR
+ * there is no carry to chase: the top twelve bytes never move.
+ */
+#define GCM_CTR(i)   s[i] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c + 1 + (i)), base, 3));
+#define GCM_ENC(i)   { const uint8x16_t m_ = vld1q_u8(input + 16 * (i)); \
+                       s[i] = veorq_u8(s[i], m_); \
+                       vst1q_u8(output + 16 * (i), s[i]); }
+#define GCM_DEC(i)   { const uint8x16_t m_ = vld1q_u8(input + 16 * (i)); \
+                       vst1q_u8(output + 16 * (i), veorq_u8(s[i], m_)); \
+                       s[i] = m_; }
+#define GCM_GHASH(i) { uint8x16_t l_, h_; \
+                       clmul_pmull(s[i], vld1q_u8((const uint8_t *) &ht[WAY - 1 - (i)]), \
+                                   &l_, &h_); \
+                       glo = veorq_u8(glo, l_); ghi = veorq_u8(ghi, h_); }
+
+/* the eight blocks now in s[] are the ciphertext; fold them into the tag */
+#define GCM_FOLD()                                                            \
+	do {                                                                  \
+		uint8x16_t glo, ghi;                                          \
+		clmul_pmull(veorq_u8(tag, s[0]),                              \
+		            vld1q_u8((const uint8_t *) &ht[WAY - 1]),         \
+		            &glo, &ghi);                                      \
+		EACH7(GCM_GHASH)                                              \
+		tag = gfred_pmull(glo, ghi);                                  \
+	} while (0)
+
+#define GCM_PROLOGUE                                                          \
+	const uint8_t *rk = FWD(key);                                         \
+	const block128 *ht = gcm->htable;                                     \
+	uint8x16_t s[WAY];                                                    \
+	uint8x16_t tag = vld1q_u8((const uint8_t *) &gcm->tag);               \
+	uint32_t c = be32_to_cpu(gcm->civ.d[3]);                              \
+	uint32x4_t base = vreinterpretq_u32_u8(vld1q_u8((const uint8_t *) &gcm->civ))
+
+/* one block, for what is left after the last group of eight */
+#define GCM_ONE(load_m, store_c, ghash_of)                                    \
+	do {                                                                  \
+		const uint8x16_t m_ = (load_m);                               \
+		c++;                                                          \
+		s[0] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c), base, 3)); \
+		ENC_ROUNDS(EACH1);                                            \
+		s[0] = veorq_u8(s[0], m_);                                    \
+		(store_c);                                                    \
+		tag = gfmul_pmull(veorq_u8(tag, (ghash_of)), (const uint8_t *) ht); \
+	} while (0)
+
+#define GCM_EPILOGUE                                                          \
+	do {                                                                  \
+		gcm->civ.d[3] = cpu_to_be32(c);                               \
+		vst1q_u8((uint8_t *) &gcm->tag, tag);                         \
+	} while (0)
+
+TARGET_ARMV8_CRYPTO
+void SIZED(crypton_aes_armv8_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	GCM_PROLOGUE;
+	uint32_t i;
+
+	gcm->length_input += length;
+
+	for (; length >= 16 * WAY; input += 16 * WAY, output += 16 * WAY, length -= 16 * WAY) {
+		EACH8(GCM_CTR);
+		c += WAY;
+		ENC_ROUNDS(EACH8);
+		EACH8(GCM_ENC);
+		GCM_FOLD();
+	}
+	for (; length >= 16; input += 16, output += 16, length -= 16) {
+		GCM_ONE(vld1q_u8(input), vst1q_u8(output, s[0]), s[0]);
+	}
+	if (length) {
+		aes_block m, o;
+
+		block128_zero(&m);
+		block128_copy_bytes(&m, input, length);
+		c++;
+		s[0] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c), base, 3));
+		ENC_ROUNDS(EACH1);
+		s[0] = veorq_u8(s[0], vld1q_u8((const uint8_t *) &m));
+		vst1q_u8((uint8_t *) &o, s[0]);
+		block128_zero(&m);
+		for (i = 0; i < length; i++)
+			output[i] = m.b[i] = o.b[i];
+		tag = gfmul_pmull(veorq_u8(tag, vld1q_u8((const uint8_t *) &m)),
+		                  (const uint8_t *) ht);
+	}
+	GCM_EPILOGUE;
+}
+
+TARGET_ARMV8_CRYPTO
+void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	GCM_PROLOGUE;
+	uint32_t i;
+
+	gcm->length_input += length;
+
+	for (; length >= 16 * WAY; input += 16 * WAY, output += 16 * WAY, length -= 16 * WAY) {
+		EACH8(GCM_CTR);
+		c += WAY;
+		ENC_ROUNDS(EACH8);
+		EACH8(GCM_DEC);
+		GCM_FOLD();
+	}
+	for (; length >= 16; input += 16, output += 16, length -= 16) {
+		const uint8x16_t ct = vld1q_u8(input);
+
+		GCM_ONE(ct, vst1q_u8(output, s[0]), ct);
+	}
+	if (length) {
+		aes_block m, o;
+
+		block128_zero(&m);
+		block128_copy_bytes(&m, input, length);
+		c++;
+		s[0] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c), base, 3));
+		ENC_ROUNDS(EACH1);
+		s[0] = veorq_u8(s[0], vld1q_u8((const uint8_t *) &m));
+		vst1q_u8((uint8_t *) &o, s[0]);
+		for (i = 0; i < length; i++)
+			output[i] = o.b[i];
+		tag = gfmul_pmull(veorq_u8(tag, vld1q_u8((const uint8_t *) &m)),
+		                  (const uint8_t *) ht);
+	}
+	GCM_EPILOGUE;
+}
+
 #undef WAY
 #undef EACH1
+#undef EACH7
 #undef EACH8
 #undef LOAD_IN
 #undef STORE_OUT
@@ -265,3 +403,11 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
 #undef CBC_XOR
 #undef CTR_SET
 #undef CTR_XOR
+#undef GCM_CTR
+#undef GCM_ENC
+#undef GCM_DEC
+#undef GCM_GHASH
+#undef GCM_FOLD
+#undef GCM_PROLOGUE
+#undef GCM_ONE
+#undef GCM_EPILOGUE
