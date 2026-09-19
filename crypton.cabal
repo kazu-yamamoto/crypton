@@ -383,7 +383,7 @@ library
         if !flag(use_target_attributes)
             cc-options: -march=armv8-a+crypto
 
-    if ((flag(support_aesni) && ((os(linux) || os(freebsd)) || os(osx))) && (arch(i386) || arch(x86_64)))
+    if ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
         c-sources:
             cbits/aes/generic.c

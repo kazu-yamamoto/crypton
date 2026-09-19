@@ -122,10 +122,14 @@ jobs:
 
     # Which implementation the C actually picked is invisible to the test
     # suite: when a runtime check answers no, everything still passes on the
-    # generic code, just slower.  So ask, and on aarch64 Linux -- the one job
-    # whose answer comes from the auxiliary vector, and the reason that job
-    # exists -- insist on the answer.  This covers the AES and PMULL checks;
-    # the SHA-2 one is not reported through this interface.
+    # generic code, just slower.  So ask, and insist on the answer.
+    #
+    # Every image in the matrix is hardware that has AES and carry-less
+    # multiply -- every x86-64 part since about 2010, and both AArch64 ones --
+    # so anything less means crypton failed to reach for them, whether the
+    # runtime check said no or the build never compiled the code.  Covers the
+    # AES and PMULL checks; the SHA-2 one is not reported through this
+    # interface.
     - name: Report the implementations crypton selected
       shell: bash
       run: |
@@ -143,13 +147,11 @@ jobs:
           ghc -v0 -O0 -i -package crypton ci-cpu-check.hs -o ci-cpu-check
         options=$(./ci-cpu-check 2>/dev/null || ./ci-cpu-check.exe)
         echo "processorOptions = $options"
-        if [ '${{ matrix.os }}' = 'ubuntu-24.04-arm' ]; then
-          case "$options" in
-            *AESNI*PCLMUL*) ;;
-            *) echo "::error::expected AESNI and PCLMUL on aarch64 Linux, got $options"
-               exit 1 ;;
-          esac
-        fi
+        case "$options" in
+          *AESNI*PCLMUL*) ;;
+          *) echo "::error::expected AESNI and PCLMUL on ${{ matrix.os }}, got $options"
+             exit 1 ;;
+        esac
 
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
