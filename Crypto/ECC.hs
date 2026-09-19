@@ -12,6 +12,24 @@
 -- Portability : unknown
 --
 -- Elliptic Curve Cryptography
+--
+-- == Timing
+--
+-- 'Curve_P256R1' reaches a dedicated implementation whose scalar
+-- multiplication does not branch on the scalar.  'Curve_P384R1' and
+-- 'Curve_P521R1' do not: they are built on "Crypto.ECC.Simple.Prim", whose
+-- scalar multiplication is a double-and-add over @Integer@ and is
+-- documented there as vulnerable to timing attacks.
+--
+-- That matters wherever the scalar is secret, which is both operations that
+-- have one: 'ecdh', which multiplies by the private key, and ECDSA signing,
+-- which multiplies by the secret nonce.  Verification and public-key
+-- derivation work on values an attacker already has, so they are unaffected.
+--
+-- Note also that @Integer@ arithmetic is variable-time underneath, so no
+-- curve built on "Crypto.ECC.Simple.Prim" can be made constant-time without
+-- leaving it.  Where that matters, use 'Curve_P256R1', 'Curve_X25519',
+-- 'Curve_X448' or 'Curve_Edwards25519'.
 module Crypto.ECC (
     Curve_P256R1 (..),
     Curve_P384R1 (..),
@@ -224,6 +242,10 @@ instance EllipticCurveBasepointArith Curve_P256R1 where
     scalarAdd _ = P256.scalarAdd
     scalarMul _ = P256.scalarMul
 
+-- | NIST P-384.
+--
+-- Scalar multiplication branches on the scalar; see the note on timing
+-- at the head of this module.
 data Curve_P384R1 = Curve_P384R1
     deriving (Show, Data)
 
@@ -260,6 +282,10 @@ instance EllipticCurveBasepointArith Curve_P384R1 where
     scalarAdd _ = ecScalarAdd
     scalarMul _ = ecScalarMul
 
+-- | NIST P-521.
+--
+-- Scalar multiplication branches on the scalar; see the note on timing
+-- at the head of this module.
 data Curve_P521R1 = Curve_P521R1
     deriving (Show, Data)
 
