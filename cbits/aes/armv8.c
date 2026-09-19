@@ -67,84 +67,22 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 	}
 }
 
-TARGET_ARMV8_CRYPTO
-static inline uint8x16_t aes_encrypt_block_armv8(uint8x16_t s, const aes_key *key)
-{
-	const uint8_t *rk = FWD(key);
-	int i;
+/*
+ * The modes, generated once per key size.  See armv8_impl.c for why the
+ * round count has to be a compile-time constant.  AES-192 is left to the
+ * generic code, as it is on x86.
+ */
+#define SIZED(m) m##128
+#define NBR 10
+#include <aes/armv8_impl.c>
+#undef SIZED
+#undef NBR
 
-	for (i = 0; i < key->nbr - 1; i++)
-		s = vaesmcq_u8(vaeseq_u8(s, vld1q_u8(rk + 16 * i)));
-	s = vaeseq_u8(s, vld1q_u8(rk + 16 * (key->nbr - 1)));
-	return veorq_u8(s, vld1q_u8(rk + 16 * key->nbr));
-}
-
-TARGET_ARMV8_CRYPTO
-static inline uint8x16_t aes_decrypt_block_armv8(uint8x16_t s, const aes_key *key)
-{
-	const uint8_t *fwd = FWD(key);
-	const uint8_t *inv = INV(key);
-	int i;
-
-	/* the decryption schedule is k[nbr], imc(k[nbr-1]) .. imc(k[1]), k[0];
-	 * the two ends come from the forward half, the middle from inv[] */
-	s = vaesimcq_u8(vaesdq_u8(s, vld1q_u8(fwd + 16 * key->nbr)));
-	for (i = 0; i < key->nbr - 2; i++)
-		s = vaesimcq_u8(vaesdq_u8(s, vld1q_u8(inv + 16 * i)));
-	s = vaesdq_u8(s, vld1q_u8(inv + 16 * (key->nbr - 2)));
-	return veorq_u8(s, vld1q_u8(fwd));
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_encrypt_block(aes_block *output, aes_key *key, aes_block *input)
-{
-	vst1q_u8((uint8_t *) output,
-	         aes_encrypt_block_armv8(vld1q_u8((const uint8_t *) input), key));
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_decrypt_block(aes_block *output, aes_key *key, aes_block *input)
-{
-	vst1q_u8((uint8_t *) output,
-	         aes_decrypt_block_armv8(vld1q_u8((const uint8_t *) input), key));
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
-{
-	for (; nb_blocks-- > 0; input++, output++)
-		crypton_aes_armv8_encrypt_block(output, key, input);
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
-{
-	for (; nb_blocks-- > 0; input++, output++)
-		crypton_aes_armv8_decrypt_block(output, key, input);
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
-{
-	uint8x16_t iv = vld1q_u8((const uint8_t *) _iv);
-
-	for (; nb_blocks-- > 0; input++, output++) {
-		iv = aes_encrypt_block_armv8(veorq_u8(iv, vld1q_u8((const uint8_t *) input)), key);
-		vst1q_u8((uint8_t *) output, iv);
-	}
-}
-
-TARGET_ARMV8_CRYPTO
-void crypton_aes_armv8_decrypt_cbc(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
-{
-	uint8x16_t iv = vld1q_u8((const uint8_t *) _iv);
-
-	for (; nb_blocks-- > 0; input++, output++) {
-		uint8x16_t in = vld1q_u8((const uint8_t *) input);
-		vst1q_u8((uint8_t *) output, veorq_u8(aes_decrypt_block_armv8(in, key), iv));
-		iv = in;
-	}
-}
+#define SIZED(m) m##256
+#define NBR 14
+#include <aes/armv8_impl.c>
+#undef SIZED
+#undef NBR
 
 /*
  * Whether the extensions are actually present.

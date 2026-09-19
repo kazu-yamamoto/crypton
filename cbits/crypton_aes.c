@@ -58,12 +58,16 @@ void crypton_aes_generic_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key
 
 #ifdef WITH_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
-void crypton_aes_armv8_encrypt_block(aes_block *output, aes_key *key, aes_block *input);
-void crypton_aes_armv8_decrypt_block(aes_block *output, aes_key *key, aes_block *input);
-void crypton_aes_armv8_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
-void crypton_aes_armv8_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
-void crypton_aes_armv8_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
-void crypton_aes_armv8_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks);
+#define ARMV8_DECLS(sz) \
+	void crypton_aes_armv8_encrypt_block##sz(aes_block *output, aes_key *key, aes_block *input); \
+	void crypton_aes_armv8_decrypt_block##sz(aes_block *output, aes_key *key, aes_block *input); \
+	void crypton_aes_armv8_encrypt_ecb##sz(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks); \
+	void crypton_aes_armv8_decrypt_ecb##sz(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks); \
+	void crypton_aes_armv8_encrypt_cbc##sz(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks); \
+	void crypton_aes_armv8_decrypt_cbc##sz(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks); \
+	void crypton_aes_armv8_encrypt_ctr##sz(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len);
+ARMV8_DECLS(128)
+ARMV8_DECLS(256)
 int crypton_aes_armv8_available(void);
 int crypton_aes_armv8_pmull_available(void);
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h);
@@ -320,20 +324,23 @@ static void initialize_table_armv8(void)
 	crypton_aes_branch_table[INIT_128] = crypton_aes_armv8_init;
 	crypton_aes_branch_table[INIT_256] = crypton_aes_armv8_init;
 
-	crypton_aes_branch_table[ENCRYPT_BLOCK_128] = crypton_aes_armv8_encrypt_block;
-	crypton_aes_branch_table[DECRYPT_BLOCK_128] = crypton_aes_armv8_decrypt_block;
-	crypton_aes_branch_table[ENCRYPT_BLOCK_256] = crypton_aes_armv8_encrypt_block;
-	crypton_aes_branch_table[DECRYPT_BLOCK_256] = crypton_aes_armv8_decrypt_block;
+	crypton_aes_branch_table[ENCRYPT_BLOCK_128] = crypton_aes_armv8_encrypt_block128;
+	crypton_aes_branch_table[DECRYPT_BLOCK_128] = crypton_aes_armv8_decrypt_block128;
+	crypton_aes_branch_table[ENCRYPT_BLOCK_256] = crypton_aes_armv8_encrypt_block256;
+	crypton_aes_branch_table[DECRYPT_BLOCK_256] = crypton_aes_armv8_decrypt_block256;
 	/* ECB */
-	crypton_aes_branch_table[ENCRYPT_ECB_128] = crypton_aes_armv8_encrypt_ecb;
-	crypton_aes_branch_table[DECRYPT_ECB_128] = crypton_aes_armv8_decrypt_ecb;
-	crypton_aes_branch_table[ENCRYPT_ECB_256] = crypton_aes_armv8_encrypt_ecb;
-	crypton_aes_branch_table[DECRYPT_ECB_256] = crypton_aes_armv8_decrypt_ecb;
+	crypton_aes_branch_table[ENCRYPT_ECB_128] = crypton_aes_armv8_encrypt_ecb128;
+	crypton_aes_branch_table[DECRYPT_ECB_128] = crypton_aes_armv8_decrypt_ecb128;
+	crypton_aes_branch_table[ENCRYPT_ECB_256] = crypton_aes_armv8_encrypt_ecb256;
+	crypton_aes_branch_table[DECRYPT_ECB_256] = crypton_aes_armv8_decrypt_ecb256;
 	/* CBC */
-	crypton_aes_branch_table[ENCRYPT_CBC_128] = crypton_aes_armv8_encrypt_cbc;
-	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aes_armv8_decrypt_cbc;
-	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aes_armv8_encrypt_cbc;
-	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aes_armv8_decrypt_cbc;
+	crypton_aes_branch_table[ENCRYPT_CBC_128] = crypton_aes_armv8_encrypt_cbc128;
+	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aes_armv8_decrypt_cbc128;
+	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aes_armv8_encrypt_cbc256;
+	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aes_armv8_decrypt_cbc256;
+	/* CTR, which the generic loop would otherwise drive one block at a time */
+	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aes_armv8_encrypt_ctr128;
+	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aes_armv8_encrypt_ctr256;
 
 	/* GHASH, which GCM spends its time in once AES itself is fast */
 	if (!crypton_aes_armv8_pmull_available())
