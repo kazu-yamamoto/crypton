@@ -492,6 +492,7 @@ test-suite test-crypton
         BlockCipher.CamelliaSpec
         BlockCipher.CAST5Spec
         BlockCipher.DESSpec
+        BlockCipher.ModesSpec
         BlockCipher.TripleDESSpec
         BlockCipher.TwofishSpec
         ConstructHash.MiyaguchiPreneelSpec
