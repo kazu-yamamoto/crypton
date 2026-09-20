@@ -1,6 +1,8 @@
 -- | Elliptic Curve Arithmetic.
 --
--- /WARNING:/ These functions are vulnerable to timing attacks.
+-- /WARNING:/ These functions are vulnerable to timing attacks, except on
+-- P-256, whose multiplications go to the C implementation in
+-- "Crypto.PubKey.ECC.P256".
 module Crypto.PubKey.ECC.Prim (
     scalarGenerate,
     pointAdd,
@@ -15,13 +17,72 @@ module Crypto.PubKey.ECC.Prim (
     isPointValid,
 ) where
 
+import Crypto.Error (maybeCryptoError)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic
+import qualified Crypto.PubKey.ECC.P256 as P256
 import Crypto.PubKey.ECC.Types
 import Crypto.Random
-import Data.Bits (testBit)
+import Data.Bits (shiftL, testBit)
 import Data.Maybe
+
+-- | P-256, the one curve here that has a C implementation: 'SEC_p256r1', also
+-- known as NIST P-256 and prime256v1.
+--
+-- A 'Curve' carries its parameters rather than a name, so this compares the
+-- parameters.  They are public, so the comparison tells an attacker nothing.
+p256Curve :: Curve
+p256Curve = getCurveByName SEC_p256r1
+{-# NOINLINE p256Curve #-}
+
+p256Order :: Integer
+p256Order = ecc_n (common_curve p256Curve)
+
+p256Base :: Point
+p256Base = ecc_g (common_curve p256Curve)
+
+-- | A point the C implementation will take: in range, on the curve, and not
+-- the point at infinity, which it does not represent.  Anything else is left
+-- to the generic code, which answers for points off the curve too.
+toP256 :: Point -> Maybe P256.Point
+toP256 PointO = Nothing
+toP256 (Point x y)
+    | x < 0 || y < 0 || x >= limit || y >= limit = Nothing
+    | P256.pointIsValid p = Just p
+    | otherwise = Nothing
+  where
+    limit = 1 `shiftL` 256
+    p = P256.pointFromIntegers (x, y)
+
+fromP256 :: P256.Point -> Point
+fromP256 p
+    | P256.pointIsAtInfinity p = PointO
+    | otherwise = uncurry Point (P256.pointToIntegers p)
+
+-- | The scalar reduced into the range the C implementation takes.
+--
+-- Every point it accepts has the curve's order, so reducing changes no
+-- answer; 'Nothing' means the multiple is the point at infinity, which is the
+-- generic code's business.
+toP256Scalar :: Integer -> Maybe P256.Scalar
+toP256Scalar n
+    | k == 0 = Nothing
+    | otherwise = maybeCryptoError (P256.scalarFromInteger k)
+  where
+    k = n `mod` p256Order
+
+-- | @n1 * p1 + n2 * p2@ through the C implementation, when one of the points
+-- is the base point.  That is the shape signature verification uses.
+p256AddTwoMuls :: Integer -> Point -> Integer -> Point -> Maybe Point
+p256AddTwoMuls n1 p1 n2 p2
+    | p1 == p256Base = withBase n1 n2 p2
+    | p2 == p256Base = withBase n2 n1 p1
+    | otherwise = Nothing
+  where
+    withBase a b q =
+        fromP256
+            <$> (P256.pointsMulVarTime <$> toP256Scalar a <*> toP256Scalar b <*> toP256 q)
 
 -- | Generate a valid scalar for a specific Curve
 scalarGenerate :: MonadRandom randomly => Curve -> randomly PrivateNumber
@@ -99,7 +160,10 @@ pointDouble (CurveF2m (CurveBinary fx cc)) (Point xp yp)
 
 -- | Elliptic curve point multiplication using the base
 --
--- /WARNING:/ Vulnerable to timing attacks.
+-- On P-256 this reaches the C implementation, which multiplies the base point
+-- through a table of its own.
+--
+-- /WARNING:/ On every other curve, vulnerable to timing attacks.
 pointBaseMul :: Curve -> Integer -> Point
 pointBaseMul c n = pointMul c n (ecc_g $ common_curve c)
 
@@ -111,12 +175,24 @@ pointBaseMul c n = pointMul c n (ecc_g $ common_curve c)
 -- set, so the number of operations depends on the size of the curve's order
 -- rather than on the scalar.  Binary curves keep the affine double-and-add.
 --
--- /WARNING:/ Still vulnerable to timing attacks.  Uniform operation counts
--- are not constant time: the operations are 'Integer' arithmetic, whose cost
--- depends on the values, and the choice at each bit is a branch.
+-- On P-256 none of that applies: the multiplication goes to the C
+-- implementation in "Crypto.PubKey.ECC.P256", which is constant time.
+--
+-- /WARNING:/ On every other curve, still vulnerable to timing attacks.
+-- Uniform operation counts are not constant time: the operations are
+-- 'Integer' arithmetic, whose cost depends on the values, and the choice at
+-- each bit is a branch.
 pointMul :: Curve -> Integer -> Point -> Point
 pointMul _ _ PointO = PointO
 pointMul c n p
+    -- the base point has a table of its own in the C, which is what makes key
+    -- generation and signing quicker than multiplying any other point
+    | c == p256Curve
+    , p == p256Base =
+        maybe PointO (fromP256 . P256.toPoint) (toP256Scalar n)
+    | c == p256Curve
+    , Just q <- toP256 p =
+        maybe PointO (\s -> fromP256 (P256.pointMul s q)) (toP256Scalar n)
     | n < 0 = pointMul c (-n) (pointNegate c p)
     | n == 0 = PointO
     | otherwise =
@@ -215,12 +291,17 @@ fromJacobian pr (JPoint x y z) =
 -- > pointAddTwoMuls c n1 p1 n2 p2 == pointAdd c (pointMul c n1 p1)
 -- >                                             (pointMul c n2 p2)
 --
+-- On P-256, with one of the points the base point -- which is the shape
+-- signature verification uses -- this reaches the C implementation.  Both
+-- scalars are public there, so that one is variable time by design.
+--
 -- /WARNING:/ Vulnerable to timing attacks.
 pointAddTwoMuls :: Curve -> Integer -> Point -> Integer -> Point -> Point
 pointAddTwoMuls _ _ PointO _ PointO = PointO
 pointAddTwoMuls c _ PointO n2 p2 = pointMul c n2 p2
 pointAddTwoMuls c n1 p1 _ PointO = pointMul c n1 p1
 pointAddTwoMuls c n1 p1 n2 p2
+    | c == p256Curve, Just r <- p256AddTwoMuls n1 p1 n2 p2 = r
     | n1 < 0 || n2 < 0 = pointAdd c (pointMul c n1 p1) (pointMul c n2 p2)
     | otherwise =
         case c of

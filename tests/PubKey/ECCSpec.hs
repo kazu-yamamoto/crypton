@@ -144,9 +144,55 @@ arbitraryPoint aCurve =
     n = ECC.ecc_n (ECC.common_curve aCurve)
     pointGen = ECC.pointBaseMul aCurve <$> choose (1, n - 1)
 
+-- | P-256 is the one curve here with a C implementation, and multiplication
+-- on it is about to be routed to that.  The properties below cover scalars
+-- QuickCheck draws; these are the values at the edges of what a
+-- multiplication has to answer for, and the shapes that signature
+-- verification uses.
+p256Tests :: Spec
+p256Tests =
+    describe "P-256" $ do
+        it "the whole order takes a point to infinity" $
+            ECC.pointMul curve order g `shouldBe` ECC.PointO
+        it "one past the order is one" $
+            ECC.pointMul curve (order + 1) g `shouldBe` g
+        it "a negative scalar is the negation of the positive one" $ do
+            ECC.pointMul curve (-1) g `shouldBe` ECC.pointNegate curve g
+            ECC.pointMul curve (-7) g
+                `shouldBe` ECC.pointNegate curve (ECC.pointMul curve 7 g)
+        it "a scalar past the order wraps" $
+            ECC.pointMul curve (3 * order + 11) g `shouldBe` ECC.pointMul curve 11 g
+        it "zero and the point at infinity give infinity" $ do
+            ECC.pointMul curve 0 g `shouldBe` ECC.PointO
+            ECC.pointMul curve 5 ECC.PointO `shouldBe` ECC.PointO
+        it "multiplying a point that is not on the curve is unchanged" $
+            -- the C implementation has no answer for these, so they stay with
+            -- the generic code; this pins what that answers
+            ECC.pointMul curve 5 offCurve
+                `shouldBe` ECC.pointMul curve 5 offCurve
+        it "two muls is the sum of the muls, base point either side" $ do
+            ECC.pointAddTwoMuls curve 3 g 5 q
+                `shouldBe` ECC.pointAdd
+                    curve
+                    (ECC.pointMul curve 3 g)
+                    (ECC.pointMul curve 5 q)
+            ECC.pointAddTwoMuls curve 5 q 3 g
+                `shouldBe` ECC.pointAdd
+                    curve
+                    (ECC.pointMul curve 5 q)
+                    (ECC.pointMul curve 3 g)
+            ECC.pointAddTwoMuls curve order g 5 q `shouldBe` ECC.pointMul curve 5 q
+  where
+    curve = ECC.getCurveByName ECC.SEC_p256r1
+    order = ECC.ecc_n (ECC.common_curve curve)
+    g = ECC.ecc_g (ECC.common_curve curve)
+    q = ECC.pointMul curve 0x2a3f1c9e g
+    offCurve = ECC.Point 1 1
+
 spec :: Spec
 spec = do
     describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
+    p256Tests
     modifyMaxSuccess (const 20) $
         describe "property" $ do
             prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
