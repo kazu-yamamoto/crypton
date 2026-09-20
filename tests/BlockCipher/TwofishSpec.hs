@@ -4,6 +4,8 @@ import BlockCipher
 import Imports
 
 import Crypto.Cipher.Twofish
+import Crypto.Cipher.Types
+import Crypto.Error (throwCryptoError)
 import qualified Data.ByteString as B
 
 vectors_twofish128 =
@@ -379,8 +381,31 @@ kats128 = defaultKATs{kat_ECB = vectors_twofish128}
 kats192 = defaultKATs{kat_ECB = vectors_twofish192}
 kats256 = defaultKATs{kat_ECB = vectors_twofish256}
 
+-- | ECB is the block operation applied to each block and nothing else, so a
+-- message of several blocks is the blocks encrypted one at a time and put back
+-- together.  The vectors above are all one block long, and the loop that walks
+-- the blocks is about to be rewritten.
+manyBlockTests :: Spec
+manyBlockTests =
+    describe "several blocks" $ do
+        it "ECB of a message is ECB of its blocks" $
+            ecbEncrypt ctx message `shouldBe` B.concat (map (ecbEncrypt ctx) blocks)
+        it "and the same going back" $
+            ecbDecrypt ctx cipherText
+                `shouldBe` B.concat (map (ecbDecrypt ctx) cipherBlocks)
+        it "a message of 64 KiB still decrypts to itself" $
+            ecbDecrypt ctx (ecbEncrypt ctx big) `shouldBe` big
+  where
+    ctx = throwCryptoError (cipherInit (B.replicate 16 0x2b)) :: Twofish128
+    message = B.pack (map fromIntegral [1 .. 80 :: Int])
+    blocks = [B.take 16 (B.drop i message) | i <- [0, 16 .. 64]]
+    cipherText = ecbEncrypt ctx message
+    cipherBlocks = [B.take 16 (B.drop i cipherText) | i <- [0, 16 .. 64]]
+    big = B.concat (replicate 819 message)
+
 spec :: Spec
 spec = do
+    manyBlockTests
     testBlockCipher kats128 (undefined :: Twofish128)
     testBlockCipher kats192 (undefined :: Twofish192)
     testBlockCipher kats256 (undefined :: Twofish256)
