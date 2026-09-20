@@ -150,17 +150,22 @@ decrypt (Params p _ _) (PrivateNumber a) (c1, c2)
   where
     s = expSafe c1 a p
 
--- | sign a message with an explicit k number
+-- | sign a message with an explicit ephemeral value
 --
--- if k is not appropriate, then no signature is returned.
+-- @k@ has to lie in @[1, p-2]@ and be coprime with @p-1@.  'Nothing' says the
+-- value handed in cannot be used: either it fails one of those two conditions,
+-- or it is one of the few that produce a second component of zero.  Either way
+-- the answer is to draw another @k@, which is what 'sign' does.
 --
--- with some appropriate value of k, the signature generation can fail,
--- and no signature is returned. User of this function need to retry
--- with a different k value.
+-- @k@ is an ephemeral private key.  It has to be drawn uniformly at random,
+-- kept secret, and used for one signature only: the private number follows
+-- from a signature and its @k@, and equally from two signatures made with the
+-- same @k@.  None of that is visible to this function, which is why it takes
+-- @k@ from the caller and checks only what it can.
 signWith
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => Integer
-    -- ^ random number k, between 0 and p-1 and gcd(k,p-1)=1
+    -- ^ ephemeral value k, in [1, p-2] and coprime with p-1
     -> Params
     -- ^ DH params (p,g)
     -> PrivateNumber
@@ -182,9 +187,9 @@ signWith k (Params p g _) (PrivateNumber x) hashAlg msg
 
 -- | sign message
 --
--- This function will generate a random number, however
--- as the signature might fail, the function will automatically retry
--- until a proper signature has been created.
+-- This function draws the ephemeral value itself, and draws a fresh one on
+-- each attempt until 'signWith' accepts it, so a caller who has no particular
+-- @k@ in mind should use this rather than 'signWith'.
 sign
     :: (ByteArrayAccess msg, HashAlgorithm hash, MonadRandom m)
     => Params

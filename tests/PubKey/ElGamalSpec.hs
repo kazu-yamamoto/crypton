@@ -78,8 +78,22 @@ signatureTests = describe "signature" $ do
             Just sig -> ElGamal.verify params pub SHA256 msg sig `shouldBe` True
     it "refuses a k of zero" $
         ElGamal.signWith 0 params priv SHA256 msg `shouldBe` Nothing
+    it "refuses a negative k" $
+        ElGamal.signWith (-1) params priv SHA256 msg `shouldBe` Nothing
     it "refuses a k at or above p-1" $
-        ElGamal.signWith (p - 1) params priv SHA256 msg `shouldBe` Nothing
+        mapM_
+            (\k' -> ElGamal.signWith k' params priv SHA256 msg `shouldBe` Nothing)
+            [p - 1, p, p + 1]
+    it "accepts the largest usable k" $
+        -- p-2 and p-1 are consecutive, so they are coprime
+        case ElGamal.signWith (p - 2) params priv SHA256 msg of
+            Nothing -> expectationFailure "expected a signature"
+            Just sig -> ElGamal.verify params pub SHA256 msg sig `shouldBe` True
+    it "refuses a k sharing a factor with p-1" $
+        -- p is an odd prime, so p-1 is even and no even k is coprime with it
+        mapM_
+            (\k' -> ElGamal.signWith k' params priv SHA256 msg `shouldBe` Nothing)
+            [2, 4, p - 3]
     it "rejects a signature over a different message" $
         case ElGamal.signWith k params priv SHA256 msg of
             Nothing -> expectationFailure "expected a signature"
