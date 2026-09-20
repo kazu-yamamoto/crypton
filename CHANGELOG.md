@@ -2,6 +2,66 @@
 
 ## 1.2.0
 
+* Breaking change: fix(rabin): refuse a ciphertext or a signature that is not
+  below the modulus, and a ciphertext carrying a leading zero octet.  Squaring
+  and the square roots that undo it work modulo n, so Basic and Rabin-Williams
+  decrypted `c + n` to whatever `c` decrypted to, and all three schemes verified
+  `s + n`, and `-s`, wherever they verified `s`.  `Basic.signWith` also refuses a
+  padding whose first octet is zero, which the signature cannot carry: about one
+  signature in 256 was one its own `verify` rejected
+  [#125](https://github.com/kazu-yamamoto/crypton/pull/125)
+* fix(prime): derive the Miller-Rabin witnesses from the number being tested and
+  from a secret drawn once per process.  They came from one generator made once
+  and shared by every call, so the witnesses for one number were the witnesses
+  for every number, and testing a number again told the caller nothing it had
+  not already been told.  This is the path every GHC since 9.0 takes, integer-gmp
+  1.1 having no Miller-Rabin of its own
+  [#124](https://github.com/kazu-yamamoto/crypton/pull/124)
+* docs(elgamal): say what `signWith` requires of its ephemeral value: the range
+  is 1 to p-2, not the "between 0 and p-1" the haddock claimed, and the value is
+  a private key that a signature discloses if it is reused or revealed
+  [#123](https://github.com/kazu-yamamoto/crypton/pull/123)
+* Breaking change: fix(afis): give `split` and `merge` one answer for a parameter
+  they cannot use.  They had four between them, including a division by zero for
+  an expand count of zero and, for a count of one, handing the diffused data back
+  as though it were the secret
+  [#122](https://github.com/kazu-yamamoto/crypton/pull/122)
+* Breaking change: fix(rsa): refuse a ciphertext or a signature whose integer
+  representative is not below the modulus, which RFC 8017 requires in sections
+  5.1.2 and 5.2.2.  `PKCS15.decrypt` and `OAEP.decrypt` decrypted `c + n` to the
+  same message as `c`, and `PSS.verifyDigest` accepted `s + n` wherever it
+  accepted `s`
+  [#121](https://github.com/kazu-yamamoto/crypton/pull/121)
+* fix(otp): search the HOTP resynchronization window without early exits.  The
+  time taken read out both where in the window the client's counter was found
+  and how many of the submitted values were right -- the second of which the
+  answer itself does not give, being `Nothing` either way.  A call now costs one
+  HMAC per counter in the window plus one per extra value, every time
+  [#120](https://github.com/kazu-yamamoto/crypton/pull/120)
+* Breaking change: fix(kdf): report a refused parameter as a `CryptoError` rather
+  than as an `ErrorCall` carrying a string, with a `'`-suffixed variant of each
+  entry point returning `CryptoFailable`.  PBKDF2 had no validation at all: a
+  negative output length reached `memSet` and killed the process with SIGBUS, and
+  an iteration count of zero returned 32 bytes of zeroes
+  [#119](https://github.com/kazu-yamamoto/crypton/pull/119)
+* perf(xts): take eight blocks at a time on AArch64 and x86-64, and dispatch XTS
+  decryption through the branch table, which it had never used.  AArch64 goes
+  from 1200 to 7742 MiB/s encrypting and 1166 to 7763 decrypting, x86-64 from
+  1220 to 3464 and from 594 to 3461
+  [#118](https://github.com/kazu-yamamoto/crypton/pull/118)
+* perf(poly1305): take four blocks at a time with AVX2 on x86-64, folding the
+  lanes back together weighted by the powers of r.  1347 to 4137 MiB/s
+  [#117](https://github.com/kazu-yamamoto/crypton/pull/117)
+* perf(ecc): work in Jacobian coordinates in both generic prime-field scalar
+  multiplications, and say in `Crypto.ECC` which curves branch on a secret
+  scalar.  P-384 and P-521 ECDSA are 2.3x: signing goes from 3.36 to 1.46 ms and
+  from 5.96 to 2.61 ms.  P-256, which has its own C implementation, is unaffected
+  [#116](https://github.com/kazu-yamamoto/crypton/pull/116)
+* Breaking change: fix(padding): bound PKCS#7 padding by the block rather than by
+  the whole input, which had let a block of sixteen accept a claim of twenty, and
+  refuse a `ZERO` size of zero rather than dividing by it.  What `ZERO` can and
+  cannot undo is now written down
+  [#115](https://github.com/kazu-yamamoto/crypton/pull/115)
 * perf(gcm): give x86 its own GCM decryption loop.  It fell to the generic one,
   which calls the block function once per block, and ran at a quarter the speed
   of encryption; both directions now take eight blocks at a time and fold their
@@ -109,7 +169,12 @@
 * New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.getShared'`,
   `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`,
   and the whole of `Crypto.PubKey.ElGamal`, which was present but not exposed.
-  These are additions and break nothing.
+  The KDFs gained a variant of each entry point that can refuse its parameters,
+  returning `CryptoFailable` instead of raising: `Crypto.KDF.Scrypt.generate'`,
+  `Crypto.KDF.BCrypt.bcrypt'`, `Crypto.KDF.BCryptPBKDF.generate'` and
+  `hashInternal'`, `Crypto.KDF.HKDF.expand'`, `Crypto.KDF.PBKDF2.generate'` and
+  `fastPBKDF2_SHA1'`, `fastPBKDF2_SHA256'` and `fastPBKDF2_SHA512'`, and
+  `Crypto.Data.AFIS.split'` and `merge'`.  These are additions and break nothing.
 * Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
   appended, so the `Enum` values of the existing constructors are unchanged, but an
   exhaustive `case` without a wildcard will warn.  Adding a constructor to an exported
@@ -117,12 +182,25 @@
   below changes behaviour rather than types.
 * Breaking change: `getShared` in both DH modules raises a `CryptoError` where it
   previously raised an `ErrorCall`, since it is now defined in terms of `getShared'`.
+  The same is now true of `Crypto.KDF.Scrypt.generate`, `Crypto.KDF.BCrypt.bcrypt`,
+  `Crypto.KDF.BCryptPBKDF.generate` and `hashInternal`, and `Crypto.Data.AFIS.split`
+  and `merge`, each of which is defined in terms of the variant above.
 * Breaking change: input that used to be accepted is now rejected -- a digest shorter
   than 20 bytes in `Crypto.OTP.hotp`, a signature of the wrong length or out of range
   in `Crypto.PubKey.RSA.PKCS15.verify`, an off-curve peer point or a peer public number
   outside `1 < y < p-1` in `getShared`, an output beyond 255 blocks in
   `Crypto.KDF.HKDF.expand`, a non-canonical Ed25519 signature, and `Options` the
   implementation refuses in `Crypto.KDF.Argon2.hash`.
+* Breaking change: a value at or above the modulus is now rejected where it used to be
+  reduced and accepted -- a ciphertext in `Crypto.PubKey.RSA.PKCS15.decrypt` and
+  `Crypto.PubKey.RSA.OAEP.decrypt`, a signature in `Crypto.PubKey.RSA.PSS.verify`, and
+  both, along with a negated signature and a ciphertext with a leading zero octet, in
+  the three `Crypto.PubKey.Rabin.*` schemes.
+* Breaking change: parameters that used to be accepted are now refused -- an iteration
+  count below one or a negative output length in `Crypto.KDF.PBKDF2`, an expand count
+  below two or a secret of no bytes in `Crypto.Data.AFIS`, a `PKCS7` claim longer than
+  the block and a `ZERO` size of zero in `Crypto.Data.Padding`, and a signature padding
+  whose first octet is zero in `Crypto.PubKey.Rabin.Basic.signWith`.
 * Breaking change: `Crypto.Data.Padding.pad` raises on a `PKCS7` block size outside
   1..255, and `unpad` returns `Nothing` for one, where both used to narrow the size to
   a `Word8` and hand back something other than what was padded.
