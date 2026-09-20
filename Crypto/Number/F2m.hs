@@ -23,9 +23,21 @@ module Crypto.Number.F2m (
     quadraticF2m,
 ) where
 
+import Crypto.Internal.WordArray
 import Crypto.Number.Basic
-import Data.Bits (setBit, shift, testBit, unsafeShiftR, xor)
+import Data.Bits (
+    setBit,
+    shift,
+    shiftL,
+    shiftR,
+    testBit,
+    unsafeShiftR,
+    xor,
+    (.&.),
+    (.|.),
+ )
 import Data.List (foldl')
+import Data.Word (Word32)
 import Prelude hiding (foldl')
 
 -- | Binary Polynomial represented by an integer
@@ -53,16 +65,49 @@ modF2m fx i
         error "modF2m: negative number represent no binary polynomial"
     | fx == 0 = error "modF2m: cannot divide by zero polynomial"
     | fx == 1 = 0
-    | otherwise = go i
+    | otherwise = case tailExponents fx of
+        Just es -> fold es i
+        Nothing -> go i
   where
     lfx = log2 fx
+    -- one bit at a time, for a modulus with too many terms to be worth the
+    -- other way
     go n
         | s == 0 = n `addF2m` fx
         | s < 0 = n
         | otherwise = go $ n `addF2m` shift fx s
       where
         s = log2 n - lfx
+
+    -- x^m is the rest of the modulus, so everything above bit m folds back in
+    -- as a copy of the number's top shifted by each of the modulus's lower
+    -- exponents: a handful of shifts, where the loop above takes one step per
+    -- bit of excess
+    mask = (1 `shiftL` lfx) - 1
+    fold es n
+        | n <= mask = n
+        | otherwise =
+            fold
+                es
+                (foldl' (\acc e -> acc `xor` (hi `shiftL` e)) (n .&. mask) es)
+      where
+        hi = n `shiftR` lfx
 {-# INLINE modF2m #-}
+
+-- | The exponents of a modulus below its leading term, when there are few
+-- enough of them to reduce with.
+--
+-- Every binary curve in use has a trinomial or a pentanomial here, which is
+-- three or five exponents; sixteen is the point past which folding stops being
+-- the cheaper way.
+tailExponents :: BinaryPolynomial -> Maybe [Int]
+tailExponents fx = go (log2 fx - 1) 0 []
+  where
+    go i n acc
+        | i < 0 = Just acc
+        | n > 16 = Nothing
+        | testBit fx i = go (i - 1) (n + 1 :: Int) (i : acc)
+        | otherwise = go (i - 1) n acc
 
 -- | Multiplication over F₂m.
 --
@@ -80,14 +125,46 @@ mulF2m fx n1 n2
         || n2 < 0 =
         error "mulF2m: negative number represent no binary polynomial"
     | fx == 0 = error "mulF2m: cannot multiply modulo zero polynomial"
-    | otherwise = modF2m fx $ go (if n2 `mod` 2 == 1 then n1 else 0) (log2 n2)
+    | otherwise = modF2m fx (go n2 0 0)
   where
-    go n s
-        | s == 0 = n
-        | otherwise =
-            if testBit n2 s
-                then go (n `addF2m` shift n1 s) (s - 1)
-                else go n (s - 1)
+    -- Four bits of the multiplier at a time, against the sixteen multiples of
+    -- n1 that four bits can ask for.  A bit at a time is four times the
+    -- shifting and exclusive-oring, and each of those allocates.
+    go 0 _ acc = acc
+    go v sh acc =
+        go (v `shiftR` 4) (sh + 4) (acc `xor` (multiple (v .&. 0xf) `shiftL` sh))
+
+    m2 = n1 `shiftL` 1
+    m4 = n1 `shiftL` 2
+    m8 = n1 `shiftL` 3
+    m3 = m2 `xor` n1
+    m5 = m4 `xor` n1
+    m6 = m4 `xor` m2
+    m7 = m6 `xor` n1
+    m9 = m8 `xor` n1
+    m10 = m8 `xor` m2
+    m11 = m10 `xor` n1
+    m12 = m8 `xor` m4
+    m13 = m12 `xor` n1
+    m14 = m12 `xor` m2
+    m15 = m14 `xor` n1
+
+    multiple 1 = n1
+    multiple 2 = m2
+    multiple 3 = m3
+    multiple 4 = m4
+    multiple 5 = m5
+    multiple 6 = m6
+    multiple 7 = m7
+    multiple 8 = m8
+    multiple 9 = m9
+    multiple 10 = m10
+    multiple 11 = m11
+    multiple 12 = m12
+    multiple 13 = m13
+    multiple 14 = m14
+    multiple 15 = m15
+    multiple _ = 0
 {-# INLINEABLE mulF2m #-}
 
 -- | Squaring over F₂m.
@@ -114,11 +191,29 @@ squareF2m'
     -> Integer
 squareF2m' n
     | n < 0 = error "mulF2m: negative number represent no binary polynomial"
-    | otherwise =
-        foldl'
-            (\acc s -> if testBit n s then setBit acc (2 * s) else acc)
-            0
-            [0 .. log2 n]
+    | otherwise = go n 0 0
+  where
+    -- A byte at a time, through a table of the sixteen-bit patterns a byte
+    -- spreads into.  A bit at a time is eight times the work, and setting a
+    -- bit of an Integer allocates another one.
+    go 0 _ acc = acc
+    go v sh acc =
+        go
+            (v `shiftR` 8)
+            (sh + 16)
+            ( acc
+                .|. (fromIntegral (arrayRead32 spreadTable (fromIntegral (v .&. 0xff))) `shiftL` sh)
+            )
+
+-- | Each byte, with a zero inserted between every pair of its bits.
+spreadTable :: Array32
+spreadTable = array32 256 [spread b | b <- [0 .. 255]]
+  where
+    spread :: Int -> Word32
+    spread b =
+        foldl' (\acc i -> if testBit b i then setBit acc (2 * i) else acc) 0 [0 .. 7]
+{-# NOINLINE spreadTable #-}
+
 {-# INLINE squareF2m' #-}
 
 -- | Exponentiation in F₂m by computing @a^b mod fx@.
