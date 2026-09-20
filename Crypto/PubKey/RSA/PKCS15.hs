@@ -459,6 +459,14 @@ unpad packed
 -- If unsure always set a blinder or use decryptSafer
 --
 -- The message is returned un-padded.
+--
+-- Following RFC 8017, the ciphertext is rejected unless it is exactly as long
+-- as the modulus (section 7.2.2, step 1) and its integer representative is
+-- below the modulus (RSADP, section 5.1.2, step 1).  The decryption primitive
+-- normalises any multiple of the modulus away, so without the second check
+-- @c + n@ would decrypt to the same message as @c@, and a ciphertext would not
+-- be unique to its plaintext.  Both checks are made on the ciphertext alone,
+-- which is public, and report 'MessageSizeIncorrect'.
 decrypt
     :: ByteArray ba
     => Maybe Blinder
@@ -470,6 +478,7 @@ decrypt
     -> Either Error ba
 decrypt blinder pk c
     | B.length c /= (private_size pk) = Left MessageSizeIncorrect
+    | os2ip c >= private_n pk = Left MessageSizeIncorrect
     -- "convert" must be apply to "c".
     | otherwise = unpad $ dp blinder pk $ B.convert c
 
