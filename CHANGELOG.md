@@ -2,6 +2,62 @@
 
 ## 1.2.0
 
+* perf(f2m): reduce the binary field by folding the top back in rather than
+  taking a step per bit of excess, square a byte at a time through a table of
+  the patterns a byte spreads into, and take four bits of a multiplier at a
+  time rather than one.  On the 283-bit field, squaring goes from 5440 to 2068
+  ns and multiplication from 7526 to 4086.  A scalar multiplication there is
+  still affine, so it inverts once per addition, which is where its time now
+  goes
+  [#134](https://github.com/kazu-yamamoto/crypton/pull/134)
+* perf(ecc): fold instead of dividing in the generic prime-curve arithmetic,
+  and add the point being multiplied as the affine point it is.  These primes
+  are `2^k - c` with `c` far smaller, so the top half of a product folds back
+  in with a shift, a multiplication and an addition, where dividing costs four
+  times as much -- above 256 bits, below which the folding costs more than it
+  saves.  P-521 scalar multiplication goes from 892 to 492 us and P-384 from
+  684 to 572
+  [#133](https://github.com/kazu-yamamoto/crypton/pull/133)
+* perf(ecc): route P-256 through the C implementation the library already had.
+  `Crypto.PubKey.ECDSA` reached `cbits/p256`; `Crypto.PubKey.ECC.*`, the older
+  and more widely used API, never did.  ECDSA signing goes from 590 to 28.7 us,
+  verification from 726 to 91.4, and `getShared` from 1177 to 96.  On P-256
+  that multiplication is now constant time, where the generic code branches on
+  the scalar at every bit
+  [#132](https://github.com/kazu-yamamoto/crypton/pull/132)
+* Breaking change: perf(camellia): put Camellia in C, 40 to 321 MiB/s.  The
+  round function ran a byte at a time in Haskell; generating the tables that
+  take a byte straight to its contribution gained 14%, and the rest was the
+  language.  Input that is not a whole number of blocks now raises, where the
+  tail of the answer used to be uninitialised memory
+  [#131](https://github.com/kazu-yamamoto/crypton/pull/131)
+* Breaking change: perf(twofish): walk the blocks once and carry them in words
+  rather than appending each result to what came before and going through lists
+  per block.  2 MiB goes from 0.14 to 56 MiB/s, and the rate no longer falls as
+  the message grows.  Input that is not a whole number of blocks now raises,
+  where it used to come back longer than it went in
+  [#130](https://github.com/kazu-yamamoto/crypton/pull/130)
+* perf(modes): cut the message without copying the rest of it in the generic
+  block cipher modes, which every cipher but AES uses, and hand whole slices to
+  the cipher in the modes whose blocks do not depend on one another.  Camellia
+  in CBC goes from 1.8 to 22.9 MiB/s at 1 MiB, DES CBC decryption from 0.5 to
+  83, and every figure is now flat in the message length where it used to fall
+  [#129](https://github.com/kazu-yamamoto/crypton/pull/129)
+* Breaking change: perf(des): put DES in C.  It was carried over lists of
+  `Bool`, one cons cell per bit, with the key schedule recomputed for every
+  block: 0.04 MiB/s, and 3DES 0.013, against 105 and 41 for OpenSSL.  They are
+  now 112 and 37.  Input that is not a whole number of blocks now raises, where
+  the tail of the answer used to be uninitialised memory
+  [#128](https://github.com/kazu-yamamoto/crypton/pull/128)
+* perf(cmac): slice the message rather than copying what is left of it once per
+  block, and chain through CBC, which is what CMAC's chaining is.  A MAC over
+  4 MiB goes from 0.36 to 1628 MiB/s, which is the speed of AES-CBC itself
+  [#127](https://github.com/kazu-yamamoto/crypton/pull/127)
+* fix(rabin): decode OAEP without early exits, as
+  `Crypto.PubKey.RSA.OAEP.unpad` has since #91.  The difference is not
+  measurable against the cost of mask generation, and is structural: the scan
+  across the padding no longer depends on the data
+  [#126](https://github.com/kazu-yamamoto/crypton/pull/126)
 * Breaking change: fix(rabin): refuse a ciphertext or a signature that is not
   below the modulus, and a ciphertext carrying a leading zero octet.  Squaring
   and the square roots that undo it work modulo n, so Basic and Rabin-Williams
@@ -201,6 +257,10 @@
   below two or a secret of no bytes in `Crypto.Data.AFIS`, a `PKCS7` claim longer than
   the block and a `ZERO` size of zero in `Crypto.Data.Padding`, and a signature padding
   whose first octet is zero in `Crypto.PubKey.Rabin.Basic.signWith`.
+* Breaking change: DES, 3DES, Twofish and Camellia now raise on input that is not a
+  whole number of blocks, as AES already did.  Before, DES and Camellia returned an
+  answer whose tail was never written -- uninitialised memory -- and Twofish returned
+  more than it was given, the missing bytes read as zero.
 * Breaking change: `Crypto.Data.Padding.pad` raises on a `PKCS7` block size outside
   1..255, and `unpad` returns `Nothing` for one, where both used to narrow the size to
   a `Word8` and hand back something other than what was padded.
