@@ -7,9 +7,12 @@ module BlockCipher.CamelliaSpec (spec) where
 
 import BlockCipher
 import Imports ()
-import Test.Hspec (Spec)
+import Test.Hspec
 
+import Control.Exception (evaluate)
 import Crypto.Cipher.Camellia
+import Crypto.Cipher.Types
+import Crypto.Error (throwCryptoError)
 import qualified Data.ByteString as B
 
 vectors_camellia128 =
@@ -245,5 +248,28 @@ kats128 = defaultKATs{kat_ECB = vectors_camellia128}
 kats192 = defaultKATs{kat_ECB = vectors_camellia192}
 kats256 = defaultKATs{kat_ECB = vectors_camellia256}
 
+-- | Every vector here is one block long.  ECB is the block operation applied
+-- to each block and nothing else, so say that too, and say what happens to a
+-- message that is not whole blocks.
+manyBlockTests :: Spec
+manyBlockTests =
+    describe "several blocks" $ do
+        it "ECB of a message is ECB of its blocks" $
+            ecbEncrypt ctx message `shouldBe` B.concat (map (ecbEncrypt ctx) blocks)
+        it "and the same going back" $
+            ecbDecrypt ctx cipherText
+                `shouldBe` B.concat (map (ecbDecrypt ctx) cipherBlocks)
+        it "a message of 64 KiB still decrypts to itself" $
+            ecbDecrypt ctx (ecbEncrypt ctx big) `shouldBe` big
+  where
+    ctx = throwCryptoError (cipherInit (B.replicate 16 0x2b)) :: Camellia128
+    message = B.pack (map fromIntegral [1 .. 80 :: Int])
+    blocks = [B.take 16 (B.drop i message) | i <- [0, 16 .. 64]]
+    cipherText = ecbEncrypt ctx message
+    cipherBlocks = [B.take 16 (B.drop i cipherText) | i <- [0, 16 .. 64]]
+    big = B.concat (replicate 819 message)
+
 spec :: Spec
-spec = testBlockCipher kats128 (undefined :: Camellia128)
+spec = do
+    testBlockCipher kats128 (undefined :: Camellia128)
+    manyBlockTests
