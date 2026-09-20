@@ -3,6 +3,7 @@
 module PubKey.OAEPSpec (spec) where
 
 import Crypto.Hash
+import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import Crypto.PubKey.RSA
 import qualified Crypto.PubKey.RSA.OAEP as OAEP
 import Crypto.PubKey.RSA.Prim (dp, ep)
@@ -162,6 +163,35 @@ oaepRejectTests =
         B.concat [B.take i bs, B.singleton w, B.drop (i + 1) bs]
     flipBit i bs = poke i (B.index bs i `xor` 1) bs
 
+-- | RSADP (RFC 8017 section 5.1.2 step 1) refuses a ciphertext representative
+-- outside @[0, n-1]@, and section 7.1.2 step 1 passes the ciphertext to it
+-- unchanged.  The modular exponentiation normalises the range away, so without
+-- the check @c@ and @c + n@ decrypt to the same message whenever @c + n@ still
+-- fits in k octets.
+oaepRangeTests :: Spec
+oaepRangeTests =
+    describe "ciphertext range" $ do
+        it "the ciphertext itself decrypts" $
+            decrypt' c `shouldBe` Right (message vec)
+        it "the same ciphertext plus n is refused" $
+            decrypt' (i2ospOf_ k (os2ip c + modulus)) `shouldBe` Left MessageSizeIncorrect
+        it "a ciphertext representative equal to the modulus is refused" $
+            decrypt' (i2ospOf_ k modulus) `shouldBe` Left MessageSizeIncorrect
+  where
+    key = rsaKey1
+    k = public_size (private_pub key)
+    modulus = public_n (private_pub key)
+    decrypt' = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key
+    -- the first vector whose ciphertext can be shifted by n and still fit in k
+    -- octets
+    (vec, c) =
+        head
+            [ (v, ct)
+            | v <- vectorsKey1
+            , let ct = cipherText v
+            , os2ip ct + modulus < 2 ^ (8 * k)
+            ]
+
 spec :: Spec
 spec =
     describe "RSA-OAEP" $ do
@@ -175,3 +205,4 @@ spec =
             sequence_ $
                 zipWith (doDecryptionTest rsaKey1) [katZero ..] vectorsKey1
         oaepRejectTests
+        oaepRangeTests

@@ -2,6 +2,7 @@
 
 module PubKey.PSSSpec (spec) where
 
+import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import Crypto.PubKey.RSA
 import qualified Crypto.PubKey.RSA.PSS as PSS
 
@@ -463,9 +464,40 @@ doVerifyTest key i vector = it (show i) (actual `shouldBe` True)
             (message vector)
             (signature vector)
 
+-- | RSAVP1 (RFC 8017 section 5.2.2 step 1) refuses a signature representative
+-- outside @[0, n-1]@, and section 8.1.2 step 1 passes the signature to it
+-- unchanged.  The modular exponentiation normalises the range away, so without
+-- the check @s + n@ verifies exactly as well as @s@ whenever it still fits in
+-- k octets: a third party can turn one valid signature into another without
+-- the private key, over the same message.
+signatureRangeTests :: Spec
+signatureRangeTests =
+    describe "signature range" $ do
+        it "the signature itself verifies" $
+            verify' s `shouldBe` True
+        it "the same signature plus n is refused" $
+            verify' (i2ospOf_ k (os2ip s + modulus)) `shouldBe` False
+        it "a signature representative equal to the modulus is refused" $
+            verify' (i2ospOf_ k modulus) `shouldBe` False
+  where
+    key = rsaKey1
+    k = public_size (private_pub key)
+    modulus = public_n (private_pub key)
+    verify' = PSS.verify PSS.defaultPSSParamsSHA1 (private_pub key) (message vec)
+    -- the first vector whose signature can be shifted by n and still fit in k
+    -- octets
+    (vec, s) =
+        head
+            [ (v, sg)
+            | v <- vectorsKey1
+            , let sg = signature v
+            , os2ip sg + modulus < 2 ^ (8 * k)
+            ]
+
 spec :: Spec
 spec =
     describe "RSA-PSS" $ do
+        signatureRangeTests
         describe "signature internal" $ do
             doSignTest rsaKeyInt katZero vectorInt
         describe "verify internal" $ do

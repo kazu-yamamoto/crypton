@@ -22,6 +22,7 @@ module Crypto.PubKey.RSA.PSS (
 
 import Crypto.Hash
 import Crypto.Number.Basic (numBits)
+import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.MaskGenFunction
 import Crypto.PubKey.RSA (generateBlinder)
 import Crypto.PubKey.RSA.Prim
@@ -197,6 +198,13 @@ verify params pk m = verifyDigest params pk mHash
     mHash = hashWith (pssHash params) m
 
 -- | Verify a signature using the PSS Parameters
+--
+-- Following RFC 8017, the signature is rejected unless it is exactly as long
+-- as the modulus (section 8.1.2, step 1) and its integer representative is
+-- below the modulus (RSAVP1, section 5.2.2, step 1).  The public-key operation
+-- normalises any multiple of the modulus away, so without the second check
+-- @s + n@ would verify as readily as @s@, and a third party could turn one
+-- valid signature into another without the private key.
 verifyDigest
     :: HashAlgorithm hash
     => PSSParams hash ByteString ByteString
@@ -211,6 +219,7 @@ verifyDigest
     -> Bool
 verifyDigest params pk digest s
     | B.length s /= k = False
+    | os2ip s >= public_n pk = False
     | B.any (/= 0) pre = False
     | B.last em /= pssTrailerField params = False
     | B.any (/= 0) ps0 = False

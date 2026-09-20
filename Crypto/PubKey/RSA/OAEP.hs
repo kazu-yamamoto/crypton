@@ -21,6 +21,7 @@ module Crypto.PubKey.RSA.OAEP (
 ) where
 
 import Crypto.Hash
+import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.Internal (and')
 import Crypto.PubKey.MaskGenFunction
 import Crypto.PubKey.RSA (generateBlinder)
@@ -184,6 +185,14 @@ unpad oaep k em
 -- information from the timing of the operation, the blinder can be set to None.
 --
 -- If unsure always set a blinder or use decryptSafer
+--
+-- Following RFC 8017, the ciphertext is rejected unless it is exactly as long
+-- as the modulus (section 7.1.2, step 1) and its integer representative is
+-- below the modulus (RSADP, section 5.1.2, step 1).  The decryption primitive
+-- normalises any multiple of the modulus away, so without the second check
+-- @c + n@ would decrypt to the same message as @c@, and a ciphertext would not
+-- be unique to its plaintext.  Both checks are made on the ciphertext alone,
+-- which is public, and report 'MessageSizeIncorrect'.
 decrypt
     :: HashAlgorithm hash
     => Maybe Blinder
@@ -197,6 +206,7 @@ decrypt
     -> Either Error ByteString
 decrypt blinder oaep pk cipher
     | B.length cipher /= k = Left MessageSizeIncorrect
+    | os2ip cipher >= private_n pk = Left MessageSizeIncorrect
     | k < 2 * hashLen + 2 = Left InvalidParameters
     | otherwise = unpad oaep (private_size pk) $ dp blinder pk cipher
   where

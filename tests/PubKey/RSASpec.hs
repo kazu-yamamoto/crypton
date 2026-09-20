@@ -3,9 +3,10 @@
 module PubKey.RSASpec (spec) where
 
 import Crypto.Hash
-import Crypto.Number.Serialize (i2osp, os2ip)
+import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import Crypto.PubKey.RSA.Prim (ep)
 import qualified Data.ByteString as B
 import Data.Either
 
@@ -179,6 +180,49 @@ unpadTests =
                 `shouldBe` Left RSA.MessageNotRecognized
             )
 
+-- | RSADP (RFC 8017 section 5.1.2 step 1) refuses a ciphertext representative
+-- outside @[0, n-1]@, and section 7.2.2 step 1 passes the ciphertext to it
+-- unchanged.  The modular exponentiation normalises the range away, so without
+-- the check @c@ and @c + n@ decrypt to the same message whenever @c + n@ still
+-- fits in k octets -- and then a ciphertext is not unique to its plaintext,
+-- which is what a replay cache keyed on the ciphertext assumes.
+ciphertextRangeTests :: Spec
+ciphertextRangeTests =
+    describe "ciphertext range" $ do
+        it "the ciphertext itself decrypts" $
+            decrypt' c `shouldBe` Right m
+        it "the same ciphertext plus n is refused" $
+            decrypt' (i2ospOf_ k (os2ip c + modulus)) `shouldBe` sizeError
+        it "a ciphertext representative equal to the modulus is refused" $
+            decrypt' (i2ospOf_ k modulus) `shouldBe` sizeError
+  where
+    vector = head vectorsSHA1
+    k = size vector
+    modulus = n vector
+    decrypt' ct =
+        RSA.decrypt Nothing (vectorToPrivate vector) ct :: Either RSA.Error ByteString
+    sizeError = Left RSA.MessageSizeIncorrect
+
+    -- The padding string of an EME-PKCS1-v1_5 block is nonzero octets of the
+    -- encrypter's choosing, so the block can be built here and encrypted with
+    -- the public key.  Whether c + n fits in k octets depends on the message;
+    -- with this modulus about a quarter of the candidates below do.
+    (m, c) =
+        head
+            [ (msg', ct)
+            | i <- [1 .. 200 :: Int]
+            , let msg' = B.append "message " (B.replicate i 0x78)
+            , let block =
+                    B.concat
+                        [ B.pack [0, 2]
+                        , B.replicate (k - 3 - B.length msg') 0xff
+                        , B.pack [0]
+                        , msg'
+                        ]
+            , let ct = ep (vectorToPublic vector) block
+            , os2ip ct + modulus < 2 ^ (8 * k)
+            ]
+
 spec :: Spec
 spec = do
     describe "SHA1" $ do
@@ -192,3 +236,4 @@ spec = do
                 zipWith doMalleabilityTest [katZero ..] $
                     filter vectorHasSignature vectorsSHA1
     unpadTests
+    ciphertextRangeTests
