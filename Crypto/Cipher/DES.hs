@@ -4,6 +4,9 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : stable
 -- Portability : good
+--
+-- DES, which is here because callers still meet it rather than because it
+-- should be chosen: its 56-bit key is exhaustible.  Prefer "Crypto.Cipher.AES".
 module Crypto.Cipher.DES (
     DES,
 ) where
@@ -13,11 +16,9 @@ import Crypto.Cipher.Types
 import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
-import Data.Memory.Endian
-import Data.Word
 
 -- | DES Context
-data DES = DES Word64
+data DES = DES Schedule Schedule
     deriving (Eq)
 
 instance Cipher DES where
@@ -27,13 +28,11 @@ instance Cipher DES where
 
 instance BlockCipher DES where
     blockSize _ = 8
-    ecbEncrypt (DES key) = B.mapAsWord64 (unBlock . encrypt key . Block)
-    ecbDecrypt (DES key) = B.mapAsWord64 (unBlock . decrypt key . Block)
+    ecbEncrypt (DES enc _) = ecb enc
+    ecbDecrypt (DES _ dec) = ecb dec
 
 initDES :: ByteArrayAccess key => key -> CryptoFailable DES
 initDES k
-    | len == 8 = CryptoPassed $ DES key
-    | otherwise = CryptoFailed $ CryptoError_KeySizeInvalid
-  where
-    len = B.length k
-    key = fromBE $ B.toW64BE k 0
+    | B.length k == 8 =
+        CryptoPassed $ DES (schedule [(Encrypt, k)]) (schedule [(Decrypt, k)])
+    | otherwise = CryptoFailed CryptoError_KeySizeInvalid
