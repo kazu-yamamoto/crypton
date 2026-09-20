@@ -5,6 +5,8 @@ module KDF.BCryptSpec (
 )
 where
 
+import Control.Exception (evaluate)
+import Crypto.Error
 import Crypto.KDF.BCrypt
 import qualified Data.ByteString as B
 import Imports
@@ -102,6 +104,13 @@ spec = do
             "Hashed password should validate"
             (validatePassword somePassword (bcrypt 5 aSalt somePassword :: B.ByteString))
         )
+    describe "salt length" $ do
+        it "rejects a salt shorter than 16 bytes" $
+            evaluate (bcrypt (5 :: Int) (B.replicate 15 0x61) somePassword :: B.ByteString)
+                `shouldThrow` (== CryptoError_ParameterInvalid)
+        it "rejects a salt longer than 16 bytes" $
+            evaluate (bcrypt (5 :: Int) (B.replicate 17 0x61) somePassword :: B.ByteString)
+                `shouldThrow` (== CryptoError_ParameterInvalid)
     describe "password length limit" $ do
         -- bcrypt keys Blowfish with at most the first 72 bytes of the
         -- password, so everything after that is ignored.  The Openwall

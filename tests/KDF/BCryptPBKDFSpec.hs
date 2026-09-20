@@ -4,8 +4,10 @@ module KDF.BCryptPBKDFSpec (spec) where
 
 import qualified Data.ByteString as B
 
+import Control.Exception (evaluate)
 import Test.Hspec
 
+import Crypto.Error
 import Crypto.KDF.BCryptPBKDF (
     Parameters (..),
     generate,
@@ -20,7 +22,18 @@ spec = do
         it "3" generate3
     describe "hashInternal" $ do
         it "1" hashInternal1
+    describe "invalid parameters" $ do
+        it "rejects an iteration count below one" $
+            evaluate (run (Parameters 0 32)) `shouldThrow` cryptoError
+        it "rejects an output length of zero" $
+            evaluate (run (Parameters 1 0)) `shouldThrow` cryptoError
+        it "rejects an output length above 1024" $
+            evaluate (run (Parameters 1 1025)) `shouldThrow` cryptoError
   where
+    run params =
+        generate params ("password" :: B.ByteString) ("salt" :: B.ByteString)
+            :: B.ByteString
+    cryptoError e = e == CryptoError_ParameterInvalid
     -- test vector taken from the go implementation by @dchest
     generate1 = generate params pass salt `shouldBe` expected
       where
