@@ -130,9 +130,62 @@ primalityTests = describe "primality" $ do
     it "reaches the same verdict every time it is asked" $
         map (`askAgain` 2465) [1 .. 20] `shouldBe` replicate 20 (askAgain 0 2465)
 
+-- | The two exponentiations have to agree on every shape of argument: the
+-- safe one is only meant to differ in how it spends its time.  The pairs are
+-- (base, exponent, modulus), and cover a zero exponent, a zero base, a base
+-- above the modulus, a negative base, a negative exponent (which GMP reads as
+-- a request for the inverse), a modulus of one, and an even modulus, which
+-- sends expSafe down the fast path.
+exponentiationCorners :: [(Integer, Integer, Integer)]
+exponentiationCorners =
+    [ (2, 3, 1)
+    , (0, 0, 7)
+    , (0, 5, 7)
+    , (1, 0, 7)
+    , (9, 3, 7)
+    , (-2, 3, 7)
+    , (3, -1, 7)
+    , (2, 3, 8)
+    , (2, 0, 9)
+    , (5, 1, 3)
+    , (2, 256, 255)
+    , (bigPrime, bigPrime - 2, bigComposite + 1)
+    , (bigComposite, 65537, bigPrime)
+    , (bigPrime + 1, 2 ^ (600 :: Int), bigPrime)
+    , (3, 2 * bigPrime * bigComposite, 2 * bigPrime * bigComposite + 1)
+    ]
+
+exponentiationTests :: Spec
+exponentiationTests = describe "exponentiation" $ do
+    it "agrees with the fast one on the corners" $
+        map safely exponentiationCorners `shouldBe` map fastly exponentiationCorners
+    it "agrees with repetitive squaring on the corners" $
+        [ (b, e, m)
+        | (b, e, m) <- exponentiationCorners
+        , e >= 0
+        , m > 1
+        , safely (b, e, m) /= naivePow (b `mod` m) e m
+        ]
+            `shouldBe` []
+    prop "agrees with the fast one" $ \(QAInteger b) (QAInteger e) (QAInteger m') ->
+        let m = abs m' + 1
+         in expSafe b (abs e) m === expFast b (abs e) m
+    prop "agrees with the fast one on a modulus a key would have" $
+        \(QAInteger b) (QAInteger e) ->
+            let m = 2 * bigPrime * bigComposite + 1 -- odd, and 1025 bits
+             in expSafe b (abs e) m === expFast b (abs e) m
+  where
+    safely (b, e, m) = expSafe b e m
+    fastly (b, e, m) = expFast b e m
+    -- an answer owing nothing to the library, for the corners to be held to
+    naivePow b e m = foldl (\acc bit -> acc * acc * (if bit then b else 1) `mod` m) 1 bits
+      where
+        bits = [testBit e i | i <- [numBits e - 1, numBits e - 2 .. 0]]
+
 spec :: Spec
 spec = do
     primalityTests
+    exponentiationTests
     prop "num-bits" $ \(Int1_2901 i) ->
         and
             [ (numBits (2 ^ i - 1) == i)
