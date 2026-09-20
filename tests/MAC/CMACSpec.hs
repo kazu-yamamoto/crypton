@@ -14,6 +14,7 @@ import qualified Crypto.MAC.CMAC as CMAC
 
 import Imports
 
+import Data.Bits (xor)
 import qualified Data.ByteArray as B
 import qualified Data.ByteString as BS
 import Data.Char (digitToInt)
@@ -67,6 +68,48 @@ msg0 = BS.empty
 
 bsCMAC :: BlockCipher k => k -> ByteString -> ByteString
 bsCMAC k = B.convert . CMAC.cmac k
+
+-- | CMAC as RFC 4493 section 2.4 states it, written out here so that the
+-- implementation has something to be compared against at lengths the NIST
+-- vectors do not cover: the message is split into blocks, the last one is
+-- exclusive-ored with the first subkey when it is full and padded and
+-- exclusive-ored with the second when it is not, and the blocks are chained
+-- through the cipher from a block of zeroes.
+refCMAC :: BlockCipher k => k -> ByteString -> ByteString
+refCMAC k msg = foldl step (BS.replicate bsz 0) (blocks msg)
+  where
+    bsz = blockSize k
+    (k1, k2) = CMAC.subKeys k
+    step c m = ecbEncrypt k (bxor c m)
+    blocks m
+        | BS.length m <= bsz = [lastBlock m]
+        | otherwise = BS.take bsz m : blocks (BS.drop bsz m)
+    lastBlock m
+        | BS.length m == bsz = bxor k1 m
+        | otherwise =
+            bxor k2 $
+                BS.concat
+                    [m, BS.singleton 0x80, BS.replicate (bsz - BS.length m - 1) 0]
+    bxor a b = BS.pack (BS.zipWith xor a b)
+
+-- | The lengths around a block boundary, and one message long enough that a
+-- decision made once per block is repeated thousands of times.
+lengthTests :: Spec
+lengthTests =
+    describe "message lengths" $ do
+        it "agrees with the definition at every length from 0 to 80" $
+            [ n
+            | n <- [0 .. 80]
+            , let m = BS.take n (BS.concat [msg512, msg512])
+            , bsCMAC key m /= refCMAC key m
+            ]
+                `shouldBe` []
+        it "agrees with the definition on a message of 256 KiB" $
+            bsCMAC key big `shouldBe` refCMAC key big
+  where
+    key :: AES128
+    key = unsafeCipher $ hxs "2b7e1516 28aed2a6 abf71588 09cf4f3c"
+    big = BS.concat (replicate 4096 msg512)
 
 gAES128 :: Spec
 gAES128 =
@@ -212,3 +255,4 @@ nistVectors =
 spec :: Spec
 spec = do
     nistVectors
+    lengthTests

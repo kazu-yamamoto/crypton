@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
@@ -17,11 +18,12 @@ module Crypto.MAC.CMAC (
 ) where
 
 import Data.Bits (setBit, shiftL, testBit)
-import Data.List (foldl')
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import Data.Word
-import Prelude hiding (foldl')
 
 import Crypto.Cipher.Types
+import Crypto.Cipher.Types.Block (IV (..))
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 
@@ -41,27 +43,45 @@ cmac
     -- ^ input message
     -> CMAC cipher
     -- ^ output tag
-cmac k msg =
-    CMAC $ foldl' (\c m -> ecbEncrypt k $ bxor c m) zeroV ms
+cmac k msg = CMAC $ B.convert $ step (chain zeroV whole) final
   where
     bytes = blockSize k
-    zeroV = B.replicate bytes 0 :: Bytes
+    zeroV = S.replicate bytes 0
     (k1, k2) = subKeys k
-    ms = cmacChunks k k1 k2 $ B.convert msg
 
-cmacChunks :: (BlockCipher k, ByteArray ba) => k -> ba -> ba -> ba -> [ba]
-cmacChunks k k1 k2 = rec'
-  where
-    rec' msg
-        | B.null tl =
-            if lack == 0
-                then [bxor k1 hd]
-                else [bxor k2 $ hd `B.append` B.pack (0x80 : replicate (lack - 1) 0)]
-        | otherwise = hd : rec' tl
-      where
-        bytes = blockSize k
-        (hd, tl) = B.splitAt bytes msg
-        lack = bytes - B.length hd
+    -- The message is held as a ByteString and sliced, never consumed.  'Bytes'
+    -- has no shared representation, so splitting one repeatedly -- which is
+    -- what this used to do, once per block -- copied whatever was left of the
+    -- message each time, and so the message about n/2 times in all.
+    msgBytes = B.convert msg :: ByteString
+    msgLen = S.length msgBytes
+
+    -- the last block is the one the subkeys are for, and it is a whole block
+    -- only when there is one to be had
+    lastLen
+        | msgLen > 0 && msgLen `mod` bytes == 0 = bytes
+        | otherwise = msgLen `mod` bytes
+    (whole, rest) = S.splitAt (msgLen - lastLen) msgBytes
+    final
+        | lastLen == bytes = bxor k1 rest
+        | otherwise =
+            bxor k2 $
+                S.concat [rest, S.singleton 0x80, S.replicate (bytes - lastLen - 1) 0]
+
+    -- CMAC chains its blocks the way CBC does, so the running state is the
+    -- last ciphertext block of a CBC encryption.  Handing the cipher a chunk
+    -- at a time rather than a block at a time is what makes that worth saying:
+    -- for AES it reaches the C implementation of CBC, where a block at a time
+    -- reached a foreign call per sixteen bytes.
+    chunkBytes = bytes * 2048
+    chain !c bs
+        | S.null bs = c
+        | otherwise =
+            let (hd, tl) = S.splitAt chunkBytes bs
+                out = cbcEncrypt k (IV c) hd
+             in chain (S.drop (S.length hd - bytes) out) tl
+
+    step c m = ecbEncrypt k (bxor c m) :: ByteString
 
 -- | make sub-keys used in CMAC
 subKeys
