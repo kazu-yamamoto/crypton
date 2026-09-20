@@ -54,6 +54,8 @@ import Crypto.Internal.ByteArray (
     withByteArray,
  )
 import qualified Crypto.Internal.ByteArray as B
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 
 import Foreign.Ptr
 import Foreign.Storable
@@ -218,14 +220,46 @@ cbcEncryptGeneric cipher ivini input = mconcat $ doEnc ivini $ chunk (blockSize 
         let o = ecbEncrypt cipher $ B.xor iv i
          in o : doEnc (IV o) is
 
+-- | How many blocks to hand the cipher at a time in the modes whose blocks do
+-- not depend on one another.  Enough that the cost of a call disappears, few
+-- enough that what it copies stays in cache.
+blocksPerCall :: Int
+blocksPerCall = 2048
+
+-- | The input in slices of that many blocks.  A ByteString shares where
+-- 'B.splitAt' copies the rest of the message, once per slice.
+slices :: ByteArray ba => Int -> ba -> [ByteString]
+slices bytes input = go (B.convert input)
+  where
+    go bs
+        | S.null bs = []
+        | otherwise = let (hd, tl) = S.splitAt bytes bs in hd : go tl
+
+-- | The previous ciphertext block of every block in a slice: the incoming IV,
+-- and then the slice itself one block short.
+shiftedBy :: BlockCipher cipher => Int -> IV cipher -> ByteString -> ByteString
+shiftedBy bsz iv c = S.append (B.convert iv) (S.take (S.length c - bsz) c)
+
+-- | The last whole block of a slice, which is where the next one carries on
+-- from.
+lastBlockOf :: Int -> ByteString -> IV cipher
+lastBlockOf bsz c = IV (B.convert (S.drop (S.length c - bsz) c) :: Bytes)
+
+-- | Decryption does not chain: @P_i@ is @D(C_i)@ exclusive-ored with
+-- @C_(i-1)@, so a whole slice is decrypted in one call and exclusive-ored with
+-- the ciphertext moved along by a block.
 cbcDecryptGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
-cbcDecryptGeneric cipher ivini input = mconcat $ doDec ivini $ chunk (blockSize cipher) input
+cbcDecryptGeneric cipher ivini input =
+    B.concat $ doDec ivini $ slices (blocksPerCall * bsz) input
   where
+    bsz = blockSize cipher
+    conv x = B.convert x `asTypeOf` input
+    xorB a b = B.xor a b `asTypeOf` input
     doDec _ [] = []
-    doDec iv (i : is) =
-        let o = B.xor iv $ ecbDecrypt cipher i
-         in o : doDec (IV i) is
+    doDec iv (c : cs) =
+        xorB (ecbDecrypt cipher (conv c)) (conv (shiftedBy bsz iv c))
+            : doDec (lastBlockOf bsz c) cs
 
 cfbEncryptGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
@@ -236,23 +270,37 @@ cfbEncryptGeneric cipher ivini input = mconcat $ doEnc ivini $ chunk (blockSize 
         let o = B.xor i $ ecbEncrypt cipher iv
          in o : doEnc (IV o) is
 
+-- | Nor does this one: @P_i@ is @C_i@ exclusive-ored with @E(C_(i-1))@, and
+-- what gets encrypted is again the ciphertext moved along by a block.
 cfbDecryptGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
-cfbDecryptGeneric cipher ivini input = mconcat $ doDec ivini $ chunk (blockSize cipher) input
+cfbDecryptGeneric cipher ivini input =
+    B.concat $ doDec ivini $ slices (blocksPerCall * bsz) input
   where
+    bsz = blockSize cipher
+    conv x = B.convert x `asTypeOf` input
+    xorB a b = B.xor a b `asTypeOf` input
     doDec _ [] = []
-    doDec (IV iv) (i : is) =
-        let o = B.xor i $ ecbEncrypt cipher iv
-         in o : doDec (IV i) is
+    doDec iv (c : cs) =
+        xorB (conv c) (ecbEncrypt cipher (conv (shiftedBy bsz iv c)))
+            : doDec (lastBlockOf bsz c) cs
 
+-- | The counters do not depend on the message at all, so a slice of them is
+-- built and encrypted in one call.
 ctrCombineGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
-ctrCombineGeneric cipher ivini input = mconcat $ doCnt ivini $ chunk (blockSize cipher) input
+ctrCombineGeneric cipher ivini input =
+    B.concat $ doCnt ivini $ slices (blocksPerCall * bsz) input
   where
+    bsz = blockSize cipher
+    conv x = B.convert x `asTypeOf` input
+    xorB a b = B.xor a b `asTypeOf` input
     doCnt _ [] = []
-    doCnt iv@(IV ivd) (i : is) =
-        let ivEnc = ecbEncrypt cipher ivd
-         in B.xor i ivEnc : doCnt (ivAdd iv 1) is
+    doCnt iv (m : ms) =
+        xorB (conv m) (ecbEncrypt cipher counters) : doCnt (ivAdd iv n) ms
+      where
+        n = (S.length m + bsz - 1) `div` bsz
+        counters = conv (S.concat [B.convert (ivAdd iv i) | i <- [0 .. n - 1]])
 
 xtsEncryptGeneric :: (ByteArray ba, BlockCipher128 cipher) => XTS ba cipher
 xtsEncryptGeneric = xtsGeneric ecbEncrypt
