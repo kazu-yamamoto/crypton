@@ -134,6 +134,47 @@ digestSizeTests =
     rejects name otp =
         it (name ++ " is rejected") $ evaluate otp `shouldThrow` anyErrorCall
 
+-- | resynchronize hunts for the client's counter in a window of values
+-- derived from the shared secret, and reports how far it got only through the
+-- counter it returns.  Pin down which submissions it accepts, which it
+-- refuses, and the counter each accepted one leaves behind, before that search
+-- is rewritten.
+resyncTests :: [Spec]
+resyncTests =
+    [ it "the value for the current counter moves the server on by one" $
+        resync 20 (at 0, []) `shouldBe` after 1
+    , it "a value from inside the window is found" $
+        resync 20 (at 7, []) `shouldBe` after 8
+    , it "the last value in the window is found" $
+        resync 20 (at 20, []) `shouldBe` after 21
+    , it "the value just past the window is not" $
+        resync 20 (at 21, []) `shouldBe` Nothing
+    , it "a value no counter produces is refused" $
+        resync 20 (at 0 + 1, []) `shouldBe` Nothing
+    , it "a window of zero looks at the current counter only" $ do
+        resync 0 (at 0, []) `shouldBe` after 1
+        resync 0 (at 1, []) `shouldBe` Nothing
+    , it "the extra values carry the counter past all of them" $
+        resync 20 (at 7, [at 8, at 9]) `shouldBe` after 10
+    , it "an extra value that is wrong refuses the whole submission" $
+        sequence_
+            [ resync 20 (at 7, wrongAt i [at 8, at 9, at 10]) `shouldBe` Nothing
+            | i <- [0 .. 2]
+            ]
+    , it "extra values that are right do not rescue a wrong first value" $
+        resync 20 (at 0 + 1, [at 1, at 2]) `shouldBe` Nothing
+    , it "extra values from the wrong counters are refused" $
+        resync 20 (at 7, [at 9, at 10]) `shouldBe` Nothing
+    ]
+  where
+    ctr = 1000
+    resync w submitted = resynchronize SHA1 OTP6 w otpKey ctr submitted
+    -- the value the client would show at the counter n ahead of the server's
+    at n = hotp SHA1 OTP6 otpKey (ctr + n)
+    -- the server counter n ahead of where it started
+    after n = Just (ctr + n)
+    wrongAt i vs = [if j == i then v + 1 else v | (j, v) <- zip [0 :: Int ..] vs]
+
 -- | totpVerify accepts a value from any step within the skew window and
 -- nothing else.  It compares a submitted value against secret-derived ones, so
 -- pin the accepted and rejected cases down before that comparison is rewritten.
@@ -174,6 +215,7 @@ spec = do
     describe "HOTP" $ do
         describe "KATs" $ sequence_ (makeKATs (hotp SHA1 OTP6 otpKey) hotpExpected)
         describe "digest size" $ sequence_ digestSizeTests
+        describe "resynchronize" $ sequence_ resyncTests
         describe "properties" $ do
             prop "resync-expected" prop_resyncExpected
     describe "TOTP" $ do

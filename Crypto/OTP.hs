@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | One-time password implementation as defined by the
@@ -46,9 +47,9 @@ import Crypto.Hash (HashAlgorithm, SHA1 (..), hashDigestSize)
 import Crypto.Internal.ByteArray (ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.MAC.HMAC
-import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
+import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.ByteArray.Mapping (fromW64BE)
-import Data.List (elemIndex, foldl')
+import Data.List (foldl')
 import Data.Word
 import Prelude hiding (foldl')
 
@@ -110,6 +111,12 @@ hotp _ d k c
 
 -- | Attempt to resynchronize the server's counter value
 -- with the client, given a sequence of HOTP values.
+--
+-- Every counter in the window is tried and every submitted value is compared,
+-- whatever matches, so the time taken does not depend on where in the window
+-- the client's counter was found, nor on how many of the submitted values were
+-- right.  The cost of a call is therefore one HMAC per counter in the window
+-- plus one per extra value, every time.
 resynchronize
     :: (HashAlgorithm hash, ByteArrayAccess key)
     => hash
@@ -127,16 +134,45 @@ resynchronize
     -> Maybe Word64
     -- ^ The new counter value, synchronized with the client's current counter
     -- or Nothing if the submitted OTP values didn't match anywhere within the window
-resynchronize h d s k c (p1, extras) = do
-    offBy <- fmap fromIntegral (elemIndex p1 range)
-    checkExtraOtps (c + offBy + 1) extras
+resynchronize h d s k c (p1, extras)
+    | accepted == 0 = Nothing
+    | otherwise = Just (afterFirst + fromIntegral (length extras))
   where
-    checkExtraOtps ctr [] = Just ctr
-    checkExtraOtps ctr (p : ps)
-        | hotp h d k ctr /= p = Nothing
-        | otherwise = checkExtraOtps (ctr + 1) ps
+    -- Every counter in the window is tried and every extra value is compared,
+    -- whatever matches: the search does not stop at the first hit and the
+    -- check of the extra values does not stop at the first miss.  Each skipped
+    -- counter used to save an HMAC, so the time taken revealed where in the
+    -- window the client's counter sat and how many of its extra values were
+    -- right -- the second of which a client that submits guesses cannot learn
+    -- from the answer itself, since that is 'Nothing' either way.
+    accepted = matched .&. extrasMatched
 
     range = map (hotp h d k) [c .. c + fromIntegral s]
+
+    -- the offset of the first match, accumulated without stopping there
+    (matched, offset) = foldl' pick (0, 0) (zip [0 ..] range)
+    pick (!m, !off) (i, candidate) = (m .|. hit, off .|. (hit .&. i))
+      where
+        -- zero once something has matched, so only the first match counts
+        hit = eqMask candidate p1 .&. complement m
+
+    -- the counter the first submitted value matched, plus one
+    afterFirst = c + offset + 1
+
+    -- the counters continue past the window, and wrap where the old
+    -- 'checkExtraOtps' wrapped
+    extrasMatched =
+        foldl' step (complement 0) (zip (iterate (+ 1) afterFirst) extras)
+    step acc (ctr, p) = acc .&. eqMask (hotp h d k ctr) p
+
+-- | All ones when the two values are equal, zero otherwise, without branching
+-- on either of them.
+eqMask :: OTP -> OTP -> Word64
+eqMask a b = negate (fromIntegral (1 - nonZero))
+  where
+    v = a `xor` b
+    -- 0 when v is zero, 1 otherwise
+    nonZero = (v .|. negate v) `shiftR` 31
 
 digitsPower :: OTPDigits -> Word32
 digitsPower OTP4 = 10000
@@ -204,7 +240,7 @@ totpVerify
     -> OTPTime
     -> OTP
     -> Bool
-totpVerify (TP h t0 x d skew) k now otp = matched == 0
+totpVerify (TP h t0 x d skew) k now otp = matched /= 0
   where
     t = timeToCounter now t0 x
     window = fromIntegral (fromEnum skew)
@@ -214,10 +250,8 @@ totpVerify (TP h t0 x d skew) k now otp = matched == 0
     -- every candidate is compared, and none of the comparisons stops early, so
     -- neither which step matched nor how far a mismatch got is visible in how
     -- long this takes
-    matched = foldl' step 1 (map (hotp h d k) (range window []))
-    step acc candidate = acc .&. nonZero (candidate `xor` otp)
-    -- 0 when w is zero, 1 otherwise
-    nonZero w = (w .|. negate w) `shiftR` 31
+    matched = foldl' step 0 (map (hotp h d k) (range window []))
+    step acc candidate = acc .|. eqMask candidate otp
 
 timeToCounter :: Word64 -> Word64 -> Word16 -> Word64
 timeToCounter now t0 x = (now - t0) `div` fromIntegral x
