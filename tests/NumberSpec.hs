@@ -43,8 +43,89 @@ serializationVectors =
         )
     ]
 
+-- | Numbers built to fool a primality test: the Carmichael numbers, which
+-- pass a Fermat test to every base coprime with them, and the strong
+-- pseudoprimes to base 2.
+carmichaels :: [Integer]
+carmichaels =
+    [ 561
+    , 1105
+    , 1729
+    , 2465
+    , 2821
+    , 6601
+    , 8911
+    , 10585
+    , 15841
+    , 29341
+    , 41041
+    , 46657
+    , 52633
+    , 62745
+    , 63973
+    , 75361
+    , 101101
+    , 115921
+    , 126217
+    , 162401
+    ]
+
+strongPseudoprimesBase2 :: [Integer]
+strongPseudoprimesBase2 =
+    [ 2047
+    , 3277
+    , 4033
+    , 4681
+    , 8321
+    , 15841
+    , 29341
+    , 42799
+    , 49141
+    , 52633
+    , 65281
+    , 74665
+    , 80581
+    , 85489
+    , 88357
+    , 90751
+    ]
+
+-- a 512-bit prime, and a 512-bit composite that is the product of two primes
+bigPrime, bigComposite :: Integer
+bigPrime = 2 ^ (512 :: Int) - 569
+bigComposite = (2 ^ (256 :: Int) - 189) * (2 ^ (256 :: Int) - 357)
+
+-- the index is threaded through so that repeated calls cannot be shared
+askAgain :: Int -> Integer -> Bool
+askAgain i n = i `seq` primalityTestMillerRabin 1 n
+{-# NOINLINE askAgain #-}
+
+-- | Miller-Rabin draws witnesses from a generator this library builds itself,
+-- so check the answers it reaches: against trial division over a range, over
+-- the numbers built to fool such a test, and at a size a key would use.  The
+-- last test is about the generator rather than the arithmetic: a pure function
+-- has to give one answer, so the same number asked many times has to reach the
+-- same verdict.
+primalityTests :: Spec
+primalityTests = describe "primality" $ do
+    it "agrees with trial division on the odd numbers from 5 to 5001" $
+        [n | n <- [5, 7 .. 5001], primalityTestMillerRabin 30 n /= primalityTestNaive n]
+            `shouldBe` []
+    it "calls the Carmichael numbers composite" $
+        filter (primalityTestMillerRabin 30) carmichaels `shouldBe` []
+    it "calls the strong pseudoprimes to base 2 composite" $
+        filter (primalityTestMillerRabin 30) strongPseudoprimesBase2 `shouldBe` []
+    it "sees through them from isProbablyPrime too" $
+        filter isProbablyPrime (carmichaels ++ strongPseudoprimesBase2) `shouldBe` []
+    it "calls a 512-bit prime prime and a 512-bit composite composite" $ do
+        primalityTestMillerRabin 30 bigPrime `shouldBe` True
+        primalityTestMillerRabin 30 bigComposite `shouldBe` False
+    it "reaches the same verdict every time it is asked" $
+        map (`askAgain` 2465) [1 .. 20] `shouldBe` replicate 20 (askAgain 0 2465)
+
 spec :: Spec
 spec = do
+    primalityTests
     prop "num-bits" $ \(Int1_2901 i) ->
         and
             [ (numBits (2 ^ i - 1) == i)
