@@ -23,8 +23,11 @@ import Crypto.Number.Basic (gcde, sqrti)
 import Crypto.Number.Compat
 import Crypto.Number.Generate
 import Crypto.Number.ModArithmetic (expSafe)
+import Crypto.Number.Serialize (i2osp)
 import Crypto.Random.Probabilistic
 import Crypto.Random.Types
+
+import Crypto.Internal.ByteArray (Bytes)
 
 import Data.Bits
 
@@ -104,11 +107,18 @@ findPrimeFrom n =
 
 -- | Miller Rabin algorithm return if the number is probably prime or composite.
 -- the tries parameter is the number of recursion, that determines the accuracy of the test.
+--
+-- The witnesses are drawn from a generator derived from @n@ itself and from a
+-- secret drawn once per process: testing the same number twice gives the same
+-- answer, testing two numbers draws independent witnesses for each, and an
+-- attacker choosing the number cannot tell which witnesses it will face.
 primalityTestMillerRabin :: Int -> Integer -> Bool
 primalityTestMillerRabin tries !n =
     case gmpTestPrimeMillerRabin tries n of
         GmpSupported b -> b
-        GmpUnsupported -> probabilistic run
+        -- the material is forced only once a witness is drawn, which the
+        -- guards in run reach only for an odd n above 3
+        GmpUnsupported -> probabilisticFrom (i2osp n :: Bytes) run
   where
     run
         | n <= 3 = error "Miller-Rabin requires tested value to be > 3"
