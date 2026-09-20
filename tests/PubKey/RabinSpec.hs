@@ -4,12 +4,15 @@ module PubKey.RabinSpec (spec) where
 
 import qualified Data.ByteString as B
 
+import Control.Monad (replicateM)
 import Crypto.Hash
-import Crypto.Number.Serialize (os2ip)
+import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.PubKey.Rabin.Basic as BRabin
 import qualified Crypto.PubKey.Rabin.Modified as MRabin
 import qualified Crypto.PubKey.Rabin.OAEP as OAEP
 import qualified Crypto.PubKey.Rabin.RW as RW
+import Crypto.PubKey.Rabin.Types (Error (..))
+import Crypto.Random (drgNewTest, withDRG)
 
 import Imports
 
@@ -187,8 +190,105 @@ doRwVerifyTest key i vector = it (show i) (actual `shouldBe` True)
   where
     actual = RW.verify key SHA1 (message vector) (signature vector)
 
+-- | Squaring and the square roots that undo it both work modulo n, so a value
+-- at or above the modulus behaves exactly like the value it reduces to, and so
+-- does a negated one, @(-s)^2@ being @s^2@.  Unless something checks the range,
+-- @c + n@ decrypts to whatever @c@ decrypts to and @s + n@ verifies wherever
+-- @s@ does -- a ciphertext is then not unique to its plaintext, and anyone can
+-- turn one valid signature into another without the private key.  A leading
+-- zero octet is the same thing said in bytes.
+rangeTests :: Spec
+rangeTests = describe "value range" $ do
+    describe "Basic" $ do
+        it "decrypts a ciphertext it made" $
+            basicDecrypt basicCipher `shouldBe` Just (plainText basicEnc)
+        it "refuses a ciphertext at or above the modulus" $
+            basicDecrypt (i2osp (os2ip basicCipher + basicN)) `shouldBe` Nothing
+        it "refuses a ciphertext with a leading zero octet" $
+            basicDecrypt (B.cons 0 basicCipher) `shouldBe` Nothing
+        it "verifies a signature it made" $
+            basicVerify basicSig `shouldBe` True
+        it "refuses a signature at or above the modulus" $
+            basicVerify (basicSig + basicN) `shouldBe` False
+        it "refuses a negated signature" $
+            basicVerify (negate basicSig) `shouldBe` False
+    describe "Rabin-Williams" $ do
+        it "decrypts a ciphertext it made" $
+            rwDecrypt rwCipher `shouldBe` Just (plainText rwEnc)
+        it "refuses a ciphertext at or above the modulus" $
+            rwDecrypt (i2osp (os2ip rwCipher + rwN)) `shouldBe` Nothing
+        it "refuses a ciphertext with a leading zero octet" $
+            rwDecrypt (B.cons 0 rwCipher) `shouldBe` Nothing
+        it "verifies a signature it made" $
+            rwVerify rwSig `shouldBe` True
+        it "refuses a signature at or above the modulus" $
+            rwVerify (rwSig + rwN) `shouldBe` False
+        it "refuses a negated signature" $
+            rwVerify (negate rwSig) `shouldBe` False
+    describe "Modified" $ do
+        it "verifies a signature it made" $
+            modVerify modSig `shouldBe` True
+        it "refuses a signature at or above the modulus" $
+            modVerify (modSig + modN) `shouldBe` False
+        it "refuses a negated signature" $
+            modVerify (negate modSig) `shouldBe` False
+  where
+    basicEnc = head basicRabinEncryptionVectors
+    basicCipher = cipherText basicEnc
+    basicN = BRabin.public_n (BRabin.private_pub basicRabinKey)
+    basicDecrypt = BRabin.decrypt (OAEP.defaultOAEPParams SHA1) basicRabinKey
+    basicSigVec = head basicRabinSignatureVectors
+    basicSig = signature basicSigVec
+    basicVerify s =
+        BRabin.verify
+            (BRabin.private_pub basicRabinKey)
+            SHA1
+            (message basicSigVec)
+            (BRabin.Signature (os2ip (padding basicSigVec), s))
+
+    rwEnc = head rwEncryptionVectors
+    rwCipher = cipherText rwEnc
+    rwN = RW.public_n (RW.private_pub rwKey)
+    rwDecrypt = RW.decrypt (OAEP.defaultOAEPParams SHA1) rwKey
+    rwSigVec = head rwSignatureVectors
+    rwSig = signature rwSigVec
+    rwVerify = RW.verify (RW.private_pub rwKey) SHA1 (message rwSigVec)
+
+    modN = MRabin.public_n (MRabin.private_pub modifiedRabinKey)
+    modSigVec = head modifiedRabinSignatureVectors
+    modSig = signature modSigVec
+    modVerify = MRabin.verify (MRabin.private_pub modifiedRabinKey) SHA1 (message modSigVec)
+
+-- | Basic's signature carries the padding as an integer, so a padding whose
+-- first octet is zero comes back one octet short and hashes to something else.
+-- sign draws eight random octets, so about one signature in 256 was one its own
+-- verify refused.
+paddingTests :: Spec
+paddingTests = describe "signature padding" $ do
+    it "refuses a padding that would not survive the signature" $
+        BRabin.signWith
+            (B.cons 0 (B.drop 1 (padding sigVec)))
+            basicRabinKey
+            SHA1
+            (message sigVec)
+            `shouldBe` Left InvalidParameters
+    it "verifies every signature it draws" $
+        filter (not . verifies) signatures `shouldBe` []
+  where
+    sigVec = head basicRabinSignatureVectors
+    -- a fixed generator, so the same 400 paddings are drawn every run
+    signatures =
+        fst $
+            withDRG (drgNewTest (1, 2, 3, 4, 5)) $
+                replicateM 400 (BRabin.sign basicRabinKey SHA1 (message sigVec))
+    verifies (Left _) = False
+    verifies (Right sig) =
+        BRabin.verify (BRabin.private_pub basicRabinKey) SHA1 (message sigVec) sig
+
 spec :: Spec
 spec = do
+    rangeTests
+    paddingTests
     describe "Basic" $ do
         describe "encrypt" $
             sequence_ $

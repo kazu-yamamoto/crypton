@@ -109,18 +109,23 @@ verify
     -> Integer
     -- ^ signature
     -> Bool
-verify pk hashAlg m s =
-    let n = public_n pk
-        h = os2ip $ hashWith hashAlg m
-        s' = expSafe s 2 n
-        s'' = case s' `mod` 8 of
-            6 -> s'
-            3 -> 2 * s'
-            7 -> n - s'
-            2 -> 2 * (n - s')
-            _ -> 0
-     in case s'' `mod` 16 of
-            6 ->
-                let h' = (s'' - 6) `div` 16
-                 in h' == h
-            _ -> False
+verify pk hashAlg m s
+    -- squaring works modulo n, so s + n and -s would verify wherever s does
+    | s < 0 || s >= n = False
+    | otherwise = go
+  where
+    n = public_n pk
+    go =
+        let h = os2ip $ hashWith hashAlg m
+            s' = expSafe s 2 n
+            s'' = case s' `mod` 8 of
+                6 -> s'
+                3 -> 2 * s'
+                7 -> n - s'
+                2 -> 2 * (n - s')
+                _ -> 0
+         in case s'' `mod` 16 of
+                6 ->
+                    let h' = (s'' - 6) `div` 16
+                     in h' == h
+                _ -> False

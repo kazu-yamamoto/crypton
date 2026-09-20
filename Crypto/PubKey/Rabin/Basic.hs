@@ -128,6 +128,12 @@ encrypt oaep pk m = do
 
 -- | Decrypt ciphertext using private key.
 --
+-- The ciphertext has to be what 'encrypt' produces: the big-endian encoding,
+-- with no leading zero octet, of a value below the modulus.  Squaring and the
+-- square roots that undo it work modulo n, so without that condition @c@ and
+-- @c + n@ -- and @c@ with a zero octet in front of it -- would all decrypt to
+-- the same message, and a ciphertext would not be unique to its plaintext.
+--
 -- See algorithm 8.12 in "Handbook of Applied Cryptography" by Alfred J. Menezes et al.
 decrypt
     :: HashAlgorithm hash
@@ -138,18 +144,21 @@ decrypt
     -> ByteString
     -- ^ ciphertext
     -> Maybe ByteString
-decrypt oaep pk c =
-    let p = private_p pk
-        q = private_q pk
-        a = private_a pk
-        b = private_b pk
-        n = public_n $ private_pub pk
-        k = numBytes n
-        c' = os2ip c
-        solutions = rights $ toList $ mapTuple (unpad oaep k . i2ospOf_ k) $ sqroot' c' p q a b n
-     in case solutions of
-            [x] -> Just x
-            _ -> Nothing
+decrypt oaep pk c
+    | os2ip c >= public_n (private_pub pk) = Nothing
+    | c /= (i2osp (os2ip c) :: ByteString) = Nothing
+    | otherwise =
+        let p = private_p pk
+            q = private_q pk
+            a = private_a pk
+            b = private_b pk
+            n = public_n $ private_pub pk
+            k = numBytes n
+            c' = os2ip c
+            solutions = rights $ toList $ mapTuple (unpad oaep k . i2ospOf_ k) $ sqroot' c' p q a b n
+         in case solutions of
+                [x] -> Just x
+                _ -> Nothing
   where
     toList (w, x, y, z) = w : x : y : z : []
     mapTuple f (w, x, y, z) = (f w, f x, f y, f z)
@@ -168,10 +177,14 @@ signWith
     -> ByteString
     -- ^ message to sign
     -> Either Error Signature
-signWith padding pk hashAlg m = do
-    h <- calculateHash padding pk hashAlg m
-    signature <- calculateSignature h
-    return signature
+signWith padding pk hashAlg m
+    -- the signature carries the padding as an integer, so a leading zero octet
+    -- would not survive it: verify would hash one octet less than was signed
+    | B.null padding || B.index padding 0 == 0 = Left InvalidParameters
+    | otherwise = do
+        h <- calculateHash padding pk hashAlg m
+        signature <- calculateSignature h
+        return signature
   where
     calculateSignature h =
         let p = private_p pk
@@ -203,8 +216,10 @@ sign pk hashAlg m = do
   where
     findPadding = do
         padding <- getRandomBytes 8
-        case calculateHash padding pk hashAlg m of
-            Right _ -> return padding
+        case (B.index padding 0, calculateHash padding pk hashAlg m) of
+            -- a padding that starts with a zero octet is one signWith refuses
+            (0, _) -> findPadding
+            (_, Right _) -> return padding
             _ -> findPadding
 
 -- | Calculate hash of message and padding.
@@ -242,12 +257,17 @@ verify
     -> Signature
     -- ^ signature
     -> Bool
-verify pk hashAlg m (Signature (padding, s)) =
-    let n = public_n pk
-        p = i2osp padding
-        h = os2ip $ hashWith hashAlg $ B.append p m
-        h' = expSafe s 2 n
-     in h' == h
+verify pk hashAlg m (Signature (padding, s))
+    -- squaring works modulo n, so s + n and -s would verify wherever s does
+    | s < 0 || s >= n = False
+    | padding < 0 = False
+    | otherwise =
+        let p = i2osp padding
+            h = os2ip $ hashWith hashAlg $ B.append p m
+            h' = expSafe s 2 n
+         in h' == h
+  where
+    n = public_n pk
 
 -- | Square roots modulo prime p where p is congruent 3 mod 4
 -- Value a must be a quadratic residue modulo p (i.e. jacobi symbol (a/n) = 1).
