@@ -32,16 +32,22 @@ import Crypto.Internal.ByteArray (Bytes)
 import Data.Bits
 
 -- | Returns if the number is probably prime.
--- First a list of small primes are implicitely tested for divisibility,
--- then a fermat primality test is used with arbitrary numbers and
--- then the Miller Rabin algorithm is used with an accuracy of 30 recursions.
+--
+-- The small primes are tested for divisibility first, and then the
+-- Miller-Rabin algorithm with an accuracy of 30 rounds.
+--
+-- A Fermat test of fifty consecutive bases used to run between the two.  It
+-- ruled out nothing Miller-Rabin does not: a strong probable prime to a base
+-- is a Fermat probable prime to that base, and the converse is what Carmichael
+-- numbers are.  What it cost was fifty modular exponentiations on every number
+-- that turned out to be prime -- 2167 of the 3480 microseconds spent on a
+-- 512-bit prime, and about two thirds of the time to generate one.
 isProbablyPrime :: Integer -> Bool
 isProbablyPrime !n
+    | n < 2 = False
     | any (\p -> p `divides` n) (filter (< n) firstPrimes) = False
-    | n >= 2 && n <= 2903 = True
-    | primalityTestFermat 50 (n `div` 2) n =
-        primalityTestMillerRabin 30 n
-    | otherwise = False
+    | n <= 2903 = True
+    | otherwise = primalityTestMillerRabin 30 n
 
 -- | Generate a prime number of the required bitsize (i.e. in the range
 -- [2^(b-1)+2^(b-2), 2^b)).
