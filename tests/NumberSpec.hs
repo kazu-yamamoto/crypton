@@ -120,6 +120,13 @@ primalityTests = describe "primality" $ do
     it "calls a 512-bit prime prime and a 512-bit composite composite" $ do
         primalityTestMillerRabin 30 bigPrime `shouldBe` True
         primalityTestMillerRabin 30 bigComposite `shouldBe` False
+    it "answers for the small numbers and the edges of the shortcut" $ do
+        -- below two, nothing is prime, and the list of small primes answers up
+        -- to its own end at 2903; past that the Miller-Rabin path takes over,
+        -- and it has no answer for anything below four
+        filter isProbablyPrime [-3, -1, 0, 1, 4, 6, 8, 9, 2911] `shouldBe` []
+        filter (not . isProbablyPrime) [2, 3, 5, 7, 2897, 2903, 2909, 2917]
+            `shouldBe` []
     it "reaches the same verdict every time it is asked" $
         map (`askAgain` 2465) [1 .. 20] `shouldBe` replicate 20 (askAgain 0 2465)
 
