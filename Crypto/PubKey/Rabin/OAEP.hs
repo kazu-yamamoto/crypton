@@ -14,13 +14,16 @@ module Crypto.PubKey.Rabin.OAEP (
     unpad,
 ) where
 
-import Data.Bits (xor)
+import Data.Bits (complement, shiftR, xor, (.&.), (.|.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.List (foldl')
+import Data.Word (Word32)
+import Prelude hiding (foldl')
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
-import qualified Crypto.Internal.ByteArray as B (convert)
+import qualified Crypto.Internal.ByteArray as B (constEq, convert)
 import Crypto.PubKey.Internal (and')
 import Crypto.PubKey.MaskGenFunction
 import Crypto.PubKey.Rabin.Types
@@ -80,6 +83,17 @@ pad seed oaep k msg
     em = B.concat [B.singleton 0x0, maskedSeed, maskedDB]
 
 -- | Un-pad a OAEP encoded message.
+--
+-- The data block is scanned in full rather than up to the 01 octet separating
+-- the padding from the message, and the label hash and the leading octet are
+-- compared without an early exit, so neither the length of the padding nor
+-- where a comparison first differs shows up in how long this takes.  This is
+-- what "Crypto.PubKey.RSA.OAEP" does with the same block.
+--
+-- What remains visible is the result itself: whether the block was well formed,
+-- and the length of the message when it was.  That is the signal Manger's
+-- attack needs, so a caller that decrypts attacker-supplied ciphertext must not
+-- pass the distinction on.
 unpad
     :: HashAlgorithm hash
     => OAEPParams hash ByteString ByteString
@@ -95,7 +109,9 @@ unpad oaep k em
   where
     -- parameters
     mgf = oaepMaskGenAlg oaep
-    labelHash = B.convert $ hashWith (oaepHash oaep) (maybe B.empty id $ oaepLabel oaep)
+    labelHash =
+        B.convert $ hashWith (oaepHash oaep) (maybe B.empty id $ oaepLabel oaep)
+            :: ByteString
     hashLen = hashDigestSize (oaepHash oaep)
     -- getting em's fields
     (pb, em0) = B.splitAt 1 em
@@ -106,12 +122,30 @@ unpad oaep k em
     db = B.pack $ B.zipWith xor maskedDB dbmask
     -- getting db's fields
     (labelHash', db1) = B.splitAt hashLen db
-    (_, db2) = B.break (/= 0) db1
-    (ps1, msg) = B.splitAt 1 db2
+
+    -- index of the first nonzero octet in db1, or its length when every octet
+    -- is zero; all of them are looked at either way
+    oneIndex =
+        fst $
+            foldl'
+                step
+                (fromIntegral (B.length db1) :: Word32, 1 :: Word32)
+                (zip [0 ..] (B.unpack db1))
+    step (idx, unseen) (i, b) = (select found i idx, unseen .&. complement found)
+      where
+        w = fromIntegral b :: Word32
+        -- 0 when b is zero, 1 otherwise
+        nonZero = (w .|. negate w) `shiftR` 31
+        -- all ones at the first nonzero octet only
+        found = negate (unseen .&. nonZero)
+    select mask a b = (a .&. mask) .|. (b .&. complement mask)
+
+    ps1 = B.take 1 $ B.drop (fromIntegral oneIndex) db1
+    msg = B.drop (fromIntegral oneIndex + 1) db1
 
     paddingSuccess =
         and'
-            [ labelHash' == labelHash -- no need for constant eq
-            , ps1 == B.replicate 1 0x1
-            , pb == B.replicate 1 0x0
+            [ labelHash' `B.constEq` labelHash
+            , ps1 `B.constEq` B.replicate 1 0x1
+            , pb `B.constEq` B.replicate 1 0x0
             ]
