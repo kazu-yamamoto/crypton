@@ -13,6 +13,7 @@ import qualified Crypto.PubKey.Rabin.OAEP as OAEP
 import qualified Crypto.PubKey.Rabin.RW as RW
 import Crypto.PubKey.Rabin.Types (Error (..))
 import Crypto.Random (drgNewTest, withDRG)
+import Data.Bits (xor)
 
 import Imports
 
@@ -285,9 +286,47 @@ paddingTests = describe "signature padding" $ do
     verifies (Right sig) =
         BRabin.verify (BRabin.private_pub basicRabinKey) SHA1 (message sigVec) sig
 
+-- | EME-OAEP decoding accepts a block with the leading zero octet, the label
+-- hash it expects, and an 01 octet ending the padding string; it refuses
+-- everything else.  The scan across that padding string and the comparison of
+-- the label hash are about to be rewritten, so write down which blocks are
+-- accepted and which are refused first.
+oaepTests :: Spec
+oaepTests = describe "OAEP" $ do
+    it "accepts a block it padded" $
+        unpad' (block 43) `shouldBe` Right (msg 43)
+    it "accepts a message that fills the block" $
+        unpad' (block 86) `shouldBe` Right (msg 86)
+    it "accepts a message of one octet, behind the longest padding" $
+        unpad' (block 1) `shouldBe` Right (msg 1)
+    it "refuses a leading octet that is not zero" $
+        unpad' (poke 0 1 (block 43)) `shouldBe` Left MessageNotRecognized
+    it "refuses a label hash that does not match" $ do
+        unpad' (flipBit 21 (block 43)) `shouldBe` Left MessageNotRecognized
+        unpad' (flipBit 40 (block 43)) `shouldBe` Left MessageNotRecognized
+    it "refuses a block with no octet ending the padding string" $
+        -- every octet of db after the label hash is zero, so nothing separates
+        -- the padding from a message
+        unpad' (B.concat [B.take 21 (block 86), B.replicate 107 0])
+            `shouldBe` Left MessageNotRecognized
+    it "refuses a corrupted masked seed" $
+        unpad' (flipBit 3 (block 43)) `shouldBe` Left MessageNotRecognized
+  where
+    oaep = OAEP.defaultOAEPParams SHA1
+    k = 128
+    seed = B.replicate 20 0x5a
+    msg n = B.replicate n 0x41
+    block n = case OAEP.pad seed oaep k (msg n) of
+        Right b -> b
+        Left e -> error (show e)
+    unpad' = OAEP.unpad oaep k
+    poke i w bs = B.concat [B.take i bs, B.singleton w, B.drop (i + 1) bs]
+    flipBit i bs = poke i (B.index bs i `xor` 1) bs
+
 spec :: Spec
 spec = do
     rangeTests
+    oaepTests
     paddingTests
     describe "Basic" $ do
         describe "encrypt" $
