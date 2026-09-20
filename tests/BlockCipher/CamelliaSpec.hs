@@ -261,6 +261,11 @@ manyBlockTests =
                 `shouldBe` B.concat (map (ecbDecrypt ctx) cipherBlocks)
         it "a message of 64 KiB still decrypts to itself" $
             ecbDecrypt ctx (ecbEncrypt ctx big) `shouldBe` big
+        it "a message that is not whole blocks is refused" $
+            -- the tail of the answer used to be whatever was in the buffer it
+            -- was allocated in
+            evaluate (B.length (ecbEncrypt ctx (B.take 20 message)))
+                `shouldThrow` anyErrorCall
   where
     ctx = throwCryptoError (cipherInit (B.replicate 16 0x2b)) :: Camellia128
     message = B.pack (map fromIntegral [1 .. 80 :: Int])
