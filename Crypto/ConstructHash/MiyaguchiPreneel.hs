@@ -19,6 +19,7 @@ import Data.List (foldl')
 import Prelude hiding (foldl')
 
 import Crypto.Cipher.Types
+import Crypto.Cipher.Types.Utils (chunk)
 import Crypto.Data.Padding (Format (ZERO), pad)
 import Crypto.Error (throwCryptoError)
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
@@ -43,11 +44,11 @@ compute' g =
     MP . foldl' (step $ g) (B.replicate bsz 0) . chunks . pad (ZERO bsz) . B.convert
   where
     bsz = blockSize (g B.empty {- dummy to get block size -})
+    -- 'chunk' slices rather than splitting the message, which copied whatever
+    -- was left of it once per block
     chunks msg
         | B.null msg = []
-        | otherwise = (hd :: Bytes) : chunks tl
-      where
-        (hd, tl) = B.splitAt bsz msg
+        | otherwise = chunk bsz (msg :: Bytes)
 
 -- | Compute Miyaguchi-Preneel one way compress using the inferred block cipher.
 --   Only safe when KEY-SIZE equals to BLOCK-SIZE.
