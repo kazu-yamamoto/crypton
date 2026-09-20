@@ -3,6 +3,7 @@ module BlockCipher.TwofishSpec (spec) where
 import BlockCipher
 import Imports
 
+import Control.Exception (evaluate)
 import Crypto.Cipher.Twofish
 import Crypto.Cipher.Types
 import Crypto.Error (throwCryptoError)
@@ -395,6 +396,11 @@ manyBlockTests =
                 `shouldBe` B.concat (map (ecbDecrypt ctx) cipherBlocks)
         it "a message of 64 KiB still decrypts to itself" $
             ecbDecrypt ctx (ecbEncrypt ctx big) `shouldBe` big
+        it "a message that is not whole blocks is refused" $
+            -- it used to come back longer than it went in: the short block was
+            -- read as though the bytes it does not have were zero
+            evaluate (B.length (ecbEncrypt ctx (B.take 20 message)))
+                `shouldThrow` anyErrorCall
   where
     ctx = throwCryptoError (cipherInit (B.replicate 16 0x2b)) :: Twofish128
     message = B.pack (map fromIntegral [1 .. 80 :: Int])

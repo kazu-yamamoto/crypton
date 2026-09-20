@@ -13,6 +13,7 @@ import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArray)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.WordArray
+import Crypto.Internal.Words (Word128 (..))
 import Data.Bits
 import Data.List (foldl')
 import Data.Word
@@ -65,13 +66,34 @@ initTwofish key =
             generatedK = array32 40 $ genK keyPackage
             generatedS = genSboxes keyPackage $ sWords key
 
-mapBlocks :: ByteArray ba => (ba -> ba) -> ba -> ba
+-- | Run a block operation over every block of the input.
+--
+-- 'B.mapAsWord128' walks the input and the output once each, where taking a
+-- block off the front and appending the result copied the whole of both, once
+-- per block.
+mapBlocks :: ByteArray ba => (Word128 -> Word128) -> ba -> ba
 mapBlocks operation input
-    | B.null rest = blockOutput
-    | otherwise = blockOutput `B.append` mapBlocks operation rest
+    | B.length input `mod` blockSize /= 0 =
+        error $
+            "Crypto.Cipher.Twofish: input length must be a multiple of block size (16). Its length is: "
+                ++ show (B.length input)
+    | otherwise = B.mapAsWord128 operation input
+
+-- | The four little-endian words of a block, from the two big-endian words
+-- 'Word128' is read as.
+load32ls :: Word128 -> (Word32, Word32, Word32, Word32)
+load32ls (Word128 hi lo) =
+    ( byteSwap32 (fromIntegral (hi `shiftR` 32))
+    , byteSwap32 (fromIntegral hi)
+    , byteSwap32 (fromIntegral (lo `shiftR` 32))
+    , byteSwap32 (fromIntegral lo)
+    )
+
+store32ls :: (Word32, Word32, Word32, Word32) -> Word128
+store32ls (a, b, c, d) = Word128 (pair a b) (pair c d)
   where
-    (block, rest) = B.splitAt blockSize input
-    blockOutput = operation block
+    pair x y =
+        (fromIntegral (byteSwap32 x) `shiftL` 32) .|. fromIntegral (byteSwap32 y)
 
 -- | Encrypts the given ByteString using the given Key
 encrypt
@@ -83,7 +105,7 @@ encrypt
     -> ba
 encrypt cipher = mapBlocks (encryptBlock cipher)
 
-encryptBlock :: ByteArray ba => Twofish -> ba -> ba
+encryptBlock :: Twofish -> Word128 -> Word128
 encryptBlock Twofish{s = (s1, s2, s3, s4), k = ks} message = store32ls ts
   where
     (a, b, c, d) = load32ls message
@@ -150,7 +172,7 @@ decrypt
 decrypt cipher = mapBlocks (decryptBlock cipher)
 
 {- decryption for 128 bits blocks -}
-decryptBlock :: ByteArray ba => Twofish -> ba -> ba
+decryptBlock :: Twofish -> Word128 -> Word128
 decryptBlock Twofish{s = (s1, s2, s3, s4), k = ks} message = store32ls ixs
   where
     (a, b, c, d) = load32ls message
@@ -251,26 +273,6 @@ rs =
     , [0x02, 0xA1, 0xFC, 0xC1, 0x47, 0xAE, 0x3D, 0x19]
     , [0xA4, 0x55, 0x87, 0x5A, 0x58, 0xDB, 0x9E, 0x03]
     ]
-
-load32ls :: ByteArray ba => ba -> (Word32, Word32, Word32, Word32)
-load32ls message = (intify q1, intify q2, intify q3, intify q4)
-  where
-    (half1, half2) = B.splitAt 8 message
-    (q1, q2) = B.splitAt 4 half1
-    (q3, q4) = B.splitAt 4 half2
-
-    intify :: ByteArray ba => ba -> Word32
-    intify bytes =
-        foldl'
-            (\int (!word, !ind) -> int .|. shiftL (fromIntegral word) (ind * 8))
-            0
-            (zip (B.unpack bytes) [0 ..])
-
-store32ls :: ByteArray ba => (Word32, Word32, Word32, Word32) -> ba
-store32ls (a, b, c, d) = B.pack $ concatMap splitWordl [a, b, c, d]
-  where
-    splitWordl :: Word32 -> [Word8]
-    splitWordl w = fmap (\ind -> fromIntegral $ shiftR w (8 * ind)) [0 .. 3]
 
 -- Create S words
 sWords :: ByteArray ba => ba -> [Word8]
