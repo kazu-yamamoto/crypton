@@ -41,10 +41,17 @@ spec = do
         it "rejects an r and p that overflow" $
             evaluate (run (Scrypt.Parameters 16 1073741824 1 32))
                 `shouldThrow` cryptoError
+        it "reports them without raising" $ do
+            run' (Scrypt.Parameters 3 8 1 32) `shouldBe` refused
+            run' (Scrypt.Parameters 16 1073741824 1 32) `shouldBe` refused
   where
     run params =
         Scrypt.generate params ("password" :: ByteString) ("salt" :: ByteString)
             :: ByteString
+    run' params =
+        Scrypt.generate' params ("password" :: ByteString) ("salt" :: ByteString)
+            :: CryptoFailable ByteString
+    refused = CryptoFailed CryptoError_ParameterInvalid
     cryptoError e = e == CryptoError_ParameterInvalid
     toCase i ((pass, salt, n, r, p, dklen), output) =
         it

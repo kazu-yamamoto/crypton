@@ -111,6 +111,11 @@ spec = do
         it "rejects a salt longer than 16 bytes" $
             evaluate (bcrypt (5 :: Int) (B.replicate 17 0x61) somePassword :: B.ByteString)
                 `shouldThrow` (== CryptoError_ParameterInvalid)
+        it "reports a wrong salt length without raising" $
+            ( bcrypt' (5 :: Int) (B.replicate 15 0x61) somePassword
+                :: CryptoFailable B.ByteString
+            )
+                `shouldBe` CryptoFailed CryptoError_ParameterInvalid
     describe "password length limit" $ do
         -- bcrypt keys Blowfish with at most the first 72 bytes of the
         -- password, so everything after that is ignored.  The Openwall

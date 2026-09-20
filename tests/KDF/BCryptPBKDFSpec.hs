@@ -11,7 +11,9 @@ import Crypto.Error
 import Crypto.KDF.BCryptPBKDF (
     Parameters (..),
     generate,
+    generate',
     hashInternal,
+    hashInternal',
  )
 
 spec :: Spec
@@ -29,10 +31,26 @@ spec = do
             evaluate (run (Parameters 1 0)) `shouldThrow` cryptoError
         it "rejects an output length above 1024" $
             evaluate (run (Parameters 1 1025)) `shouldThrow` cryptoError
+        it "reports them without raising" $ do
+            run' (Parameters 0 32) `shouldBe` refused
+            run' (Parameters 1 0) `shouldBe` refused
+            run' (Parameters 1 1025) `shouldBe` refused
+        it "rejects a hashInternal input that is not 512 bits" $ do
+            evaluate
+                (hashInternal (B.replicate 63 0x61) (B.replicate 64 0x61) :: B.ByteString)
+                `shouldThrow` cryptoError
+            ( hashInternal' (B.replicate 64 0x61) (B.replicate 63 0x61)
+                    :: CryptoFailable B.ByteString
+                )
+                `shouldBe` refused
   where
     run params =
         generate params ("password" :: B.ByteString) ("salt" :: B.ByteString)
             :: B.ByteString
+    run' params =
+        generate' params ("password" :: B.ByteString) ("salt" :: B.ByteString)
+            :: CryptoFailable B.ByteString
+    refused = CryptoFailed CryptoError_ParameterInvalid
     cryptoError e = e == CryptoError_ParameterInvalid
     -- test vector taken from the go implementation by @dchest
     generate1 = generate params pass salt `shouldBe` expected

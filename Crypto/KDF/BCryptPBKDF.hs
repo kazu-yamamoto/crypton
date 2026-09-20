@@ -9,7 +9,9 @@
 module Crypto.KDF.BCryptPBKDF (
     Parameters (..),
     generate,
+    generate',
     hashInternal,
+    hashInternal',
 )
 where
 
@@ -17,6 +19,7 @@ import qualified Control.Exception as E
 import Control.Monad (when)
 import qualified Crypto.Cipher.Blowfish.Box as Blowfish
 import qualified Crypto.Cipher.Blowfish.Primitive as Blowfish
+import Crypto.Error
 import Crypto.Hash.Algorithms (SHA512 (..))
 import Crypto.Hash.Types (
     Context,
@@ -48,17 +51,30 @@ data Parameters = Parameters
     deriving (Eq, Ord, Show)
 
 -- | Derive a key of specified length using the bcrypt_pbkdf algorithm.
+--
+-- Parameters outside the ranges documented for 'Parameters' raise
+-- 'CryptoError_ParameterInvalid'; 'generate'' reports the same condition as
+-- 'CryptoFailed'.
 generate
     :: (B.ByteArray pass, B.ByteArray salt, B.ByteArray output)
     => Parameters
     -> pass
     -> salt
     -> output
-generate params pass salt
-    | iterCounts params < 1 = error "BCryptPBKDF: iterCounts must be > 0"
-    | keyLen < 1 || keyLen > 1024 =
-        error "BCryptPBKDF: outputLength must be in 1..1024"
-    | otherwise = B.unsafeCreate keyLen deriveKey
+generate params pass salt = throwCryptoError (generate' params pass salt)
+
+-- | Derive a key of specified length using the bcrypt_pbkdf algorithm,
+-- reporting parameters the implementation refuses rather than raising.
+generate'
+    :: (B.ByteArray pass, B.ByteArray salt, B.ByteArray output)
+    => Parameters
+    -> pass
+    -> salt
+    -> CryptoFailable output
+generate' params pass salt
+    | iterCounts params < 1 = CryptoFailed CryptoError_ParameterInvalid
+    | keyLen < 1 || keyLen > 1024 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed $ B.unsafeCreate keyLen deriveKey
   where
     outLen, tmpLen, blkLen, keyLen, passLen, saltLen, ctxLen, hashLen, blocks :: Int
     outLen = 32
@@ -141,15 +157,30 @@ generate params pass salt
 -- | Internal hash function used by `generate`.
 --
 -- Normal users should not need this.
+--
+-- Inputs that are not 512 bits long raise 'CryptoError_ParameterInvalid';
+-- 'hashInternal'' reports the same condition as 'CryptoFailed'.
 hashInternal
     :: (B.ByteArrayAccess pass, B.ByteArrayAccess salt, B.ByteArray output)
     => pass
     -> salt
     -> output
-hashInternal passHash saltHash
-    | B.length passHash /= 64 = error "passHash must be 512 bits"
-    | B.length saltHash /= 64 = error "saltHash must be 512 bits"
-    | otherwise = unsafeDoIO $ do
+hashInternal passHash saltHash =
+    throwCryptoError (hashInternal' passHash saltHash)
+
+-- | Internal hash function used by 'generate'', reporting inputs the
+-- implementation refuses rather than raising.
+--
+-- Normal users should not need this.
+hashInternal'
+    :: (B.ByteArrayAccess pass, B.ByteArrayAccess salt, B.ByteArray output)
+    => pass
+    -> salt
+    -> CryptoFailable output
+hashInternal' passHash saltHash
+    | B.length passHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
+    | B.length saltHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed $ unsafeDoIO $ do
         ks0 <- Blowfish.createKeySchedule
         B.alloc 32 $ \outPtr -> hashInternalMutable ks0 passHash saltHash outPtr
 

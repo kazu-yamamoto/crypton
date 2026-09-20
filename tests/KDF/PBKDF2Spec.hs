@@ -3,6 +3,8 @@
 -- from <http://www.ietf.org/rfc/rfc6070.txt>
 module KDF.PBKDF2Spec (spec) where
 
+import Control.Exception (evaluate)
+import Crypto.Error
 import Crypto.Hash (SHA1 (..), SHA256 (..), SHA512 (..))
 import qualified Crypto.KDF.PBKDF2 as PBKDF2
 
@@ -83,7 +85,42 @@ spec = do
     describe "KATs-HMAC-SHA512 (fast)" $
         sequence_ $
             (katTestFastPBKDF2_SHA512 vectors_hmac_sha512)
+    describe "invalid parameters" $ do
+        -- A zero iteration count derives the zero key rather than a key, and
+        -- a negative output length used to ask memSet for a buffer of -1
+        -- bytes, which took the process down with it.
+        it "rejects an iteration count below one" $
+            evaluate (slow (PBKDF2.Parameters 0 32)) `shouldThrow` cryptoError
+        it "rejects a negative output length" $
+            evaluate (slow (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
+        it "rejects an iteration count below one in the fast path" $ do
+            evaluate (fast1 (PBKDF2.Parameters 0 32)) `shouldThrow` cryptoError
+            evaluate (fast256 (PBKDF2.Parameters 0 32)) `shouldThrow` cryptoError
+            evaluate (fast512 (PBKDF2.Parameters 0 32)) `shouldThrow` cryptoError
+        it "rejects a negative output length in the fast path" $ do
+            evaluate (fast1 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
+            evaluate (fast256 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
+            evaluate (fast512 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
+        it "reports them without raising" $ do
+            PBKDF2.generate' badPrf (PBKDF2.Parameters 0 32) badPass badSalt
+                `shouldBe` refused
+            PBKDF2.fastPBKDF2_SHA1' (PBKDF2.Parameters 1 (-1)) badPass badSalt
+                `shouldBe` refused
+            PBKDF2.fastPBKDF2_SHA256' (PBKDF2.Parameters 0 32) badPass badSalt
+                `shouldBe` refused
+            PBKDF2.fastPBKDF2_SHA512' (PBKDF2.Parameters 1 (-1)) badPass badSalt
+                `shouldBe` refused
   where
+    badPrf = PBKDF2.prfHMAC SHA256
+    badPass = "password" :: ByteString
+    badSalt = "salt" :: ByteString
+    refused = CryptoFailed CryptoError_ParameterInvalid :: CryptoFailable ByteString
+    cryptoError e = e == CryptoError_ParameterInvalid
+    slow params = PBKDF2.generate badPrf params badPass badSalt :: ByteString
+    fast1 params = PBKDF2.fastPBKDF2_SHA1 params badPass badSalt :: ByteString
+    fast256 params = PBKDF2.fastPBKDF2_SHA256 params badPass badSalt :: ByteString
+    fast512 params = PBKDF2.fastPBKDF2_SHA512 params badPass badSalt :: ByteString
+
     katTests prf = zipWith (toKatTest prf) is
 
     toKatTest prf i ((pass, salt, iter, dkLen), output) =
