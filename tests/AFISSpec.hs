@@ -74,6 +74,17 @@ invalidParameterTests =
             evaluate (split' (-1) secret) `shouldThrow` refused
         it "split refuses an empty secret" $
             evaluate (split' 4 B.empty) `shouldThrow` refused
+        it "the recoverable variants report instead of raising" $ do
+            AFIS.merge' SHA1 0 diffused `shouldBe` failed
+            AFIS.merge' SHA1 1 diffused `shouldBe` failed
+            AFIS.merge' SHA1 3 diffused `shouldBe` failed
+            AFIS.merge' SHA1 4 B.empty `shouldBe` failed
+            fmap fst (AFIS.split' SHA1 rng 1 secret) `shouldBe` failed
+            fmap fst (AFIS.split' SHA1 rng 4 B.empty) `shouldBe` failed
+        it "the recoverable variants still split and merge" $ do
+            let d = fmap fst (AFIS.split' SHA1 rng 4 secret)
+            d `shouldBe` CryptoPassed diffused
+            (d >>= AFIS.merge' SHA1 4) `shouldBe` CryptoPassed secret
         it "a good split still merges back" $
             AFIS.merge SHA1 4 diffused `shouldBe` secret
   where
@@ -82,6 +93,7 @@ invalidParameterTests =
     diffused = fst (AFIS.split SHA1 rng 4 secret) :: B.ByteString
     merge' e d = AFIS.merge SHA1 e d :: B.ByteString
     split' e d = fst (AFIS.split SHA1 rng e d) :: B.ByteString
+    failed = CryptoFailed CryptoError_ParameterInvalid :: CryptoFailable B.ByteString
     refused e = e == CryptoError_ParameterInvalid
 
 spec :: Spec

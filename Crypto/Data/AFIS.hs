@@ -15,10 +15,13 @@
 -- destroy a key stored on disk.
 module Crypto.Data.AFIS (
     split,
+    split',
     merge,
+    merge',
 ) where
 
 import Control.Monad (foldM, forM_)
+import Crypto.Error
 import Crypto.Hash
 import Crypto.Internal.Compat
 import Crypto.Random.Types
@@ -49,6 +52,10 @@ import Data.Memory.PtrMethods (memCopy, memSet)
 --
 -- where acc is :
 --   acc(n+1) = hash (n ++ rand(n)) ^ acc(n)
+--
+-- The data has to be at least one byte long and the number of times to diffuse
+-- it at least two; anything else raises 'CryptoError_ParameterInvalid', which
+-- 'split'' reports as 'CryptoFailed' instead.
 split
     :: (ByteArray ba, HashAlgorithm hash, DRG rng)
     => hash
@@ -61,10 +68,31 @@ split
     -- ^ original data to diffuse.
     -> (ba, rng)
     -- ^ The diffused data
-{-# NOINLINE split #-}
-split hashAlg rng expandTimes src
-    | expandTimes <= 1 = error "invalid expandTimes value"
-    | otherwise = unsafeDoIO $ do
+split hashAlg rng expandTimes src =
+    throwCryptoError (split' hashAlg rng expandTimes src)
+
+-- | Split data to diffused data, reporting parameters the splitter cannot work
+-- with rather than raising.
+--
+-- See 'split'.
+split'
+    :: (ByteArray ba, HashAlgorithm hash, DRG rng)
+    => hash
+    -- ^ Hash algorithm to use as diffuser
+    -> rng
+    -- ^ Random generator to use
+    -> Int
+    -- ^ Number of times to diffuse the data.
+    -> ba
+    -- ^ original data to diffuse.
+    -> CryptoFailable (ba, rng)
+    -- ^ The diffused data
+{-# NOINLINE split' #-}
+split' hashAlg rng expandTimes src
+    | expandTimes < 2 = CryptoFailed CryptoError_ParameterInvalid
+    -- an empty secret splits into nothing at all, which merge cannot undo
+    | blockSize == 0 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed $ unsafeDoIO $ do
         (rng', bs) <- B.allocRet diffusedLen runOp
         return (bs, rng')
   where
@@ -87,6 +115,11 @@ split hashAlg rng expandTimes src
         return g'
 
 -- | Merge previously diffused data back to the original data.
+--
+-- The diffused data has to be a non-empty multiple of the number of times it
+-- was diffused, and that number at least two -- the same values 'split'
+-- accepts.  Anything else raises 'CryptoError_ParameterInvalid', which
+-- 'merge'' reports as 'CryptoFailed' instead.
 merge
     :: (ByteArray ba, HashAlgorithm hash)
     => hash
@@ -97,11 +130,31 @@ merge
     -- ^ Diffused data
     -> ba
     -- ^ Original data
-{-# NOINLINE merge #-}
-merge hashAlg expandTimes bs
-    | r /= 0 = error "diffused data not a multiple of expandTimes"
-    | originalSize <= 0 = error "diffused data null"
-    | otherwise = B.allocAndFreeze originalSize $ \dstPtr ->
+merge hashAlg expandTimes bs =
+    throwCryptoError (merge' hashAlg expandTimes bs)
+
+-- | Merge previously diffused data back to the original data, reporting
+-- parameters the merger cannot work with rather than raising.
+--
+-- See 'merge'.
+merge'
+    :: (ByteArray ba, HashAlgorithm hash)
+    => hash
+    -- ^ Hash algorithm used as diffuser
+    -> Int
+    -- ^ Number of times to un-diffuse the data
+    -> ba
+    -- ^ Diffused data
+    -> CryptoFailable ba
+    -- ^ Original data
+{-# NOINLINE merge' #-}
+merge' hashAlg expandTimes bs
+    -- guards the quotRem below, which for zero would divide by zero; a count
+    -- of one would return the diffused data itself as the secret
+    | expandTimes < 2 = CryptoFailed CryptoError_ParameterInvalid
+    | r /= 0 = CryptoFailed CryptoError_ParameterInvalid
+    | originalSize <= 0 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed $ B.allocAndFreeze originalSize $ \dstPtr ->
         B.withByteArray bs $ \srcPtr -> do
             memSet dstPtr 0 originalSize
             forM_ [0 .. (expandTimes - 2)] $ \i -> do
