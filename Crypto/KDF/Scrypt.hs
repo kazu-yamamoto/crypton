@@ -14,6 +14,7 @@
 module Crypto.KDF.Scrypt (
     Parameters (..),
     generate,
+    generate',
 ) where
 
 import Control.Monad (forM_)
@@ -21,6 +22,7 @@ import Data.Word
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (Ptr, plusPtr)
 
+import Crypto.Error
 import Crypto.Hash (SHA256 (..))
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
@@ -44,18 +46,31 @@ foreign import ccall "crypton_scrypt_smix"
         :: Ptr Word8 -> Word32 -> Word64 -> Ptr Word8 -> Ptr Word8 -> IO ()
 
 -- | Generate the scrypt key derivation data
+--
+-- Parameters the implementation refuses raise a 'CryptoError'; 'generate''
+-- reports the same condition as 'CryptoFailed'.
 generate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
     => Parameters
     -> password
     -> salt
     -> output
-generate params password salt
-    | r params * p params >= 0x40000000 =
-        error "Scrypt: invalid parameters: r and p constraint"
-    | popCount (n params) /= 1 =
-        error "Scrypt: invalid parameters: n not a power of 2"
-    | otherwise = unsafeDoIO $ do
+generate params password salt = throwCryptoError (generate' params password salt)
+
+-- | Generate the scrypt key derivation data, reporting parameters the
+-- implementation refuses rather than raising.
+--
+-- @n@ has to be a power of two, and @r@ times @p@ has to stay below 2^30.
+generate'
+    :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
+    => Parameters
+    -> password
+    -> salt
+    -> CryptoFailable output
+generate' params password salt
+    | r params * p params >= 0x40000000 = CryptoFailed CryptoError_ParameterInvalid
+    | popCount (n params) /= 1 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise = CryptoPassed $ unsafeDoIO $ do
         let b = PBKDF2.generate prf (PBKDF2.Parameters 1 intLen) password salt :: B.Bytes
         newSalt <- B.copy b $ \bPtr ->
             allocaBytesAligned (128 * (fromIntegral $ n params) * (r params)) 8 $ \v ->
@@ -77,4 +92,4 @@ generate params password salt
   where
     prf = PBKDF2.prfHMAC SHA256
     intLen = p params * 128 * r params
-{-# NOINLINE generate #-}
+{-# NOINLINE generate' #-}

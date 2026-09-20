@@ -16,6 +16,7 @@ module Crypto.KDF.HKDF (
     extract,
     extractSkip,
     expand,
+    expand',
     toPRK,
 ) where
 
@@ -64,7 +65,8 @@ extractSkip ikm = PRK_NoExpand $ B.convert ikm
 -- | Expand key material of specific length out of the parameters
 --
 -- Requests exceeding the RFC 5869 limit of @255 * HashLen@ raise
--- 'CryptoError_OutputLengthTooBig'.
+-- 'CryptoError_OutputLengthTooBig'; 'expand'' reports the same condition as
+-- 'CryptoFailed'.
 expand
     :: forall a info out
      . (HashAlgorithm a, ByteArrayAccess info, ByteArray out)
@@ -76,12 +78,28 @@ expand
     -- ^ Output length in bytes
     -> out
     -- ^ Output data
-expand prkAt infoAt outputLength
+expand prkAt infoAt outputLength =
+    throwCryptoError (expand' prkAt infoAt outputLength)
+
+-- | Expand key material of specific length out of the parameters, reporting a
+-- length the RFC refuses rather than raising.
+expand'
+    :: forall a info out
+     . (HashAlgorithm a, ByteArrayAccess info, ByteArray out)
+    => PRK a
+    -- ^ Pseudo Random Key
+    -> info
+    -- ^ Optional context and application specific information
+    -> Int
+    -- ^ Output length in bytes
+    -> CryptoFailable out
+    -- ^ Output data
+expand' prkAt infoAt outputLength
     | outputLength > 255 * hashDigestSize (undefined :: a) =
-        throwCryptoError (CryptoFailed CryptoError_OutputLengthTooBig)
+        CryptoFailed CryptoError_OutputLengthTooBig
     | otherwise =
         let hF = hFGet prkAt
-         in B.concat $ loop hF B.empty outputLength 1
+         in CryptoPassed $ B.concat $ loop hF B.empty outputLength 1
   where
     hFGet :: (HashAlgorithm a, ByteArrayAccess b) => PRK a -> (b -> HMAC a)
     hFGet prk = case prk of

@@ -5,9 +5,11 @@ module KDF.ScryptSpec (spec) where
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 ()
 
+import Control.Exception (evaluate)
 import Data.Word
 import Test.Hspec
 
+import Crypto.Error
 import qualified Crypto.KDF.Scrypt as Scrypt
 
 vectors :: [((ByteString, ByteString, Word64, Int, Int, Int), ByteString)]
@@ -31,10 +33,26 @@ vectors =
     ]
 
 spec :: Spec
-spec =
-    sequence_ $
-        zipWith toCase [(1 :: Int) ..] vectors
+spec = do
+    sequence_ $ zipWith toCase [(1 :: Int) ..] vectors
+    describe "invalid parameters" $ do
+        it "rejects an n that is not a power of two" $
+            evaluate (run (Scrypt.Parameters 3 8 1 32)) `shouldThrow` cryptoError
+        it "rejects an r and p that overflow" $
+            evaluate (run (Scrypt.Parameters 16 1073741824 1 32))
+                `shouldThrow` cryptoError
+        it "reports them without raising" $ do
+            run' (Scrypt.Parameters 3 8 1 32) `shouldBe` refused
+            run' (Scrypt.Parameters 16 1073741824 1 32) `shouldBe` refused
   where
+    run params =
+        Scrypt.generate params ("password" :: ByteString) ("salt" :: ByteString)
+            :: ByteString
+    run' params =
+        Scrypt.generate' params ("password" :: ByteString) ("salt" :: ByteString)
+            :: CryptoFailable ByteString
+    refused = CryptoFailed CryptoError_ParameterInvalid
+    cryptoError e = e == CryptoError_ParameterInvalid
     toCase i ((pass, salt, n, r, p, dklen), output) =
         it
             (show i)

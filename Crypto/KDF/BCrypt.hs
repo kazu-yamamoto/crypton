@@ -57,6 +57,7 @@ module Crypto.KDF.BCrypt (
     validatePassword,
     validatePasswordEither,
     bcrypt,
+    bcrypt',
 )
 where
 
@@ -69,6 +70,7 @@ import Crypto.Cipher.Blowfish.Primitive (
     expandKeyWithSalt,
     freezeKeySchedule,
  )
+import Crypto.Error
 import Crypto.Internal.Compat
 import Crypto.Random (MonadRandom, getRandomBytes)
 import Data.ByteArray (
@@ -105,6 +107,9 @@ hashPassword cost password = do
 -- | Create a bcrypt hash for a password with a provided cost value and salt.
 --
 -- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
+--
+-- A salt that is not 16 bytes long raises 'CryptoError_ParameterInvalid';
+-- 'bcrypt'' reports the same condition as 'CryptoFailed'.
 bcrypt
     :: (ByteArray salt, ByteArray password, ByteArray output)
     => Int
@@ -117,7 +122,29 @@ bcrypt
     -- Only the first 72 bytes are used; see the module documentation.
     -> output
     -- ^ The bcrypt hash in standard format.
-bcrypt cost salt password = B.concat [header, B.snoc costBytes dollar, b64 salt, b64 hash]
+bcrypt cost salt password = throwCryptoError (bcrypt' cost salt password)
+
+-- | Create a bcrypt hash for a password with a provided cost value and salt,
+-- reporting a salt the implementation refuses rather than raising.
+--
+-- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
+bcrypt'
+    :: (ByteArray salt, ByteArray password, ByteArray output)
+    => Int
+    -- ^ The cost parameter. Should be between 4 and 31 (inclusive).
+    -- Values which lie outside this range will be adjusted accordingly.
+    -> salt
+    -- ^ The salt. Must be 16 bytes in length.
+    -> password
+    -- ^ The password. Should be the UTF-8 encoded bytes of the password text.
+    -- Only the first 72 bytes are used; see the module documentation.
+    -> CryptoFailable output
+    -- ^ The bcrypt hash in standard format.
+bcrypt' cost salt password
+    | B.length salt /= 16 = CryptoFailed CryptoError_ParameterInvalid
+    | otherwise =
+        CryptoPassed $
+            B.concat [header, B.snoc costBytes dollar, b64 salt, b64 hash]
   where
     hash = rawHash 'b' realCost salt password
     header = B.pack [dollar, fromIntegral (ord '2'), fromIntegral (ord 'b'), dollar]

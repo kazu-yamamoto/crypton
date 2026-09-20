@@ -3,7 +3,7 @@
 module KDF.HKDFSpec (spec) where
 
 import Control.Exception (evaluate)
-import Crypto.Error (CryptoError (..))
+import Crypto.Error (CryptoError (..), CryptoFailable (..))
 import Crypto.Hash (HashAlgorithm, SHA1, SHA256, SHA384, SHA512)
 import qualified Crypto.KDF.HKDF as HKDF
 import qualified Data.ByteString as B
@@ -399,6 +399,9 @@ boundTests =
             it "one byte past the maximum" $
                 evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString))
                     `shouldThrow` (== CryptoError_OutputLengthTooBig)
+            it "reports one byte past the maximum without raising" $
+                (HKDF.expand' prk info (maxLen + 1) :: CryptoFailable ByteString)
+                    `shouldBe` CryptoFailed CryptoError_OutputLengthTooBig
       where
         maxLen = 255 * hashLen
 
