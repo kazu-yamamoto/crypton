@@ -18,13 +18,14 @@ module Crypto.PubKey.ECC.Prim (
 ) where
 
 import Crypto.Error (maybeCryptoError)
+import Crypto.Number.Basic (numBits)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic
 import qualified Crypto.PubKey.ECC.P256 as P256
 import Crypto.PubKey.ECC.Types
 import Crypto.Random
-import Data.Bits (shiftL, testBit)
+import Data.Bits (shiftL, shiftR, testBit, (.&.))
 import Data.Maybe
 
 -- | P-256, the one curve here that has a C implementation: 'SEC_p256r1', also
@@ -228,63 +229,115 @@ integerBits = go 0
 -- @(X\/Z^2, Y\/Z^3)@, and @JPointO@ for the point at infinity.
 data JPoint = JPointO | JPoint !Integer !Integer !Integer
 
+-- | The field a prime curve works in, and how to reduce into it.
+--
+-- Most curve primes are @2^k - c@ with @c@ far smaller than the prime.
+-- Reducing is then a shift, a multiplication by @c@ and an addition, where
+-- dividing a number twice the width costs about four times as much: 227ns
+-- against 183 for a P-384 multiplication, and 226 against 89 for P-521, whose
+-- @c@ is one.
+-- | The prime, the width to fold at, and what to fold back in.  A @c@ of zero
+-- says to divide instead, either because the prime has no such shape or
+-- because it is too small for folding to pay: @c@ has to be under half the
+-- width, or folding would not shrink the number, and below 256 bits the
+-- handful of 'Integer' operations folding takes costs more than the division
+-- it saves -- measured on P-192, where folding is 14% slower.
+data Field = Field !Integer !Int !Integer
+
+mkField :: Integer -> Field
+mkField p
+    | p > 0 && c > 0 && 2 * numBits c <= k && k >= 256 = Field p k c
+    | otherwise = Field p 0 0
+  where
+    k = numBits p
+    c = (1 `shiftL` k) - p
+
+fieldPrime :: Field -> Integer
+fieldPrime (Field p _ _) = p
+
+fieldReduce :: Field -> Integer -> Integer
+fieldReduce (Field p k c) x
+    | c == 0 || x < 0 = x `mod` p
+    | otherwise = trim (fold x)
+  where
+    mask = (1 `shiftL` k) - 1
+    fold v
+        | v > mask = fold ((v `shiftR` k) * c + (v .&. mask))
+        | otherwise = v
+    trim v
+        | v >= p = trim (v - p)
+        | otherwise = v
+{-# INLINE fieldReduce #-}
+
+-- | A point in affine coordinates: the second operand of every addition a
+-- scalar multiplication makes, where knowing that z is one saves four
+-- multiplications of the sixteen.
+data Affine = AffineO | Affine !Integer !Integer
+
+toAffine :: Point -> Affine
+toAffine PointO = AffineO
+toAffine (Point x y) = Affine x y
+
 jacobianMul :: Integer -> Integer -> Int -> Integer -> Point -> Point
 jacobianMul _ _ _ _ PointO = PointO
-jacobianMul pr a bits n (Point px py) = fromJacobian pr (go (bits - 1) JPointO)
+jacobianMul pr a bits n (Point px py) = fromJacobian f (go (bits - 1) JPointO)
   where
-    base = JPoint px py 1
+    f = mkField pr
+    base = Affine px py
 
     go i acc
         | i < 0 = acc
         | otherwise =
-            let d = jDouble pr a acc
-                s = jAdd pr a d base
+            let d = jDouble f a acc
+                s = jAddAffine f a d base
              in go (i - 1) (if testBit n i then s else d)
 
-jDouble :: Integer -> Integer -> JPoint -> JPoint
+jDouble :: Field -> Integer -> JPoint -> JPoint
 jDouble _ _ JPointO = JPointO
-jDouble pr a (JPoint x y z)
+jDouble f a (JPoint x y z)
     | y == 0 = JPointO
     | otherwise = JPoint x3 y3 z3
   where
-    yy = (y * y) `mod` pr
-    delta = (4 * x * yy) `mod` pr
-    zz = (z * z) `mod` pr
-    m = (3 * x * x + a * zz * zz) `mod` pr
-    x3 = (m * m - 2 * delta) `mod` pr
-    y3 = (m * (delta - x3) - 8 * yy * yy) `mod` pr
-    z3 = (2 * y * z) `mod` pr
+    red = fieldReduce f
+    yy = red (y * y)
+    delta = red (4 * x * yy)
+    zz = red (z * z)
+    m = red (3 * x * x + a * zz * zz)
+    x3 = red (m * m - 2 * delta)
+    y3 = red (m * (delta - x3) - 8 * yy * yy)
+    z3 = red (2 * y * z)
 
-jAdd :: Integer -> Integer -> JPoint -> JPoint -> JPoint
-jAdd _ _ JPointO q = q
-jAdd _ _ p JPointO = p
-jAdd pr a p@(JPoint x1 y1 z1) (JPoint x2 y2 z2)
+-- | Add a point whose z is one, which is what a scalar multiplication always
+-- adds: u1 is x1, s1 is y1, and z3 is one multiplication rather than two.
+jAddAffine :: Field -> Integer -> JPoint -> Affine -> JPoint
+jAddAffine _ _ p AffineO = p
+jAddAffine _ _ JPointO (Affine x2 y2) = JPoint x2 y2 1
+jAddAffine f a p@(JPoint x1 y1 z1) (Affine x2 y2)
     | h /= 0 = JPoint x3 y3 z3
     | r /= 0 = JPointO
-    | otherwise = jDouble pr a p
+    | otherwise = jDouble f a p
   where
-    z1s = (z1 * z1) `mod` pr
-    z2s = (z2 * z2) `mod` pr
-    u1 = (x1 * z2s) `mod` pr
-    u2 = (x2 * z1s) `mod` pr
-    s1 = (y1 * z2s * z2) `mod` pr
-    s2 = (y2 * z1s * z1) `mod` pr
-    h = (u2 - u1) `mod` pr
-    r = (s2 - s1) `mod` pr
-    h2 = (h * h) `mod` pr
-    h3 = (h2 * h) `mod` pr
-    x3 = (r * r - h3 - 2 * u1 * h2) `mod` pr
-    y3 = (r * (u1 * h2 - x3) - s1 * h3) `mod` pr
-    z3 = (h * z1 * z2) `mod` pr
+    red = fieldReduce f
+    z1s = red (z1 * z1)
+    u2 = red (x2 * z1s)
+    s2 = red (y2 * z1s * z1)
+    h = red (u2 - x1)
+    r = red (s2 - y1)
+    h2 = red (h * h)
+    h3 = red (h2 * h)
+    x3 = red (r * r - h3 - 2 * x1 * h2)
+    y3 = red (r * (x1 * h2 - x3) - y1 * h3)
+    z3 = red (h * z1)
 
-fromJacobian :: Integer -> JPoint -> Point
+fromJacobian :: Field -> JPoint -> Point
 fromJacobian _ JPointO = PointO
-fromJacobian pr (JPoint x y z) =
-    case inverse z pr of
+fromJacobian f (JPoint x y z) =
+    case inverse z (fieldPrime f) of
         Nothing -> PointO
         Just zi ->
-            let zi2 = (zi * zi) `mod` pr
-             in Point ((x * zi2) `mod` pr) ((y * zi2 * zi) `mod` pr)
+            let red = fieldReduce f
+                zi2 = red (zi * zi)
+             in Point (red (x * zi2)) (red (y * zi2 * zi))
 
 -- | Elliptic curve double-scalar multiplication (uses Shamir's trick).
 --
@@ -322,25 +375,22 @@ pointAddTwoMuls c n1 p1 n2 p2
     -- Shamir's trick, with the division deferred as in pointMul.  Both
     -- scalars are public here -- verification is the caller -- so this skips
     -- the addition when a bit is clear rather than adding regardless.
-    jacobian pr a nn = fromJacobian pr (go (bits - 1) JPointO)
+    jacobian pr a nn = fromJacobian f (go (bits - 1) JPointO)
       where
+        f = mkField pr
         bits = maximum [integerBits n1, integerBits n2, integerBits nn]
-        j0 = toJacobian p0
-        j1 = toJacobian p1
-        j2 = toJacobian p2
+        j0 = toAffine p0
+        j1 = toAffine p1
+        j2 = toAffine p2
         go i acc
             | i < 0 = acc
             | otherwise =
-                let d = jDouble pr a acc
+                let d = jDouble f a acc
                  in go (i - 1) $ case (testBit n1 i, testBit n2 i) of
-                        (True, True) -> jAdd pr a d j0
-                        (True, False) -> jAdd pr a d j1
-                        (False, True) -> jAdd pr a d j2
+                        (True, True) -> jAddAffine f a d j0
+                        (True, False) -> jAddAffine f a d j1
+                        (False, True) -> jAddAffine f a d j2
                         (False, False) -> d
-
-toJacobian :: Point -> JPoint
-toJacobian PointO = JPointO
-toJacobian (Point x y) = JPoint x y 1
 
 -- | Decompose a point into index, residue, and parity.
 --

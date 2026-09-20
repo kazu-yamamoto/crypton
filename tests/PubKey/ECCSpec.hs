@@ -153,40 +153,40 @@ p256Tests :: Spec
 p256Tests =
     describe "P-256" $ do
         it "the whole order takes a point to infinity" $
-            ECC.pointMul curve order g `shouldBe` ECC.PointO
+            ECC.pointMul p256curve order g `shouldBe` ECC.PointO
         it "one past the order is one" $
-            ECC.pointMul curve (order + 1) g `shouldBe` g
+            ECC.pointMul p256curve (order + 1) g `shouldBe` g
         it "a negative scalar is the negation of the positive one" $ do
-            ECC.pointMul curve (-1) g `shouldBe` ECC.pointNegate curve g
-            ECC.pointMul curve (-7) g
-                `shouldBe` ECC.pointNegate curve (ECC.pointMul curve 7 g)
+            ECC.pointMul p256curve (-1) g `shouldBe` ECC.pointNegate p256curve g
+            ECC.pointMul p256curve (-7) g
+                `shouldBe` ECC.pointNegate p256curve (ECC.pointMul p256curve 7 g)
         it "a scalar past the order wraps" $
-            ECC.pointMul curve (3 * order + 11) g `shouldBe` ECC.pointMul curve 11 g
+            ECC.pointMul p256curve (3 * order + 11) g `shouldBe` ECC.pointMul p256curve 11 g
         it "zero and the point at infinity give infinity" $ do
-            ECC.pointMul curve 0 g `shouldBe` ECC.PointO
-            ECC.pointMul curve 5 ECC.PointO `shouldBe` ECC.PointO
-        it "multiplying a point that is not on the curve is unchanged" $
+            ECC.pointMul p256curve 0 g `shouldBe` ECC.PointO
+            ECC.pointMul p256curve 5 ECC.PointO `shouldBe` ECC.PointO
+        it "multiplying a point that is not on the p256curve is unchanged" $
             -- the C implementation has no answer for these, so they stay with
             -- the generic code; this pins what that answers
-            ECC.pointMul curve 5 offCurve
-                `shouldBe` ECC.pointMul curve 5 offCurve
+            ECC.pointMul p256curve 5 offCurve
+                `shouldBe` ECC.pointMul p256curve 5 offCurve
         it "two muls is the sum of the muls, base point either side" $ do
-            ECC.pointAddTwoMuls curve 3 g 5 q
+            ECC.pointAddTwoMuls p256curve 3 g 5 q
                 `shouldBe` ECC.pointAdd
-                    curve
-                    (ECC.pointMul curve 3 g)
-                    (ECC.pointMul curve 5 q)
-            ECC.pointAddTwoMuls curve 5 q 3 g
+                    p256curve
+                    (ECC.pointMul p256curve 3 g)
+                    (ECC.pointMul p256curve 5 q)
+            ECC.pointAddTwoMuls p256curve 5 q 3 g
                 `shouldBe` ECC.pointAdd
-                    curve
-                    (ECC.pointMul curve 5 q)
-                    (ECC.pointMul curve 3 g)
-            ECC.pointAddTwoMuls curve order g 5 q `shouldBe` ECC.pointMul curve 5 q
+                    p256curve
+                    (ECC.pointMul p256curve 5 q)
+                    (ECC.pointMul p256curve 3 g)
+            ECC.pointAddTwoMuls p256curve order g 5 q `shouldBe` ECC.pointMul p256curve 5 q
   where
-    curve = ECC.getCurveByName ECC.SEC_p256r1
-    order = ECC.ecc_n (ECC.common_curve curve)
-    g = ECC.ecc_g (ECC.common_curve curve)
-    q = ECC.pointMul curve 0x2a3f1c9e g
+    p256curve = ECC.getCurveByName ECC.SEC_p256r1
+    order = ECC.ecc_n (ECC.common_curve p256curve)
+    g = ECC.ecc_g (ECC.common_curve p256curve)
+    q = ECC.pointMul p256curve 0x2a3f1c9e g
     offCurve = ECC.Point 1 1
 
 spec :: Spec
