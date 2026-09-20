@@ -215,6 +215,7 @@ library
         cbits/crypton_blake2bp.c
         cbits/crypton_blake2s.c
         cbits/crypton_blake2sp.c
+        cbits/crypton_camellia.c
         cbits/crypton_chacha.c
         cbits/crypton_cpu.c
         cbits/crypton_des.c
