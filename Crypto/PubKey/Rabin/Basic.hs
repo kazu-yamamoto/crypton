@@ -177,10 +177,14 @@ signWith
     -> ByteString
     -- ^ message to sign
     -> Either Error Signature
-signWith padding pk hashAlg m = do
-    h <- calculateHash padding pk hashAlg m
-    signature <- calculateSignature h
-    return signature
+signWith padding pk hashAlg m
+    -- the signature carries the padding as an integer, so a leading zero octet
+    -- would not survive it: verify would hash one octet less than was signed
+    | B.null padding || B.index padding 0 == 0 = Left InvalidParameters
+    | otherwise = do
+        h <- calculateHash padding pk hashAlg m
+        signature <- calculateSignature h
+        return signature
   where
     calculateSignature h =
         let p = private_p pk
@@ -212,8 +216,10 @@ sign pk hashAlg m = do
   where
     findPadding = do
         padding <- getRandomBytes 8
-        case calculateHash padding pk hashAlg m of
-            Right _ -> return padding
+        case (B.index padding 0, calculateHash padding pk hashAlg m) of
+            -- a padding that starts with a zero octet is one signWith refuses
+            (0, _) -> findPadding
+            (_, Right _) -> return padding
             _ -> findPadding
 
 -- | Calculate hash of message and padding.
