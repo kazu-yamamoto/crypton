@@ -118,6 +118,12 @@ encrypt oaep pk m = do
     hashLen = hashDigestSize (oaepHash oaep)
 
 -- | Decrypt ciphertext using private key.
+--
+-- The ciphertext has to be what 'encrypt' produces: the big-endian encoding,
+-- with no leading zero octet, of a value below the modulus.  The primitives
+-- work modulo n, so without that condition @c@ and @c + n@ -- and @c@ with a
+-- zero octet in front of it -- would all decrypt to the same message, and a
+-- ciphertext would not be unique to its plaintext.
 decrypt
     :: HashAlgorithm hash
     => OAEPParams hash ByteString ByteString
@@ -127,14 +133,17 @@ decrypt
     -> ByteString
     -- ^ ciphertext
     -> Maybe ByteString
-decrypt oaep pk c =
-    let d = private_d pk
-        n = public_n $ private_pub pk
-        k = numBytes n
-        c' = i2ospOf_ k $ dp2 n $ dp1 d n $ os2ip c
-     in case unpad oaep k c' of
-            Left _ -> Nothing
-            Right p -> Just p
+decrypt oaep pk c
+    | os2ip c >= public_n (private_pub pk) = Nothing
+    | c /= (i2osp (os2ip c) :: ByteString) = Nothing
+    | otherwise =
+        let d = private_d pk
+            n = public_n $ private_pub pk
+            k = numBytes n
+            c' = i2ospOf_ k $ dp2 n $ dp1 d n $ os2ip c
+         in case unpad oaep k c' of
+                Left _ -> Nothing
+                Right p -> Just p
 
 -- | Sign message using hash algorithm and private key.
 sign
@@ -165,11 +174,15 @@ verify
     -> Integer
     -- ^ signature
     -> Bool
-verify pk hashAlg m s =
-    let n = public_n pk
-        h = os2ip $ hashWith hashAlg m
-        h' = dp2 n $ ep2 n s
-     in h' == h
+verify pk hashAlg m s
+    -- squaring works modulo n, so s + n and -s would verify wherever s does
+    | s < 0 || s >= n = False
+    | otherwise =
+        let h = os2ip $ hashWith hashAlg m
+            h' = dp2 n $ ep2 n s
+         in h' == h
+  where
+    n = public_n pk
 
 -- | Encryption primitive 1
 ep1 :: Integer -> Integer -> Either Error Integer
