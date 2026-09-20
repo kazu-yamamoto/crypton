@@ -79,6 +79,10 @@ void crypton_aesni_encrypt_xts128(aes_block *out, aes_key *key1, aes_key *key2,
                            aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
 void crypton_aesni_encrypt_xts256(aes_block *out, aes_key *key1, aes_key *key2,
                            aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
+void crypton_aesni_decrypt_xts128(aes_block *out, aes_key *key1, aes_key *key2,
+                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
+void crypton_aesni_decrypt_xts256(aes_block *out, aes_key *key1, aes_key *key2,
+                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
 
 void crypton_aesni_gcm_encrypt128(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
 void crypton_aesni_gcm_encrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);

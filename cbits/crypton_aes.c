@@ -67,7 +67,9 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
 	void crypton_aes_armv8_decrypt_cbc##sz(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks); \
 	void crypton_aes_armv8_encrypt_ctr##sz(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len); \
 	void crypton_aes_armv8_gcm_encrypt##sz(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length); \
-	void crypton_aes_armv8_gcm_decrypt##sz(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
+	void crypton_aes_armv8_gcm_decrypt##sz(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length); \
+	void crypton_aes_armv8_encrypt_xts##sz(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks); \
+	void crypton_aes_armv8_decrypt_xts##sz(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 ARMV8_DECLS(128)
 ARMV8_DECLS(256)
 int crypton_aes_armv8_available(void);
@@ -293,6 +295,8 @@ static void initialize_table_ni(int aesni, int pclmul)
 	/* XTS */
 	crypton_aes_branch_table[ENCRYPT_XTS_128] = crypton_aesni_encrypt_xts128;
 	crypton_aes_branch_table[ENCRYPT_XTS_256] = crypton_aesni_encrypt_xts256;
+	crypton_aes_branch_table[DECRYPT_XTS_128] = crypton_aesni_decrypt_xts128;
+	crypton_aes_branch_table[DECRYPT_XTS_256] = crypton_aesni_decrypt_xts256;
 	/* GCM */
 	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aesni_gcm_encrypt128;
 	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aesni_gcm_encrypt256;
@@ -345,6 +349,11 @@ static void initialize_table_armv8(void)
 	/* CTR, which the generic loop would otherwise drive one block at a time */
 	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aes_armv8_encrypt_ctr128;
 	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aes_armv8_encrypt_ctr256;
+	/* XTS, likewise, in both directions */
+	crypton_aes_branch_table[ENCRYPT_XTS_128] = crypton_aes_armv8_encrypt_xts128;
+	crypton_aes_branch_table[DECRYPT_XTS_128] = crypton_aes_armv8_decrypt_xts128;
+	crypton_aes_branch_table[ENCRYPT_XTS_256] = crypton_aes_armv8_encrypt_xts256;
+	crypton_aes_branch_table[DECRYPT_XTS_256] = crypton_aes_armv8_decrypt_xts256;
 
 	/* GHASH, which GCM spends its time in once AES itself is fast */
 	if (!crypton_aes_armv8_pmull_available())
@@ -459,7 +468,8 @@ void crypton_aes_encrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_bl
 void crypton_aes_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit,
                      uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
-	crypton_aes_generic_decrypt_xts(output, k1, k2, dataunit, spoint, input, nb_blocks);
+	xts_f d = GET_XTS_DECRYPT(k1->strength);
+	d(output, k1, k2, dataunit, spoint, input, nb_blocks);
 }
 
 void crypton_aes_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)

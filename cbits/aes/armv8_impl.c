@@ -387,6 +387,77 @@ void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 	GCM_EPILOGUE;
 }
 
+
+/*
+ * XTS.  The tweak for each block is the one before it doubled, so a group's
+ * eight tweaks are a short chain that runs while the eight AES chains are in
+ * flight.  The first tweak is the data unit number enciphered under the
+ * second key; spoint skips that many blocks into the unit.
+ */
+#define XTS_IN(i)   s[i] = veorq_u8(vld1q_u8((const uint8_t *) (input + (i))), t[i]);
+#define XTS_OUT(i)  vst1q_u8((uint8_t *) (output + (i)), veorq_u8(s[i], t[i]));
+#define XTS_TWEAK(i) do { t[i] = tw; tw = gfmulx_neon(tw); } while (0);
+
+TARGET_ARMV8_CRYPTO
+void SIZED(crypton_aes_armv8_encrypt_xts)(aes_block *output, aes_key *key, aes_key *key2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks)
+{
+	const uint8_t *rk = FWD(key);
+	uint8x16_t s[WAY], t[WAY], tw;
+
+	{
+		aes_block first;
+
+		SIZED(crypton_aes_armv8_encrypt_block)(&first, key2, dataunit);
+		tw = vld1q_u8((const uint8_t *) &first);
+	}
+	while (spoint-- > 0)
+		tw = gfmulx_neon(tw);
+
+	for (; nb_blocks >= WAY; nb_blocks -= WAY, input += WAY, output += WAY) {
+		EACH8(XTS_TWEAK);
+		EACH8(XTS_IN);
+		ENC_ROUNDS(EACH8);
+		EACH8(XTS_OUT);
+	}
+	for (; nb_blocks > 0; nb_blocks--, input++, output++) {
+		EACH1(XTS_TWEAK);
+		EACH1(XTS_IN);
+		ENC_ROUNDS(EACH1);
+		EACH1(XTS_OUT);
+	}
+}
+
+TARGET_ARMV8_CRYPTO
+void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_key *key2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks)
+{
+	const uint8_t *fwd = FWD(key);
+	const uint8_t *inv = INV(key);
+	uint8x16_t s[WAY], t[WAY], tw;
+
+	{
+		aes_block first;
+
+		/* the tweak is always enciphered, whichever way the data goes */
+		SIZED(crypton_aes_armv8_encrypt_block)(&first, key2, dataunit);
+		tw = vld1q_u8((const uint8_t *) &first);
+	}
+	while (spoint-- > 0)
+		tw = gfmulx_neon(tw);
+
+	for (; nb_blocks >= WAY; nb_blocks -= WAY, input += WAY, output += WAY) {
+		EACH8(XTS_TWEAK);
+		EACH8(XTS_IN);
+		DEC_ROUNDS(EACH8);
+		EACH8(XTS_OUT);
+	}
+	for (; nb_blocks > 0; nb_blocks--, input++, output++) {
+		EACH1(XTS_TWEAK);
+		EACH1(XTS_IN);
+		DEC_ROUNDS(EACH1);
+		EACH1(XTS_OUT);
+	}
+}
+
 #undef WAY
 #undef EACH1
 #undef EACH7
@@ -403,6 +474,9 @@ void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 #undef CBC_XOR
 #undef CTR_SET
 #undef CTR_XOR
+#undef XTS_IN
+#undef XTS_OUT
+#undef XTS_TWEAK
 #undef GCM_CTR
 #undef GCM_ENC
 #undef GCM_DEC
