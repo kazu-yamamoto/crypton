@@ -294,6 +294,29 @@ int crypton_aes_armv8_pmull_available(void)
 }
 
 /*
+ * The XTS tweak advances by doubling in GF(2^128), which
+ * crypton_aes_generic_gf_mulx does through memory.  Here it stays in a
+ * register: shift both halves left by one, carry the low half's top bit into
+ * the high half, and fold the bit that leaves the top back in as 0x87.  The
+ * block is little-endian, so lane 0 is the low half.
+ */
+TARGET_ARMV8_CRYPTO
+static inline uint8x16_t gfmulx_neon(uint8x16_t v)
+{
+	const uint64x2_t x = vreinterpretq_u64_u8(v);
+	const uint64x2_t zero = vdupq_n_u64(0);
+	const uint64x2_t carry = vshrq_n_u64(x, 63);
+	/* the low half's carry becomes the high half's bit 0 */
+	const uint64x2_t into_hi = vextq_u64(zero, carry, 1);
+	/* and the high half's becomes all ones, or nothing, in the low half */
+	const uint64x2_t out = vsubq_u64(zero, vextq_u64(carry, zero, 1));
+	const uint64x2_t poly = vsetq_lane_u64(0x87, zero, 0);
+
+	return vreinterpretq_u8_u64(veorq_u64(
+	    vorrq_u64(vshlq_n_u64(x, 1), into_hi), vandq_u64(out, poly)));
+}
+
+/*
  * The modes, generated once per key size.  See armv8_impl.c for why the
  * round count has to be a compile-time constant.  AES-192 is left to the
  * generic code, as it is on x86.

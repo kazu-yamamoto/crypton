@@ -212,18 +212,87 @@ void SIZED(crypton_aesni_encrypt_xts)(aes_block *out, aes_key *key1, aes_key *ke
 		DO_ENC_BLOCK(tweak);
 
 		while (spoint-- > 0)
-			tweak = gfmulx(tweak);
+			tweak = gfmulx_sse(tweak);
 	} while (0) ;
 
 	do {
 		__m128i *k1 = (__m128i *) key1->data;
 		PRELOAD_ENC(k1);
 
-		for ( ; blocks-- > 0; in += 1, out += 1, tweak = gfmulx(tweak)) {
+		/* eight at a time: the tweaks are a short chain that runs while
+		 * the eight AES chains are in flight */
+		for ( ; blocks >= 8; blocks -= 8, in += 8, out += 8) {
+			__m128i m[8], t[8];
+			int i;
+
+			for (i = 0; i < 8; i++) {
+				t[i] = tweak;
+				tweak = gfmulx_sse(tweak);
+				m[i] = _mm_xor_si128(
+				    _mm_loadu_si128((__m128i *) (in + i)), t[i]);
+			}
+			DO_ENC_BLOCK8(m);
+			for (i = 0; i < 8; i++)
+				_mm_storeu_si128((__m128i *) (out + i),
+				                 _mm_xor_si128(m[i], t[i]));
+		}
+		for ( ; blocks-- > 0; in += 1, out += 1, tweak = gfmulx_sse(tweak)) {
 			__m128i m = _mm_loadu_si128((__m128i *) in);
 
 			m = _mm_xor_si128(m, tweak);
 			DO_ENC_BLOCK(m);
+			m = _mm_xor_si128(m, tweak);
+
+			_mm_storeu_si128((__m128i *) out, m);
+		}
+	} while (0);
+}
+
+/*
+ * XTS the other way, which until now fell to the generic loop -- and which
+ * nothing reached at all, since crypton_aes_decrypt_xts called the generic
+ * function directly rather than through the branch table.  The tweak is
+ * enciphered whichever way the data goes; only the data is deciphered.
+ */
+TARGET_AESNI
+void SIZED(crypton_aesni_decrypt_xts)(aes_block *out, aes_key *key1, aes_key *key2,
+                               aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks)
+{
+	__m128i tweak = _mm_loadu_si128((__m128i *) _tweak);
+
+	do {
+		__m128i *k2 = (__m128i *) key2->data;
+		PRELOAD_ENC(k2);
+		DO_ENC_BLOCK(tweak);
+
+		while (spoint-- > 0)
+			tweak = gfmulx_sse(tweak);
+	} while (0) ;
+
+	do {
+		__m128i *k1 = (__m128i *) key1->data;
+		PRELOAD_DEC(k1);
+
+		for ( ; blocks >= 8; blocks -= 8, in += 8, out += 8) {
+			__m128i m[8], t[8];
+			int i;
+
+			for (i = 0; i < 8; i++) {
+				t[i] = tweak;
+				tweak = gfmulx_sse(tweak);
+				m[i] = _mm_xor_si128(
+				    _mm_loadu_si128((__m128i *) (in + i)), t[i]);
+			}
+			DO_DEC_BLOCK8(m);
+			for (i = 0; i < 8; i++)
+				_mm_storeu_si128((__m128i *) (out + i),
+				                 _mm_xor_si128(m[i], t[i]));
+		}
+		for ( ; blocks-- > 0; in += 1, out += 1, tweak = gfmulx_sse(tweak)) {
+			__m128i m = _mm_loadu_si128((__m128i *) in);
+
+			m = _mm_xor_si128(m, tweak);
+			DO_DEC_BLOCK(m);
 			m = _mm_xor_si128(m, tweak);
 
 			_mm_storeu_si128((__m128i *) out, m);

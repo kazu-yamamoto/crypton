@@ -530,6 +530,47 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 	__m128i K13 = _mm_loadu_si128(((__m128i *) k)+14+13); \
 	__m128i K14 = _mm_loadu_si128(((__m128i *) k)+0);
 
+#define AESDEC8(KK) \
+	m[0] = _mm_aesdec_si128(m[0], KK); m[1] = _mm_aesdec_si128(m[1], KK); \
+	m[2] = _mm_aesdec_si128(m[2], KK); m[3] = _mm_aesdec_si128(m[3], KK); \
+	m[4] = _mm_aesdec_si128(m[4], KK); m[5] = _mm_aesdec_si128(m[5], KK); \
+	m[6] = _mm_aesdec_si128(m[6], KK); m[7] = _mm_aesdec_si128(m[7], KK);
+
+#define AESDECLAST8(KK) \
+	m[0] = _mm_aesdeclast_si128(m[0], KK); m[1] = _mm_aesdeclast_si128(m[1], KK); \
+	m[2] = _mm_aesdeclast_si128(m[2], KK); m[3] = _mm_aesdeclast_si128(m[3], KK); \
+	m[4] = _mm_aesdeclast_si128(m[4], KK); m[5] = _mm_aesdeclast_si128(m[5], KK); \
+	m[6] = _mm_aesdeclast_si128(m[6], KK); m[7] = _mm_aesdeclast_si128(m[7], KK);
+
+#define DO_DEC_BLOCK8_128(m) \
+	XOR8(K0) AESDEC8(K1) AESDEC8(K2) AESDEC8(K3) AESDEC8(K4) AESDEC8(K5) \
+	AESDEC8(K6) AESDEC8(K7) AESDEC8(K8) AESDEC8(K9) AESDECLAST8(K10)
+
+#define DO_DEC_BLOCK8_256(m) \
+	XOR8(K0) AESDEC8(K1) AESDEC8(K2) AESDEC8(K3) AESDEC8(K4) AESDEC8(K5) \
+	AESDEC8(K6) AESDEC8(K7) AESDEC8(K8) AESDEC8(K9) AESDEC8(K10) \
+	AESDEC8(K11) AESDEC8(K12) AESDEC8(K13) AESDECLAST8(K14)
+
+/*
+ * The XTS tweak advances by doubling in GF(2^128).  gfmulx above does that
+ * through memory; this keeps it in a register, which matters once eight
+ * tweaks are wanted per group.  The block is little-endian, so the low
+ * 64-bit half is first.
+ */
+TARGET_AESNI
+static inline __m128i gfmulx_sse(__m128i v)
+{
+	const __m128i poly = _mm_set_epi64x(0, 0x87);
+	const __m128i carry = _mm_srli_epi64(v, 63);
+	/* the low half's carry becomes the high half's bit 0 */
+	const __m128i into_hi = _mm_slli_si128(carry, 8);
+	/* and the high half's becomes all ones, or nothing, in the low half */
+	const __m128i out = _mm_sub_epi64(_mm_setzero_si128(), _mm_srli_si128(carry, 8));
+
+	return _mm_xor_si128(_mm_or_si128(_mm_slli_epi64(v, 1), into_hi),
+	                     _mm_and_si128(out, poly));
+}
+
 #define DO_DEC_BLOCK128(m) \
 	m = _mm_xor_si128(m, K0); \
 	m = _mm_aesdec_si128(m, K1); \
@@ -567,6 +608,7 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #define DO_ENC_BLOCK8 DO_ENC_BLOCK8_128
 #define PRELOAD_DEC PRELOAD_DEC_KEYS128
 #define DO_DEC_BLOCK DO_DEC_BLOCK128
+#define DO_DEC_BLOCK8 DO_DEC_BLOCK8_128
 #include <aes/x86ni_impl.c>
 
 #undef SIZE
@@ -576,6 +618,7 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #undef DO_ENC_BLOCK
 #undef DO_ENC_BLOCK8
 #undef DO_DEC_BLOCK
+#undef DO_DEC_BLOCK8
 
 #define SIZED(m) m##256
 #define SIZE 256
@@ -584,6 +627,7 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #define DO_ENC_BLOCK8 DO_ENC_BLOCK8_256
 #define PRELOAD_DEC PRELOAD_DEC_KEYS256
 #define DO_DEC_BLOCK DO_DEC_BLOCK256
+#define DO_DEC_BLOCK8 DO_DEC_BLOCK8_256
 #include <aes/x86ni_impl.c>
 
 #undef SIZE
@@ -593,6 +637,7 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #undef DO_ENC_BLOCK
 #undef DO_ENC_BLOCK8
 #undef DO_DEC_BLOCK
+#undef DO_DEC_BLOCK8
 
 #endif
 
