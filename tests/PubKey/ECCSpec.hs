@@ -2,6 +2,7 @@
 
 module PubKey.ECCSpec (spec) where
 
+import Crypto.Number.Basic (numBits)
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 
@@ -222,10 +223,45 @@ p256Tests =
     q = ECC.pointMul p256curve 0x2a3f1c9e g
     offCurve = ECC.Point 1 1
 
+-- | A scalar multiplication over a prime field walks the bits of the scalar,
+-- and what it does at a bit that is set differs from what it does at one that
+-- is not.  These are the scalars where that difference is starkest -- one bit
+-- set, every bit set, alternating bits -- and what they pin is that all of
+-- them still come out right.
+weightTests :: Spec
+weightTests = describe "scalars of every weight" $ do
+    check "P-384" ECC.SEC_p384r1
+    check "P-521" ECC.SEC_p521r1
+  where
+    check name curveName = describe name $ do
+        it "adding two scalars is adding their multiples" $
+            [ (a, b)
+            | (a, b) <- pairs
+            , ECC.pointMul c (a + b) g
+                /= ECC.pointAdd c (ECC.pointMul c a g) (ECC.pointMul c b g)
+            ]
+                `shouldBe` []
+      where
+        c = ECC.getCurveByName curveName
+        n = ECC.ecc_n (ECC.common_curve c)
+        g = ECC.ecc_g (ECC.common_curve c)
+        bits = numBits n
+        ones k = 2 ^ k - 1
+        alternating k = sum [2 ^ i | i <- [0, 2 .. k]]
+        pairs =
+            [ (1, 1)
+            , (2 ^ (bits - 2), 1)
+            , (ones (bits - 2), 1)
+            , (alternating (bits - 2), 3)
+            , (ones (bits - 2), alternating (bits - 2))
+            , (n - 1, n - 1)
+            ]
+
 spec :: Spec
 spec = do
     describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
     p256Tests
+    weightTests
     modifyMaxSuccess (const 20) $
         describe "property" $ do
             prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
