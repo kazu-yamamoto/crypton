@@ -61,46 +61,43 @@ primeCurveMul
 primeCurveMul p a b klen k px py
     | p <= 0 || even p || klen <= 0 || k < 0 = MulUnsupported
     | otherwise = unsafeDoIO $
-        -- seven numbers of the prime's width -- the two coordinates out, the
-        -- two in, a, b and the prime itself -- and then the scalar
-        allocaBytes (7 * plen + klen) $ \outx -> do
-            let outy = outx `plusPtr` plen
-                cx = outy `plusPtr` plen
-                cy = cx `plusPtr` plen
-                ca = cy `plusPtr` plen
-                cb = ca `plusPtr` plen
-                cp = cb `plusPtr` plen
-                ck = cp `plusPtr` plen
-            _ <- Internal.i2ospOf px cx plen
-            _ <- Internal.i2ospOf py cy plen
-            _ <- Internal.i2ospOf a ca plen
-            _ <- Internal.i2ospOf b cb plen
-            _ <- Internal.i2ospOf p cp plen
-            _ <- Internal.i2ospOf k ck klen
-            r <-
-                c_ecc_mul
-                    outx
-                    outy
-                    cx
-                    cy
-                    ck
-                    (fromIntegral klen)
-                    ca
-                    cb
-                    cp
-                    (fromIntegral plen)
-            -- the scalar is the caller's secret, and this is the last place
-            -- it is written out in the clear
-            Internal.i2ospOf 0 ck klen >> return ()
-            case r of
-                0 -> do
-                    !x <- Internal.os2ip outx plen
-                    !y <- Internal.os2ip outy plen
-                    return (MulPoint x y)
-                1 -> return MulInfinity
-                _ -> return MulUnsupported
+        allocaBytes (sum widths) $ \base -> case scanl plusPtr base widths of
+            (outx : outy : cx : cy : ca : cb : cp : ck : _) -> do
+                _ <- Internal.i2ospOf px cx plen
+                _ <- Internal.i2ospOf py cy plen
+                _ <- Internal.i2ospOf a ca plen
+                _ <- Internal.i2ospOf b cb plen
+                _ <- Internal.i2ospOf p cp plen
+                _ <- Internal.i2ospOf k ck klen
+                r <-
+                    c_ecc_mul
+                        outx
+                        outy
+                        cx
+                        cy
+                        ck
+                        (fromIntegral klen)
+                        ca
+                        cb
+                        cp
+                        (fromIntegral plen)
+                -- the scalar is the caller's secret, and this is the last place
+                -- it is written out in the clear
+                Internal.i2ospOf 0 ck klen >> return ()
+                case r of
+                    0 -> do
+                        !x <- Internal.os2ip outx plen
+                        !y <- Internal.os2ip outy plen
+                        return (MulPoint x y)
+                    1 -> return MulInfinity
+                    _ -> return MulUnsupported
+            _ -> return MulUnsupported -- there are eight, but say so anyway
   where
     !plen = numBytes p
+    -- What the buffer holds, in this order: the two coordinates out, the two
+    -- in, a, b, the prime, and the scalar.  The room to take and where each
+    -- one starts both come from here, so they cannot drift apart.
+    widths = [plen, plen, plen, plen, plen, plen, plen, klen]
 
 foreign import ccall safe "crypton_ecc_mul"
     c_ecc_mul
