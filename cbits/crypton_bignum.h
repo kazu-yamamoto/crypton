@@ -201,14 +201,32 @@ static inline void mont_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t 
 	mont_reduce(r, t, m, n0, n);
 }
 
-/* r2 = R^2 mod m, by doubling one 2 * n * LIMB_BITS times */
+/* r2 = R^2 mod m, by doubling
+ *
+ * Doubling starts at the highest power of two under the modulus rather than
+ * at one, since everything below that power is where doubling would go
+ * anyway: for a modulus that fills its limbs that is half the steps.
+ */
 static inline void mont_r2(limb_t *r2, const limb_t *m, uint32_t n, limb_t *tmp)
 {
-	uint32_t i;
+	uint32_t i, k = 0, steps;
 
+	for (i = n; i > 0 && k == 0; i--)
+		if (m[i - 1] != 0) {
+			limb_t top = m[i - 1];
+
+			k = (i - 1) * LIMB_BITS;
+			while (top != 0) {
+				k++;
+				top >>= 1;
+			}
+		}
 	memset(r2, 0, n * sizeof(limb_t));
-	r2[0] = 1;
-	for (i = 0; i < 2 * n * LIMB_BITS; i++) {
+	if (k == 0)
+		return; /* a modulus of nothing, which the caller rules out */
+	r2[(k - 1) / LIMB_BITS] = (limb_t) 1 << ((k - 1) % LIMB_BITS);
+	steps = 2 * n * LIMB_BITS - (k - 1);
+	for (i = 0; i < steps; i++) {
 		limb_t carry = shl1(r2, n);
 		limb_t borrow = sub_n(tmp, r2, m, n);
 		select_n(r2, tmp, r2, (carry | (borrow ^ 1)) & 1, n);
