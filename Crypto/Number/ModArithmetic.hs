@@ -13,6 +13,7 @@ module Crypto.Number.ModArithmetic (
 
     -- * Inverse computing
     inverse,
+    inverseSafe,
     inverseCoprimes,
     inverseFermat,
 
@@ -212,6 +213,27 @@ jacobi a n
 -- the modulus is prime but avoids side channels like in 'expSafe'.
 inverseFermat :: Integer -> Integer -> Integer
 inverseFermat g p = expSafe g (p - 2) p
+
+-- | @inverseSafe@ computes the modular inverse without letting the number
+-- being inverted steer how long the work takes, which is what 'inverse' does:
+-- the extended Euclidean algorithm takes a number of steps that follows the
+-- bits it is given, and a nonce inverted that way has been taken apart before
+-- by watching the steps go by.
+--
+-- The moduli this is for -- the order of a group -- are prime, so the inverse
+-- comes from 'inverseFermat' instead.  When the modulus is not prime, that
+-- answer is not an inverse, and the result is checked and 'inverse' asked
+-- instead, so this agrees with 'inverse' on every input.  That fallback is
+-- reached only by parameters that are already broken.
+--
+-- It costs what an exponentiation costs: around thirty times an 'inverse'
+-- for a 256-bit modulus.
+inverseSafe :: Integer -> Integer -> Maybe Integer
+inverseSafe g m
+    | m > 1 && (g * r) `mod` m == 1 = Just r
+    | otherwise = inverse g m
+  where
+    r = inverseFermat g m
 
 -- | Raised when the assumption about the modulus is invalid.
 data ModulusAssertionError = ModulusAssertionError

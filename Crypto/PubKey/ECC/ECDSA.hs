@@ -1,7 +1,11 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
--- | /WARNING:/ Signature operations may leak the private key. Signature verification
--- should be safe.
+-- | /WARNING:/ Signature operations may leak the private key.  The nonce is
+-- inverted without a side channel on every curve, and on P-256 the scalar
+-- multiplication is the constant-time C implementation, but what surrounds
+-- them is 'Integer' arithmetic, whose cost follows the values it is given, and
+-- on every other curve the multiplication follows the nonce as well.
+-- Signature verification takes only public values and should be safe.
 module Crypto.PubKey.ECC.ECDSA (
     Signature (..),
     ExtendedSignature (..),
@@ -103,7 +107,7 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
     let z = dsaTruncHashDigest digest n
         CurveCommon _ _ g n _ = common_curve curve
     (i, r, p) <- pointDecompose curve $ pointMul curve k g
-    kInv <- inverse k n
+    kInv <- scalarInverse curve k
     let s = kInv * (z + r * d) `mod` n
     when (r == 0 || s == 0) Nothing
     return $
