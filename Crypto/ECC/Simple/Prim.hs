@@ -150,6 +150,13 @@ pointBaseMul n = pointMul n (curveEccG $ curveParameters (Proxy :: Proxy curve))
 -- the curve, the one point of a binary curve that has no x, and a prime the C
 -- will not take.
 --
+-- Multiplying the base point of a curve over a prime field -- which is what
+-- signing and making a key do, and nothing else does -- goes through a table
+-- of its multiples, built when that curve is first asked for one and kept
+-- afterwards.  The build is a few milliseconds and the table a few hundred
+-- kilobytes, and a multiplication that uses it takes about a third of what
+-- one without it takes.
+--
 -- /WARNING:/ Over a binary field, still vulnerable to timing attacks.
 -- Uniform operation counts are not constant time: those operations are
 -- 'Integer' arithmetic, whose cost depends on the values.  See the note in

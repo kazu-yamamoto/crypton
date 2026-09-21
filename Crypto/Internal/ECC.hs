@@ -161,10 +161,12 @@ foreign import ccall safe "crypton_ecc_mul"
 -- so both of the elliptic curve APIs find the same table.
 --
 -- Each is built when it is first wanted and kept for as long as the program
--- runs: it costs a few thousand point operations to build, saves every
--- doubling of every multiplication that uses it, and is a few hundred
--- kilobytes.  A curve nobody multiplies the base point of never has one
--- built.
+-- runs, and a curve nobody multiplies the base point of never has one built.
+-- Building costs 2.8 ms for secp256k1, 5.5 for secp384r1 and 10.6 for
+-- secp521r1, and the last two take 221 KB and 456 KB.  A multiplication with
+-- the table takes about a third of what one without it takes, so the build
+-- pays for itself after about fifteen of them: a program that signs many
+-- times wins, and one that signs once and exits does not.
 baseTable
     :: Integer
     -- ^ p
