@@ -7,10 +7,10 @@
  * equivalent.
  *
  * The key schedule is laid out exactly as x86ni.c lays it out, because
- * crypton_aes.c leaves some operations -- XTS decryption, OCB, CCM, AES-192 --
- * pointing at the generic implementation even once the accelerated table is
- * installed, and those read the forward schedule.  So: the forward round keys
- * k[0..nbr] first, exactly as crypton_aes_generic_init writes them, then
+ * crypton_aes.c leaves some operations -- OCB and CCM -- pointing at the
+ * generic implementation even once the accelerated table is installed, and
+ * those read the forward schedule.  So: the forward round keys k[0..nbr]
+ * first, in the order crypton_aes_generic_init writes them, then
  * InvMixColumns(k[nbr-1]) down to InvMixColumns(k[1]) for decryption.  The two
  * ends of the decryption schedule, k[nbr] and k[0], are read back out of the
  * forward half rather than stored twice, which is what makes AES-256 fit in
@@ -25,7 +25,6 @@
 #include <asm/hwcap.h>
 #endif
 #include "crypton_aes.h"
-#include "aes/generic.h"
 #include "crypton_bitfn.h"
 
 /*
@@ -51,18 +50,78 @@
 /* InvMixColumns(k[nbr-1]) .. InvMixColumns(k[1]): nbr - 1 of them */
 #define INV(key)  (((const uint8_t *) (key)->data) + 16 * ((key)->nbr + 1))
 
+/*
+ * The key schedule of FIPS 197 5.2, with the S-box the schedule needs coming
+ * from the instructions rather than a table in memory.
+ *
+ * AArch64 has no counterpart to x86's AESKEYGENASSIST, but AESE is
+ * AddRoundKey, SubBytes and ShiftRows together, so against a zero key it is
+ * SubBytes and ShiftRows.  Give it a word in all four columns and ShiftRows
+ * only moves identical bytes between them, which leaves every column holding
+ * SubWord of that word.  RotWord is then a byte rotation, and on a register
+ * whose four words are equal a rotation of the whole register by one byte
+ * rotates each word.
+ *
+ * The words stay in vector registers throughout: a word moved to a general
+ * register and back costs more than the instruction it is moved for.
+ *
+ * The exposure this removes is a small one -- sixteen lookups at addresses
+ * derived from the key, once per key, against the per-block indexing the
+ * instructions exist to remove -- but a key schedule is the one thing an
+ * attacker most wants and it costs little to keep it out of the cache.
+ */
+TARGET_ARMV8_CRYPTO
+static uint32x4_t sub_word(uint32x4_t w)
+{
+	return vreinterpretq_u32_u8(
+	    vaeseq_u8(vreinterpretq_u8_u32(w), vdupq_n_u8(0)));
+}
+
+TARGET_ARMV8_CRYPTO
+static uint32x4_t sub_rot_word(uint32x4_t w)
+{
+	const uint8x16_t s = vreinterpretq_u8_u32(sub_word(w));
+
+	return vreinterpretq_u32_u8(vextq_u8(s, s, 1));
+}
+
 TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 {
-	int i;
+	/* 2^0 .. 2^9 in GF(2^8), which is as far as any key size reaches */
+	static const uint32_t rcon[10] = {
+		0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
+	};
+	uint32_t *w = (uint32_t *) key->data;
 	uint8_t *inv;
+	int nk, nw, i;
 
-	crypton_aes_generic_init(key, origkey, size);
+	switch (size) {
+	case 16: key->nbr = 10; break;
+	case 24: key->nbr = 12; break;
+	case 32: key->nbr = 14; break;
+	default: return;
+	}
+	nk = size / 4;                  /* words of key */
+	nw = 4 * (key->nbr + 1);        /* words of schedule */
 
-	/* the generic expansion leaves key->nbr set for this size */
+	memcpy(w, origkey, size);
+	for (i = nk; i < nw; i++) {
+		uint32x4_t t = vld1q_dup_u32(w + i - 1);
+
+		if (i % nk == 0)
+			t = veorq_u32(sub_rot_word(t),
+			              vdupq_n_u32(rcon[i / nk - 1]));
+		else if (nk > 6 && i % nk == 4)
+			t = sub_word(t);
+		vst1q_lane_u32(w + i, veorq_u32(t, vld1q_dup_u32(w + i - nk)), 0);
+	}
+
+	/* and the inverted round keys the decryption modes read */
 	inv = ((uint8_t *) key->data) + 16 * (key->nbr + 1);
 	for (i = 1; i < key->nbr; i++) {
-		uint8x16_t rk = vld1q_u8(((const uint8_t *) key->data) + 16 * (key->nbr - i));
+		uint8x16_t rk =
+		    vld1q_u8(((const uint8_t *) key->data) + 16 * (key->nbr - i));
 		vst1q_u8(inv + 16 * (i - 1), vaesimcq_u8(rk));
 	}
 }
