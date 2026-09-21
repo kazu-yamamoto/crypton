@@ -2,6 +2,76 @@
 
 ## 2.0.0
 
+* perf(bcrypt): Blowfish, and the key setup bcrypt wraps it in, in C.  bcrypt
+  is a cost parameter and a promise that the cost is paid, and what pays it is
+  the Blowfish key schedule; in Haskell that cost about twice what the usual
+  implementations charge, so a hash of a given length of time had to be asked
+  for with a lower cost than elsewhere.  Cost 8 goes from 25.97 to 9.98 ms,
+  cost 10 from 102.01 to 39.79, cost 12 from 418.78 to 159.41, `bcrypt_pbkdf`
+  from 109.76 to 40.38, and Blowfish over 4 KiB from 0.05 to 0.01 -- at cost
+  10 that is 39.8 ms against the 52 `htpasswd` takes on the same machine.  The
+  Haskell cipher goes with it, so there is one implementation rather than two,
+  and nothing exposed changes
+  [#154](https://github.com/kazu-yamamoto/crypton/pull/154)
+* perf(prime): fewer Miller-Rabin rounds for a candidate nobody chose.  A
+  number handed over may have been built to pass, and against that the only
+  thing to go on is that a round catches three quarters of the composites
+  there are, so `isProbablyPrime`, `findPrimeFrom` and `findPrimeFromWith`,
+  which all take their number from the caller, keep their thirty rounds.  A
+  candidate drawn here is the case Damgard, Landrock and Pomerance worked out
+  and Table 4.4 of the Handbook of Applied Cryptography tabulates:
+  `generatePrime` and `generateSafePrime` now use twice what it asks for one
+  chance in 2^80, capped at the thirty they had, which leaves the chance far
+  under one in 2^100 at every size.  With the candidates held fixed,
+  `generatePrime 1024` goes from 28.5 to 16.9 ms and an RSA-2048 key from 52.9
+  to 39.2
+  [#153](https://github.com/kazu-yamamoto/crypton/pull/153)
+* fix(rsa): work the private exponent out without the extended Euclidean
+  algorithm.  The modulus is the secret there, so multiplying the value by a
+  random number hides nothing; what does is that `e` is public.  Whatever `d`
+  is, `e * d = 1 + k * phi` for some `k` under `e`, and reading that modulo
+  `e` gives `k` as an inverse modulo a number of a handful of bits, which for
+  a prime `e` is Fermat; `d` is then an exact division.  What phi touches is a
+  remainder and a division, and nothing in either follows it
+  [#152](https://github.com/kazu-yamamoto/crypton/pull/152)
+* perf(f2m): ask aarch64 for its carry-less multiply as well.  #148 used PMULL
+  only where the compiler had been told the machine has the crypto
+  extensions, which is so on Apple and not on a Linux built for the bare
+  ARMv8 baseline, though every processor that runs such a build has it.  It is
+  now compiled behind an attribute and the machine asked at run time, through
+  the auxiliary vector on Linux and Android, elf_aux_info on FreeBSD and a
+  sysctl on Apple: sect283k1 421.2 to 168.9 us there, sect571r1 2289.2 to
+  579.9
+  [#151](https://github.com/kazu-yamamoto/crypton/pull/151)
+* refactor(ecc): one multiplication for both of the curve APIs, and one place
+  for each buffer's size.  Which path a point multiplication takes was written
+  out twice, and the copy in `Crypto.ECC.Simple.Prim` cannot be reached from
+  outside the library on a curve over a binary field, so the suite never ran
+  it; it moves to the internal module both already share, which makes the copy
+  nobody can call the same code everybody runs.  The two buffers for a C call
+  that still had their size written out separately from the offsets into them
+  now take both from one list, as the one that was wrong in #141 does -- the
+  note there records that neither valgrind nor the debug RTS catches that
+  mistake, both having been tried
+  [#150](https://github.com/kazu-yamamoto/crypton/pull/150)
+* perf(f2m): use the x86 carry-less multiply where the processor has it.
+  PCLMULQDQ is not part of the x86-64 baseline, so the cpuid the package
+  already runs for AES-NI reports one more bit and the multiplication that
+  uses the instruction sits behind an attribute.  Measured through Rosetta,
+  which translates rather than runs it, so the ratio is what to read:
+  sect283k1 560.4 to 177.5 us, sect571r1 3049.6 to 623.9
+  [#149](https://github.com/kazu-yamamoto/crypton/pull/149)
+* perf(f2m): do the binary field arithmetic in C.  The ladder of #142 spent
+  nearly all its time on one thing -- a carry-less multiplication, which
+  ordinary arithmetic does not give and which in Haskell was `Integer` shifts
+  and exclusive ors, about 4 us for a 283-bit multiplication.  The field and
+  the ladder over it are now C, with the processor's instruction where there
+  is one and four interleaved groups of bits where there is not, folding for
+  the reduction and Fermat for the inverse.  sect163k1 3431 to 67.4 us with
+  the instruction and 117.3 without, sect283k1 10181 to 157.6 and 386.2,
+  sect571r1 40469 to 521.6 and 2101.0.  It is also constant time, which the
+  Haskell ladder was not
+  [#148](https://github.com/kazu-yamamoto/crypton/pull/148)
 * perf(bignum): start the doubling for `R^2 mod m` at the highest power of two
   under the modulus rather than at one, which for a modulus that fills its
   limbs is half the steps.  Two to three percent of a curve operation, and
