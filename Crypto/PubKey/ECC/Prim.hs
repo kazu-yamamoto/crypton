@@ -26,6 +26,7 @@ import Crypto.Error (maybeCryptoError)
 import Crypto.Internal.ECC (
     MulResult (..),
     baseTable,
+    binaryCurveC,
     binaryCurveMul,
     primeCurveMul,
     primeCurveTableMul,
@@ -239,11 +240,12 @@ pointBaseMul c n = pointMul c n (ecc_g $ common_curve c)
 --
 -- Over a prime field this goes to C, four bits of scalar at a time, with the
 -- multiple to add taken from a table read by touching every entry of it.
--- Over a binary field it is Montgomery's ladder, which carries the x
--- coordinates of two consecutive multiples -- their difference being the
--- point is what lets it carry no more than that -- and spends one addition
--- and one doubling on every bit whichever way the bit goes.  Either way the
--- work follows the width of the curve's order and not the scalar.
+-- Over a binary field it also goes to C, as Montgomery's ladder: it carries
+-- the x coordinates of two consecutive multiples -- their difference being
+-- the point is what lets it carry no more than that -- and spends one
+-- addition and one doubling on every bit whichever way the bit goes, with the
+-- two exchanged by a mask rather than chosen by a branch.  Either way the work
+-- follows the width of the curve's order and not the scalar.
 --
 -- What falls back on the 'Integer' arithmetic below is a point that is not on
 -- the curve, the one point of a binary curve that has no x, and a prime the C
@@ -259,9 +261,11 @@ pointBaseMul c n = pointMul c n (ecc_g $ common_curve c)
 -- On P-256 the multiplication goes to the C implementation in
 -- "Crypto.PubKey.ECC.P256", which has a table for the base point.
 --
--- /WARNING:/ Over a binary field, still vulnerable to timing attacks.
--- Uniform operation counts are not constant time: those operations are
--- 'Integer' arithmetic, whose cost depends on the values.
+-- /WARNING:/ What is left of the 'Integer' arithmetic below -- a point off
+-- the curve, the one point of a binary curve with no x, a prime or a
+-- polynomial the C will not take -- has uniform operation counts at best, and
+-- uniform operation counts are not constant time: those operations cost what
+-- the values they are given cost.
 pointMul :: Curve -> Integer -> Point -> Point
 pointMul _ _ PointO = PointO
 pointMul c n p
@@ -316,13 +320,18 @@ pointMul c n p
         Point px py
             | px /= 0
             , isPointValid c p ->
-                case binaryCurveMul fx (ecc_b cc) bits n px py of
+                case binaryCurveC fx (ecc_b cc) klenB n px py of
                     MulPoint x y -> Point x y
                     MulInfinity -> PointO
-                    MulUnsupported -> affineMul n p
+                    -- the ladder in Haskell, for a field the C will not take
+                    MulUnsupported -> case binaryCurveMul fx (ecc_b cc) bits n px py of
+                        MulPoint x y -> Point x y
+                        MulInfinity -> PointO
+                        MulUnsupported -> affineMul n p
         _ -> affineMul n p
       where
         bits = max (integerBits n) (integerBits (ecc_n cc))
+        klenB = max (numBytes n) (numBytes (ecc_n cc))
 
     affineMul k q
         | k == 0 = PointO
