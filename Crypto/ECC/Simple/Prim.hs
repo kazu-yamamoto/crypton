@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Elliptic Curve Arithmetic.
@@ -221,11 +222,16 @@ jacobianMul pr a bits n (Point px py) = fromJacobian f (go (bits - 1) JPointO)
   where
     f = mkField pr
 
+    -- The bangs are what make the addition happen at every bit.  Without
+    -- them the one that is not taken stays a thunk and is never worked out,
+    -- so the multiplication costs a step for every bit that is set rather
+    -- than for every bit there is, and a single measurement tells an attacker
+    -- how many bits of the scalar are set.
     go i acc
         | i < 0 = acc
         | otherwise =
-            let d = jDouble f a acc
-                s = jAddAffine f a d px py
+            let !d = jDouble f a acc
+                !s = jAddAffine f a d px py
              in go (i - 1) (if testBit n i then s else d)
 
 jDouble :: Field -> Integer -> JPoint -> JPoint
