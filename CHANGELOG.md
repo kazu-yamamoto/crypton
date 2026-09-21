@@ -2,6 +2,30 @@
 
 ## 2.0.0
 
+* perf(ecc): multiply points in C on curves over a prime field.  P-256 has had
+  a C implementation all along; every other prime curve -- P-384, P-521,
+  secp256k1 and the rest -- multiplied points with `Integer` arithmetic, which
+  cannot be constant time, since what an `Integer` operation costs follows the
+  value it is given.  The C walks four bits of scalar at a time, taking the
+  multiple to add from a table of sixteen that it reads by touching every
+  entry and keeping one with a mask, and its addition and doubling are the
+  complete formulas of Renes, Costello and Batina, which answer for every pair
+  of points with no case to choose between.  A P-384 multiplication goes from
+  1557 to 585 us and no longer follows the scalar, ECDSA P-384 signing from
+  1700 to 636 us, P-521 from 1942 to 1123.  Binary curves are unchanged, and a
+  point that is not on the curve keeps the answer the Haskell gives it
+  [#141](https://github.com/kazu-yamamoto/crypton/pull/141)
+* fix(ecc): add at every bit in the prime-curve multiplication, which laziness
+  was skipping.  The multiplication adds at every bit, set or not, so that its
+  cost follows the width of the curve's order rather than the scalar -- but
+  the addition was a binding only one branch of the following `if` used, so at
+  a bit that was not set it stayed a thunk and was never worked out.  The cost
+  followed the number of bits set in the scalar, which is the nonce when
+  signing and the private key in ECDH: on P-384, 765.8 us for a scalar with
+  two bits set against 1671.5 for one with 383, in a straight line between.
+  Both copies of the multiplication had it, so both elliptic curve APIs were
+  affected on every prime curve but P-256
+  [#140](https://github.com/kazu-yamamoto/crypton/pull/140)
 * fix(ecdsa): keep the P-256 signature out of `Integer` arithmetic.  The
   scalar handed to the C implementation was reduced with `mod`, a division,
   whose steps follow the number being divided -- the nonce when signing, the
