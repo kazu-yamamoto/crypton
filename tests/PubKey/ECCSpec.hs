@@ -5,6 +5,7 @@ module PubKey.ECCSpec (spec) where
 import Crypto.Number.Basic (numBits)
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
+import Data.Bits (testBit)
 
 import Imports
 
@@ -223,6 +224,16 @@ p256Tests =
     q = ECC.pointMul p256curve 0x2a3f1c9e g
     offCurve = ECC.Point 1 1
 
+-- | Multiplication the long way, out of the affine addition and doubling,
+-- for the fast one to be held to.
+doubleAndAdd :: ECC.Curve -> Integer -> ECC.Point -> ECC.Point
+doubleAndAdd c k q = go (numBits k - 1) ECC.PointO
+  where
+    go i acc
+        | i < 0 = acc
+        | testBit k i = go (i - 1) (ECC.pointAdd c (ECC.pointDouble c acc) q)
+        | otherwise = go (i - 1) (ECC.pointDouble c acc)
+
 -- | A scalar multiplication over a prime field walks the bits of the scalar,
 -- and what it does at a bit that is set differs from what it does at one that
 -- is not.  These are the scalars where that difference is starkest -- one bit
@@ -283,6 +294,11 @@ spec = do
                 let pRes = ECC.pointMul aCurve (n1 * n2) p
                 let pDef = ECC.pointMul aCurve n1 (ECC.pointMul aCurve n2 p)
                 return $ pRes `propertyEq` pDef
+            prop "point-mul-matches-double-and-add" $ \aCurve (QAInteger k) ->
+                let n = ECC.ecc_n (ECC.common_curve aCurve)
+                    g = ECC.ecc_g (ECC.common_curve aCurve)
+                    k' = 1 + k `mod` (n - 1)
+                 in ECC.pointMul aCurve k' g == doubleAndAdd aCurve k' g
             prop "scalar-arithmetic" $ \aCurve (QAInteger n1) (QAInteger n2) ->
                 let n = ECC.ecc_n (ECC.common_curve aCurve)
                  in ECC.scalarAdd aCurve n1 n2
