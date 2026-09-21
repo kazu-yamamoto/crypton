@@ -6,6 +6,8 @@
 module Crypto.PubKey.ECC.Prim (
     scalarGenerate,
     scalarInverse,
+    scalarAdd,
+    scalarMul,
     pointAdd,
     pointNegate,
     pointDouble,
@@ -62,17 +64,33 @@ fromP256 p
     | P256.pointIsAtInfinity p = PointO
     | otherwise = uncurry Point (P256.pointToIntegers p)
 
+-- | Any 256-bit number as a scalar.
+--
+-- The arithmetic below takes them as they come: a 256-bit value is barely
+-- over the order, and both the multiplication and the addition bring their
+-- answer back under it.  'Nothing' is for what does not fit in 256 bits,
+-- which no scalar anybody signs with does.
+p256Scalar :: Integer -> Maybe P256.Scalar
+p256Scalar n
+    | n < 0 || n >= 1 `shiftL` 256 = Nothing
+    | otherwise = maybeCryptoError (P256.scalarFromInteger n)
+
 -- | The scalar reduced into the range the C implementation takes.
 --
 -- Every point it accepts has the curve's order, so reducing changes no
 -- answer; 'Nothing' means the multiple is the point at infinity, which is the
 -- generic code's business.
+-- The reduction is a single masked subtraction, so a secret scalar does not
+-- steer it, which taking the remainder would: dividing takes a number of
+-- steps that follows the number being divided.  Anything wider than 256 bits
+-- has to go through a division first, but a scalar that wide is not one
+-- anybody signs with.
 toP256Scalar :: Integer -> Maybe P256.Scalar
-toP256Scalar n
-    | k == 0 = Nothing
-    | otherwise = maybeCryptoError (P256.scalarFromInteger k)
-  where
-    k = n `mod` p256Order
+toP256Scalar n = case P256.scalarReduce <$> p256Scalar n of
+    Nothing -> toP256Scalar (n `mod` p256Order) -- wider than 256 bits, or below zero
+    Just s
+        | P256.scalarIsZero s -> Nothing
+        | otherwise -> Just s
 
 -- | @n1 * p1 + n2 * p2@ through the C implementation, when one of the points
 -- is the base point.  That is the shape signature verification uses.
@@ -106,6 +124,28 @@ scalarInverse c k
     , Just s <- toP256Scalar k =
         Just (P256.scalarToInteger (P256.scalarInvSafe s))
     | otherwise = inverseSafe k (ecc_n $ common_curve c)
+
+-- | Addition modulo the order of the curve.
+--
+-- On P-256 this is the C implementation's arithmetic, which works in a fixed
+-- width and so does not let the values steer it; elsewhere it is 'Integer'
+-- arithmetic, whose cost follows the values.
+scalarAdd :: Curve -> Integer -> Integer -> Integer
+scalarAdd c a b
+    | c == p256Curve
+    , Just x <- p256Scalar a
+    , Just y <- p256Scalar b =
+        P256.scalarToInteger (P256.scalarAdd x y)
+    | otherwise = (a + b) `mod` ecc_n (common_curve c)
+
+-- | Multiplication modulo the order of the curve, as 'scalarAdd'.
+scalarMul :: Curve -> Integer -> Integer -> Integer
+scalarMul c a b
+    | c == p256Curve
+    , Just x <- p256Scalar a
+    , Just y <- p256Scalar b =
+        P256.scalarToInteger (P256.scalarMul x y)
+    | otherwise = (a * b) `mod` ecc_n (common_curve c)
 
 -- TODO: Extract helper function for `fromMaybe PointO...`
 
