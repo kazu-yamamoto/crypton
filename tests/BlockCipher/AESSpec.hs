@@ -109,7 +109,10 @@ kats192 =
         { kat_ECB = map toKatECB KATECB.vectors_aes192_enc
         , kat_CBC = map toKatCBC KATCBC.vectors_aes192_enc
         , kat_CTR = map toKatCTR KATCTR.vectors_aes192_enc
-        , kat_AEAD = map toKatGCM KATGCM.vectors_aes192_enc
+        , kat_AEAD =
+            map toKatGCM KATGCM.vectors_aes192_enc
+                ++ map toKatOCB KATOCB3.vectors_aes192_enc
+                ++ map toKatCCM KATCCM.vectors_aes192_enc
         }
 
 kats256 =
@@ -118,7 +121,10 @@ kats256 =
         , kat_CBC = map toKatCBC KATCBC.vectors_aes256_enc
         , kat_CTR = map toKatCTR KATCTR.vectors_aes256_enc
         , kat_XTS = map toKatXTS KATXTS.vectors_aes256_enc
-        , kat_AEAD = map toKatGCM KATGCM.vectors_aes256_enc
+        , kat_AEAD =
+            map toKatGCM KATGCM.vectors_aes256_enc
+                ++ map toKatOCB KATOCB3.vectors_aes256_enc
+                ++ map toKatCCM KATCCM.vectors_aes256_enc
         }
 
 -- SP 800-38D 5.2.1.1: 1 <= len(IV) <= 2^64 - 1.  A zero-length IV makes
@@ -177,9 +183,9 @@ aeadTagLengthTests =
 
 spec :: Spec
 spec = do
-    testBlockCipher kats128 (undefined :: AES.AES128)
-    testBlockCipher kats192 (undefined :: AES.AES192)
-    testBlockCipher kats256 (undefined :: AES.AES256)
+    testBlockCipher128 kats128 (undefined :: AES.AES128)
+    testBlockCipher128 kats192 (undefined :: AES.AES192)
+    testBlockCipher128 kats256 (undefined :: AES.AES256)
     aeadIVLengthTests
     aeadTagLengthTests
 
