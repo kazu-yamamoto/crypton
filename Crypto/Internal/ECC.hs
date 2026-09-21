@@ -12,6 +12,8 @@
 module Crypto.Internal.ECC (
     MulResult (..),
     primeCurveMul,
+    primeCurveTableMul,
+    baseTable,
     binaryCurveMul,
 ) where
 
@@ -19,9 +21,18 @@ import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic (numBytes)
 import Crypto.Number.F2m (addF2m, divF2m, mulF2m, squareF2m)
 import qualified Crypto.Number.Serialize.Internal as Internal
+import Crypto.PubKey.ECC.Types (
+    Curve (..),
+    CurveCommon (..),
+    CurveName,
+    CurvePrime (..),
+    Point (..),
+    getCurveByName,
+ )
 import Data.Bits (testBit)
 import Data.Word (Word32, Word8)
 import Foreign.C.Types (CInt (..))
+import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Ptr (Ptr, plusPtr)
 
@@ -102,6 +113,34 @@ primeCurveMul p a b klen k px py
     -- one starts both come from here, so they cannot drift apart.
     widths = [plen, plen, plen, plen, plen, plen, plen, klen]
 
+foreign import ccall unsafe "crypton_ecc_table_size"
+    c_ecc_table_size :: Word32 -> Word32 -> Word32
+
+foreign import ccall safe "crypton_ecc_table_build"
+    c_ecc_table_build
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
+
+foreign import ccall safe "crypton_ecc_table_mul"
+    c_ecc_table_mul
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
+
 foreign import ccall safe "crypton_ecc_mul"
     c_ecc_mul
         :: Ptr Word8
@@ -115,6 +154,151 @@ foreign import ccall safe "crypton_ecc_mul"
         -> Ptr Word8
         -> Word32
         -> IO CInt
+
+-- | The table for the base point of a curve the library knows, which is the
+-- point signing and making a key multiply and the only point worth keeping a
+-- table for.  The curves are told apart by their numbers, which are public,
+-- so both of the elliptic curve APIs find the same table.
+--
+-- Each is built when it is first wanted and kept for as long as the program
+-- runs, and a curve nobody multiplies the base point of never has one built.
+-- Building costs 2.8 ms for secp256k1, 5.5 for secp384r1 and 10.6 for
+-- secp521r1, and the last two take 221 KB and 456 KB.  A multiplication with
+-- the table takes about a third of what one without it takes, so the build
+-- pays for itself after about fifteen of them: a program that signs many
+-- times wins, and one that signs once and exits does not.
+baseTable
+    :: Integer
+    -- ^ p
+    -> Integer
+    -- ^ a
+    -> Integer
+    -- ^ b
+    -> Int
+    -- ^ how many bytes of scalar are wanted
+    -> Integer
+    -- ^ the base point's x
+    -> Integer
+    -- ^ the base point's y
+    -> Maybe (ForeignPtr Word8)
+baseTable p a b klen gx gy =
+    case lookup (p, a, b, klen, gx, gy) baseTables of
+        Just table -> table
+        Nothing -> Nothing
+
+type TableKey = (Integer, Integer, Integer, Int, Integer, Integer)
+
+baseTables :: [(TableKey, Maybe (ForeignPtr Word8))]
+baseTables =
+    [ ((p, a, b, klen, gx, gy), primeCurveTable p a b klen gx gy)
+    | name <- [minBound .. maxBound] :: [CurveName]
+    , CurveFP (CurvePrime p cc) <- [getCurveByName name]
+    , Point gx gy <- [ecc_g cc]
+    , let a = ecc_a cc
+    , let b = ecc_b cc
+    , let klen = numBytes (ecc_n cc)
+    ]
+{-# NOINLINE baseTables #-}
+
+-- | The multiples of a point that 'primeCurveTableMul' wants: for every four
+-- bits of a scalar, the sixteen points those bits can call for.  Building it
+-- costs a few thousand point operations, and what it saves is all the
+-- doublings of every multiplication that uses it, so it is worth keeping for
+-- as long as the point is -- which for a curve's base point is forever.
+--
+-- The arguments are as for 'primeCurveMul'.  'Nothing' means the C would not
+-- take them.
+primeCurveTable
+    :: Integer
+    -- ^ p
+    -> Integer
+    -- ^ a
+    -> Integer
+    -- ^ b
+    -> Int
+    -- ^ how many bytes of scalar the table is to cover
+    -> Integer
+    -- ^ the point's x
+    -> Integer
+    -- ^ the point's y
+    -> Maybe (ForeignPtr Word8)
+primeCurveTable p a b klen px py
+    | p <= 0 || even p || klen <= 0 || size == 0 = Nothing
+    | otherwise = unsafeDoIO $ do
+        table <- mallocForeignPtrBytes (fromIntegral size)
+        allocaBytes (5 * plen) $ \cx -> do
+            let cy = cx `plusPtr` plen
+                ca = cy `plusPtr` plen
+                cb = ca `plusPtr` plen
+                cp = cb `plusPtr` plen
+            _ <- Internal.i2ospOf px cx plen
+            _ <- Internal.i2ospOf py cy plen
+            _ <- Internal.i2ospOf a ca plen
+            _ <- Internal.i2ospOf b cb plen
+            _ <- Internal.i2ospOf p cp plen
+            r <- withForeignPtr table $ \t ->
+                c_ecc_table_build
+                    t
+                    cx
+                    cy
+                    (fromIntegral klen)
+                    ca
+                    cb
+                    cp
+                    (fromIntegral plen)
+            return $ if r == 0 then Just table else Nothing
+  where
+    !plen = numBytes p
+    !size = c_ecc_table_size (fromIntegral plen) (fromIntegral klen)
+
+-- | Multiply the point a table was built for by a scalar of the width the
+-- table was built for.  One addition for every four bits and no doublings.
+primeCurveTableMul
+    :: ForeignPtr Word8
+    -- ^ the table
+    -> Integer
+    -- ^ p
+    -> Integer
+    -- ^ a
+    -> Integer
+    -- ^ b
+    -> Int
+    -- ^ the width the table was built for
+    -> Integer
+    -- ^ the scalar
+    -> MulResult
+primeCurveTableMul table p a b klen k
+    | p <= 0 || even p || klen <= 0 || k < 0 = MulUnsupported
+    | otherwise = unsafeDoIO $
+        allocaBytes (sum widths) $ \base -> case scanl plusPtr base widths of
+            (outx : outy : ca : cb : cp : ck : _) -> do
+                _ <- Internal.i2ospOf a ca plen
+                _ <- Internal.i2ospOf b cb plen
+                _ <- Internal.i2ospOf p cp plen
+                _ <- Internal.i2ospOf k ck klen
+                r <- withForeignPtr table $ \t ->
+                    c_ecc_table_mul
+                        outx
+                        outy
+                        t
+                        ck
+                        (fromIntegral klen)
+                        ca
+                        cb
+                        cp
+                        (fromIntegral plen)
+                Internal.i2ospOf 0 ck klen >> return ()
+                case r of
+                    0 -> do
+                        !x <- Internal.os2ip outx plen
+                        !y <- Internal.os2ip outy plen
+                        return (MulPoint x y)
+                    1 -> return MulInfinity
+                    _ -> return MulUnsupported
+            _ -> return MulUnsupported -- there are six, but say so anyway
+  where
+    !plen = numBytes p
+    widths = [plen, plen, plen, plen, plen, klen]
 
 -- | Multiply a point by a scalar on the curve @y^2 + x*y = x^3 + a*x^2 + b@
 -- over the binary field of @fx@, by Montgomery's ladder.

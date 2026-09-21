@@ -199,171 +199,323 @@ static void point_double(const field *f, limb_t *r, const limb_t *x, limb_t *w)
 	memcpy(r + 2 * n, z3, n * sizeof(limb_t));
 }
 
+/* Everything a curve needs, in one allocation: the field, the buffers the
+ * formulas work in, and a table of sixteen points.  The caller frees it with
+ * ctx_free. */
+typedef struct {
+	field f;
+	limb_t *space;
+	uint32_t words;
+	uint32_t n;
+	limb_t *r2;   /* R^2 mod p, which is what takes a number to Montgomery form */
+	limb_t *one;  /* 1, in Montgomery form */
+	limb_t *acc;  /* a point */
+	limb_t *sel;  /* a point */
+	limb_t *tmp;  /* a point */
+	limb_t *work; /* 9n, for the formulas */
+	limb_t *table; /* sixteen points */
+	uint8_t *bytes; /* 2 * plen, for the inversion */
+	uint32_t plen;
+} curve_ctx;
+
+static void ctx_free(curve_ctx *c)
+{
+	if (c->space != NULL) {
+		memset(c->space, 0, c->words * sizeof(limb_t));
+		free(c->space);
+	}
+	if (c->bytes != NULL) {
+		memset(c->bytes, 0, 2 * c->plen);
+		free(c->bytes);
+	}
+	c->space = NULL;
+	c->bytes = NULL;
+}
+
+/* r = x, taken into Montgomery form */
+static void to_mont(const curve_ctx *c, limb_t *r, const limb_t *x)
+{
+	mont_mul(r, x, c->r2, c->f.p, c->f.n0, c->n, c->f.t);
+}
+
+/* r = x, taken back out of it */
+static void from_mont(const curve_ctx *c, limb_t *r, const limb_t *x)
+{
+	mont_mul(r, x, c->one, c->f.p, c->f.n0, c->n, c->f.t);
+}
+
+static int ctx_init(curve_ctx *c, const uint8_t *a, const uint8_t *b,
+                    const uint8_t *p, uint32_t plen)
+{
+	uint32_t n = (plen + LIMB_BYTES - 1) / LIMB_BYTES;
+	limb_t *mp, *ma, *mb3, *zero, *scratch, *mont_t;
+	uint32_t i;
+
+	memset(c, 0, sizeof(*c));
+	if (plen == 0 || n == 0 || (p[plen - 1] & 1) == 0)
+		return -1;
+
+	/* six single numbers, three points, four of scratch, nine for the
+	 * formulas, and a table of sixteen points */
+	c->n = n;
+	c->plen = plen;
+	c->words = (6 + 9 + 4 + 9 + 3 * TABLE_SIZE) * n;
+	c->space = calloc(c->words, sizeof(limb_t));
+	c->bytes = calloc(2, plen);
+	if (c->space == NULL || c->bytes == NULL) {
+		ctx_free(c);
+		return -1;
+	}
+	mp = c->space;
+	ma = mp + n;
+	mb3 = ma + n;
+	c->r2 = mb3 + n;
+	c->one = c->r2 + n;
+	zero = c->one + n;
+	c->acc = zero + n;
+	c->sel = c->acc + 3 * n;
+	c->tmp = c->sel + 3 * n;
+	scratch = c->tmp + 3 * n;
+	mont_t = scratch + 2 * n;
+	c->work = mont_t + 2 * n;
+	c->table = c->work + 9 * n;
+
+	if (from_be(mp, n, p, plen) != 0) {
+		ctx_free(c);
+		return -1;
+	}
+	mont_r2(c->r2, mp, n, mont_t);
+
+	c->f.n = n;
+	c->f.n0 = mont_n0(mp[0]);
+	c->f.p = mp;
+	c->f.a = ma;
+	c->f.b3 = mb3;
+	c->f.zero = zero;
+	c->f.t = mont_t;
+	c->f.s = scratch;
+	c->f.s2 = scratch + n;
+	c->f.a_is_zero = 0;
+	c->f.a_is_minus3 = 0;
+
+	memset(c->one, 0, n * sizeof(limb_t));
+	c->one[0] = 1;
+	to_mont(c, c->tmp, c->one);
+	memcpy(c->one, c->tmp, n * sizeof(limb_t));
+
+	/* the curve's a, and which of the three shapes it has */
+	if (from_be(c->tmp, n, a, plen) != 0) {
+		ctx_free(c);
+		return -1;
+	}
+	{
+		limb_t nonzero = 0, differs = 0;
+
+		for (i = 0; i < n; i++)
+			nonzero |= c->tmp[i];
+		memset(c->sel, 0, n * sizeof(limb_t));
+		c->sel[0] = 3;
+		sub_n(c->sel, mp, c->sel, n); /* p - 3 */
+		for (i = 0; i < n; i++)
+			differs |= c->tmp[i] ^ c->sel[i];
+		c->f.a_is_zero = nonzero == 0;
+		c->f.a_is_minus3 = differs == 0;
+	}
+	to_mont(c, ma, c->tmp);
+
+	/* three times the curve's b, which is what the formulas want */
+	if (from_be(c->tmp, n, b, plen) != 0) {
+		ctx_free(c);
+		return -1;
+	}
+	to_mont(c, mb3, c->tmp);
+	fe_add(&c->f, c->tmp, mb3, mb3);
+	fe_add(&c->f, mb3, c->tmp, mb3);
+	return 0;
+}
+
+/* a point, in Montgomery form, from its coordinates */
+static int point_from_be(const curve_ctx *c, limb_t *r, const uint8_t *px,
+                         const uint8_t *py)
+{
+	uint32_t n = c->n;
+
+	if (from_be(c->tmp, n, px, c->plen) != 0)
+		return -1;
+	to_mont(c, r, c->tmp);
+	if (from_be(c->tmp, n, py, c->plen) != 0)
+		return -1;
+	to_mont(c, r + n, c->tmp);
+	memcpy(r + 2 * n, c->one, n * sizeof(limb_t));
+	return 0;
+}
+
+/* x = X/Z and y = Y/Z, with the inverse from Fermat, which is the
+ * exponentiation that hides its exponent.  Returns 1 for the point at
+ * infinity, which has no coordinates. */
+static int point_to_be(curve_ctx *c, uint8_t *outx, uint8_t *outy,
+                       const limb_t *pt, const uint8_t *p)
+{
+	uint32_t n = c->n, plen = c->plen, i;
+	limb_t empty = 0;
+	uint8_t *zbytes = c->bytes, *pm2 = c->bytes + plen;
+
+	for (i = 0; i < n; i++)
+		empty |= pt[2 * n + i];
+	if (empty == 0)
+		return 1;
+
+	from_mont(c, c->tmp, pt + 2 * n);
+	to_be(zbytes, plen, c->tmp, n);
+	memset(c->sel, 0, n * sizeof(limb_t));
+	c->sel[0] = 2;
+	sub_n(c->sel, c->f.p, c->sel, n); /* p - 2 */
+	to_be(pm2, plen, c->sel, n);
+	if (crypton_powm_sec(zbytes, zbytes, plen, pm2, plen, p, plen) != 0)
+		return -1;
+	if (from_be(c->tmp, n, zbytes, plen) != 0)
+		return -1;
+	to_mont(c, c->sel, c->tmp); /* 1/Z, in Montgomery form */
+
+	fe_mul(&c->f, c->tmp, pt, c->sel);
+	from_mont(c, c->tmp + n, c->tmp);
+	to_be(outx, plen, c->tmp + n, n);
+
+	fe_mul(&c->f, c->tmp, pt + n, c->sel);
+	from_mont(c, c->tmp + n, c->tmp);
+	to_be(outy, plen, c->tmp + n, n);
+	return 0;
+}
+
+/* every one of the sixteen entries is read, and a mask keeps the one wanted */
+static void table_select(const curve_ctx *c, limb_t *r, const limb_t *table,
+                         limb_t w)
+{
+	uint32_t n = c->n, j, l;
+
+	memset(r, 0, 3 * n * sizeof(limb_t));
+	for (j = 0; j < TABLE_SIZE; j++) {
+		limb_t mask = eq_mask(j, w);
+
+		for (l = 0; l < 3 * n; l++)
+			r[l] |= table[3 * j * n + l] & mask;
+	}
+}
+
 int crypton_ecc_mul(uint8_t *outx, uint8_t *outy,
                     const uint8_t *px, const uint8_t *py,
                     const uint8_t *k, uint32_t klen,
                     const uint8_t *a, const uint8_t *b,
                     const uint8_t *p, uint32_t plen)
 {
-	uint32_t n = (plen + LIMB_BYTES - 1) / LIMB_BYTES;
-	/* six single numbers, three points, four of scratch, nine for the
-	 * formulas, and the table's sixteen points */
-	uint32_t words = (6 + 9 + 4 + 9 + 3 * TABLE_SIZE) * n;
-	limb_t *space, *mp, *ma, *mb3, *r2, *one, *zero, *acc, *sel, *tmp;
-	limb_t *table, *work, *scratch, *mont_t, n0;
-	uint8_t *bytes = NULL;
-	field f;
-	uint32_t i, j;
+	curve_ctx c;
+	uint32_t n, i, j;
 	int ret = -1;
 
-	if (plen == 0 || klen == 0 || n == 0 || (p[plen - 1] & 1) == 0)
+	if (klen == 0 || ctx_init(&c, a, b, p, plen) != 0)
 		return -1;
-
-	space = calloc(words, sizeof(limb_t));
-	bytes = calloc(2, plen);
-	if (space == NULL || bytes == NULL) {
-		free(space);
-		free(bytes);
-		return -1;
-	}
-	mp = space;            /* the prime */
-	ma = mp + n;           /* a, in Montgomery form */
-	mb3 = ma + n;          /* three times b, in Montgomery form */
-	r2 = mb3 + n;          /* R^2 mod p, which is what takes a number there */
-	one = r2 + n;          /* 1, in Montgomery form */
-	zero = one + n;        /* nothing but zeroes, to subtract from */
-	acc = zero + n;        /* the running total, a point */
-	sel = acc + 3 * n;     /* the entry a window picks, a point */
-	tmp = sel + 3 * n;     /* a point's worth of scratch */
-	scratch = tmp + 3 * n; /* 2n, for the addition, the subtraction and a */
-	mont_t = scratch + 2 * n; /* 2n, for the multiplication */
-	work = mont_t + 2 * n; /* 9n, for the formulas */
-	table = work + 9 * n;  /* sixteen points */
-
-	if (from_be(mp, n, p, plen) != 0)
-		goto done;
-	mont_r2(r2, mp, n, mont_t);
-	n0 = mont_n0(mp[0]);
-
-	f.n = n;
-	f.n0 = n0;
-	f.p = mp;
-	f.a = ma;
-	f.b3 = mb3;
-	f.zero = zero;
-	f.t = mont_t;
-	f.s = scratch;
-	f.s2 = scratch + n;
-	f.a_is_zero = 0;
-	f.a_is_minus3 = 0;
-
-	/* one, into Montgomery form */
-	memset(one, 0, n * sizeof(limb_t));
-	one[0] = 1;
-	mont_mul(tmp, one, r2, mp, n0, n, mont_t);
-	memcpy(one, tmp, n * sizeof(limb_t));
-
-	/* the curve's a, and which of the three shapes it has */
-	if (from_be(tmp, n, a, plen) != 0)
-		goto done;
-	{
-		limb_t nonzero = 0, differs = 0;
-
-		for (i = 0; i < n; i++)
-			nonzero |= tmp[i];
-		memset(sel, 0, n * sizeof(limb_t));
-		sel[0] = 3;
-		sub_n(sel, mp, sel, n); /* p - 3 */
-		for (i = 0; i < n; i++)
-			differs |= tmp[i] ^ sel[i];
-		f.a_is_zero = nonzero == 0;
-		f.a_is_minus3 = differs == 0;
-	}
-	mont_mul(ma, tmp, r2, mp, n0, n, mont_t);
-
-	/* three times the curve's b, which is what the formulas want */
-	if (from_be(tmp, n, b, plen) != 0)
-		goto done;
-	mont_mul(mb3, tmp, r2, mp, n0, n, mont_t);
-	fe_add(&f, tmp, mb3, mb3);
-	fe_add(&f, mb3, tmp, mb3);
+	n = c.n;
 
 	/* the table: nothing, the point, and its multiples up to fifteen */
-	memset(table, 0, 3 * n * sizeof(limb_t));
-	memcpy(table + n, one, n * sizeof(limb_t)); /* (0 : 1 : 0) */
-
-	if (from_be(tmp, n, px, plen) != 0)
+	memset(c.table, 0, 3 * n * sizeof(limb_t));
+	memcpy(c.table + n, c.one, n * sizeof(limb_t)); /* (0 : 1 : 0) */
+	if (point_from_be(&c, c.table + 3 * n, px, py) != 0)
 		goto done;
-	mont_mul(table + 3 * n, tmp, r2, mp, n0, n, mont_t);
-	if (from_be(tmp, n, py, plen) != 0)
-		goto done;
-	mont_mul(table + 4 * n, tmp, r2, mp, n0, n, mont_t);
-	memcpy(table + 5 * n, one, n * sizeof(limb_t));
-
 	for (i = 2; i < TABLE_SIZE; i++)
-		point_add(&f, table + 3 * i * n, table + 3 * (i - 1) * n,
-		          table + 3 * n, work);
+		point_add(&c.f, c.table + 3 * i * n, c.table + 3 * (i - 1) * n,
+		          c.table + 3 * n, c.work);
 
 	/* four bits at a time, from the top */
-	memcpy(acc, table, 3 * n * sizeof(limb_t));
+	memcpy(c.acc, c.table, 3 * n * sizeof(limb_t));
 	for (i = klen * 2; i > 0; i--) {
 		uint32_t nib = i - 1;
 		limb_t w = (k[klen - 1 - nib / 2] >> (4 * (nib % 2))) & 0xf;
 
 		for (j = 0; j < WINDOW_BITS; j++)
-			point_double(&f, acc, acc, work);
-
-		/* every entry is read, and a mask keeps the one wanted */
-		memset(sel, 0, 3 * n * sizeof(limb_t));
-		for (j = 0; j < TABLE_SIZE; j++) {
-			limb_t mask = eq_mask(j, w);
-			uint32_t l;
-
-			for (l = 0; l < 3 * n; l++)
-				sel[l] |= table[3 * j * n + l] & mask;
-		}
-		point_add(&f, acc, acc, sel, work);
+			point_double(&c.f, c.acc, c.acc, c.work);
+		table_select(&c, c.sel, c.table, w);
+		point_add(&c.f, c.acc, c.acc, c.sel, c.work);
 	}
-
-	/* out of projective coordinates: x = X/Z and y = Y/Z, with the inverse
-	 * from Fermat, which is the exponentiation that hides its exponent */
-	{
-		limb_t empty = 0;
-		uint8_t *zbytes = bytes, *pm2 = bytes + plen;
-
-		for (i = 0; i < n; i++)
-			empty |= acc[2 * n + i];
-		if (empty == 0) {
-			ret = 1; /* the point at infinity has no coordinates */
-			goto done;
-		}
-
-		mont_mul(tmp, acc + 2 * n, one, mp, n0, n, mont_t); /* plain Z */
-		to_be(zbytes, plen, tmp, n);
-		memset(sel, 0, n * sizeof(limb_t));
-		sel[0] = 2;
-		sub_n(sel, mp, sel, n); /* p - 2 */
-		to_be(pm2, plen, sel, n);
-		if (crypton_powm_sec(zbytes, zbytes, plen, pm2, plen, p, plen) != 0)
-			goto done;
-		if (from_be(tmp, n, zbytes, plen) != 0)
-			goto done;
-		mont_mul(sel, tmp, r2, mp, n0, n, mont_t); /* 1/Z, Montgomery form */
-
-		fe_mul(&f, tmp, acc, sel);
-		mont_mul(tmp + n, tmp, one, mp, n0, n, mont_t);
-		to_be(outx, plen, tmp + n, n);
-
-		fe_mul(&f, tmp, acc + n, sel);
-		mont_mul(tmp + n, tmp, one, mp, n0, n, mont_t);
-		to_be(outy, plen, tmp + n, n);
-		ret = 0;
-	}
+	ret = point_to_be(&c, outx, outy, c.acc, p);
 
 done:
-	memset(space, 0, words * sizeof(limb_t));
-	memset(bytes, 0, 2 * plen);
-	free(space);
-	free(bytes);
+	ctx_free(&c);
+	return ret;
+}
+
+uint32_t crypton_ecc_table_size(uint32_t plen, uint32_t klen)
+{
+	uint32_t n = (plen + LIMB_BYTES - 1) / LIMB_BYTES;
+
+	if (plen == 0 || klen == 0 || n == 0)
+		return 0;
+	return klen * 2 * TABLE_SIZE * 3 * n * (uint32_t) sizeof(limb_t);
+}
+
+int crypton_ecc_table_build(uint8_t *tab,
+                            const uint8_t *gx, const uint8_t *gy,
+                            uint32_t klen,
+                            const uint8_t *a, const uint8_t *b,
+                            const uint8_t *p, uint32_t plen)
+{
+	curve_ctx c;
+	limb_t *t = (limb_t *) (void *) tab;
+	uint32_t n, i, j, windows;
+	int ret = -1;
+
+	if (klen == 0 || ctx_init(&c, a, b, p, plen) != 0)
+		return -1;
+	n = c.n;
+	windows = klen * 2;
+
+	/* acc walks the powers: at window i it holds 16^i times the point */
+	if (point_from_be(&c, c.acc, gx, gy) != 0)
+		goto done;
+	for (i = 0; i < windows; i++) {
+		limb_t *slot = t + (size_t) i * TABLE_SIZE * 3 * n;
+
+		memset(slot, 0, 3 * n * sizeof(limb_t));
+		memcpy(slot + n, c.one, n * sizeof(limb_t)); /* (0 : 1 : 0) */
+		memcpy(slot + 3 * n, c.acc, 3 * n * sizeof(limb_t));
+		for (j = 2; j < TABLE_SIZE; j++)
+			point_add(&c.f, slot + 3 * j * n, slot + 3 * (j - 1) * n,
+			          c.acc, c.work);
+		for (j = 0; j < WINDOW_BITS; j++)
+			point_double(&c.f, c.acc, c.acc, c.work);
+	}
+	ret = 0;
+
+done:
+	ctx_free(&c);
+	return ret;
+}
+
+int crypton_ecc_table_mul(uint8_t *outx, uint8_t *outy, const uint8_t *tab,
+                          const uint8_t *k, uint32_t klen,
+                          const uint8_t *a, const uint8_t *b,
+                          const uint8_t *p, uint32_t plen)
+{
+	curve_ctx c;
+	const limb_t *t = (const limb_t *) (const void *) tab;
+	uint32_t n, i;
+	int ret;
+
+	if (klen == 0 || ctx_init(&c, a, b, p, plen) != 0)
+		return -1;
+	n = c.n;
+
+	/* nothing to start with, and one addition for every four bits: the
+	 * multiples the doubling would work out are all in the table */
+	memset(c.acc, 0, 3 * n * sizeof(limb_t));
+	memcpy(c.acc + n, c.one, n * sizeof(limb_t));
+	for (i = 0; i < klen * 2; i++) {
+		limb_t w = (k[klen - 1 - i / 2] >> (4 * (i % 2))) & 0xf;
+
+		table_select(&c, c.sel, t + (size_t) i * TABLE_SIZE * 3 * n, w);
+		point_add(&c.f, c.acc, c.acc, c.sel, c.work);
+	}
+	ret = point_to_be(&c, outx, outy, c.acc, p);
+
+	ctx_free(&c);
 	return ret;
 }

@@ -246,6 +246,14 @@ weightTests = describe "scalars of every weight" $ do
     check "P-521" ECC.SEC_p521r1
   where
     check name curveName = describe name $ do
+        it "answers the same for a point that is not the base one" $
+            -- the base point has a table of its own, and everything else
+            -- goes the long way round; both have to come out the same
+            [ k
+            | k <- [1, 2, 3, 15, 16, 17, n - 1, n, n + 1]
+            , ECC.pointMul c k other /= doubleAndAdd c k other
+            ]
+                `shouldBe` []
         it "adding two scalars is adding their multiples" $
             [ (a, b)
             | (a, b) <- pairs
@@ -257,6 +265,7 @@ weightTests = describe "scalars of every weight" $ do
         c = ECC.getCurveByName curveName
         n = ECC.ecc_n (ECC.common_curve c)
         g = ECC.ecc_g (ECC.common_curve c)
+        other = ECC.pointMul c 5 g
         bits = numBits n
         ones k = 2 ^ k - 1
         alternating k = sum [2 ^ i | i <- [0, 2 .. k]]
