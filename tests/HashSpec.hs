@@ -433,6 +433,78 @@ runhashinc (HashAlg hashAlg) v = B.convertToBase B.Base16 $ hashinc $ v
   where
     hashinc = hashFinalize . foldl hashUpdate (hashInitWith hashAlg)
 
+-- | Messages that take more than one block, which none of the vectors above
+-- do: the longest of them is 43 bytes and a block is 64, so a compression
+-- function that is wrong only in how one block carries into the next -- which
+-- is what the paths written for a processor's hashing instructions can get
+-- wrong -- passes every KAT above.  Two of these cross a block boundary and
+-- the third is the million letters FIPS 180-4 uses; the digests are what
+-- FIPS 180-4 and openssl give.
+longVectors :: [ByteString]
+longVectors =
+    [ "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+    , "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"
+    , B.replicate 1000000 0x61
+    ]
+
+expectedLong :: [(String, HashAlg, [ByteString])]
+expectedLong =
+    [
+        ( "MD5"
+        , HashAlg MD5
+        ,
+            [ "8215ef0796a20bcaaae116d3876c664a"
+            , "2782e38354c31d1b1d6dfb6f4ccb2d2e"
+            , "7707d6ae4e027c70eea2a935c2296f21"
+            ]
+        )
+    ,
+        ( "SHA1"
+        , HashAlg SHA1
+        ,
+            [ "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
+            , "b85d6468bd3a73794bceaf812239cc1fe460ab95"
+            , "34aa973cd4c4daa4f61eeb2bdbad27316534016f"
+            ]
+        )
+    ,
+        ( "SHA224"
+        , HashAlg SHA224
+        ,
+            [ "75388b16512776cc5dba5da1fd890150b0c6455cb4f58b1952522525"
+            , "4176f330539b0ed8b0b6b5dea7c8e47a18fc4daf3f53920355b0926a"
+            , "20794655980c91d8bbb4c1ea97618a4bf03f42581948b2ee4ee7ad67"
+            ]
+        )
+    ,
+        ( "SHA256"
+        , HashAlg SHA256
+        ,
+            [ "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+            , "2ff100b36c386c65a1afc462ad53e25479bec9498ed00aa5a04de584bc25301b"
+            , "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+            ]
+        )
+    ,
+        ( "SHA384"
+        , HashAlg SHA384
+        ,
+            [ "3391fdddfc8dc7393707a65b1b4709397cf8b1d162af05abfe8f450de5f36bc6b0455a8520bc4e6f5fe95b1fe3c8452b"
+            , "bdc0f4a6e0d7de88f374e6c2562441d856aeabed3f52553103f55eca811f64b422c7cb47a8067f123e45c1a8ee303635"
+            , "9d0e1809716474cb086e834e310a4a1ced149e9c00f248527972cec5704c2a5b07b8b3dc38ecc4ebae97ddd87f3d8985"
+            ]
+        )
+    ,
+        ( "SHA512"
+        , HashAlg SHA512
+        ,
+            [ "204a8fc6dda82f0a0ced7beb8e08a41657c16ef468b228a8279be331a703c33596fd15c13b1b07f9aa1d3bea57789ca031ad85c7a71dd70354ec631238ca3445"
+            , "90d1bdb9a6cbf9cb0d4a7f185ee0870456f440b81f13f514f4561a08112763523033245875b68209bb1f5d5215bac81e0d69f77374cc44d1be30f58c8b615141"
+            , "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"
+            ]
+        )
+    ]
+
 data HashPrefixAlg = forall alg. HashAlgorithmPrefix alg => HashPrefixAlg alg
 
 expectedPrefix :: [(String, HashPrefixAlg)]
@@ -451,8 +523,10 @@ runhashpfx (HashPrefixAlg hashAlg) v = B.convertToBase B.Base16 $ hashWith hashA
 runhashpfxpfx :: HashPrefixAlg -> ByteString -> Int -> ByteString
 runhashpfxpfx (HashPrefixAlg hashAlg) v len = B.convertToBase B.Base16 $ hashPrefixWith hashAlg v len
 
-makeTestAlg (name, hashAlg, results) =
-    describe name $ mapM_ maketest (zip3 is vectors results)
+makeTestAlg = makeTestAlgWith vectors
+
+makeTestAlgWith vs (name, hashAlg, results) =
+    describe name $ mapM_ maketest (zip3 is vs results)
   where
     is :: [Int]
     is = [1 ..]
@@ -492,6 +566,8 @@ makeTestSHAKE128Truncation i byte =
 spec :: Spec
 spec = do
     describe "KATs" $ mapM_ makeTestAlg expected
+    describe "KATs over several blocks" $
+        mapM_ (makeTestAlgWith longVectors) expectedLong
     describe "Chunking" $ mapM_ makeTestChunk expected
     describe "Prefix" $ mapM_ makeTestPrefix expectedPrefix
     describe "Hybrid" $ mapM_ makeTestHybrid expectedPrefix

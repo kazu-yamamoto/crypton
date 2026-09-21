@@ -54,10 +54,7 @@ static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, ui
 }
 
 /*
- * What the machine will let us use beyond the x86-64 baseline.  AVX2 needs
- * three things to agree: the CPU has it, the CPU has XSAVE enabled by the
- * OS, and the OS has said it will save the wider registers -- without that
- * last one the upper halves are lost across a context switch.  XGETBV is
+ * What the machine will let us use beyond the x86-64 baseline.  XGETBV is
  * spelled out in bytes because it predates some assemblers that are still
  * in use.
  */
@@ -97,18 +94,38 @@ uint32_t crypton_x86_simd_features(void)
 	static uint32_t features = 0;
 
 	if (!resolved) {
-		uint32_t eax, ebx, ecx, edx, f = 0;
+		uint32_t eax, ebx, ecx, edx, leaf1, maxleaf, f = 0;
+
+		cpuid(0, &eax, &ebx, &ecx, &edx);
+		maxleaf = eax;
 
 		cpuid(1, &eax, &ebx, &ecx, &edx);
-		if (ecx & (1 << 9))
+		leaf1 = ecx;
+		if (leaf1 & (1 << 9))
 			f |= CRYPTON_X86_SSSE3;
-		if (ecx & (1 << 1))
+		if (leaf1 & (1 << 1))
 			f |= CRYPTON_X86_PCLMUL;
-		/* OSXSAVE, then AVX, then the XCR0 bits for the SSE and AVX
-		 * register state, and only then ask leaf 7 about AVX2 */
-		if ((ecx & (1 << 27)) && (ecx & (1 << 28)) && ((xcr0() & 6) == 6)) {
+
+		/* leaf 7 answers for both of the rest, and a processor that
+		 * does not have it answers for the highest leaf it does have
+		 * instead, so ask what that is first */
+		if (maxleaf >= 7) {
 			cpuid_count(7, 0, &eax, &ebx, &ecx, &edx);
-			if (ebx & (1 << 5))
+			/* the SHA extensions work in registers the SSE state
+			 * already covers, so they need nothing of the
+			 * operating system.  The code that uses them also
+			 * wants SSSE3 and SSE4.1, which every processor that
+			 * has them has, but ask rather than assume */
+			if ((ebx & (1 << 29)) && (leaf1 & (1 << 9))
+			    && (leaf1 & (1 << 19)))
+				f |= CRYPTON_X86_SHA_NI;
+			/* AVX2 has the wider registers, which takes three
+			 * things agreeing: the CPU has it, OSXSAVE is on, and
+			 * XCR0 says the operating system saves them --
+			 * without that last one the upper halves are lost
+			 * across a context switch */
+			if ((ebx & (1 << 5)) && (leaf1 & (1 << 27))
+			    && (leaf1 & (1 << 28)) && ((xcr0() & 6) == 6))
 				f |= CRYPTON_X86_AVX2;
 		}
 		features = f;

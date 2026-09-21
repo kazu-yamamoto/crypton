@@ -122,6 +122,23 @@ jobs:
 
     # Which implementation the C actually picked is invisible to the test
     # suite: when a runtime check answers no, everything still passes on the
+    # Which of the instructions a job exercises depends on the machine it
+    # landed on, and for the SHA extensions that differs between x86 runners
+    # of the same label: nothing else in the log says which one this was.
+    - name: Report the processor
+      shell: bash
+      continue-on-error: true
+      run: |
+        if [ -r /proc/cpuinfo ]; then
+          grep -m1 -E 'model name|^Model' /proc/cpuinfo || true
+          grep -m1 -E '^flags|^Features' /proc/cpuinfo | tr ' ' '\n' |
+            grep -xE 'aes|pclmulqdq|avx2|sha_ni|sha512|pmull|sha1|sha2|sha3' |
+            sort | tr '\n' ' '
+          echo
+        else
+          sysctl -n machdep.cpu.brand_string || true
+        fi
+
     # generic code, just slower.  So ask, and insist on the answer.
     #
     # Every image in the matrix is hardware that has AES and carry-less
