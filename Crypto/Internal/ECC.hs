@@ -61,7 +61,9 @@ primeCurveMul
 primeCurveMul p a b klen k px py
     | p <= 0 || even p || klen <= 0 || k < 0 = MulUnsupported
     | otherwise = unsafeDoIO $
-        allocaBytes (6 * plen + klen) $ \outx -> do
+        -- seven numbers of the prime's width -- the two coordinates out, the
+        -- two in, a, b and the prime itself -- and then the scalar
+        allocaBytes (7 * plen + klen) $ \outx -> do
             let outy = outx `plusPtr` plen
                 cx = outy `plusPtr` plen
                 cy = cx `plusPtr` plen

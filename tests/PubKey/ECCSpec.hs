@@ -266,6 +266,10 @@ weightTests = describe "scalars of every weight" $ do
             , (alternating (bits - 2), 3)
             , (ones (bits - 2), alternating (bits - 2))
             , (n - 1, n - 1)
+            , -- twice the width of the order and more, which is what
+              -- recovering a public key hands to a multiplication
+              (n * n, 3)
+            , (n * n * n, alternating (bits - 2))
             ]
 
 spec :: Spec
