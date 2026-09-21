@@ -316,11 +316,8 @@ static void initialize_table_ni(int aesni, int pclmul)
 	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aesni_gcm_decrypt128;
 	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aesni_gcm_decrypt192;
 	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aesni_gcm_decrypt256;
-	/* OCB */
-	/*
-	crypton_aes_branch_table[ENCRYPT_OCB_128] = crypton_aesni_ocb_encrypt128;
-	crypton_aes_branch_table[ENCRYPT_OCB_256] = crypton_aesni_ocb_encrypt256;
-	*/
+	/* OCB drives the ECB paths above a group at a time, so it has no
+	 * entries of its own */
 #ifdef WITH_PCLMUL
 	if (!pclmul)
 		return;
@@ -778,6 +775,21 @@ static void ocb_get_L_i(block128 *l, block128 *lis, unsigned int i)
 #undef L_CACHED
 }
 
+/*
+ * OCB's offsets are a running exclusive-or, so they have to be worked out in
+ * order, but the block cipher calls under them do not depend on each other:
+ * every block is offset, encrypted, and offset again.  So the offsets are
+ * computed a group at a time and the group goes through ECB together, which
+ * is where the code written for the AES instructions interleaves eight blocks
+ * and covers the latency of AESENC.  One block at a time left that idle and
+ * cost four times what GCM costs on the same machine, for a mode that does
+ * less work than GCM.
+ *
+ * Eight is what the ECB paths interleave; a group beyond that gains nothing
+ * and only makes the buffers larger.
+ */
+#define OCB_WAY 8
+
 void crypton_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len, uint32_t taglen)
 {
 	block128 tmp, nonce, ktop;
@@ -837,9 +849,23 @@ void crypton_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len,
 void crypton_aes_ocb_aad(aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length)
 {
 	block128 tmp;
-	unsigned int i;
+	block128 buf[OCB_WAY];
+	uint32_t blocks = length / 16;
+	unsigned int i = 1, j;
 
-	for (i=1; i<= length/16; i++, input=input+16) {
+	for (; blocks >= OCB_WAY; blocks -= OCB_WAY, input += 16 * OCB_WAY) {
+		for (j = 0; j < OCB_WAY; j++, i++) {
+			ocb_get_L_i(&tmp, ocb->li, i);
+			block128_xor_aligned(&ocb->offset_aad, &tmp);
+			block128_vxor(&buf[j], &ocb->offset_aad,
+			              (block128 *) (input + 16 * j));
+		}
+		crypton_aes_encrypt_ecb(buf, key, buf, OCB_WAY);
+		for (j = 0; j < OCB_WAY; j++)
+			block128_xor_aligned(&ocb->sum_aad, &buf[j]);
+	}
+
+	for (; blocks > 0; blocks--, i++, input += 16) {
 		ocb_get_L_i(&tmp, ocb->li, i);
 		block128_xor_aligned(&ocb->offset_aad, &tmp);
 
@@ -1096,10 +1122,37 @@ static void ocb_generic_crypt(uint8_t *output, aes_ocb *ocb, aes_key *key,
                               uint8_t *input, uint32_t length, int encrypt)
 {
 	block128 tmp, pad;
-	unsigned int i;
+	block128 offsets[OCB_WAY], buf[OCB_WAY];
+	uint32_t blocks = length / 16;
+	unsigned int i = 1, j;
 
-	for (i = 1; i <= length/16; i++, input += 16, output += 16) {
-		/* Offset_i = Offset_{i-1} xor L_{ntz(i)} */
+	for (; blocks >= OCB_WAY;
+	     blocks -= OCB_WAY, input += 16 * OCB_WAY, output += 16 * OCB_WAY) {
+		for (j = 0; j < OCB_WAY; j++, i++) {
+			/* Offset_i = Offset_{i-1} xor L_{ntz(i)} */
+			ocb_get_L_i(&tmp, ocb->li, i);
+			block128_xor_aligned(&ocb->offset_enc, &tmp);
+			block128_copy_aligned(&offsets[j], &ocb->offset_enc);
+			block128_vxor(&buf[j], &ocb->offset_enc,
+			              (block128 *) (input + 16 * j));
+		}
+
+		if (encrypt)
+			crypton_aes_encrypt_ecb(buf, key, buf, OCB_WAY);
+		else
+			crypton_aes_decrypt_ecb(buf, key, buf, OCB_WAY);
+
+		for (j = 0; j < OCB_WAY; j++) {
+			block128_vxor((block128 *) (output + 16 * j),
+			              &offsets[j], &buf[j]);
+			block128_xor(&ocb->sum_enc,
+			             (block128 *) ((encrypt ? input : output)
+			                           + 16 * j));
+		}
+	}
+
+	/* and what is left of the message, a block at a time */
+	for (; blocks > 0; blocks--, i++, input += 16, output += 16) {
 		ocb_get_L_i(&tmp, ocb->li, i);
 		block128_xor_aligned(&ocb->offset_enc, &tmp);
 
