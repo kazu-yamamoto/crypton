@@ -87,36 +87,39 @@ expSafe b e m
 -- one.
 expSec :: Integer -> Integer -> Integer -> Integer
 expSec b e m = unsafeDoIO $
-    allocaBytes (mLen + mLen + eLen + mLen) $ \out -> do
-        let base = out `plusPtr` mLen
-            expo = base `plusPtr` mLen
-            modu = expo `plusPtr` eLen
-        _ <- Internal.i2ospOf b base mLen
-        _ <- Internal.i2ospOf e expo eLen
-        _ <- Internal.i2ospOf m modu mLen
-        r <-
-            c_powm_sec
-                out
-                base
-                (fromIntegral mLen)
-                expo
-                (fromIntegral eLen)
-                modu
-                (fromIntegral mLen)
-        -- the exponent is the caller's secret, and this is the last place it
-        -- is written out in the clear
-        memSet expo 0 eLen
-        if r == 0
-            then do
-                !v <- Internal.os2ip out mLen
-                return v
-            else
-                return
-                    ( gmpPowModInteger b e m
-                        `onGmpUnsupported` exponentiation b e m
-                    )
+    allocaBytes (sum widths) $ \start -> case scanl plusPtr start widths of
+        (out : base : expo : modu : _) -> do
+            _ <- Internal.i2ospOf b base mLen
+            _ <- Internal.i2ospOf e expo eLen
+            _ <- Internal.i2ospOf m modu mLen
+            r <-
+                c_powm_sec
+                    out
+                    base
+                    (fromIntegral mLen)
+                    expo
+                    (fromIntegral eLen)
+                    modu
+                    (fromIntegral mLen)
+            -- the exponent is the caller's secret, and this is the last place it
+            -- is written out in the clear
+            memSet expo 0 eLen
+            if r == 0
+                then do
+                    !v <- Internal.os2ip out mLen
+                    return v
+                else
+                    return
+                        ( gmpPowModInteger b e m
+                            `onGmpUnsupported` exponentiation b e m
+                        )
+        _ -> return 0 -- there are four, but say so anyway
   where
     !mLen = numBytes m
+    -- the answer, the base, the exponent and the modulus.  The room to take
+    -- and where each one starts both come from here, so they cannot drift
+    -- apart.
+    widths = [mLen, mLen, eLen, mLen]
     -- whole words of exponent, so that the count of them says as little as
     -- what GMP's own secure exponentiation lets slip
     !eLen = 8 * ((numBytes e + 7) `div` 8)

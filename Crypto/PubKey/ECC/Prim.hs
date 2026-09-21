@@ -23,14 +23,7 @@ module Crypto.PubKey.ECC.Prim (
 ) where
 
 import Crypto.Error (maybeCryptoError)
-import Crypto.Internal.ECC (
-    MulResult (..),
-    baseTable,
-    binaryCurveC,
-    binaryCurveMul,
-    primeCurveMul,
-    primeCurveTableMul,
- )
+import Crypto.Internal.ECC (CurveField (..), MulResult (..), curveMul)
 import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
@@ -290,22 +283,17 @@ pointMul c n p
     -- table kept for it.
     primeMul pr cc = case p of
         Point px py
-            | p == ecc_g cc
-            , klen == numBytes (ecc_n cc)
-            , Just table <- baseTable pr (ecc_a cc) (ecc_b cc) klen px py ->
-                answer (primeCurveTableMul table pr (ecc_a cc) (ecc_b cc) klen n)
             | isPointValid c p ->
-                answer (primeCurveMul pr (ecc_a cc) (ecc_b cc) klen n px py)
+                answer slow $
+                    curveMul
+                        (Prime pr (ecc_a cc) (ecc_b cc))
+                        (ecc_n cc)
+                        n
+                        px
+                        py
+                        (p == ecc_g cc)
         _ -> slow
       where
-        answer (MulPoint x y) = Point x y
-        answer MulInfinity = PointO
-        answer MulUnsupported = slow
-        -- Walk the width of the order, which is public, so a scalar in range
-        -- -- which is every secret one -- costs the same whatever it is.  A
-        -- scalar may still be given out of range, and then the width has to
-        -- follow it or the high bits would be dropped.
-        klen = max (numBytes n) (numBytes (ecc_n cc))
         slow =
             jacobianMul
                 pr
@@ -318,20 +306,16 @@ pointMul c n p
     -- point with no x, and anything off the curve, keep what they had.
     binaryMul fx cc = case p of
         Point px py
-            | px /= 0
-            , isPointValid c p ->
-                case binaryCurveC fx (ecc_b cc) klenB n px py of
-                    MulPoint x y -> Point x y
-                    MulInfinity -> PointO
-                    -- the ladder in Haskell, for a field the C will not take
-                    MulUnsupported -> case binaryCurveMul fx (ecc_b cc) bits n px py of
-                        MulPoint x y -> Point x y
-                        MulInfinity -> PointO
-                        MulUnsupported -> affineMul n p
+            | isPointValid c p ->
+                answer (affineMul n p) $
+                    curveMul (Binary fx (ecc_b cc)) (ecc_n cc) n px py False
         _ -> affineMul n p
-      where
-        bits = max (integerBits n) (integerBits (ecc_n cc))
-        klenB = max (numBytes n) (numBytes (ecc_n cc))
+
+    -- what the C could not take goes back to the code that was here before
+    answer fallback r = case r of
+        MulPoint x y -> Point x y
+        MulInfinity -> PointO
+        MulUnsupported -> fallback
 
     affineMul k q
         | k == 0 = PointO
