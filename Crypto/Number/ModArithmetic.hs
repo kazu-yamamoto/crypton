@@ -22,8 +22,15 @@ module Crypto.Number.ModArithmetic (
 ) where
 
 import qualified Control.Exception as E
+import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic
 import Crypto.Number.Compat
+import qualified Crypto.Number.Serialize.Internal as Internal
+import Data.Memory.PtrMethods (memSet)
+import Data.Word (Word32, Word8)
+import Foreign.C.Types (CInt (..))
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Ptr (Ptr, plusPtr)
 
 -- | Raised when two numbers are supposed to be coprimes but are not.
 data CoprimesAssertionError = CoprimesAssertionError
@@ -37,12 +44,25 @@ instance E.Exception CoprimesAssertionError
 -- Modulo need to be odd otherwise the normal fast modular exponentiation
 -- is used.
 --
--- When used with integer-simple, this function is not different
--- from expFast, and thus provide the same unstudied and dubious
--- timing and side channels claims.
+-- With an odd modulo the work is done in C, four bits of exponent at a time:
+-- four squarings and one multiplication by a small power of the base, taken
+-- from a table of sixteen which is read by touching every entry and keeping
+-- one of them with a mask.  So each group of four bits costs the same five
+-- multiplications and the same sixteen reads whatever those bits are, and
+-- nothing branches on the exponent or indexes memory with it.
 --
--- Before GHC 8.4.2, powModSecInteger is missing from integer-gmp,
--- so expSafe has the same security as expFast.
+-- What the exponent still shows is its length: it is rounded up to a whole
+-- 64-bit word and every bit of that is walked over, so its value is hidden
+-- but its size is not.  The @mpz_powm_sec@ of GMP, which GHC stopped
+-- offering in integer-gmp 1.1 and which this replaces, hides exactly as much.
+--
+-- The base is taken to be public -- in this library it is a ciphertext, a
+-- public value from a peer, or a generator -- and is reduced modulo the
+-- modulus in the ordinary way first.
+--
+-- Hiding the exponent has a price: against the windowed exponentiation of
+-- GMP, which is what this function used to end up calling, a 2048-bit
+-- modulus costs somewhat over twice as much.
 expSafe
     :: Integer
     -- ^ base
@@ -53,14 +73,63 @@ expSafe
     -> Integer
     -- ^ result
 expSafe b e m
-    | odd m =
-        gmpPowModSecInteger b e m
-            `onGmpUnsupported` ( gmpPowModInteger b e m
-                                    `onGmpUnsupported` exponentiation b e m
-                               )
+    | odd m && m > 1 && e >= 0 =
+        gmpPowModSecInteger b e m `onGmpUnsupported` expSec (b `mod` m) e m
+    -- a modulus of one, and a negative exponent asking for an inverse, are
+    -- left to the path they have always taken
     | otherwise =
         gmpPowModInteger b e m
             `onGmpUnsupported` exponentiation b e m
+
+-- | The windowed exponentiation itself, in C.  The base has to be reduced
+-- already, the exponent to be zero or more, and the modulus odd and above
+-- one.
+expSec :: Integer -> Integer -> Integer -> Integer
+expSec b e m = unsafeDoIO $
+    allocaBytes (mLen + mLen + eLen + mLen) $ \out -> do
+        let base = out `plusPtr` mLen
+            expo = base `plusPtr` mLen
+            modu = expo `plusPtr` eLen
+        _ <- Internal.i2ospOf b base mLen
+        _ <- Internal.i2ospOf e expo eLen
+        _ <- Internal.i2ospOf m modu mLen
+        r <-
+            c_powm_sec
+                out
+                base
+                (fromIntegral mLen)
+                expo
+                (fromIntegral eLen)
+                modu
+                (fromIntegral mLen)
+        -- the exponent is the caller's secret, and this is the last place it
+        -- is written out in the clear
+        memSet expo 0 eLen
+        if r == 0
+            then do
+                !v <- Internal.os2ip out mLen
+                return v
+            else
+                return
+                    ( gmpPowModInteger b e m
+                        `onGmpUnsupported` exponentiation b e m
+                    )
+  where
+    !mLen = numBytes m
+    -- whole words of exponent, so that the count of them says as little as
+    -- what GMP's own secure exponentiation lets slip
+    !eLen = 8 * ((numBytes e + 7) `div` 8)
+
+foreign import ccall safe "crypton_powm_sec"
+    c_powm_sec
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
 
 -- | Compute the modular exponentiation of base^exponent using
 -- the fastest algorithm without any consideration for
