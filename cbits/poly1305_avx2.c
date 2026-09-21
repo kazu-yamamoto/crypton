@@ -66,59 +66,78 @@ static void mul_limbs(uint32_t out[5], const uint32_t a[5], const uint32_t b[5])
 }
 
 /* One multiply by the five limbs in r[], with the reduction that follows. */
-#define MULRED(a0, a1, a2, a3, a4, r0, r1, r2, r3, r4, s1, s2, s3, s4)        \
+#define MULRED(a0, a1, a2, a3, a4, rv)                                        \
 	do {                                                                  \
-		__m256i d0_, d1_, d2_, d3_, d4_, c_;                          \
+		__m256i d0_, d1_, d2_, d3_, d4_, cx_, cy_;                    \
 		const __m256i m26_ = _mm256_set1_epi64x(MASK26);              \
 		d0_ = _mm256_add_epi64(                                       \
-		    _mm256_add_epi64(_mm256_mul_epu32(a0, r0), _mm256_mul_epu32(a1, s4)), \
+		    _mm256_add_epi64(_mm256_mul_epu32(a0, (rv)[0]), _mm256_mul_epu32(a1, (rv)[8])), \
 		    _mm256_add_epi64(                                         \
-		        _mm256_add_epi64(_mm256_mul_epu32(a2, s3), _mm256_mul_epu32(a3, s2)), \
-		        _mm256_mul_epu32(a4, s1)));                           \
+		        _mm256_add_epi64(_mm256_mul_epu32(a2, (rv)[7]), _mm256_mul_epu32(a3, (rv)[6])), \
+		        _mm256_mul_epu32(a4, (rv)[5])));                           \
 		d1_ = _mm256_add_epi64(                                       \
-		    _mm256_add_epi64(_mm256_mul_epu32(a0, r1), _mm256_mul_epu32(a1, r0)), \
+		    _mm256_add_epi64(_mm256_mul_epu32(a0, (rv)[1]), _mm256_mul_epu32(a1, (rv)[0])), \
 		    _mm256_add_epi64(                                         \
-		        _mm256_add_epi64(_mm256_mul_epu32(a2, s4), _mm256_mul_epu32(a3, s3)), \
-		        _mm256_mul_epu32(a4, s2)));                           \
+		        _mm256_add_epi64(_mm256_mul_epu32(a2, (rv)[8]), _mm256_mul_epu32(a3, (rv)[7])), \
+		        _mm256_mul_epu32(a4, (rv)[6])));                           \
 		d2_ = _mm256_add_epi64(                                       \
-		    _mm256_add_epi64(_mm256_mul_epu32(a0, r2), _mm256_mul_epu32(a1, r1)), \
+		    _mm256_add_epi64(_mm256_mul_epu32(a0, (rv)[2]), _mm256_mul_epu32(a1, (rv)[1])), \
 		    _mm256_add_epi64(                                         \
-		        _mm256_add_epi64(_mm256_mul_epu32(a2, r0), _mm256_mul_epu32(a3, s4)), \
-		        _mm256_mul_epu32(a4, s3)));                           \
+		        _mm256_add_epi64(_mm256_mul_epu32(a2, (rv)[0]), _mm256_mul_epu32(a3, (rv)[8])), \
+		        _mm256_mul_epu32(a4, (rv)[7])));                           \
 		d3_ = _mm256_add_epi64(                                       \
-		    _mm256_add_epi64(_mm256_mul_epu32(a0, r3), _mm256_mul_epu32(a1, r2)), \
+		    _mm256_add_epi64(_mm256_mul_epu32(a0, (rv)[3]), _mm256_mul_epu32(a1, (rv)[2])), \
 		    _mm256_add_epi64(                                         \
-		        _mm256_add_epi64(_mm256_mul_epu32(a2, r1), _mm256_mul_epu32(a3, r0)), \
-		        _mm256_mul_epu32(a4, s4)));                           \
+		        _mm256_add_epi64(_mm256_mul_epu32(a2, (rv)[1]), _mm256_mul_epu32(a3, (rv)[0])), \
+		        _mm256_mul_epu32(a4, (rv)[8])));                           \
 		d4_ = _mm256_add_epi64(                                       \
-		    _mm256_add_epi64(_mm256_mul_epu32(a0, r4), _mm256_mul_epu32(a1, r3)), \
+		    _mm256_add_epi64(_mm256_mul_epu32(a0, (rv)[4]), _mm256_mul_epu32(a1, (rv)[3])), \
 		    _mm256_add_epi64(                                         \
-		        _mm256_add_epi64(_mm256_mul_epu32(a2, r2), _mm256_mul_epu32(a3, r1)), \
-		        _mm256_mul_epu32(a4, r0)));                           \
+		        _mm256_add_epi64(_mm256_mul_epu32(a2, (rv)[2]), _mm256_mul_epu32(a3, (rv)[1])), \
+		        _mm256_mul_epu32(a4, (rv)[0])));                           \
                                                                               \
-		c_ = _mm256_srli_epi64(d0_, 26); a0 = _mm256_and_si256(d0_, m26_); \
-		d1_ = _mm256_add_epi64(d1_, c_);                              \
-		c_ = _mm256_srli_epi64(d1_, 26); a1 = _mm256_and_si256(d1_, m26_); \
-		d2_ = _mm256_add_epi64(d2_, c_);                              \
-		c_ = _mm256_srli_epi64(d2_, 26); a2 = _mm256_and_si256(d2_, m26_); \
-		d3_ = _mm256_add_epi64(d3_, c_);                              \
-		c_ = _mm256_srli_epi64(d3_, 26); a3 = _mm256_and_si256(d3_, m26_); \
-		d4_ = _mm256_add_epi64(d4_, c_);                              \
-		c_ = _mm256_srli_epi64(d4_, 26); a4 = _mm256_and_si256(d4_, m26_); \
+		/*                                                            \
+		 * The carries in pairs that do not wait for each other: the  \
+		 * chain that takes each limb's overflow into the next one is \
+		 * six steps long and every step is a shift, a mask and an    \
+		 * add, so run the two halves of it at once and the depth     \
+		 * halves.  The last step brings limb three back under 2^26,  \
+		 * which is what keeps the bound from growing from one group  \
+		 * to the next.                                               \
+		 */                                                           \
+		cx_ = _mm256_srli_epi64(d0_, 26); d0_ = _mm256_and_si256(d0_, m26_); \
+		cy_ = _mm256_srli_epi64(d3_, 26); d3_ = _mm256_and_si256(d3_, m26_); \
+		d1_ = _mm256_add_epi64(d1_, cx_);                             \
+		d4_ = _mm256_add_epi64(d4_, cy_);                             \
+		                                                              \
+		cx_ = _mm256_srli_epi64(d1_, 26); a1 = _mm256_and_si256(d1_, m26_); \
+		cy_ = _mm256_srli_epi64(d4_, 26); a4 = _mm256_and_si256(d4_, m26_); \
+		d2_ = _mm256_add_epi64(d2_, cx_);                             \
 		/* what leaves the top limb comes back multiplied by five */  \
-		a0 = _mm256_add_epi64(                                        \
-		    a0, _mm256_add_epi64(_mm256_slli_epi64(c_, 2), c_));      \
-		c_ = _mm256_srli_epi64(a0, 26); a0 = _mm256_and_si256(a0, m26_); \
-		a1 = _mm256_add_epi64(a1, c_);                                \
+		d0_ = _mm256_add_epi64(                                       \
+		    d0_, _mm256_add_epi64(_mm256_slli_epi64(cy_, 2), cy_));   \
+		                                                              \
+		cx_ = _mm256_srli_epi64(d2_, 26); a2 = _mm256_and_si256(d2_, m26_); \
+		cy_ = _mm256_srli_epi64(d0_, 26); a0 = _mm256_and_si256(d0_, m26_); \
+		d3_ = _mm256_add_epi64(d3_, cx_);                             \
+		a1 = _mm256_add_epi64(a1, cy_);                               \
+		                                                              \
+		cx_ = _mm256_srli_epi64(d3_, 26); a3 = _mm256_and_si256(d3_, m26_); \
+		a4 = _mm256_add_epi64(a4, cx_);                               \
 	} while (0)
 
 /*
- * Four blocks from data into the five limb vectors, lane i holding block i.
- * The two loads give (m0.lo, m0.hi, m1.lo, m1.hi) and the same for m2 and m3;
- * the unpacks gather the low halves and the high halves, in the lane order
- * 0, 2, 1, 3, and the permute puts that straight.
+ * Four blocks from data, added into the five limb vectors, lane i holding
+ * block i.  The two loads give (m0.lo, m0.hi, m1.lo, m1.hi) and the same for
+ * m2 and m3; the unpacks gather the low halves and the high halves, in the
+ * lane order 0, 2, 1, 3, and the permute puts that straight.
+ *
+ * Each limb is added as it is taken apart rather than all five being formed
+ * first: the accumulator already holds five registers and the multiply below
+ * needs five more for its products, so five more for the message is what
+ * pushed the loop into spilling.
  */
-#define LOAD4(dst0, dst1, dst2, dst3, dst4, data, hibit)                      \
+#define LOAD4_ADD(dst0, dst1, dst2, dst3, dst4, data, hibit)                  \
 	do {                                                                  \
 		__m256i t0_ = _mm256_loadu_si256((const __m256i *) (data));   \
 		__m256i t1_ = _mm256_loadu_si256((const __m256i *) ((data) + 32)); \
@@ -127,13 +146,18 @@ static void mul_limbs(uint32_t out[5], const uint32_t a[5], const uint32_t b[5])
 		__m256i hi_ = _mm256_permute4x64_epi64(                       \
 		    _mm256_unpackhi_epi64(t0_, t1_), 0xd8);                   \
 		const __m256i m26b_ = _mm256_set1_epi64x(MASK26);             \
-		dst0 = _mm256_and_si256(lo_, m26b_);                          \
-		dst1 = _mm256_and_si256(_mm256_srli_epi64(lo_, 26), m26b_);   \
-		dst2 = _mm256_and_si256(                                      \
-		    _mm256_or_si256(_mm256_srli_epi64(lo_, 52),               \
-		                    _mm256_slli_epi64(hi_, 12)), m26b_);      \
-		dst3 = _mm256_and_si256(_mm256_srli_epi64(hi_, 14), m26b_);   \
-		dst4 = _mm256_or_si256(_mm256_srli_epi64(hi_, 40), hibit);    \
+		dst0 = _mm256_add_epi64(dst0, _mm256_and_si256(lo_, m26b_));  \
+		dst1 = _mm256_add_epi64(                                      \
+		    dst1, _mm256_and_si256(_mm256_srli_epi64(lo_, 26), m26b_)); \
+		dst2 = _mm256_add_epi64(                                      \
+		    dst2, _mm256_and_si256(                                   \
+		              _mm256_or_si256(_mm256_srli_epi64(lo_, 52),     \
+		                              _mm256_slli_epi64(hi_, 12)),    \
+		              m26b_));                                        \
+		dst3 = _mm256_add_epi64(                                      \
+		    dst3, _mm256_and_si256(_mm256_srli_epi64(hi_, 14), m26b_)); \
+		dst4 = _mm256_add_epi64(                                      \
+		    dst4, _mm256_or_si256(_mm256_srli_epi64(hi_, 40), hibit)); \
 	} while (0)
 
 /*
@@ -146,7 +170,10 @@ void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32
 {
 	uint32_t r1[5], r2[5], r3[5], r4[5];
 	__m256i a0, a1, a2, a3, a4;
-	__m256i R0, R1, R2, R3, R4, S1, S2, S3, S4;
+	/* r^4 and its multiples by five, and later the lane weights: kept in
+	 * an array rather than nine live registers, so that the multiplies
+	 * read them from memory and leave the registers to the accumulator */
+	__m256i rv[9];
 	const __m256i hibit = _mm256_set1_epi64x(1 << 24);
 	uint64_t lane[4];
 	uint32_t h[5];
@@ -159,43 +186,30 @@ void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32
 	mul_limbs(r4, r3, r1);
 
 	/* the first group takes the accumulator in with its first block */
-	LOAD4(a0, a1, a2, a3, a4, data, hibit);
-	a0 = _mm256_add_epi64(a0, _mm256_set_epi64x(0, 0, 0, ctx->h[0]));
-	a1 = _mm256_add_epi64(a1, _mm256_set_epi64x(0, 0, 0, ctx->h[1]));
-	a2 = _mm256_add_epi64(a2, _mm256_set_epi64x(0, 0, 0, ctx->h[2]));
-	a3 = _mm256_add_epi64(a3, _mm256_set_epi64x(0, 0, 0, ctx->h[3]));
-	a4 = _mm256_add_epi64(a4, _mm256_set_epi64x(0, 0, 0, ctx->h[4]));
+	a0 = _mm256_set_epi64x(0, 0, 0, ctx->h[0]);
+	a1 = _mm256_set_epi64x(0, 0, 0, ctx->h[1]);
+	a2 = _mm256_set_epi64x(0, 0, 0, ctx->h[2]);
+	a3 = _mm256_set_epi64x(0, 0, 0, ctx->h[3]);
+	a4 = _mm256_set_epi64x(0, 0, 0, ctx->h[4]);
+	LOAD4_ADD(a0, a1, a2, a3, a4, data, hibit);
 	data += 64;
 
-#define BROADCAST(v, src) v = _mm256_set1_epi64x(src)
-	BROADCAST(R0, r4[0]); BROADCAST(R1, r4[1]); BROADCAST(R2, r4[2]);
-	BROADCAST(R3, r4[3]); BROADCAST(R4, r4[4]);
-	BROADCAST(S1, r4[1] * 5); BROADCAST(S2, r4[2] * 5);
-	BROADCAST(S3, r4[3] * 5); BROADCAST(S4, r4[4] * 5);
-#undef BROADCAST
+	for (i = 0; i < 5; i++)
+		rv[i] = _mm256_set1_epi64x(r4[i]);
+	for (i = 1; i < 5; i++)
+		rv[4 + i] = _mm256_set1_epi64x((uint64_t) r4[i] * 5);
 
 	for (groups--; groups > 0; groups--, data += 64) {
-		__m256i m0, m1, m2, m3, m4;
-
-		MULRED(a0, a1, a2, a3, a4, R0, R1, R2, R3, R4, S1, S2, S3, S4);
-		LOAD4(m0, m1, m2, m3, m4, data, hibit);
-		a0 = _mm256_add_epi64(a0, m0);
-		a1 = _mm256_add_epi64(a1, m1);
-		a2 = _mm256_add_epi64(a2, m2);
-		a3 = _mm256_add_epi64(a3, m3);
-		a4 = _mm256_add_epi64(a4, m4);
+		MULRED(a0, a1, a2, a3, a4, rv);
+		LOAD4_ADD(a0, a1, a2, a3, a4, data, hibit);
 	}
 
 	/* fold the lanes back together, weighted r^4, r^3, r^2, r */
-#define WEIGHTS(v, i) v = _mm256_set_epi64x(r1[i], r2[i], r3[i], r4[i])
-	WEIGHTS(R0, 0); WEIGHTS(R1, 1); WEIGHTS(R2, 2);
-	WEIGHTS(R3, 3); WEIGHTS(R4, 4);
-#undef WEIGHTS
-	S1 = _mm256_add_epi64(_mm256_slli_epi64(R1, 2), R1);
-	S2 = _mm256_add_epi64(_mm256_slli_epi64(R2, 2), R2);
-	S3 = _mm256_add_epi64(_mm256_slli_epi64(R3, 2), R3);
-	S4 = _mm256_add_epi64(_mm256_slli_epi64(R4, 2), R4);
-	MULRED(a0, a1, a2, a3, a4, R0, R1, R2, R3, R4, S1, S2, S3, S4);
+	for (i = 0; i < 5; i++)
+		rv[i] = _mm256_set_epi64x(r1[i], r2[i], r3[i], r4[i]);
+	for (i = 1; i < 5; i++)
+		rv[4 + i] = _mm256_add_epi64(_mm256_slli_epi64(rv[i], 2), rv[i]);
+	MULRED(a0, a1, a2, a3, a4, rv);
 
 #define SUMLANES(v, out)                                             \
 	do {                                                         \
