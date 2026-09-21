@@ -8,9 +8,9 @@
  * multiplication itself is Montgomery's, whose only conditional step -- the
  * subtraction at the end -- is also done with a mask.
  *
- * So every window costs the same five multiplications and the same sixteen
- * reads, and nothing here branches on, or indexes memory with, anything
- * derived from the exponent.
+ * So every window costs the same four squarings, the same multiplication and
+ * the same sixteen reads, and nothing here branches on, or indexes memory
+ * with, anything derived from the exponent.
  *
  * What is still visible is how many bytes the caller passed: the loop runs
  * over every bit of them, so the exponent's value is hidden but its length is
@@ -101,45 +101,87 @@ static limb_t mont_n0(limb_t m0)
 	return (limb_t) 0 - inv;
 }
 
-/* r = a * b * R^-1 mod m, with r, a and b of n limbs and t of n + 2 */
+/* t += a * b over n limbs, returning the carry.  This is where nearly all of
+ * the time goes, so the limbs are taken eight at a time; what is left over at
+ * the end is taken one at a time. */
+#define ADDMUL_STEP(k)                                                  \
+	p = (dlimb_t) a[i + (k)] * b + t[i + (k)] + carry;                  \
+	t[i + (k)] = (limb_t) p;                                            \
+	carry = (limb_t) (p >> LIMB_BITS);
+
+static limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
+{
+	limb_t carry = 0;
+	uint32_t i = 0;
+	dlimb_t p;
+
+	for (; i + 8 <= n; i += 8) {
+		ADDMUL_STEP(0) ADDMUL_STEP(1) ADDMUL_STEP(2) ADDMUL_STEP(3)
+		ADDMUL_STEP(4) ADDMUL_STEP(5) ADDMUL_STEP(6) ADDMUL_STEP(7)
+	}
+	for (; i < n; i++) {
+		ADDMUL_STEP(0)
+	}
+	return carry;
+}
+
+/* r = t * R^-1 mod m, with t of 2n limbs and destroyed on the way */
+static void mont_reduce(limb_t *r, limb_t *t, const limb_t *m, limb_t n0,
+                        uint32_t n)
+{
+	limb_t borrow, take, carry = 0;
+	uint32_t i;
+
+	for (i = 0; i < n; i++) {
+		limb_t u = t[i] * n0;
+		limb_t c = addmul_1(t + i, m, n, u);
+		dlimb_t s = (dlimb_t) t[n + i] + c + carry;
+
+		t[n + i] = (limb_t) s;
+		carry = (limb_t) (s >> LIMB_BITS);
+	}
+
+	/* what is left is under 2m, so at most one subtraction; which of the two
+	 * to keep is a mask */
+	borrow = sub_n(r, t + n, m, n);
+	take = carry | (borrow ^ 1);
+	select_n(r, r, t + n, take & 1, n);
+}
+
+/* r = a * b * R^-1 mod m, with t of 2n limbs */
 static void mont_mul(limb_t *r, const limb_t *a, const limb_t *b,
                      const limb_t *m, limb_t n0, uint32_t n, limb_t *t)
 {
-	uint32_t i, j;
-	limb_t borrow, take;
+	uint32_t i;
 
-	memset(t, 0, (n + 2) * sizeof(limb_t));
+	memset(t, 0, 2 * n * sizeof(limb_t));
+	for (i = 0; i < n; i++)
+		t[n + i] = addmul_1(t + i, a, n, b[i]);
+	mont_reduce(r, t, m, n0, n);
+}
 
+/* r = a * a * R^-1 mod m, with t of 2n limbs.  A square is its own mirror
+ * image, so each product off the diagonal is worth two and only half of them
+ * are worked out: their sum is doubled, and then the diagonal is added in. */
+static void mont_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
+                     uint32_t n, limb_t *t)
+{
+	limb_t carry = 0;
+	uint32_t i;
+
+	memset(t, 0, 2 * n * sizeof(limb_t));
+	for (i = 0; i + 1 < n; i++)
+		t[n + i] = addmul_1(t + i + i + 1, a + i + 1, n - 1 - i, a[i]);
+	shl1(t, 2 * n); /* their sum is under half of what 2n limbs hold */
 	for (i = 0; i < n; i++) {
-		limb_t carry = 0, u;
-		dlimb_t p;
+		dlimb_t p = (dlimb_t) a[i] * a[i] + t[i + i] + carry;
 
-		for (j = 0; j < n; j++) {
-			p = (dlimb_t) a[j] * b[i] + t[j] + carry;
-			t[j] = (limb_t) p;
-			carry = (limb_t) (p >> LIMB_BITS);
-		}
-		p = (dlimb_t) t[n] + carry;
-		t[n] = (limb_t) p;
-		t[n + 1] = (limb_t) (p >> LIMB_BITS);
-
-		u = t[0] * n0;
-		p = (dlimb_t) u * m[0] + t[0];
+		t[i + i] = (limb_t) p;
+		p = (dlimb_t) t[i + i + 1] + (limb_t) (p >> LIMB_BITS);
+		t[i + i + 1] = (limb_t) p;
 		carry = (limb_t) (p >> LIMB_BITS);
-		for (j = 1; j < n; j++) {
-			p = (dlimb_t) u * m[j] + t[j] + carry;
-			t[j - 1] = (limb_t) p;
-			carry = (limb_t) (p >> LIMB_BITS);
-		}
-		p = (dlimb_t) t[n] + carry;
-		t[n - 1] = (limb_t) p;
-		t[n] = t[n + 1] + (limb_t) (p >> LIMB_BITS);
 	}
-
-	/* t is under 2m, so at most one subtraction; which one to keep is a mask */
-	borrow = sub_n(r, t, m, n);
-	take = t[n] | (borrow ^ 1);
-	select_n(r, r, t, take & 1, n);
+	mont_reduce(r, t, m, n0, n);
 }
 
 /* r2 = R^2 mod m, by doubling one 2 * n * LIMB_BITS times */
@@ -194,14 +236,14 @@ int crypton_powm_sec(uint8_t *out,
                      const uint8_t *mod, uint32_t modlen)
 {
 	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
-	uint32_t words = (TABLE_SIZE + 6) * n + 2;
+	uint32_t words = (TABLE_SIZE + 7) * n;
 	limb_t *space, *m, *r2, *acc, *sel, *prod, *table, *t, n0;
 	uint32_t i, j, k;
 
 	if (modlen == 0 || n == 0 || (mod[modlen - 1] & 1) == 0)
 		return 1;
 
-	/* the table, five more n-limb numbers and one of n + 2 */
+	/* the table, five more n-limb numbers and one of 2n */
 	space = calloc(words, sizeof(limb_t));
 	if (space == NULL)
 		return 1;
@@ -211,7 +253,7 @@ int crypton_powm_sec(uint8_t *out,
 	sel = acc + n;
 	prod = sel + n;
 	t = prod + n;
-	table = t + n + 2;
+	table = t + 2 * n;
 
 	if (from_be(m, n, mod, modlen) != 0)
 		goto fail;
@@ -237,7 +279,7 @@ int crypton_powm_sec(uint8_t *out,
 		limb_t w = (exp[explen - 1 - nib / 2] >> (4 * (nib % 2))) & 0xf;
 
 		for (j = 0; j < WINDOW_BITS; j++) {
-			mont_mul(sel, acc, acc, m, n0, n, t);
+			mont_sqr(sel, acc, m, n0, n, t);
 			memcpy(acc, sel, n * sizeof(limb_t));
 		}
 
