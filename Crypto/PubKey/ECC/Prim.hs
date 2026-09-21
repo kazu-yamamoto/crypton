@@ -23,7 +23,8 @@ module Crypto.PubKey.ECC.Prim (
 ) where
 
 import Crypto.Error (maybeCryptoError)
-import Crypto.Number.Basic (numBits)
+import Crypto.Internal.ECC (MulResult (..), primeCurveMul)
+import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic
@@ -256,20 +257,33 @@ pointMul c n p
     | n == 0 = PointO
     | otherwise =
         case c of
-            CurveFP (CurvePrime pr cc) ->
-                -- Count to the width of the order, which is public, so a
-                -- scalar in range -- which is every secret one -- takes the
-                -- same number of steps whatever it is.  A scalar may still be
-                -- given out of range, and then the count has to follow it or
-                -- the high bits would be dropped.
-                jacobianMul
-                    pr
-                    (ecc_a cc)
-                    (max (integerBits n) (integerBits (ecc_n cc)))
-                    n
-                    p
+            CurveFP (CurvePrime pr cc) -> primeMul pr cc
             CurveF2m{} -> affineMul n p
   where
+    -- The C answers for a point on the curve; anything else keeps the
+    -- answers it has always had from the code below.
+    primeMul pr cc = case p of
+        Point px py
+            | isPointValid c p ->
+                case primeCurveMul pr (ecc_a cc) (ecc_b cc) klen n px py of
+                    MulPoint x y -> Point x y
+                    MulInfinity -> PointO
+                    MulUnsupported -> slow
+        _ -> slow
+      where
+        -- Walk the width of the order, which is public, so a scalar in range
+        -- -- which is every secret one -- costs the same whatever it is.  A
+        -- scalar may still be given out of range, and then the width has to
+        -- follow it or the high bits would be dropped.
+        klen = max (numBytes n) (numBytes (ecc_n cc))
+        slow =
+            jacobianMul
+                pr
+                (ecc_a cc)
+                (max (integerBits n) (integerBits (ecc_n cc)))
+                n
+                p
+
     affineMul k q
         | k == 0 = PointO
         | k == 1 = q
