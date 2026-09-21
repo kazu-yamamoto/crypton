@@ -3,6 +3,7 @@
 module PubKey.RSASpec (spec) where
 
 import Crypto.Hash
+import Crypto.Number.ModArithmetic (inverse)
 import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
@@ -257,9 +258,39 @@ blinderTests = describe "blinder" $ do
                 withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n (RSA.private_pub key))
          in Prim.dp (Just blinder) key cipher === Prim.dp Nothing key cipher
 
+-- | The private exponent is the inverse of e modulo (p-1)(q-1), however it
+-- is worked out.  These are primes small enough to be quick and a spread of
+-- exponents: prime ones, which have the arithmetic of e to themselves, a
+-- composite one, which does not, and ones that share a factor with the
+-- modulus and so have no inverse at all.
+privateExponentTests :: Spec
+privateExponentTests = describe "private exponent" $ do
+    it "is the inverse of e modulo phi" $
+        [ (p, q, e)
+        | (p, q) <- primePairs
+        , e <- exponents
+        , let phi = (p - 1) * (q - 1)
+        , fmap (RSA.private_d . snd) (RSA.generateWith (p, q) 64 e)
+            /= inverse e phi
+        ]
+            `shouldBe` []
+  where
+    primePairs =
+        [ (11, 13)
+        , (61, 53)
+        , (10007, 10009)
+        , (1000003, 1000033)
+        ,
+            ( 0xfffffffffffffffffffffffffffffffeffffffffffffffff
+            , 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff + 4294967295
+            )
+        ]
+    exponents = [3, 5, 17, 257, 65537, 9, 15, 2]
+
 spec :: Spec
 spec = do
     keyGenerationTests
+    privateExponentTests
     blinderTests
     describe "SHA1" $ do
         describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
