@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- |
 -- Module      : Crypto.PubKey.RSA
 -- License     : BSD-style
@@ -16,9 +18,11 @@ module Crypto.PubKey.RSA (
     generateBlinder,
 ) where
 
+import Crypto.Internal.ByteArray (ScrubbedBytes)
 import Crypto.Number.Generate (generateMax)
 import Crypto.Number.ModArithmetic (inverse, inverseCoprimes, inverseSafe)
 import Crypto.Number.Prime (generatePrime)
+import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
 
@@ -130,15 +134,29 @@ generate size e = loop
 -- the unique parameter apart from the random number generator is the
 -- public key value N.
 --
--- /WARNING:/ The blinder holds a random number and its inverse, and the
--- inverse is worked out with the extended Euclidean algorithm, whose steps
--- follow the number it is given.  That number is what the blinding rests on,
--- and this runs once per operation rather than once per key.  N is composite,
--- so Fermat does not answer for it; a constant time inverse would.
+-- The blinder holds a random number and its inverse.  N is composite, so
+-- Fermat has no answer for the inverse and it goes through the extended
+-- Euclidean algorithm, whose steps follow the number handed to it -- which
+-- would be the number the blinding rests on.  So the algorithm is handed that
+-- number multiplied by another random one instead, and its answer multiplied
+-- by that number again, which leaves the inverse wanted and shows the
+-- algorithm nothing that has anything to do with it.
 generateBlinder
-    :: MonadRandom m
+    :: forall m
+     . MonadRandom m
     => Integer
     -- ^ RSA public N parameter.
     -> m Blinder
-generateBlinder n =
-    (\r -> Blinder r (inverseCoprimes r n)) <$> generateMax n
+generateBlinder n = do
+    r <- generateMax n
+    -- The inverse goes through the extended Euclidean algorithm, whose steps
+    -- follow the number handed to it, and r is what the blinding rests on.
+    -- So another random number goes with it: the product is uniform and says
+    -- nothing about r on its own, and multiplying its inverse by that number
+    -- again leaves the inverse of r.  Sixteen bytes are enough to hide it and
+    -- are under either prime, so the product is coprime with n whenever r is,
+    -- as it was before.
+    u <- os2ip <$> (getRandomBytes 16 :: m ScrubbedBytes)
+    let v = (r * u) `mod` n
+        rm1 = (inverseCoprimes v n * u) `mod` n
+    return $ Blinder r rm1
