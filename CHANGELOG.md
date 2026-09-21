@@ -2,6 +2,46 @@
 
 ## 2.0.0
 
+* perf(aes): build the AArch64 key schedule with the instructions rather than
+  the S-box table.  The AArch64 path expanded a key by calling the generic
+  implementation and then inverting the round keys, so every schedule went
+  through sixteen lookups at addresses derived from the key -- a small thing
+  next to the per-block indexing the extensions exist to remove, but a key
+  schedule is what an attacker most wants out of a cache, and x86 has never
+  needed the table.  AArch64 has no counterpart to AESKEYGENASSIST, but AESE
+  against a zero key is SubBytes and ShiftRows, and a word given to it in all
+  four columns comes back as SubWord in each of them.  The words stay in
+  vector registers throughout, which is what makes it free: moving each one to
+  a general register for the instruction and back cost more than the
+  instruction did, 87 to 144 ns for an AES-128 schedule, where keeping them in
+  registers gives 81.4
+  [#157](https://github.com/kazu-yamamoto/crypton/pull/157)
+* perf(aes): AES-192 through the processor's AES instructions.  Every 192-bit
+  slot in the branch table was left at the generic code, on x86 and on AArch64
+  alike, so a 192-bit key got the table-driven software AES while 128 and 256
+  got the instructions.  It was 164 times slower for counter mode on the x86
+  machine measured and 62 on Apple silicon, and it was also the only key size
+  whose data path indexes a table with bytes derived from the key -- a caller
+  who picks AES-192 over AES-128 for a wider margin was quietly given a weaker
+  one.  Counter mode then GCM, before and after: Apple silicon 152.7 to 9452.0
+  MB/s and 112.3 to 7049.3, x86-64 40.4 to 6635.1 and 39.9 to 2633.5.  Both
+  implementations were already written once per key size, so this instantiates
+  them again at twelve rounds; x86 also needed the 192-bit schedule, which
+  does not fall into 128-bit pieces the way the other two do
+  [#156](https://github.com/kazu-yamamoto/crypton/pull/156)
+* perf(sha256): use the Intel SHA extensions on x86-64, which is what issue
+  [#31](https://github.com/kazu-yamamoto/crypton/issues/31) reports -- SHA-256
+  four to eight times slower than sha256sum and openssl, both of which use the
+  processor's instructions.  AArch64 got its instructions in #104 and is at
+  parity with them; x86 had nothing.  SHA256RNDS2 does two rounds at a time and
+  SHA256MSG1 and SHA256MSG2 help with the message schedule, so a block costs
+  four groups of sixteen instructions instead of sixty-four rounds of scalar
+  work.  On an AMD EPYC 9V74: 338.3 to 1612.7 MB/s, against openssl's 1783.8 on
+  the same machine.  The extensions arrived with Goldmont and Ice Lake at Intel
+  and with Zen at AMD, far later than AES-NI, so a processor without them is
+  ordinary rather than ancient: the code sits behind a target attribute and a
+  cpuid question, and the plain C stays for everything else
+  [#155](https://github.com/kazu-yamamoto/crypton/pull/155)
 * perf(bcrypt): Blowfish, and the key setup bcrypt wraps it in, in C.  bcrypt
   is a cost parameter and a promise that the cost is paid, and what pays it is
   the Blowfish key schedule; in Haskell that cost about twice what the usual
