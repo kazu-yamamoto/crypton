@@ -162,6 +162,17 @@ p256Tests =
                 `shouldBe` ECC.pointNegate p256curve (ECC.pointMul p256curve 7 g)
         it "a scalar past the order wraps" $
             ECC.pointMul p256curve (3 * order + 11) g `shouldBe` ECC.pointMul p256curve 11 g
+        it "a scalar wraps on either side of what 256 bits hold" $ do
+            -- the order is under 2^256 and twice it is over, so these are the
+            -- values around the boundary of a fixed-width reduction
+            ECC.pointMul p256curve (order - 1) g
+                `shouldBe` ECC.pointNegate p256curve g
+            ECC.pointMul p256curve (2 ^ (256 :: Int) - 1) g
+                `shouldBe` ECC.pointMul p256curve ((2 ^ (256 :: Int) - 1) `mod` order) g
+            ECC.pointMul p256curve (2 ^ (256 :: Int)) g
+                `shouldBe` ECC.pointMul p256curve (2 ^ (256 :: Int) `mod` order) g
+            ECC.pointMul p256curve (2 * order) g `shouldBe` ECC.PointO
+            ECC.pointMul p256curve (2 * order + 3) g `shouldBe` ECC.pointMul p256curve 3 g
         it "zero and the point at infinity give infinity" $ do
             ECC.pointMul p256curve 0 g `shouldBe` ECC.PointO
             ECC.pointMul p256curve 5 ECC.PointO `shouldBe` ECC.PointO
@@ -170,6 +181,28 @@ p256Tests =
             -- the generic code; this pins what that answers
             ECC.pointMul p256curve 5 offCurve
                 `shouldBe` ECC.pointMul p256curve 5 offCurve
+        it "the arithmetic modulo the order is the plain one" $ do
+            -- the C implementation takes 256 bits and the order is under
+            -- that, so these cross both the reduction and the fallback
+            let pairs =
+                    [ (0, 0)
+                    , (0, 7)
+                    , (1, order - 1)
+                    , (order - 1, order - 1)
+                    , (order, order)
+                    , (order + 1, 2)
+                    , (2 ^ (256 :: Int) - 1, 2 ^ (256 :: Int) - 1)
+                    , (2 ^ (256 :: Int), 3)
+                    , (2 ^ (300 :: Int) + 5, 2 ^ (256 :: Int) + 9)
+                    , (-3, 5)
+                    , (3, -5)
+                    ]
+            [ (a, b)
+              | (a, b) <- pairs
+              , ECC.scalarAdd p256curve a b /= (a + b) `mod` order
+                    || ECC.scalarMul p256curve a b /= (a * b) `mod` order
+              ]
+                `shouldBe` []
         it "two muls is the sum of the muls, base point either side" $ do
             ECC.pointAddTwoMuls p256curve 3 g 5 q
                 `shouldBe` ECC.pointAdd
@@ -214,6 +247,12 @@ spec = do
                 let pRes = ECC.pointMul aCurve (n1 * n2) p
                 let pDef = ECC.pointMul aCurve n1 (ECC.pointMul aCurve n2 p)
                 return $ pRes `propertyEq` pDef
+            prop "scalar-arithmetic" $ \aCurve (QAInteger n1) (QAInteger n2) ->
+                let n = ECC.ecc_n (ECC.common_curve aCurve)
+                 in ECC.scalarAdd aCurve n1 n2
+                        == (n1 + n2) `mod` n
+                        && ECC.scalarMul aCurve n1 n2
+                            == (n1 * n2) `mod` n
             prop "double-scalar-mult" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
                 p1 <- arbitraryPoint aCurve
                 p2 <- arbitraryPoint aCurve

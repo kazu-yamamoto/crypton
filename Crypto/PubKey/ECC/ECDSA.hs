@@ -108,7 +108,9 @@ signExtendedDigestWith k (PrivateKey curve d) digest = do
         CurveCommon _ _ g n _ = common_curve curve
     (i, r, p) <- pointDecompose curve $ pointMul curve k g
     kInv <- scalarInverse curve k
-    let s = kInv * (z + r * d) `mod` n
+    -- kInv and d are secret, so the arithmetic that mixes them goes through
+    -- the curve's own, which on P-256 is the C implementation's
+    let s = scalarMul curve kInv (scalarAdd curve z (scalarMul curve r d))
     when (r == 0 || s == 0) Nothing
     return $
         if s <= n `unsafeShiftR` 1

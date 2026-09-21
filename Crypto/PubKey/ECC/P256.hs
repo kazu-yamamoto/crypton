@@ -36,6 +36,7 @@ module Crypto.PubKey.ECC.P256 (
     scalarZero,
     scalarN,
     scalarIsZero,
+    scalarReduce,
     scalarAdd,
     scalarSub,
     scalarMul,
@@ -250,6 +251,17 @@ scalarIsZero :: Scalar -> Bool
 scalarIsZero s = unsafeDoIO $ withScalar s $ \d -> do
     result <- ccrypton_p256_is_zero d
     return $ result /= 0
+
+-- | Bring a scalar below the order of the curve
+--
+-- 'scalarFromInteger' and 'scalarFromBinary' take any 256 bits, so a scalar
+-- can arrive above the order; the arithmetic below wants it brought down
+-- first.  Twice the order is more than 256 bits hold, so this is a single
+-- subtraction, taken or not through a mask rather than a branch.
+scalarReduce :: Scalar -> Scalar
+scalarReduce a =
+    withNewScalarFreeze $ \d -> withScalar a $ \pa ->
+        ccrypton_p256_mod ccrypton_SECP256r1_n pa d
 
 -- | Perform addition between two scalars
 --
