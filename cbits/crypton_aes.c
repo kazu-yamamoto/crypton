@@ -310,12 +310,20 @@ static void initialize_table_ni(int aesni, int pclmul)
 	crypton_aes_branch_table[DECRYPT_XTS_192] = crypton_aesni_decrypt_xts192;
 	crypton_aes_branch_table[DECRYPT_XTS_256] = crypton_aesni_decrypt_xts256;
 	/* GCM */
+	/* GCM, where the build has the carry-less multiply, waits below until
+	 * the processor is known to have it too: the loop calls the multiply
+	 * rather than reaching it through the branch pointer, so that it can
+	 * be scheduled against the rounds, and is compiled with the
+	 * instruction.  The AArch64 table waits for PMULL for the same reason.
+	 */
+#ifndef WITH_PCLMUL
 	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aesni_gcm_encrypt128;
 	crypton_aes_branch_table[ENCRYPT_GCM_192] = crypton_aesni_gcm_encrypt192;
 	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aesni_gcm_encrypt256;
 	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aesni_gcm_decrypt128;
 	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aesni_gcm_decrypt192;
 	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aesni_gcm_decrypt256;
+#endif
 	/* OCB drives the ECB paths above a group at a time, so it has no
 	 * entries of its own */
 #ifdef WITH_PCLMUL
@@ -328,6 +336,14 @@ static void initialize_table_ni(int aesni, int pclmul)
 	crypton_aes_branch_table[GHASH_GF_MUL]    = crypton_aesni_gf_mul_pclmul,
 	crypton_aes_branch_table[GHASH_GF_MUL4]   = crypton_aesni_gf_mul4_pclmul,
 	crypton_aesni_init_pclmul();
+
+	/* and GCM, which needs both halves */
+	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aesni_gcm_encrypt128;
+	crypton_aes_branch_table[ENCRYPT_GCM_192] = crypton_aesni_gcm_encrypt192;
+	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aesni_gcm_encrypt256;
+	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aesni_gcm_decrypt128;
+	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aesni_gcm_decrypt192;
+	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aesni_gcm_decrypt256;
 #endif
 }
 #endif
