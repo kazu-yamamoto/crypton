@@ -182,10 +182,48 @@ exponentiationTests = describe "exponentiation" $ do
       where
         bits = [testBit e i | i <- [numBits e - 1, numBits e - 2 .. 0]]
 
+-- | The safe inverse has to answer exactly what the ordinary one answers, on
+-- a prime modulus, where it works out the inverse by Fermat, and on every
+-- other one, where that answer is not an inverse and it has to notice and ask
+-- the ordinary one instead.
+inverseTests :: Spec
+inverseTests = describe "inverse" $ do
+    it "agrees with the plain inverse on the corners" $
+        [ (g, m)
+        | (g, m) <-
+            [ (0, 1)
+            , (0, 7)
+            , (1, 7)
+            , (3, 7)
+            , (7, 7)
+            , (8, 7)
+            , (3, 9)
+            , (6, 9)
+            , (2, 8)
+            , (4, 8)
+            , (5, 8)
+            , (-3, 7)
+            , (bigPrime, bigComposite)
+            , (bigComposite, bigPrime)
+            ]
+        , inverseSafe g m /= inverse g m
+        ]
+            `shouldBe` []
+    prop "agrees with the plain inverse" $ \(QAInteger g) (QAInteger m') ->
+        let m = abs m' + 1
+         in inverseSafe g m === inverse g m
+    prop "agrees with the plain inverse on a prime modulus" $ \(QAInteger g) ->
+        inverseSafe g bigPrime === inverse g bigPrime
+    prop "inverts" $ \(QAInteger g) ->
+        let g' = g `mod` bigPrime
+         in g'
+                /= 0 ==> fmap (\i -> g' * i `mod` bigPrime) (inverseSafe g' bigPrime) === Just 1
+
 spec :: Spec
 spec = do
     primalityTests
     exponentiationTests
+    inverseTests
     prop "num-bits" $ \(Int1_2901 i) ->
         and
             [ (numBits (2 ^ i - 1) == i)

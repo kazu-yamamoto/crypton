@@ -39,7 +39,7 @@ import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Generate
-import Crypto.Number.ModArithmetic (expFast, expSafe, inverse)
+import Crypto.Number.ModArithmetic (expFast, expSafe, inverse, inverseSafe)
 import Crypto.PubKey.Internal (dsaTruncHash)
 import Crypto.Random.Types
 
@@ -140,8 +140,11 @@ signWith
     -> Maybe Signature
 signWith k pk hashAlg msg = do
     -- k comes from the caller and is only invertible when it is coprime with
-    -- q, which the caller cannot check without knowing q is prime
-    kInv <- inverse k q
+    -- q, which the caller cannot check without knowing q is prime.  It is also
+    -- a secret worth as much as the private key, so it is inverted without
+    -- the extended Euclidean algorithm, whose steps follow the bits of what
+    -- it is given
+    kInv <- inverseSafe k q
     let hm = dsaTruncHash hashAlg msg q
         r = expSafe g k p `mod` q
         s = (kInv * (hm + x * r)) `mod` q

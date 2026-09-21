@@ -5,6 +5,7 @@
 -- "Crypto.PubKey.ECC.P256".
 module Crypto.PubKey.ECC.Prim (
     scalarGenerate,
+    scalarInverse,
     pointAdd,
     pointNegate,
     pointDouble,
@@ -90,6 +91,21 @@ scalarGenerate :: MonadRandom randomly => Curve -> randomly PrivateNumber
 scalarGenerate curve = generateBetween 1 (n - 1)
   where
     n = ecc_n $ common_curve curve
+
+-- | The inverse of a scalar modulo the order of the curve, without letting
+-- the scalar steer how long the work takes.  This is what signing needs for
+-- its nonce, which is as worth hiding as the private key itself: a handful of
+-- signatures whose nonces are partly known give the key away.
+--
+-- On P-256 the C implementation does it; elsewhere it is 'inverseSafe'.
+-- 'Nothing' means the scalar has no inverse, which for the curves in use here
+-- means it was a multiple of the order.
+scalarInverse :: Curve -> Integer -> Maybe Integer
+scalarInverse c k
+    | c == p256Curve
+    , Just s <- toP256Scalar k =
+        Just (P256.scalarToInteger (P256.scalarInvSafe s))
+    | otherwise = inverseSafe k (ecc_n $ common_curve c)
 
 -- TODO: Extract helper function for `fromMaybe PointO...`
 
