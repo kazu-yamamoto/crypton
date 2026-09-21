@@ -3,12 +3,13 @@
  * one needs, doing the same work whatever the scalar is.
  *
  * A carry-less multiplication is the one thing a binary field needs and
- * ordinary arithmetic does not give.  Where the processor has the
- * instruction for it this uses it; where it does not, it falls back on the
- * trick of splitting each operand into four groups of every fourth bit, so
+ * ordinary arithmetic does not give.  Where the processor has the instruction
+ * for it this uses it -- PMULL on aarch64, which the compiler is told about,
+ * and PCLMULQDQ on x86-64, which it is asked about at run time.  Where it
+ * does not, each operand is split into four groups of every fourth bit, so
  * that the carries of an ordinary multiplication cannot reach the bits that
- * matter, and masking them away afterwards.  Neither has a table or a branch
- * that depends on what it is multiplying.
+ * matter, and masked away afterwards.  None of the three has a table or a
+ * branch that depends on what it is multiplying.
  *
  * Reduction folds what is above the degree back in, which the polynomial
  * being a trinomial or a pentanomial with exponents that are public makes
@@ -23,6 +24,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <crypton_cpu.h>
 #include <crypton_f2m.h>
 
 typedef uint64_t limb_t;
@@ -74,7 +76,8 @@ static inline void clmul(limb_t a, limb_t b, limb_t *lo, limb_t *hi)
 #endif
 
 /* t = a * b, over 2n limbs */
-static void poly_mul(limb_t *t, const limb_t *a, const limb_t *b, uint32_t n)
+static void poly_mul_generic(limb_t *t, const limb_t *a, const limb_t *b,
+                             uint32_t n)
 {
 	uint32_t i, j;
 
@@ -87,6 +90,50 @@ static void poly_mul(limb_t *t, const limb_t *a, const limb_t *b, uint32_t n)
 			t[i + j] ^= lo;
 			t[i + j + 1] ^= hi;
 		}
+}
+
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#define HAVE_PCLMUL 1
+#include <immintrin.h>
+
+/* The same, with the instruction x86 has for it.  The attribute is what lets
+ * one file hold both this and the code for a processor without it: the
+ * compiler may emit the instruction here and nowhere else, and the caller
+ * asks the processor before it comes this way.
+ */
+__attribute__((target("pclmul,sse2")))
+static void poly_mul_pclmul(limb_t *t, const limb_t *a, const limb_t *b,
+                            uint32_t n)
+{
+	uint32_t i, j;
+
+	memset(t, 0, 2 * n * sizeof(limb_t));
+	for (i = 0; i < n; i++)
+		for (j = 0; j < n; j++) {
+			__m128i p = _mm_clmulepi64_si128(
+			    _mm_cvtsi64_si128((long long) a[i]),
+			    _mm_cvtsi64_si128((long long) b[j]), 0x00);
+
+			t[i + j] ^= (limb_t) _mm_cvtsi128_si64(p);
+			t[i + j + 1] ^=
+			    (limb_t) _mm_cvtsi128_si64(_mm_srli_si128(p, 8));
+		}
+}
+#else
+#define HAVE_PCLMUL 0
+#endif
+
+static void poly_mul(limb_t *t, const limb_t *a, const limb_t *b, uint32_t n)
+{
+#if HAVE_PCLMUL
+	/* what the processor has is not what is being multiplied, so asking is
+	 * not a side channel, and the answer is worked out once */
+	if (crypton_x86_simd_features() & CRYPTON_X86_PCLMUL) {
+		poly_mul_pclmul(t, a, b, n);
+		return;
+	}
+#endif
+	poly_mul_generic(t, a, b, n);
 }
 
 /* the bits of a 32-bit half, spread out with a zero between each pair */
