@@ -12,11 +12,14 @@
 module Crypto.Internal.ECC (
     MulResult (..),
     primeCurveMul,
+    binaryCurveMul,
 ) where
 
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic (numBytes)
+import Crypto.Number.F2m (addF2m, divF2m, mulF2m, squareF2m)
 import qualified Crypto.Number.Serialize.Internal as Internal
+import Data.Bits (testBit)
 import Data.Word (Word32, Word8)
 import Foreign.C.Types (CInt (..))
 import Foreign.Marshal.Alloc (allocaBytes)
@@ -112,3 +115,86 @@ foreign import ccall safe "crypton_ecc_mul"
         -> Ptr Word8
         -> Word32
         -> IO CInt
+
+-- | Multiply a point by a scalar on the curve @y^2 + x*y = x^3 + a*x^2 + b@
+-- over the binary field of @fx@, by Montgomery's ladder.
+--
+-- The ladder carries the multiples of two consecutive numbers, whose
+-- difference is therefore the point itself, and every bit of the scalar costs
+-- one addition and one doubling of them whichever way it goes.  Only the x
+-- coordinates are carried -- the difference being known is what lets them be
+-- -- and the y is worked out at the end from the two of them, which is what
+-- makes the coordinates projective: one division for the whole
+-- multiplication rather than one for every step.
+--
+-- The point has to be on the curve and to have an x, which is what the
+-- caller has to hand: the one point with no x is its own negation and is
+-- easier multiplied the long way.  The scalar is walked over the whole of
+-- the width asked for, so its value is hidden but that width is not.
+binaryCurveMul
+    :: Integer
+    -- ^ the polynomial the field is over
+    -> Integer
+    -- ^ b
+    -> Int
+    -- ^ how many bits of scalar to walk
+    -> Integer
+    -- ^ the scalar
+    -> Integer
+    -- ^ the point's x
+    -> Integer
+    -- ^ the point's y
+    -> MulResult
+binaryCurveMul fx b bits k x y
+    | bits <= 0 || k < 0 || x == 0 = MulUnsupported
+    | otherwise = recover (go (bits - 1) (1, 0) (x, 1))
+  where
+    infixl 6 .+.
+    (.+.) = addF2m
+    sqr = squareF2m fx
+    mul = mulF2m fx
+
+    -- The two of them added, which the difference between them being the
+    -- point makes possible from their x coordinates alone.  It does not
+    -- matter which way round they come.
+    madd (xa, za) (xb, zb) =
+        let t1 = mul xa zb
+            t2 = mul xb za
+            z = sqr (t1 .+. t2)
+         in (mul x z .+. mul t1 t2, z)
+
+    -- One of them doubled.
+    mdouble (xa, za) =
+        let xa2 = sqr xa
+            za2 = sqr za
+         in (sqr xa2 .+. mul b (sqr za2), mul xa2 za2)
+
+    -- Nothing is at infinity to begin with and the point is next to it, and
+    -- from there each bit takes the pair to twice where it was.  The bangs
+    -- are what make both halves happen: without them the one the bit does not
+    -- call for would stay a thunk, and the work would follow the scalar.
+    go i p1 p2
+        | i < 0 = (p1, p2)
+        | testBit k i =
+            let !s = madd p1 p2
+                !d = mdouble p2
+             in go (i - 1) s d
+        | otherwise =
+            let !s = madd p1 p2
+                !d = mdouble p1
+             in go (i - 1) d s
+
+    -- x1 is the answer and x2 is one point further on; together with the
+    -- point they give the y that the ladder does not carry.
+    recover ((x1, z1), (x2, z2))
+        | z1 == 0 = MulInfinity -- the multiple is at infinity
+        | z2 == 0 = MulPoint x (x .+. y) -- the one after it is, so this is -P
+        | otherwise = case (divF2m fx x1 z1, divF2m fx x2 z2) of
+            (Just xa, Just xb) ->
+                let u = xa .+. x
+                    v = xb .+. x
+                    inner = mul u v .+. sqr x .+. y
+                 in case divF2m fx (mul u inner) x of
+                        Just w -> MulPoint xa (w .+. y)
+                        Nothing -> MulUnsupported
+            _ -> MulUnsupported

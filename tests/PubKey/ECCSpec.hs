@@ -3,6 +3,7 @@
 module PubKey.ECCSpec (spec) where
 
 import Crypto.Number.Basic (numBits)
+import Crypto.Number.F2m (squareF2m)
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import Data.Bits (testBit)
@@ -272,11 +273,56 @@ weightTests = describe "scalars of every weight" $ do
             , (n * n * n, alternating (bits - 2))
             ]
 
+-- | The curves over a binary field, whose multiplication is its own.  The
+-- point with no x is on every one of them -- y^2 = b has a root, since
+-- squaring is a bijection there -- and it is its own negation, so doubling it
+-- reaches infinity, which is the shape a multiplication is most likely to get
+-- wrong.
+binaryTests :: Spec
+binaryTests = describe "binary curves" $ mapM_ check names
+  where
+    names = [ECC.SEC_t113r1, ECC.SEC_t163k1, ECC.SEC_t233r1, ECC.SEC_t283k1]
+    check name = describe (show name) $ do
+        it "agrees with a double-and-add at the edges" $
+            [k | k <- scalars, ECC.pointMul c k g /= doubleAndAdd c k g]
+                `shouldBe` []
+        it "answers for the point of order two" $ do
+            ECC.isPointValid c two `shouldBe` True
+            ECC.pointMul c 1 two `shouldBe` two
+            ECC.pointMul c 2 two `shouldBe` ECC.PointO
+            ECC.pointMul c 3 two `shouldBe` two
+            ECC.pointMul c (2 * order) two `shouldBe` ECC.PointO
+        it "agrees with a double-and-add from the point of order two" $
+            [k | k <- take 6 scalars, ECC.pointMul c k two /= doubleAndAdd c k two]
+                `shouldBe` []
+      where
+        c = ECC.getCurveByName name
+        cc = ECC.common_curve c
+        order = ECC.ecc_n cc
+        g = ECC.ecc_g cc
+        fx = ECC.ecc_fx (case c of ECC.CurveF2m b -> b; _ -> error "not binary")
+        -- the square root of b, which squaring being a bijection provides
+        two = ECC.Point 0 (iterate (squareF2m fx) (ECC.ecc_b cc) !! (numBits fx - 2))
+        scalars =
+            [ 1
+            , 2
+            , 3
+            , 15
+            , 16
+            , 17
+            , order - 1
+            , order
+            , order + 1
+            , 2 * order + 3
+            , order * order
+            ]
+
 spec :: Spec
 spec = do
     describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
     p256Tests
     weightTests
+    binaryTests
     modifyMaxSuccess (const 20) $
         describe "property" $ do
             prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
