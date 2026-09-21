@@ -17,6 +17,7 @@ import Crypto.PubKey.ECC.Generate
 import Crypto.PubKey.ECC.Types
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Maybe (isJust)
 import Test.Hspec
 import Text.Printf
 import Utils (assertBool, assertFailure)
@@ -1627,8 +1628,40 @@ testEntryNonce entry = describe (show entry) $ sequence_ tests
     key = PrivateKey curve $ privateNumber entry
     curve = getCurveByName $ curveName entry
 
+-- | Signing inverts k modulo the order of the curve.  The inverse does not
+-- exist for a k that is zero or the order itself, and on a curve whose order
+-- is composite it does not exist for a k that shares a factor with it --
+-- signWith takes k and the curve from the caller, so it has to say no rather
+-- than raise.  The curve below is the textbook y^2 = x^3 + x + 1 over F23,
+-- which has 28 points, with (3, 10) generating all of them.
+nonInvertibleTests :: Spec
+nonInvertibleTests =
+    describe "non-invertible values" $ do
+        it "signWith with k = 0 returns Nothing" $
+            signWith 0 tinyKey SHA1 msg0 `shouldBe` Nothing
+        it "signWith with k = the order returns Nothing" $
+            signWith 28 tinyKey SHA1 msg0 `shouldBe` Nothing
+        it "signWith with k sharing a factor with the order returns Nothing" $
+            signWith 14 tinyKey SHA1 msg0 `shouldBe` Nothing
+        it "signWith with a usable k still signs" $
+            signWith 5 tinyKey SHA1 msg0 `shouldSatisfy` isJust
+  where
+    msg0 = "message" :: ByteString
+    tinyCurve =
+        CurveFP $
+            CurvePrime 23 $
+                CurveCommon
+                    { ecc_a = 1
+                    , ecc_b = 1
+                    , ecc_g = Point 3 10
+                    , ecc_n = 28
+                    , ecc_h = 1
+                    }
+    tinyKey = PrivateKey tinyCurve 5
+
 spec :: Spec
 spec = do
+    nonInvertibleTests
     describe "GEC 2" $ sequence_ $ testEntry . normalize <$> gec2Entries
     describe "RFC 6979" $
         sequence_ $
