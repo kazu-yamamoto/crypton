@@ -102,6 +102,8 @@ uint32_t crypton_x86_simd_features(void)
 		cpuid(1, &eax, &ebx, &ecx, &edx);
 		if (ecx & (1 << 9))
 			f |= CRYPTON_X86_SSSE3;
+		if (ecx & (1 << 1))
+			f |= CRYPTON_X86_PCLMUL;
 		/* OSXSAVE, then AVX, then the XCR0 bits for the SSE and AVX
 		 * register state, and only then ask leaf 7 about AVX2 */
 		if ((ecx & (1 << 27)) && (ecx & (1 << 28)) && ((xcr0() & 6) == 6)) {

@@ -40,8 +40,9 @@
 
 /* vector extensions beyond the x86-64 baseline, as cpuid reports them and
  * the OS allows them */
-#define CRYPTON_X86_SSSE3 1
-#define CRYPTON_X86_AVX2  2
+#define CRYPTON_X86_SSSE3  1
+#define CRYPTON_X86_AVX2   2
+#define CRYPTON_X86_PCLMUL 4
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif
