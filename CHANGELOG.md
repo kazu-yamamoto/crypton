@@ -1,6 +1,6 @@
 # CHANGELOG for crypton
 
-## 1.2.0
+## 2.0.0
 
 * fix(ecdsa): keep the P-256 signature out of `Integer` arithmetic.  The
   scalar handed to the C implementation was reduced with `mod`, a division,
