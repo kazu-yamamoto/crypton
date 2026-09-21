@@ -7,6 +7,7 @@ import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import Crypto.PubKey.RSA.Prim (ep)
+import qualified Crypto.PubKey.RSA.Prim as Prim
 import qualified Data.ByteString as B
 import Data.Either
 
@@ -237,9 +238,29 @@ keyGenerationTests =
             RSA.generateWith (p vector, q vector) (size vector) (e vector)
                 `shouldBe` Just (vectorToPublic vector, vectorToPrivate vector)
 
+-- | The blinder is a number and its inverse, and everything the blinding
+-- does rests on that: the decryption multiplies by the one on the way in and
+-- by the other on the way out, so an answer that comes back the same either
+-- way is the pair being what it says it is.
+blinderTests :: Spec
+blinderTests = describe "blinder" $ do
+    prop "holds a number and its inverse" $ \testDRG ->
+        let key = vectorToPrivate (head vectorsSHA1)
+            n = RSA.public_n (RSA.private_pub key)
+            RSA.Blinder r rm1 = withTestDRG testDRG $ RSA.generateBlinder n
+         in (r * rm1) `mod` n === 1
+    prop "leaves the decryption where it was" $ \testDRG ->
+        let vector = head vectorsSHA1
+            key = vectorToPrivate vector
+            cipher = ep (vectorToPublic vector) (B.replicate 32 7)
+            blinder =
+                withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n (RSA.private_pub key))
+         in Prim.dp (Just blinder) key cipher === Prim.dp Nothing key cipher
+
 spec :: Spec
 spec = do
     keyGenerationTests
+    blinderTests
     describe "SHA1" $ do
         describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
         describe "verify" $
