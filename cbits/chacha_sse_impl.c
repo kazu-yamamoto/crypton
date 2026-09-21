@@ -12,7 +12,8 @@
  * d[13].
  */
 TARGET
-static void SIZED(core4)(int rounds, block out[4], const crypton_chacha_state *in)
+static inline void SIZED(core4)(int rounds, const crypton_chacha_state *in,
+                                const uint8_t *src, uint8_t *dst, int combine)
 {
 	__m128i v0, v1, v2, v3, v4, v5, v6, v7;
 	__m128i v8, v9, v10, v11, v12, v13, v14, v15;
@@ -79,7 +80,19 @@ static void SIZED(core4)(int rounds, block out[4], const crypton_chacha_state *i
 	TRANSPOSE(v12, v13, v14, v15);
 #undef TRANSPOSE
 
-#define ST(j, g, v) _mm_storeu_si128((__m128i *) (out[j].d + (g)), v)
+	/*
+	 * Each piece is exclusive-ored with the input and stored where it
+	 * belongs as it comes out.  Writing the keystream to a buffer and
+	 * reading it back to combine it cost a pass over every byte.
+	 */
+#define ST(j, g, v)                                                    \
+	do {                                                           \
+		__m128i o_ = (v);                                      \
+		if (combine)                                           \
+			o_ = _mm_xor_si128(o_, _mm_loadu_si128(        \
+			    (const __m128i *) (src + 64 * (j) + 4 * (g)))); \
+		_mm_storeu_si128((__m128i *) (dst + 64 * (j) + 4 * (g)), o_); \
+	} while (0)
 	ST(0, 0, v0);   ST(1, 0, v1);   ST(2, 0, v2);   ST(3, 0, v3);
 	ST(0, 4, v4);   ST(1, 4, v5);   ST(2, 4, v6);   ST(3, 4, v7);
 	ST(0, 8, v8);   ST(1, 8, v9);   ST(2, 8, v10);  ST(3, 8, v11);
@@ -91,26 +104,11 @@ TARGET
 static void SIZED(combine)(int rounds, uint8_t *dst, const uint8_t *src,
                            const crypton_chacha_state *in)
 {
-	block k[4];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	SIZED(core4)(rounds, k, in);
-	for (i = 0; i < 256; i += 16)
-		_mm_storeu_si128((__m128i *) (dst + i),
-		                 _mm_xor_si128(_mm_loadu_si128((const __m128i *) (src + i)),
-		                               _mm_loadu_si128((const __m128i *) (ks + i))));
+	SIZED(core4)(rounds, in, src, dst, 1);
 }
 
 TARGET
 static void SIZED(generate)(int rounds, uint8_t *dst, const crypton_chacha_state *in)
 {
-	block k[4];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	SIZED(core4)(rounds, k, in);
-	for (i = 0; i < 256; i += 16)
-		_mm_storeu_si128((__m128i *) (dst + i),
-		                 _mm_loadu_si128((const __m128i *) (ks + i)));
+	SIZED(core4)(rounds, in, NULL, dst, 0);
 }

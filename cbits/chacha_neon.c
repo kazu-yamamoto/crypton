@@ -14,6 +14,7 @@
  * to attach.
  */
 
+#include <stddef.h>
 #include <stdint.h>
 #include <arm_neon.h>
 #include "crypton_chacha.h"
@@ -54,7 +55,8 @@
  * caller keeps the state's counter, and only calls this when those four
  * do not carry into d[13].
  */
-static void core4(int rounds, block out[4], const crypton_chacha_state *in)
+static inline void core4(int rounds, const crypton_chacha_state *in,
+                         const uint8_t *src, uint8_t *dst, int combine)
 {
 	static const uint8_t rot8_tbl[16] =
 		{ 3,0,1,2, 7,4,5,6, 11,8,9,10, 15,12,13,14 };
@@ -105,50 +107,35 @@ static void core4(int rounds, block out[4], const crypton_chacha_state *in)
 	TRANSPOSE(v8,  v9,  v10, v11);
 	TRANSPOSE(v12, v13, v14, v15);
 
-	vst1q_u32(out[0].d + 0,  v0);
-	vst1q_u32(out[1].d + 0,  v1);
-	vst1q_u32(out[2].d + 0,  v2);
-	vst1q_u32(out[3].d + 0,  v3);
-	vst1q_u32(out[0].d + 4,  v4);
-	vst1q_u32(out[1].d + 4,  v5);
-	vst1q_u32(out[2].d + 4,  v6);
-	vst1q_u32(out[3].d + 4,  v7);
-	vst1q_u32(out[0].d + 8,  v8);
-	vst1q_u32(out[1].d + 8,  v9);
-	vst1q_u32(out[2].d + 8,  v10);
-	vst1q_u32(out[3].d + 8,  v11);
-	vst1q_u32(out[0].d + 12, v12);
-	vst1q_u32(out[1].d + 12, v13);
-	vst1q_u32(out[2].d + 12, v14);
-	vst1q_u32(out[3].d + 12, v15);
+	/*
+	 * Each piece is exclusive-ored with the input and stored where it
+	 * belongs as it comes out.  Writing the keystream to a buffer and
+	 * reading it back to combine it cost a pass over every byte.
+	 */
+#define ST(j, g, v)                                                    \
+	do {                                                           \
+		uint8x16_t o_ = vreinterpretq_u8_u32(v);               \
+		if (combine)                                           \
+			o_ = veorq_u8(o_, vld1q_u8(src + 64 * (j)      \
+			                           + 4 * (g)));        \
+		vst1q_u8(dst + 64 * (j) + 4 * (g), o_);                \
+	} while (0)
+	ST(0, 0, v0);   ST(1, 0, v1);   ST(2, 0, v2);   ST(3, 0, v3);
+	ST(0, 4, v4);   ST(1, 4, v5);   ST(2, 4, v6);   ST(3, 4, v7);
+	ST(0, 8, v8);   ST(1, 8, v9);   ST(2, 8, v10);  ST(3, 8, v11);
+	ST(0, 12, v12); ST(1, 12, v13); ST(2, 12, v14); ST(3, 12, v15);
+#undef ST
 }
 
-/*
- * The four blocks land in one contiguous 256-byte run, so the exclusive or
- * with the plaintext is sixteen more vector operations rather than a loop
- * over bytes.
- */
 void crypton_chacha_simd_combine(int rounds, uint8_t *dst, const uint8_t *src,
                                   const crypton_chacha_state *in)
 {
-	block k[4];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	core4(rounds, k, in);
-	for (i = 0; i < 256; i += 16)
-		vst1q_u8(dst + i, veorq_u8(vld1q_u8(src + i), vld1q_u8(ks + i)));
+	core4(rounds, in, src, dst, 1);
 }
 
 void crypton_chacha_simd_generate(int rounds, uint8_t *dst, const crypton_chacha_state *in)
 {
-	block k[4];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	core4(rounds, k, in);
-	for (i = 0; i < 256; i += 16)
-		vst1q_u8(dst + i, vld1q_u8(ks + i));
+	core4(rounds, in, NULL, dst, 0);
 }
 
 /* NEON has no wider sibling to choose between, so the answer is fixed. */
