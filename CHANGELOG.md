@@ -2,6 +2,34 @@
 
 ## 2.0.0
 
+* perf(bignum): start the doubling for `R^2 mod m` at the highest power of two
+  under the modulus rather than at one, which for a modulus that fills its
+  limbs is half the steps.  Two to three percent of a curve operation, and
+  every curve operation and every `expSafe` pays for it once.  Folding instead
+  of Montgomery for the primes shaped `2^k - c` was written and measured
+  alongside it and is not here: it is slower in this representation, 87.8 ns
+  against 76.8 for a 521-bit multiplication, because the shift down by `k`
+  costs more than the reduction pass it replaces when `k` does not land on a
+  limb boundary
+  [#147](https://github.com/kazu-yamamoto/crypton/pull/147)
+* perf(ecc): keep a table of the multiples of each curve's base point, which
+  is the point signing and making a key multiply and the only one worth a
+  table.  A multiplication with it is one addition per four bits and no
+  doublings: secp256k1 211.1 to 59.8 us, secp384r1 519.3 to 144.2, secp521r1
+  1047.7 to 283.0, and ECDSA P-384 signing 556.4 to 179.9 on both elliptic
+  curve APIs, which share the table.  A table is built when a curve is first
+  asked for one -- 2.8 ms for secp256k1, 5.5 for secp384r1, 10.6 for secp521r1
+  -- and is 221 KB and 456 KB for the last two, so it pays for itself after
+  about fifteen multiplications
+  [#146](https://github.com/kazu-yamamoto/crypton/pull/146)
+* perf(bignum): take the limbs four and two at a time as well as eight in the
+  loop every modular multiplication is built out of.  Four and six limbs, which
+  is what most of the curves want, fell entirely to the one-at-a-time tail
+  before: a field multiplication at six limbs goes from about 58 to 49 ns,
+  secp384r1 scalar multiplication from 596.7 to 519.3 us and ECDSA P-384
+  signing from 645.0 to 556.4.  Specialising the sizes further, which is what a
+  generated implementation would do, measures about 4% more and is not here
+  [#145](https://github.com/kazu-yamamoto/crypton/pull/145)
 * fix(rsa): keep the blinding factor out of the extended Euclidean algorithm.
   The blinder is a random number and its inverse, and the inverse went through
   an algorithm whose steps follow the number handed to it -- the number the
