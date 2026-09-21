@@ -133,8 +133,11 @@ static int sha256_use_armv8 = -1;
  * Two threads racing to answer here both write the same value.
  */
 extern void crypton_sha256_x86_do_chunk(uint32_t state[8], const uint32_t buf[16]);
+/* and, where it does not have them, the message schedule in SSE registers */
+extern void crypton_sha256_ssse3_do_chunk(uint32_t state[8], const uint32_t buf[16]);
 
 static int sha256_use_x86 = -1;
+static int sha256_use_ssse3 = -1;
 #endif
 
 static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
@@ -153,6 +156,13 @@ static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 		    (crypton_x86_simd_features() & CRYPTON_X86_SHA_NI) != 0;
 	if (sha256_use_x86) {
 		crypton_sha256_x86_do_chunk(ctx->h, buf);
+		return;
+	}
+	if (sha256_use_ssse3 < 0)
+		sha256_use_ssse3 =
+		    (crypton_x86_simd_features() & CRYPTON_X86_SSSE3) != 0;
+	if (sha256_use_ssse3) {
+		crypton_sha256_ssse3_do_chunk(ctx->h, buf);
 		return;
 	}
 #endif

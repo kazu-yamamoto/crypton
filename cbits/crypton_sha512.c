@@ -141,6 +141,20 @@ extern int crypton_sha512_armv8_available(void);
 static int sha512_use_armv8 = -1;
 #endif
 
+#if defined(WITH_X86_AVX2_SHA512) && defined(WITH_TARGET_ATTRIBUTES)
+/*
+ * x86 has no instruction for this compression function, but the message
+ * schedule is a quarter of the work and can be computed four words at a time;
+ * see sha512_x86.c.  AVX2 needs the operating system's agreement as well as
+ * the processor's, so ask.  Two threads racing to answer here both write the
+ * same value.
+ */
+#include "crypton_cpu.h"
+extern void crypton_sha512_avx2_do_chunk(uint64_t state[8], const uint64_t buf[16]);
+
+static int sha512_use_avx2 = -1;
+#endif
+
 static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
 {
 #ifdef WITH_ARMV8_SHA512
@@ -148,6 +162,15 @@ static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
 		sha512_use_armv8 = crypton_sha512_armv8_available();
 	if (sha512_use_armv8) {
 		crypton_sha512_armv8_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
+#if defined(WITH_X86_AVX2_SHA512) && defined(WITH_TARGET_ATTRIBUTES)
+	if (sha512_use_avx2 < 0)
+		sha512_use_avx2 =
+		    (crypton_x86_simd_features() & CRYPTON_X86_AVX2) != 0;
+	if (sha512_use_avx2) {
+		crypton_sha512_avx2_do_chunk(ctx->h, buf);
 		return;
 	}
 #endif
