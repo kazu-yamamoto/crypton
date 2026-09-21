@@ -23,6 +23,7 @@ import Crypto.Error
 import Crypto.Internal.ECC (
     MulResult (..),
     baseTable,
+    binaryCurveC,
     binaryCurveMul,
     primeCurveMul,
     primeCurveTableMul,
@@ -204,11 +205,17 @@ pointMul (Scalar n) p
         Point px py
             | px /= 0
             , isPointValid (Proxy :: Proxy curve) px py ->
-                case binaryCurveMul fx (curveEccB cc) bits n px py of
+                case binaryCurveC fx (curveEccB cc) klenB n px py of
                     MulPoint x y -> Point x y
                     MulInfinity -> PointO
-                    MulUnsupported -> affineMul n p
+                    -- the ladder in Haskell, for a field the C will not take
+                    MulUnsupported -> case binaryCurveMul fx (curveEccB cc) bits n px py of
+                        MulPoint x y -> Point x y
+                        MulInfinity -> PointO
+                        MulUnsupported -> affineMul n p
         _ -> affineMul n p
+      where
+        klenB = max (numBytes n) (numBytes (curveEccN cc))
 
     affineMul k q
         | k == 0 = PointO

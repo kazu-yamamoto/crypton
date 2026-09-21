@@ -15,10 +15,11 @@ module Crypto.Internal.ECC (
     primeCurveTableMul,
     baseTable,
     binaryCurveMul,
+    binaryCurveC,
 ) where
 
 import Crypto.Internal.Compat (unsafeDoIO)
-import Crypto.Number.Basic (numBytes)
+import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m (addF2m, divF2m, mulF2m, squareF2m)
 import qualified Crypto.Number.Serialize.Internal as Internal
 import Crypto.PubKey.ECC.Types (
@@ -382,3 +383,78 @@ binaryCurveMul fx b bits k x y
                         Just w -> MulPoint xa (w .+. y)
                         Nothing -> MulUnsupported
             _ -> MulUnsupported
+
+-- | Multiply a point by a scalar on a curve over a binary field, in C.
+--
+-- The ladder is the same one 'binaryCurveMul' walks, but the field arithmetic
+-- is carry-less multiplication -- the processor's where it has it, and four
+-- interleaved groups of bits where it does not -- rather than 'Integer'
+-- shifts and exclusive ors, and nothing in it branches on the scalar or
+-- indexes memory with it.
+--
+-- The point has to be on the curve and to have an x, and the scalar is walked
+-- over the whole of the width asked for, as for 'primeCurveMul'.
+binaryCurveC
+    :: Integer
+    -- ^ the polynomial the field is over
+    -> Integer
+    -- ^ b
+    -> Int
+    -- ^ how many bytes of scalar to walk
+    -> Integer
+    -- ^ the scalar
+    -> Integer
+    -- ^ the point's x
+    -> Integer
+    -- ^ the point's y
+    -> MulResult
+binaryCurveC fx b klen k px py
+    | fx <= 1 || klen <= 0 || k < 0 || px <= 0 || flen <= 0 = MulUnsupported
+    | otherwise = unsafeDoIO $
+        allocaBytes (sum widths) $ \base -> case scanl plusPtr base widths of
+            (outx : outy : cx : cy : cb : cf : ck : _) -> do
+                _ <- Internal.i2ospOf px cx flen
+                _ <- Internal.i2ospOf py cy flen
+                _ <- Internal.i2ospOf b cb flen
+                _ <- Internal.i2ospOf fx cf fxlen
+                _ <- Internal.i2ospOf k ck klen
+                r <-
+                    c_f2m_mul
+                        outx
+                        outy
+                        cx
+                        cy
+                        ck
+                        (fromIntegral klen)
+                        cb
+                        (fromIntegral flen)
+                        cf
+                        (fromIntegral fxlen)
+                Internal.i2ospOf 0 ck klen >> return ()
+                case r of
+                    0 -> do
+                        !x <- Internal.os2ip outx flen
+                        !y <- Internal.os2ip outy flen
+                        return (MulPoint x y)
+                    1 -> return MulInfinity
+                    _ -> return MulUnsupported
+            _ -> return MulUnsupported -- there are seven, but say so anyway
+  where
+    -- the field is the degree of the polynomial, which is one under its width
+    !flen = (numBits fx - 1 + 7) `div` 8
+    !fxlen = numBytes fx
+    widths = [flen, flen, flen, flen, flen, fxlen, klen]
+
+foreign import ccall safe "crypton_f2m_mul"
+    c_f2m_mul
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
