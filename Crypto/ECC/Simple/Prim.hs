@@ -20,7 +20,13 @@ module Crypto.ECC.Simple.Prim (
 
 import Crypto.ECC.Simple.Types
 import Crypto.Error
-import Crypto.Internal.ECC (MulResult (..), binaryCurveMul, primeCurveMul)
+import Crypto.Internal.ECC (
+    MulResult (..),
+    baseTable,
+    binaryCurveMul,
+    primeCurveMul,
+    primeCurveTableMul,
+ )
 import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
@@ -166,14 +172,19 @@ pointMul (Scalar n) p
     -- answers it has always had from the code below.
     primeMul pr = case p of
         Point px py
+            | p == curveEccG cc
+            , klen == numBytes (curveEccN cc)
+            , Just table <- baseTable pr a (curveEccB cc) klen px py ->
+                answer (primeCurveTableMul table pr a (curveEccB cc) klen n)
             | isPointValid (Proxy :: Proxy curve) px py ->
-                case primeCurveMul pr a (curveEccB cc) klen n px py of
-                    MulPoint x y -> Point x y
-                    MulInfinity -> PointO
-                    MulUnsupported -> jacobianMul pr a bits n p
-        _ -> jacobianMul pr a bits n p
+                answer (primeCurveMul pr a (curveEccB cc) klen n px py)
+        _ -> slow
       where
         klen = max (numBytes n) (numBytes (curveEccN cc))
+        slow = jacobianMul pr a bits n p
+        answer (MulPoint x y) = Point x y
+        answer MulInfinity = PointO
+        answer MulUnsupported = slow
     -- Count to the width of the order, which is public, so a scalar in
     -- range -- which is every secret one -- takes the same number of steps
     -- whatever it is.  A scalar may still be given out of range, and then

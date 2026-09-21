@@ -23,7 +23,13 @@ module Crypto.PubKey.ECC.Prim (
 ) where
 
 import Crypto.Error (maybeCryptoError)
-import Crypto.Internal.ECC (MulResult (..), binaryCurveMul, primeCurveMul)
+import Crypto.Internal.ECC (
+    MulResult (..),
+    baseTable,
+    binaryCurveMul,
+    primeCurveMul,
+    primeCurveTableMul,
+ )
 import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
@@ -33,6 +39,8 @@ import Crypto.PubKey.ECC.Types
 import Crypto.Random
 import Data.Bits (shiftL, shiftR, testBit, (.&.))
 import Data.Maybe
+import Data.Word (Word8)
+import Foreign.ForeignPtr (ForeignPtr)
 
 -- | P-256, the one curve here that has a C implementation: 'SEC_p256r1', also
 -- known as NIST P-256 and prime256v1.
@@ -266,16 +274,22 @@ pointMul c n p
             CurveF2m (CurveBinary fx cc) -> binaryMul fx cc
   where
     -- The C answers for a point on the curve; anything else keeps the
-    -- answers it has always had from the code below.
+    -- answers it has always had from the code below.  Multiplying the base
+    -- point, which is what signing and making a key do, goes through the
+    -- table kept for it.
     primeMul pr cc = case p of
         Point px py
+            | p == ecc_g cc
+            , klen == numBytes (ecc_n cc)
+            , Just table <- baseTable pr (ecc_a cc) (ecc_b cc) klen px py ->
+                answer (primeCurveTableMul table pr (ecc_a cc) (ecc_b cc) klen n)
             | isPointValid c p ->
-                case primeCurveMul pr (ecc_a cc) (ecc_b cc) klen n px py of
-                    MulPoint x y -> Point x y
-                    MulInfinity -> PointO
-                    MulUnsupported -> slow
+                answer (primeCurveMul pr (ecc_a cc) (ecc_b cc) klen n px py)
         _ -> slow
       where
+        answer (MulPoint x y) = Point x y
+        answer MulInfinity = PointO
+        answer MulUnsupported = slow
         -- Walk the width of the order, which is public, so a scalar in range
         -- -- which is every secret one -- costs the same whatever it is.  A
         -- scalar may still be given out of range, and then the width has to
