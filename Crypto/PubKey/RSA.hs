@@ -20,7 +20,12 @@ module Crypto.PubKey.RSA (
 
 import Crypto.Internal.ByteArray (ScrubbedBytes)
 import Crypto.Number.Generate (generateMax)
-import Crypto.Number.ModArithmetic (inverse, inverseCoprimes, inverseSafe)
+import Crypto.Number.ModArithmetic (
+    expSafe,
+    inverse,
+    inverseCoprimes,
+    inverseSafe,
+ )
 import Crypto.Number.Prime (generatePrime)
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.RSA.Types
@@ -61,10 +66,12 @@ toPositive int
 -- constant time either.  What that leaks is about the search rather than
 -- about the primes it settles on.  Of the arithmetic that does touch them,
 -- the inverse of one prime modulo the other is worked out without a side
--- channel; the private exponent, which is the inverse of @e@ modulo
--- @(p-1)*(q-1)@, still goes through the extended Euclidean algorithm, which
--- for a public @e@ is one division by a small number and then a few steps on
--- numbers under it.
+-- channel, and so is the private exponent, which is the inverse of @e@ modulo
+-- @(p-1)*(q-1)@: @e@ being public lets that be worked out as a remainder, an
+-- inverse modulo @e@ itself, and an exact division, none of which follows the
+-- number being inverted.  An @e@ that is not prime keeps the extended
+-- Euclidean algorithm, which for a public @e@ is one division by a small
+-- number and then a few steps on numbers under it.
 generateWith
     :: (Integer, Integer)
     -- ^ chosen distinct primes p and q
@@ -74,12 +81,35 @@ generateWith
     -- ^ RSA public exponent 'e'
     -> Maybe (PublicKey, PrivateKey)
 generateWith (p, q) size e =
-    case inverse e phi of
+    case privateExponent of
         Nothing -> Nothing
         Just d -> Just (pub, priv d)
   where
     n = p * q
     phi = (p - 1) * (q - 1)
+    -- The private exponent is the inverse of e modulo phi, and phi is the
+    -- key.  The extended Euclidean algorithm would take a number of steps
+    -- that follows it; e being public lets the work be about e instead.
+    --
+    -- Whatever d is, e * d = 1 + k * phi for some k under e, and reading that
+    -- modulo e gives k = -phi^-1 mod e -- an inverse modulo a number of a
+    -- handful of bits, which for a prime e is Fermat.  Then d is an exact
+    -- division by e.  Nothing in that follows phi: the remainder and the
+    -- division are one pass each over its limbs, and the rest is arithmetic
+    -- the size of e.
+    --
+    -- Fermat wants a prime e, and rather than ask whether e is one -- which
+    -- costs more than everything else here -- the k it gives is checked,
+    -- which is arithmetic the size of e.  A composite e that fails the check
+    -- keeps the algorithm it had.
+    privateExponent
+        | e <= 1 = Nothing
+        | t == 0 = Nothing -- e divides phi, so there is no inverse
+        | (k * t) `mod` e == e - 1 = Just ((1 + k * phi) `div` e)
+        | otherwise = inverse e phi
+      where
+        t = phi `mod` e
+        k = (e - expSafe t (e - 2) e) `mod` e
     -- q and p should be *distinct* *prime* numbers, hence always coprime.
     -- Both of them are the key itself, so the inverse is worked out through
     -- Fermat's little theorem rather than the extended Euclidean algorithm,
