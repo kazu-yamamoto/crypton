@@ -4,8 +4,8 @@
  *
  * A carry-less multiplication is the one thing a binary field needs and
  * ordinary arithmetic does not give.  Where the processor has the instruction
- * for it this uses it -- PMULL on aarch64, which the compiler is told about,
- * and PCLMULQDQ on x86-64, which it is asked about at run time.  Where it
+ * for it this uses it -- PMULL on aarch64, PCLMULQDQ on x86-64 -- asking the
+ * machine at run time where the compiler has not already been told.  Where it
  * does not, each operand is split into four groups of every fourth bit, so
  * that the carries of an ordinary multiplication cannot reach the bits that
  * matter, and masked away afterwards.  None of the three has a table or a
@@ -30,20 +30,6 @@
 typedef uint64_t limb_t;
 #define LIMB_BITS 64
 #define LIMB_BYTES 8
-
-#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_AES))
-#include <arm_neon.h>
-#define HAVE_CLMUL 1
-
-static inline void clmul(limb_t a, limb_t b, limb_t *lo, limb_t *hi)
-{
-	uint64x2_t v = vreinterpretq_u64_p128(vmull_p64((poly64_t) a, (poly64_t) b));
-
-	*lo = vgetq_lane_u64(v, 0);
-	*hi = vgetq_lane_u64(v, 1);
-}
-#else
-#define HAVE_CLMUL 0
 
 /* the four groups, so that no carry of an ordinary multiplication reaches a
  * bit another partial product needs */
@@ -73,7 +59,6 @@ static inline void clmul(limb_t a, limb_t b, limb_t *lo, limb_t *hi)
 	*lo = t0 ^ (t2 << 32);
 	*hi = t1 ^ (t2 >> 32);
 }
-#endif
 
 /* t = a * b, over 2n limbs */
 static void poly_mul_generic(limb_t *t, const limb_t *a, const limb_t *b,
@@ -91,6 +76,91 @@ static void poly_mul_generic(limb_t *t, const limb_t *a, const limb_t *b,
 			t[i + j + 1] ^= hi;
 		}
 }
+
+#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+#define HAVE_PMULL 1
+#include <arm_neon.h>
+
+/* Where the compiler has been told the machine has the crypto extensions --
+ * which it is on every Apple processor -- this needs no attribute and no
+ * question.  Where it has not, the attribute lets the instruction be emitted
+ * in this one function, and the machine is asked before it is called. */
+#if defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_AES)
+#define PMULL_ATTR
+#define PMULL_ALWAYS 1
+#else
+#define PMULL_ATTR __attribute__((target("+crypto")))
+#define PMULL_ALWAYS 0
+#endif
+
+#if !PMULL_ALWAYS
+#if defined(__linux__) || defined(__ANDROID__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#elif defined(__FreeBSD__)
+#include <machine/elf.h>
+#include <sys/auxv.h>
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
+#endif
+
+static int have_pmull(void)
+{
+#if PMULL_ALWAYS
+	return 1;
+#elif (defined(__linux__) || defined(__ANDROID__)) && defined(HWCAP_PMULL)
+	static int answer = -1;
+
+	if (answer < 0)
+		answer = (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+	return answer;
+#elif defined(__FreeBSD__) && defined(HWCAP_PMULL)
+	static int answer = -1;
+
+	if (answer < 0) {
+		unsigned long hwcap = 0;
+
+		elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+		answer = (hwcap & HWCAP_PMULL) != 0;
+	}
+	return answer;
+#elif defined(__APPLE__)
+	static int answer = -1;
+
+	if (answer < 0) {
+		int has = 0;
+		size_t len = sizeof(has);
+
+		answer = sysctlbyname("hw.optional.arm.FEAT_PMULL", &has, &len,
+		                      NULL, 0) == 0
+		         && has != 0;
+	}
+	return answer;
+#else
+	return 0; /* no way to ask, so the four groups it is */
+#endif
+}
+
+PMULL_ATTR
+static void poly_mul_pmull(limb_t *t, const limb_t *a, const limb_t *b,
+                           uint32_t n)
+{
+	uint32_t i, j;
+
+	memset(t, 0, 2 * n * sizeof(limb_t));
+	for (i = 0; i < n; i++)
+		for (j = 0; j < n; j++) {
+			uint64x2_t v = vreinterpretq_u64_p128(
+			    vmull_p64((poly64_t) a[i], (poly64_t) b[j]));
+
+			t[i + j] ^= vgetq_lane_u64(v, 0);
+			t[i + j + 1] ^= vgetq_lane_u64(v, 1);
+		}
+}
+#else
+#define HAVE_PMULL 0
+#endif
 
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
 #define HAVE_PCLMUL 1
@@ -125,6 +195,14 @@ static void poly_mul_pclmul(limb_t *t, const limb_t *a, const limb_t *b,
 
 static void poly_mul(limb_t *t, const limb_t *a, const limb_t *b, uint32_t n)
 {
+#if HAVE_PMULL
+	/* what the processor has is not what is being multiplied, so asking is
+	 * not a side channel, and the answer is worked out once */
+	if (have_pmull()) {
+		poly_mul_pmull(t, a, b, n);
+		return;
+	}
+#endif
 #if HAVE_PCLMUL
 	/* what the processor has is not what is being multiplied, so asking is
 	 * not a side channel, and the answer is worked out once */
