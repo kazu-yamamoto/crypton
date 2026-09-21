@@ -10,6 +10,7 @@ module BlockCipher (
     KATs (..),
     defaultKATs,
     testBlockCipher,
+    testBlockCipher128,
     CipherInfo,
 ) where
 
@@ -196,7 +197,7 @@ testKATs kats cipher = describe "KAT" $ do
     maybeGroup makeCBCTest "CBC" (kat_CBC kats)
     maybeGroup makeCFBTest "CFB" (kat_CFB kats)
     maybeGroup makeCTRTest "CTR" (kat_CTR kats)
-    -- maybeGroup makeXTSTest "XTS" (kat_XTS kats)
+    -- XTS needs a 128-bit block, so testBlockCipher128 runs kat_XTS
     maybeGroup makeAEADTest "AEAD" (kat_AEAD kats)
   where
     makeECBTest i d = do
@@ -222,16 +223,6 @@ testKATs kats cipher = describe "KAT" $ do
       where
         ctx = cipherInitNoErr (cipherMakeKey cipher $ ctrKey d)
         iv = cipherMakeIV cipher $ ctrIV d
-    {-
-            makeXTSTest i d  =
-                [ it ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) `shouldBe` xtsCiphertext d)
-                , it ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) `shouldBe` xtsPlaintext d)
-                ]
-              where ctx1 = cipherInitNoErr (cipherMakeKey cipher $ xtsKey1 d)
-                    ctx2 = cipherInitNoErr (cipherMakeKey cipher $ xtsKey2 d)
-                    ctx  = (ctx1, ctx2)
-                    iv   = cipherMakeIV cipher $ xtsIV d
-    -}
     makeAEADTest i d = do
         it ("AE" ++ i) (etag `shouldBe` AuthTag (B.convert (aeadTag d)))
         it ("AD" ++ i) (dtag `shouldBe` AuthTag (B.convert (aeadTag d)))
@@ -551,11 +542,40 @@ testIvArith cipher = do
 
 -- | Return tests for a specific blockcipher and a list of KATs
 testBlockCipher :: BlockCipher a => KATs -> a -> Spec
-testBlockCipher kats cipher =
+testBlockCipher = testBlockCipherWith (return ())
+
+-- | The same for a cipher with a 128-bit block, whose KATs may include XTS.
+-- The mode is defined only for that block size, so its vectors cannot run
+-- from 'testBlockCipher', which promises nothing about the size -- which is
+-- how they came to sit in the tree unused.
+testBlockCipher128 :: BlockCipher128 a => KATs -> a -> Spec
+testBlockCipher128 kats cipher =
+    testBlockCipherWith
+        (maybeGroup (makeXTSTest cipher) "XTS" (kat_XTS kats))
+        kats
+        cipher
+
+testBlockCipherWith :: BlockCipher a => Spec -> KATs -> a -> Spec
+testBlockCipherWith extra kats cipher =
     describe (cipherName cipher) $ do
         unless (kats == defaultKATs) $ testKATs kats cipher
+        extra
         testModes cipher
         testIvArith cipher
+
+makeXTSTest :: BlockCipher128 cipher => cipher -> String -> KAT_XTS -> Spec
+makeXTSTest cipher i d = do
+    it ("E" ++ i) (xtsEncrypt ctx iv 0 (xtsPlaintext d) `shouldBe` xtsCiphertext d)
+    it ("D" ++ i) (xtsDecrypt ctx iv 0 (xtsCiphertext d) `shouldBe` xtsPlaintext d)
+  where
+    ctx = (keyed (xtsKey1 d), keyed (xtsKey2 d))
+    iv = cipherMakeIV cipher (xtsIV d)
+
+    keyed :: BlockCipher c => ByteString -> c
+    keyed k =
+        case cipherInit k of
+            CryptoPassed a -> a
+            CryptoFailed e -> error (show e)
 
 cipherMakeKey :: Cipher cipher => cipher -> ByteString -> Key cipher
 cipherMakeKey _ bs = Key bs
