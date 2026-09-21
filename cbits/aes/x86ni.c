@@ -465,6 +465,152 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 	return gfmul8(tag, htable, m);
 }
 
+/*
+ * Eight blocks through the rounds with the round keys read from memory rather
+ * than held in registers.
+ *
+ * There are sixteen vector registers.  Eight blocks and eleven to fifteen
+ * round keys do not fit in them, and when the GCM loop preloaded the keys the
+ * compiler spilled: ninety-six stack accesses around a hundred AESENCs, which
+ * cost more than half the loop's throughput.  AESENC takes a memory operand,
+ * and the round keys are in L1 from one group to the next, so reading them
+ * each round costs nothing and leaves the registers for the blocks.
+ */
+/*
+ * Eight blocks through the rounds with the round keys read from memory rather
+ * than held in registers.
+ *
+ * There are sixteen vector registers.  Eight blocks and eleven to fifteen
+ * round keys do not fit in them, and when the GCM loop preloaded the keys the
+ * compiler spilled: ninety-six stack accesses around a hundred AESENCs.
+ * AESENC takes a memory operand and the round keys stay in L1 from one group
+ * to the next, so reading them costs nothing and leaves the registers for the
+ * blocks.
+ *
+ * The rounds are written out rather than looped: the loop cost a fifth of the
+ * throughput, which is what -funroll-loops was recovering.
+ */
+#define K_(r) _mm_loadu_si128(k_ + (r))
+
+/* the rounds beyond the tenth, which only a longer key has */
+#define ROUNDS8_EXTRA_128
+#define ROUNDS8_EXTRA_192 AESENC8(K_(10)) AESENC8(K_(11))
+#define ROUNDS8_EXTRA_256 \
+	AESENC8(K_(10)) AESENC8(K_(11)) AESENC8(K_(12)) AESENC8(K_(13))
+
+#define DO_ENC_BLOCK8_MEM(m, k, nbr, EXTRA)                                  \
+	do {                                                                 \
+		const __m128i *k_ = (const __m128i *) (k);                   \
+		XOR8(K_(0))                                                  \
+		AESENC8(K_(1)) AESENC8(K_(2)) AESENC8(K_(3))                 \
+		AESENC8(K_(4)) AESENC8(K_(5)) AESENC8(K_(6))                 \
+		AESENC8(K_(7)) AESENC8(K_(8)) AESENC8(K_(9))                 \
+		EXTRA                                                        \
+		AESENCLAST8(K_(nbr))                                         \
+	} while (0)
+
+#define DO_ENC_BLOCK_MEM(m, k, nbr)                                          \
+	do {                                                                 \
+		const __m128i *k_ = (const __m128i *) (k);                   \
+		int r_;                                                      \
+		m = _mm_xor_si128(m, K_(0));                                 \
+		for (r_ = 1; r_ < (nbr); r_++)                               \
+			m = _mm_aesenc_si128(m, K_(r_));                     \
+		m = _mm_aesenclast_si128(m, K_(nbr));                        \
+	} while (0)
+
+/*
+ * GCM's GHASH, called directly rather than through the branch pointer the
+ * other callers use: the pointer is a call the compiler cannot see through,
+ * and these want to be scheduled against the rounds around them.  The cost is
+ * that the GCM loops are compiled with the instruction and so may only be
+ * installed where the processor has it, which crypton_aes.c sees to, as it
+ * already does for the AArch64 ones.
+ */
+#ifdef WITH_PCLMUL
+
+#define GCM_TARGET TARGET_AESNI_PCLMUL
+
+TARGET_AESNI_PCLMUL
+static inline __m128i gcm_ghash_add(__m128i tag, const table_4bit htable, __m128i m)
+{
+	return gfmul_pclmuldq(_mm_xor_si128(tag, m), htable);
+}
+
+TARGET_AESNI_PCLMUL
+static inline __m128i gcm_ghash_add8(__m128i tag, const table_4bit htable, const __m128i *m)
+{
+	return gfmul8_pclmul(tag, htable, m);
+}
+
+/*
+ * One block's carry-less multiply, accumulated rather than reduced, so that
+ * the eight of a group can be spread between the rounds of the next group's
+ * AES.
+ */
+TARGET_AESNI_PCLMUL
+static inline void ghash_fold(__m128i *lo, __m128i *hi, __m128i b,
+                              const table_4bit htable, int i)
+{
+	__m128i l, h;
+
+	clmul_pclmuldq(b, _mm_loadu_si128((const __m128i *) &htable[i]), &l, &h);
+	*lo = _mm_xor_si128(*lo, l);
+	*hi = _mm_xor_si128(*hi, h);
+}
+
+#else
+
+#define GCM_TARGET TARGET_AESNI
+#define gcm_ghash_add(t, h, m)  ghash_add((t), (h), (m))
+#define gcm_ghash_add8(t, h, m) ghash_add8((t), (h), (m))
+
+#endif
+
+/*
+ * A group of eight encrypted, with the previous group's GHASH folded in
+ * between the rounds where the build has the carry-less multiply: GH(j) after
+ * round j + 1, and the reduction after round nine, which every key size
+ * reaches.  The names are the ones the GCM loops use.
+ */
+#ifdef WITH_PCLMUL
+
+#define GCM_GH(j)                                                            \
+	ghash_fold(&glo_, &ghi_,                                             \
+	           (j) == 0 ? _mm_xor_si128(tag, pending[0]) : pending[j],   \
+	           gcm->htable, 7 - (j));
+
+#define GCM_GHRED tag = gfred_pclmuldq(glo_, ghi_);
+
+#define GCM_GROUP8(m, k, nbr, EXTRA)                                         \
+	do {                                                                 \
+		const __m128i *k_ = (const __m128i *) (k);                   \
+		__m128i glo_ = _mm_setzero_si128();                          \
+		__m128i ghi_ = _mm_setzero_si128();                          \
+		XOR8(K_(0))                                                  \
+		AESENC8(K_(1)) GCM_GH(0)                                     \
+		AESENC8(K_(2)) GCM_GH(1)                                     \
+		AESENC8(K_(3)) GCM_GH(2)                                     \
+		AESENC8(K_(4)) GCM_GH(3)                                     \
+		AESENC8(K_(5)) GCM_GH(4)                                     \
+		AESENC8(K_(6)) GCM_GH(5)                                     \
+		AESENC8(K_(7)) GCM_GH(6)                                     \
+		AESENC8(K_(8)) GCM_GH(7)                                     \
+		AESENC8(K_(9)) GCM_GHRED                                     \
+		EXTRA                                                        \
+		AESENCLAST8(K_(nbr))                                         \
+	} while (0)
+
+#else
+
+#define GCM_GROUP8(m, k, nbr, EXTRA)                                         \
+	do {                                                                 \
+		DO_ENC_BLOCK8_MEM(m, k, nbr, EXTRA);                         \
+		tag = ghash_add8(tag, gcm->htable, pending);                 \
+	} while (0)
+
+#endif
+
 #define PRELOAD_ENC_KEYS128(k) \
 	__m128i K0  = _mm_loadu_si128(((__m128i *) k)+0); \
 	__m128i K1  = _mm_loadu_si128(((__m128i *) k)+1); \
@@ -697,6 +843,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 	m = _mm_aesdeclast_si128(m, K14);
 
 #define SIZE 128
+#define NBR 10
+#define ROUNDS8_EXTRA ROUNDS8_EXTRA_128
 #define SIZED(m) m##128
 #define PRELOAD_ENC PRELOAD_ENC_KEYS128
 #define DO_ENC_BLOCK DO_ENC_BLOCK128
@@ -707,6 +855,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 #include <aes/x86ni_impl.c>
 
 #undef SIZE
+#undef NBR
+#undef ROUNDS8_EXTRA
 #undef SIZED
 #undef PRELOAD_ENC
 #undef PRELOAD_DEC
@@ -717,6 +867,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 
 #define SIZED(m) m##192
 #define SIZE 192
+#define NBR 12
+#define ROUNDS8_EXTRA ROUNDS8_EXTRA_192
 #define PRELOAD_ENC PRELOAD_ENC_KEYS192
 #define DO_ENC_BLOCK DO_ENC_BLOCK192
 #define DO_ENC_BLOCK8 DO_ENC_BLOCK8_192
@@ -726,6 +878,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 #include <aes/x86ni_impl.c>
 
 #undef SIZE
+#undef NBR
+#undef ROUNDS8_EXTRA
 #undef SIZED
 #undef PRELOAD_ENC
 #undef PRELOAD_DEC
@@ -736,6 +890,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 
 #define SIZED(m) m##256
 #define SIZE 256
+#define NBR 14
+#define ROUNDS8_EXTRA ROUNDS8_EXTRA_256
 #define PRELOAD_ENC PRELOAD_ENC_KEYS256
 #define DO_ENC_BLOCK DO_ENC_BLOCK256
 #define DO_ENC_BLOCK8 DO_ENC_BLOCK8_256
@@ -745,6 +901,8 @@ static inline __m128i gfmulx_sse(__m128i v)
 #include <aes/x86ni_impl.c>
 
 #undef SIZE
+#undef NBR
+#undef ROUNDS8_EXTRA
 #undef SIZED
 #undef PRELOAD_ENC
 #undef PRELOAD_DEC

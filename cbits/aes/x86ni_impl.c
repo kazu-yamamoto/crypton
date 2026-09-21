@@ -300,7 +300,7 @@ void SIZED(crypton_aesni_decrypt_xts)(aes_block *out, aes_key *key1, aes_key *ke
 	} while (0);
 }
 
-TARGET_AESNI
+GCM_TARGET
 void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
 {
 	__m128i *k = (__m128i *) key->data;
@@ -308,6 +308,9 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 	__m128i one        = _mm_set_epi32(0,1,0,0);
 	uint32_t nb_blocks = length / 16;
 	uint32_t part_block_len = length % 16;
+	/* the group of ciphertext whose GHASH has not been taken yet */
+	__m128i pending[8];
+	int held = 0;
 
 	gcm->length_input += length;
 
@@ -315,13 +318,20 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 	__m128i iv = _mm_loadu_si128((__m128i *) &gcm->civ);
 	iv = _mm_shuffle_epi8(iv, bswap_mask);
 
-	PRELOAD_ENC(k);
 
 	/*
 	 * Eight blocks at a time: the counters go through the rounds together
 	 * so the pipeline has something to do while AESENC is in flight, and
 	 * their GHASH folds into one reduction against H^8 .. H^1 rather than
 	 * eight.
+	 *
+	 * The GHASH is of the group before, not this one.  Taken in step the
+	 * two halves cannot overlap at all: the multiply of a block waits for
+	 * the rounds that produced it, and on this processor they do not even
+	 * want the same port -- AESENC and PCLMULQDQ issue to different ones,
+	 * so held a group apart they run through each other.  It costs one
+	 * group's worth of ciphertext kept aside and a last GHASH after the
+	 * loop.
 	 */
 	for (; nb_blocks >= 8; nb_blocks -= 8, output += 128, input += 128) {
 		__m128i m[8];
@@ -332,15 +342,22 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 			iv = _mm_add_epi32(iv, one);
 			m[i] = _mm_shuffle_epi8(iv, bswap_mask);
 		}
-		DO_ENC_BLOCK8(m);
+		if (held)
+			GCM_GROUP8(m, k, NBR, ROUNDS8_EXTRA);
+		else
+			DO_ENC_BLOCK8_MEM(m, k, NBR, ROUNDS8_EXTRA);
+
 		for (i = 0; i < 8; i++) {
 			m[i] = _mm_xor_si128(m[i],
 			                     _mm_loadu_si128((__m128i *) (input + 16 * i)));
 			_mm_storeu_si128((__m128i *) (output + 16 * i), m[i]);
 		}
-
-		tag = ghash_add8(tag, gcm->htable, m);
+		for (i = 0; i < 8; i++)
+			pending[i] = m[i];
+		held = 1;
 	}
+	if (held)
+		tag = gcm_ghash_add8(tag, gcm->htable, pending);
 	for (; nb_blocks-- > 0; output += 16, input += 16) {
 		/* iv += 1 */
 		iv = _mm_add_epi32(iv, one);
@@ -348,11 +365,11 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 		/* put back iv in big endian, encrypt it,
 		 * and xor it to input */
 		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
-		DO_ENC_BLOCK(tmp);
+		DO_ENC_BLOCK_MEM(tmp, k, NBR);
 		__m128i m = _mm_loadu_si128((__m128i *) input);
 		m = _mm_xor_si128(m, tmp);
 
-		tag = ghash_add(tag, gcm->htable, m);
+		tag = gcm_ghash_add(tag, gcm->htable, m);
 
 		/* store it out */
 		_mm_storeu_si128((__m128i *) output, m);
@@ -387,13 +404,13 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 		/* put back iv in big endian mode, encrypt it and xor it with input */
 		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
-		DO_ENC_BLOCK(tmp);
+		DO_ENC_BLOCK_MEM(tmp, k, NBR);
 
 		__m128i m = _mm_loadu_si128((__m128i *) &block);
 		m = _mm_xor_si128(m, tmp);
 		m = _mm_shuffle_epi8(m, mask);
 
-		tag = ghash_add(tag, gcm->htable, m);
+		tag = gcm_ghash_add(tag, gcm->htable, m);
 
 		/* make output */
 		_mm_storeu_si128((__m128i *) &block.b, m);
@@ -414,7 +431,7 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
  * output, and the ciphertext is read before anything is written, since
  * output may be input.
  */
-TARGET_AESNI
+GCM_TARGET
 void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
 {
 	__m128i *k = (__m128i *) key->data;
@@ -422,6 +439,9 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 	__m128i one        = _mm_set_epi32(0,1,0,0);
 	uint32_t nb_blocks = length / 16;
 	uint32_t part_block_len = length % 16;
+	/* the group of ciphertext whose GHASH has not been taken yet */
+	__m128i pending[8];
+	int held = 0;
 
 	gcm->length_input += length;
 
@@ -429,8 +449,9 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 	__m128i iv = _mm_loadu_si128((__m128i *) &gcm->civ);
 	iv = _mm_shuffle_epi8(iv, bswap_mask);
 
-	PRELOAD_ENC(k);
 
+	/* the group before's GHASH, alongside this group's rounds, as
+	 * encryption does it */
 	for (; nb_blocks >= 8; nb_blocks -= 8, output += 128, input += 128) {
 		__m128i m[8], c[8];
 		int i;
@@ -442,21 +463,28 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 		}
 		for (i = 0; i < 8; i++)
 			c[i] = _mm_loadu_si128((__m128i *) (input + 16 * i));
-		DO_ENC_BLOCK8(m);
+		if (held)
+			GCM_GROUP8(m, k, NBR, ROUNDS8_EXTRA);
+		else
+			DO_ENC_BLOCK8_MEM(m, k, NBR, ROUNDS8_EXTRA);
+
 		for (i = 0; i < 8; i++)
 			_mm_storeu_si128((__m128i *) (output + 16 * i),
 			                 _mm_xor_si128(m[i], c[i]));
-
-		tag = ghash_add8(tag, gcm->htable, c);
+		for (i = 0; i < 8; i++)
+			pending[i] = c[i];
+		held = 1;
 	}
+	if (held)
+		tag = gcm_ghash_add8(tag, gcm->htable, pending);
 	for (; nb_blocks-- > 0; output += 16, input += 16) {
 		__m128i c = _mm_loadu_si128((__m128i *) input);
 
 		iv = _mm_add_epi32(iv, one);
 		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
-		DO_ENC_BLOCK(tmp);
+		DO_ENC_BLOCK_MEM(tmp, k, NBR);
 
-		tag = ghash_add(tag, gcm->htable, c);
+		tag = gcm_ghash_add(tag, gcm->htable, c);
 		_mm_storeu_si128((__m128i *) output, _mm_xor_si128(tmp, c));
 	}
 	if (part_block_len > 0) {
@@ -472,9 +500,9 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 		iv = _mm_add_epi32(iv, one);
 
 		__m128i tmp = _mm_shuffle_epi8(iv, bswap_mask);
-		DO_ENC_BLOCK(tmp);
+		DO_ENC_BLOCK_MEM(tmp, k, NBR);
 
-		tag = ghash_add(tag, gcm->htable, c);
+		tag = gcm_ghash_add(tag, gcm->htable, c);
 
 		_mm_storeu_si128((__m128i *) &block.b, _mm_xor_si128(tmp, c));
 		memcpy(output, &block.b, part_block_len);
