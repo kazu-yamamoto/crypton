@@ -13,6 +13,7 @@ import Imports
 
 import qualified BlockCipher.AES.CBC as KATCBC
 import qualified BlockCipher.AES.CCM as KATCCM
+import qualified BlockCipher.AES.CTR as KATCTR
 import qualified BlockCipher.AES.ECB as KATECB
 import qualified BlockCipher.AES.GCM as KATGCM
 import qualified BlockCipher.AES.OCB3 as KATOCB3
@@ -29,6 +30,7 @@ instance Arbitrary AES.AES where
 
 toKatECB (k, p, c) = KAT_ECB{ecbKey = k, ecbPlaintext = p, ecbCiphertext = c}
 toKatCBC (k, iv, p, c) = KAT_CBC{cbcKey = k, cbcIV = iv, cbcPlaintext = p, cbcCiphertext = c}
+toKatCTR (k, iv, p, c) = KAT_CTR{ctrKey = k, ctrIV = iv, ctrPlaintext = p, ctrCiphertext = c}
 toKatXTS (k1, k2, iv, p, _, c) =
     KAT_XTS
         { xtsKey1 = k1
@@ -82,6 +84,7 @@ kats128 =
     defaultKATs
         { kat_ECB = map toKatECB KATECB.vectors_aes128_enc
         , kat_CBC = map toKatCBC KATCBC.vectors_aes128_enc
+        , kat_CTR = map toKatCTR KATCTR.vectors_aes128_enc
         , kat_CFB =
             [ KAT_CFB
                 { cfbKey =
@@ -105,12 +108,15 @@ kats192 =
     defaultKATs
         { kat_ECB = map toKatECB KATECB.vectors_aes192_enc
         , kat_CBC = map toKatCBC KATCBC.vectors_aes192_enc
+        , kat_CTR = map toKatCTR KATCTR.vectors_aes192_enc
+        , kat_AEAD = map toKatGCM KATGCM.vectors_aes192_enc
         }
 
 kats256 =
     defaultKATs
         { kat_ECB = map toKatECB KATECB.vectors_aes256_enc
         , kat_CBC = map toKatCBC KATCBC.vectors_aes256_enc
+        , kat_CTR = map toKatCTR KATCTR.vectors_aes256_enc
         , kat_XTS = map toKatXTS KATXTS.vectors_aes256_enc
         , kat_AEAD = map toKatGCM KATGCM.vectors_aes256_enc
         }

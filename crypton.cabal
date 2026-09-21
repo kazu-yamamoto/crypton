@@ -494,6 +494,7 @@ test-suite test-crypton
         BlockCipher
         BlockCipher.AES.CBC
         BlockCipher.AES.CCM
+        BlockCipher.AES.CTR
         BlockCipher.AES.ECB
         BlockCipher.AES.GCM
         BlockCipher.AES.OCB3

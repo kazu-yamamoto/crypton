@@ -318,11 +318,16 @@ static inline uint8x16_t gfmulx_neon(uint8x16_t v)
 
 /*
  * The modes, generated once per key size.  See armv8_impl.c for why the
- * round count has to be a compile-time constant.  AES-192 is left to the
- * generic code, as it is on x86.
+ * round count has to be a compile-time constant.
  */
 #define SIZED(m) m##128
 #define NBR 10
+#include <aes/armv8_impl.c>
+#undef SIZED
+#undef NBR
+
+#define SIZED(m) m##192
+#define NBR 12
 #include <aes/armv8_impl.c>
 #undef SIZED
 #undef NBR
