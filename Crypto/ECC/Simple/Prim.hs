@@ -20,7 +20,8 @@ module Crypto.ECC.Simple.Prim (
 
 import Crypto.ECC.Simple.Types
 import Crypto.Error
-import Crypto.Number.Basic (numBits)
+import Crypto.Internal.ECC (MulResult (..), primeCurveMul)
+import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic
@@ -149,11 +150,24 @@ pointMul (Scalar n) p
     | n < 0 = pointNegate (pointMul (Scalar (negate n) :: Scalar curve) p)
     | otherwise =
         case curveType (Proxy :: Proxy curve) of
-            CurvePrime (CurvePrimeParam pr) -> jacobianMul pr a bits n p
+            CurvePrime (CurvePrimeParam pr) -> primeMul pr
             CurveBinary _ -> affineMul n p
   where
     cc = curveParameters (Proxy :: Proxy curve)
     a = curveEccA cc
+
+    -- The C answers for a point on the curve; anything else keeps the
+    -- answers it has always had from the code below.
+    primeMul pr = case p of
+        Point px py
+            | isPointValid (Proxy :: Proxy curve) px py ->
+                case primeCurveMul pr a (curveEccB cc) klen n px py of
+                    MulPoint x y -> Point x y
+                    MulInfinity -> PointO
+                    MulUnsupported -> jacobianMul pr a bits n p
+        _ -> jacobianMul pr a bits n p
+      where
+        klen = max (numBytes n) (numBytes (curveEccN cc))
     -- Count to the width of the order, which is public, so a scalar in
     -- range -- which is every secret one -- takes the same number of steps
     -- whatever it is.  A scalar may still be given out of range, and then

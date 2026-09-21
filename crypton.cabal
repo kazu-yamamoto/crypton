@@ -219,6 +219,7 @@ library
         cbits/crypton_chacha.c
         cbits/crypton_cpu.c
         cbits/crypton_des.c
+        cbits/crypton_ecc.c
         cbits/crypton_md2.c
         cbits/crypton_md4.c
         cbits/crypton_md5.c
@@ -287,6 +288,7 @@ library
         Crypto.Internal.Compat
         Crypto.Internal.CompatPrim
         Crypto.Internal.DeepSeq
+        Crypto.Internal.ECC
         Crypto.Internal.Endian
         Crypto.Internal.Imports
         Crypto.Internal.Nat
