@@ -8,6 +8,24 @@
 -- Portability : Good
 --
 -- An implementation of the Digital Signature Algorithm (DSA)
+--
+-- == What is kept from the clock, and what is not
+--
+-- Signing keeps the private number and the ephemeral @k@ out of the two
+-- places whose duration would otherwise follow them: the exponentiation is
+-- 'Crypto.Number.ModArithmetic.expSafe', which walks the exponent a fixed
+-- four bits at a time, and @k@ is inverted by Fermat's little theorem rather
+-- than by the extended Euclidean algorithm, whose number of steps follows the
+-- bits it is given.
+--
+-- What is left is the arithmetic around them.  @x * r@, the addition and the
+-- reduction modulo @q@ are 'Integer' operations, and an 'Integer' costs what
+-- its size says: a private number that happens to be short is multiplied in
+-- fewer words than a full-length one.  The same holds in
+-- "Crypto.PubKey.ElGamal" and "Crypto.PubKey.Rabin.Basic".  Removing it means
+-- leaving 'Integer' for a fixed-width representation, which is what
+-- "Crypto.PubKey.RSA" does for its exponentiation and the curve modules do
+-- throughout; there is nothing a caller can do about it from here.
 module Crypto.PubKey.DSA (
     Params (..),
     Signature (..),

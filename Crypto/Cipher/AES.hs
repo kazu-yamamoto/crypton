@@ -7,6 +7,26 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : stable
 -- Portability : good
+--
+-- AES, in the modes "Crypto.Cipher.Types" defines.
+--
+-- == Which implementation runs
+--
+-- Where the processor has instructions for AES -- AES-NI on x86-64, the
+-- cryptographic extensions on AArch64 -- every key size and every mode here
+-- goes through them, and a block costs the same whatever the key and the data
+-- are.
+--
+-- Where it does not, the fallback is the table-driven code in
+-- @cbits\/aes\/generic.c@, which indexes a 256-byte table with bytes derived
+-- from the key and from the block.  That is the cache-timing exposure the
+-- instructions exist to remove, and on such a machine AES here is not
+-- constant time.  Every x86-64 part since about 2010 and every AArch64 one in
+-- ordinary use has the instructions.
+--
+-- 'Crypto.System.CPU.processorOptions' says which of the two a given machine
+-- got: @AESNI@ in that list means the processor's AES instructions, on either
+-- architecture.
 module Crypto.Cipher.AES (
     AES128,
     AES192,

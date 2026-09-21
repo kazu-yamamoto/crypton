@@ -6,6 +6,19 @@
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : Good
+--
+-- Modular arithmetic on 'Integer'.
+--
+-- == What an 'Integer' shows
+--
+-- An 'Integer' is as long as its value needs, and every operation on one
+-- costs what that length says.  A secret that happens to be short is
+-- multiplied, reduced and compared in fewer words than a full-length one, and
+-- the difference is there to be measured.  'expSafe' and 'inverseSafe' keep
+-- the /value/ of an exponent or of a number being inverted out of the work
+-- they do, and that is as far as an 'Integer' can be taken: hiding the length
+-- as well means a fixed-width representation, which is what the curve modules
+-- and 'expSafe' itself use underneath.
 module Crypto.Number.ModArithmetic (
     -- * Exponentiation
     expSafe,

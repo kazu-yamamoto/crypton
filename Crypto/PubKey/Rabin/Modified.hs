@@ -9,6 +9,9 @@
 --
 -- Modified-Rabin public-key digital signature algorithm.
 -- See algorithm 11.30 in "Handbook of Applied Cryptography" by Alfred J. Menezes et al.
+-- The Jacobi symbols here are taken modulo the public modulus, not the
+-- private primes, so what "Crypto.PubKey.Rabin.Basic" says about that does
+-- not apply; the note there about 'Integer' arithmetic does.
 module Crypto.PubKey.Rabin.Modified (
     PublicKey (..),
     PrivateKey (..),
