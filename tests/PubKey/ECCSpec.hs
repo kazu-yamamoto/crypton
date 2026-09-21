@@ -162,6 +162,17 @@ p256Tests =
                 `shouldBe` ECC.pointNegate p256curve (ECC.pointMul p256curve 7 g)
         it "a scalar past the order wraps" $
             ECC.pointMul p256curve (3 * order + 11) g `shouldBe` ECC.pointMul p256curve 11 g
+        it "a scalar wraps on either side of what 256 bits hold" $ do
+            -- the order is under 2^256 and twice it is over, so these are the
+            -- values around the boundary of a fixed-width reduction
+            ECC.pointMul p256curve (order - 1) g
+                `shouldBe` ECC.pointNegate p256curve g
+            ECC.pointMul p256curve (2 ^ (256 :: Int) - 1) g
+                `shouldBe` ECC.pointMul p256curve ((2 ^ (256 :: Int) - 1) `mod` order) g
+            ECC.pointMul p256curve (2 ^ (256 :: Int)) g
+                `shouldBe` ECC.pointMul p256curve (2 ^ (256 :: Int) `mod` order) g
+            ECC.pointMul p256curve (2 * order) g `shouldBe` ECC.PointO
+            ECC.pointMul p256curve (2 * order + 3) g `shouldBe` ECC.pointMul p256curve 3 g
         it "zero and the point at infinity give infinity" $ do
             ECC.pointMul p256curve 0 g `shouldBe` ECC.PointO
             ECC.pointMul p256curve 5 ECC.PointO `shouldBe` ECC.PointO
