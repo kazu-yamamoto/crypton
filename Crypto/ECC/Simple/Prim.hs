@@ -141,11 +141,12 @@ pointBaseMul n = pointMul n (curveEccG $ curveParameters (Proxy :: Proxy curve))
 --
 -- Over a prime field this goes to C, four bits of scalar at a time, with the
 -- multiple to add taken from a table read by touching every entry of it.
--- Over a binary field it is Montgomery's ladder, which carries the x
--- coordinates of two consecutive multiples -- their difference being the
--- point is what lets it carry no more than that -- and spends one addition
--- and one doubling on every bit whichever way the bit goes.  Either way the
--- work follows the width of the curve's order and not the scalar.
+-- Over a binary field it also goes to C, as Montgomery's ladder: it carries
+-- the x coordinates of two consecutive multiples -- their difference being
+-- the point is what lets it carry no more than that -- and spends one
+-- addition and one doubling on every bit whichever way the bit goes, with the
+-- two exchanged by a mask rather than chosen by a branch.  Either way the work
+-- follows the width of the curve's order and not the scalar.
 --
 -- What falls back on the 'Integer' arithmetic below is a point that is not on
 -- the curve, the one point of a binary curve that has no x, and a prime the C
@@ -158,9 +159,11 @@ pointBaseMul n = pointMul n (curveEccG $ curveParameters (Proxy :: Proxy curve))
 -- kilobytes, and a multiplication that uses it takes about a third of what
 -- one without it takes.
 --
--- /WARNING:/ Over a binary field, still vulnerable to timing attacks.
--- Uniform operation counts are not constant time: those operations are
--- 'Integer' arithmetic, whose cost depends on the values.  See the note in
+-- /WARNING:/ What is left of the 'Integer' arithmetic below -- a point off
+-- the curve, the one point of a binary curve with no x, a prime or a
+-- polynomial the C will not take -- has uniform operation counts at best, and
+-- uniform operation counts are not constant time: those operations cost what
+-- the values they are given cost.  See the note in
 -- "Crypto.ECC".
 pointMul
     :: forall curve. Curve curve => Scalar curve -> Point curve -> Point curve
