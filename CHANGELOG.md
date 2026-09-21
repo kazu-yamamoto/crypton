@@ -376,8 +376,9 @@
 * Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
   appended, so the `Enum` values of the existing constructors are unchanged, but an
   exhaustive `case` without a wildcard will warn.  Adding a constructor to an exported
-  datatype is what requires the major version bump under the PVP; everything else
-  below changes behaviour rather than types.
+  datatype is what requires a major version bump under the PVP, which would have been
+  1.2.0; this release goes to 2.0.0.  Everything else below changes behaviour rather
+  than types.
 * Breaking change: `getShared` in both DH modules raises a `CryptoError` where it
   previously raised an `ErrorCall`, since it is now defined in terms of `getShared'`.
   The same is now true of `Crypto.KDF.Scrypt.generate`, `Crypto.KDF.BCrypt.bcrypt`,
