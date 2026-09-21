@@ -223,8 +223,23 @@ ciphertextRangeTests =
             , os2ip ct + modulus < 2 ^ (8 * k)
             ]
 
+-- | Building a key from its two primes has to arrive at the key the vectors
+-- carry -- the private exponent, both of its halves, and the inverse of one
+-- prime modulo the other, which is the part worked out without the extended
+-- Euclidean algorithm.
+keyGenerationTests :: Spec
+keyGenerationTests =
+    describe "generateWith" $
+        zipWithM_ check [katZero ..] vectorsSHA1
+  where
+    check i vector =
+        it (show i) $
+            RSA.generateWith (p vector, q vector) (size vector) (e vector)
+                `shouldBe` Just (vectorToPublic vector, vectorToPrivate vector)
+
 spec :: Spec
 spec = do
+    keyGenerationTests
     describe "SHA1" $ do
         describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
         describe "verify" $

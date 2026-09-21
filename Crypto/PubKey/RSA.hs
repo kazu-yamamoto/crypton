@@ -17,7 +17,7 @@ module Crypto.PubKey.RSA (
 ) where
 
 import Crypto.Number.Generate (generateMax)
-import Crypto.Number.ModArithmetic (inverse, inverseCoprimes)
+import Crypto.Number.ModArithmetic (inverse, inverseCoprimes, inverseSafe)
 import Crypto.Number.Prime (generatePrime)
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
@@ -51,6 +51,16 @@ toPositive int
 -- * e=0x10001 is a popular choice
 --
 -- * e=3 is popular as well, but proven to not be as secure for some cases.
+--
+-- /WARNING:/ Making a key is not constant time, and cannot be: the search for
+-- the two primes takes as long as it takes, and 'Crypto.Number.Prime' is not
+-- constant time either.  What that leaks is about the search rather than
+-- about the primes it settles on.  Of the arithmetic that does touch them,
+-- the inverse of one prime modulo the other is worked out without a side
+-- channel; the private exponent, which is the inverse of @e@ modulo
+-- @(p-1)*(q-1)@, still goes through the extended Euclidean algorithm, which
+-- for a public @e@ is one division by a small number and then a few steps on
+-- numbers under it.
 generateWith
     :: (Integer, Integer)
     -- ^ chosen distinct primes p and q
@@ -66,8 +76,14 @@ generateWith (p, q) size e =
   where
     n = p * q
     phi = (p - 1) * (q - 1)
-    -- q and p should be *distinct* *prime* numbers, hence always coprime
-    qinv = inverseCoprimes q p
+    -- q and p should be *distinct* *prime* numbers, hence always coprime.
+    -- Both of them are the key itself, so the inverse is worked out through
+    -- Fermat's little theorem rather than the extended Euclidean algorithm,
+    -- whose steps follow the numbers it is given.  It falls back on the one
+    -- that raises, which is what a p that is not prime deserves.
+    qinv = case inverseSafe q p of
+        Just i -> i
+        Nothing -> inverseCoprimes q p
     pub =
         PublicKey
             { public_size = size
@@ -113,6 +129,12 @@ generate size e = loop
 --
 -- the unique parameter apart from the random number generator is the
 -- public key value N.
+--
+-- /WARNING:/ The blinder holds a random number and its inverse, and the
+-- inverse is worked out with the extended Euclidean algorithm, whose steps
+-- follow the number it is given.  That number is what the blinding rests on,
+-- and this runs once per operation rather than once per key.  N is composite,
+-- so Fermat does not answer for it; a constant time inverse would.
 generateBlinder
     :: MonadRandom m
     => Integer
