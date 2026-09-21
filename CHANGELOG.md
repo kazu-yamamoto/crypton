@@ -2,6 +2,27 @@
 
 ## 2.0.0
 
+* fix(rsa): keep the blinding factor out of the extended Euclidean algorithm.
+  The blinder is a random number and its inverse, and the inverse went through
+  an algorithm whose steps follow the number handed to it -- the number the
+  blinding rests on, and unlike the other inverses this one is worked out once
+  per operation rather than once per key.  `n` being composite leaves no
+  Fermat to fall back on, so the algorithm is handed the factor multiplied by
+  sixteen fresh random bytes and its answer multiplied by them again, which
+  leaves the inverse wanted and shows the algorithm nothing to do with it.  In
+  IO, where every draw of randomness goes to the system, `generateBlinder`
+  goes from 74 to about 120 us and a PKCS#1 v1.5 `signSafer` from 719 to about
+  765; under a DRG the caller carries, 24.7 to 24.9
+  [#144](https://github.com/kazu-yamamoto/crypton/pull/144)
+* fix(rsa): work `qinv` out without the extended Euclidean algorithm.  Making
+  a key inverts one prime modulo the other and both of them are the key
+  itself, so that inverse is now Fermat's little theorem through `expSafe`,
+  which the other prime being prime allows: 308.6 us against 10.1, on a key
+  that takes tens of milliseconds to make.  Making a key cannot be constant
+  time -- the search for the primes takes as long as it takes -- but what that
+  leaks is about the search rather than about the primes it settles on, and
+  the haddock now says which is which
+  [#143](https://github.com/kazu-yamamoto/crypton/pull/143)
 * perf(ecc): a ladder for the curves over a binary field.  These were the last
   multiplication whose cost followed the scalar: an affine double-and-add, one
   addition for every bit that was set and none for the others, which on
