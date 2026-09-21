@@ -2,6 +2,38 @@
 
 ## 1.2.0
 
+* fix(ecdsa): keep the P-256 signature out of `Integer` arithmetic.  The
+  scalar handed to the C implementation was reduced with `mod`, a division,
+  whose steps follow the number being divided -- the nonce when signing, the
+  private key in ECDH.  Twice the order is more than 256 bits hold, so a
+  scalar that fits is brought under the order by one masked subtraction
+  instead.  The second half of a signature, `kInv * (z + r * d)`, was
+  `Integer` arithmetic as well, and now goes through `scalarAdd` and
+  `scalarMul`, which on P-256 are the C implementation's fixed-width
+  arithmetic.  What is left on that curve is the conversion between `Integer`
+  and fixed-width scalars, which is also what it costs: signing goes from 34.1
+  to 39.3 us, and ECDH and the other curves are unchanged
+  [#139](https://github.com/kazu-yamamoto/crypton/pull/139)
+* fix(dsa,ecdsa): invert the signing nonce without a side channel.  Both
+  inverted it with the extended Euclidean algorithm, whose step count and
+  branches follow the bits of what it is given -- and a handful of signatures
+  whose nonces are partly known give the private key away, so the nonce is
+  worth as much as the key.  `Crypto.Number.ModArithmetic.inverseSafe` works
+  the inverse out with Fermat's little theorem through `expSafe` instead,
+  falling back on `inverse` when the modulus turns out not to be prime, so
+  every answer is the one it was.  On P-256 the C implementation does it.
+  Signing costs a little more: ECDSA P-256 30.6 to 34.1 us, ECDSA P-384 678.7
+  to 703.4, DSA-2048 422.5 to 437.1.  Verification inverts a value that
+  arrives in the signature and is left alone
+  [#138](https://github.com/kazu-yamamoto/crypton/pull/138)
+* perf(number): square, and multiply, faster in `expSafe`.  The product and
+  the Montgomery reduction are now a full product followed by a reduction
+  rather than interleaved, built out of one loop that takes its limbs eight at
+  a time, and squaring works out only the products on one side of the diagonal
+  and doubles their sum.  At 2048 bits the constant-time exponentiation goes
+  from 3.59 to 2.15 ms, which is 1.4x GMP's own rather than 2.4x; RSA-2048
+  signing goes from 0.80 to 0.63 ms and DH-2048 `getShared` from 2.43 to 1.67
+  [#137](https://github.com/kazu-yamamoto/crypton/pull/137)
 * fix(number): make `expSafe` hide the exponent again.  It asked integer-gmp
   for `powModSecInteger` and fell back on the ordinary `powModInteger` when
   that was missing; since integer-gmp 1.1 it is always missing, so on every
@@ -243,6 +275,8 @@
 
 * New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.getShared'`,
   `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`,
+  `Crypto.Number.ModArithmetic.inverseSafe`, `Crypto.PubKey.ECC.Prim.scalarInverse`,
+  `scalarAdd` and `scalarMul`, `Crypto.PubKey.ECC.P256.scalarReduce`,
   and the whole of `Crypto.PubKey.ElGamal`, which was present but not exposed.
   The KDFs gained a variant of each entry point that can refuse its parameters,
   returning `CryptoFailable` instead of raising: `Crypto.KDF.Scrypt.generate'`,
