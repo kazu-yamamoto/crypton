@@ -215,6 +215,7 @@ library
         cbits/crypton_blake2bp.c
         cbits/crypton_blake2s.c
         cbits/crypton_blake2sp.c
+        cbits/crypton_blowfish.c
         cbits/crypton_camellia.c
         cbits/crypton_chacha.c
         cbits/crypton_cpu.c
@@ -246,7 +247,6 @@ library
 
     other-modules:
         Crypto.Cipher.AES.Primitive
-        Crypto.Cipher.Blowfish.Box
         Crypto.Cipher.Blowfish.Primitive
         Crypto.Cipher.Camellia.Primitive
         Crypto.Cipher.CAST5.Primitive
