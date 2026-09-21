@@ -130,6 +130,12 @@ static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 		ADDMUL_STEP(0) ADDMUL_STEP(1) ADDMUL_STEP(2) ADDMUL_STEP(3)
 		ADDMUL_STEP(4) ADDMUL_STEP(5) ADDMUL_STEP(6) ADDMUL_STEP(7)
 	}
+	for (; i + 4 <= n; i += 4) {
+		ADDMUL_STEP(0) ADDMUL_STEP(1) ADDMUL_STEP(2) ADDMUL_STEP(3)
+	}
+	for (; i + 2 <= n; i += 2) {
+		ADDMUL_STEP(0) ADDMUL_STEP(1)
+	}
 	for (; i < n; i++) {
 		ADDMUL_STEP(0)
 	}
