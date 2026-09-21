@@ -11,6 +11,8 @@
 -- the elliptic curve APIs reach for.
 module Crypto.Internal.ECC (
     MulResult (..),
+    CurveField (..),
+    curveMul,
     primeCurveMul,
     primeCurveTableMul,
     baseTable,
@@ -112,6 +114,13 @@ primeCurveMul p a b klen k px py
     -- What the buffer holds, in this order: the two coordinates out, the two
     -- in, a, b, the prime, and the scalar.  The room to take and where each
     -- one starts both come from here, so they cannot drift apart.
+    --
+    -- They did once, and nothing caught it: the memory is a pinned array on
+    -- the GHC heap, so writing past it is invisible to valgrind, which sees
+    -- one large allocation, and to the sanity checks of the debug RTS, which
+    -- found nothing when the mistake was put back to try them.  One runner
+    -- out of eighteen died of it and the rest went green.  The way to be
+    -- right about this is not to have two numbers to keep the same.
     widths = [plen, plen, plen, plen, plen, plen, plen, klen]
 
 foreign import ccall unsafe "crypton_ecc_table_size"
@@ -155,6 +164,58 @@ foreign import ccall safe "crypton_ecc_mul"
         -> Ptr Word8
         -> Word32
         -> IO CInt
+
+-- | What a curve is made of, as much of it as a multiplication needs.
+data CurveField
+    = -- | over a prime field: the prime, a and b
+      Prime !Integer !Integer !Integer
+    | -- | over a binary field: the polynomial and b
+      Binary !Integer !Integer
+    deriving (Show, Eq)
+
+-- | Multiply a point by a scalar, through the C wherever the C takes it.
+--
+-- Both elliptic curve APIs come here, so that the decision -- the table for a
+-- base point, the C for anything else, what is left over -- is made once and
+-- in one place.  One of those APIs cannot be reached from outside the library
+-- on a curve over a binary field, and this is how that copy stays the same
+-- code as the copy everybody runs.
+--
+-- The caller has seen to it that the point is on the curve, which is what the
+-- C takes for granted, and deals with 'MulUnsupported' in whatever way it
+-- has.
+curveMul
+    :: CurveField
+    -> Integer
+    -- ^ the order of the curve
+    -> Integer
+    -- ^ the scalar
+    -> Integer
+    -- ^ the point's x
+    -> Integer
+    -- ^ the point's y
+    -> Bool
+    -- ^ whether that point is the curve's base point
+    -> MulResult
+curveMul field order k px py isBase = case field of
+    Prime p a b
+        | isBase
+        , klen == numBytes order
+        , Just table <- baseTable p a b klen px py ->
+            primeCurveTableMul table p a b klen k
+        | otherwise -> primeCurveMul p a b klen k px py
+    Binary fx b
+        | px == 0 -> MulUnsupported -- its own negation, and easier the long way
+        | otherwise -> case binaryCurveC fx b klen k px py of
+            -- the ladder in Haskell, for a field the C will not take
+            MulUnsupported -> binaryCurveMul fx b (klen * 8) k px py
+            r -> r
+  where
+    -- Walk the width of the order, which is public, so a scalar in range --
+    -- which is every secret one -- costs the same whatever it is.  A scalar
+    -- may still be given out of range, and then the width has to follow it or
+    -- the high bits would be dropped.
+    !klen = max (numBytes k) (numBytes order)
 
 -- | The table for the base point of a curve the library knows, which is the
 -- point signing and making a key multiply and the only point worth keeping a
@@ -227,30 +288,33 @@ primeCurveTable p a b klen px py
     | p <= 0 || even p || klen <= 0 || size == 0 = Nothing
     | otherwise = unsafeDoIO $ do
         table <- mallocForeignPtrBytes (fromIntegral size)
-        allocaBytes (5 * plen) $ \cx -> do
-            let cy = cx `plusPtr` plen
-                ca = cy `plusPtr` plen
-                cb = ca `plusPtr` plen
-                cp = cb `plusPtr` plen
-            _ <- Internal.i2ospOf px cx plen
-            _ <- Internal.i2ospOf py cy plen
-            _ <- Internal.i2ospOf a ca plen
-            _ <- Internal.i2ospOf b cb plen
-            _ <- Internal.i2ospOf p cp plen
-            r <- withForeignPtr table $ \t ->
-                c_ecc_table_build
-                    t
-                    cx
-                    cy
-                    (fromIntegral klen)
-                    ca
-                    cb
-                    cp
-                    (fromIntegral plen)
-            return $ if r == 0 then Just table else Nothing
+        allocaBytes (sum widths) $ \base -> case scanl plusPtr base widths of
+            (cx : cy : ca : cb : cp : _) -> do
+                _ <- Internal.i2ospOf px cx plen
+                _ <- Internal.i2ospOf py cy plen
+                _ <- Internal.i2ospOf a ca plen
+                _ <- Internal.i2ospOf b cb plen
+                _ <- Internal.i2ospOf p cp plen
+                r <- withForeignPtr table $ \t ->
+                    c_ecc_table_build
+                        t
+                        cx
+                        cy
+                        (fromIntegral klen)
+                        ca
+                        cb
+                        cp
+                        (fromIntegral plen)
+                return $ if r == 0 then Just table else Nothing
+            _ -> return Nothing -- there are five, but say so anyway
   where
     !plen = numBytes p
     !size = c_ecc_table_size (fromIntegral plen) (fromIntegral klen)
+    -- the point, a, b and the prime, all of the prime's width.  The room to
+    -- take and where each one starts both come from here, so they cannot
+    -- drift apart: they did once, and nothing caught it -- see the note on
+    -- primeCurveMul.
+    widths = [plen, plen, plen, plen, plen]
 
 -- | Multiply the point a table was built for by a scalar of the width the
 -- table was built for.  One addition for every four bits and no doublings.
