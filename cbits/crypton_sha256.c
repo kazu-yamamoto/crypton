@@ -26,6 +26,9 @@
 #include "crypton_sha256.h"
 #include "crypton_bitfn.h"
 #include "crypton_align.h"
+#ifdef WITH_X86_SHA_NI
+#include "crypton_cpu.h"
+#endif
 
 void crypton_sha224_init(struct sha224_ctx *ctx)
 {
@@ -123,6 +126,17 @@ extern int crypton_sha256_armv8_available(void);
 static int sha256_use_armv8 = -1;
 #endif
 
+#ifdef WITH_X86_SHA_NI
+/*
+ * x86 can do two rounds at a time with the SHA extensions; see sha256_x86.c.
+ * They arrived long after the x86-64 baseline, so ask before using them.
+ * Two threads racing to answer here both write the same value.
+ */
+extern void crypton_sha256_x86_do_chunk(uint32_t state[8], const uint32_t buf[16]);
+
+static int sha256_use_x86 = -1;
+#endif
+
 static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 {
 #ifdef WITH_ARMV8_SHA2
@@ -130,6 +144,15 @@ static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 		sha256_use_armv8 = crypton_sha256_armv8_available();
 	if (sha256_use_armv8) {
 		crypton_sha256_armv8_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
+#ifdef WITH_X86_SHA_NI
+	if (sha256_use_x86 < 0)
+		sha256_use_x86 =
+		    (crypton_x86_simd_features() & CRYPTON_X86_SHA_NI) != 0;
+	if (sha256_use_x86) {
+		crypton_sha256_x86_do_chunk(ctx->h, buf);
 		return;
 	}
 #endif

@@ -43,6 +43,8 @@
 #define CRYPTON_X86_SSSE3  1
 #define CRYPTON_X86_AVX2   2
 #define CRYPTON_X86_PCLMUL 4
+/* the SHA extensions, and the SSSE3 and SSE4.1 the code around them uses */
+#define CRYPTON_X86_SHA_NI 8
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif

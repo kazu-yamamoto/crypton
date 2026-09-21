@@ -371,11 +371,18 @@ library
     -- SSE2 is part of the x86-64 baseline, so this needs no flag and no
     -- runtime check; i386 keeps the scalar code.
     if arch(x86_64)
-        cc-options: -DWITH_X86_SSE2 -DWITH_X86_AVX2
+        cc-options: -DWITH_X86_SSE2 -DWITH_X86_AVX2 -DWITH_X86_SHA_NI
         c-sources:
             cbits/chacha_avx2.c
             cbits/chacha_sse2.c
             cbits/poly1305_avx2.c
+            cbits/sha256_x86.c
+
+        -- The SHA extensions are not part of the baseline, so without the
+        -- attributes this raises it for every file, as the AES-NI and
+        -- AArch64 paths do.
+        if !flag(use_target_attributes)
+            cc-options: -msha -msse4.1 -mssse3
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND
