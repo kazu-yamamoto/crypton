@@ -2,6 +2,22 @@
 
 ## 2.0.0
 
+* perf(ecc): a ladder for the curves over a binary field.  These were the last
+  multiplication whose cost followed the scalar: an affine double-and-add, one
+  addition for every bit that was set and none for the others, which on
+  sect283k1 ran from 9665 us for a scalar with two bits set to 17958 for one
+  with 270.  It is now Montgomery's ladder, which carries the multiples of two
+  consecutive numbers -- their difference being the point is what lets it
+  carry only their x coordinates -- and spends one addition and one doubling
+  on every bit whichever way it goes, working the y out at the end from the
+  two x it is left with, so one division does for the whole multiplication
+  where the affine code had one per step.  The multiplication is now flat, and
+  quicker: sect163k1 4428 to 3431 us, sect233r1 9304 to 6806, sect283k1 13797
+  to 10181, sect409k1 30826 to 20584, sect571r1 61931 to 40469.  Uniform is
+  not constant time -- these are `Integer` operations, whose cost follows the
+  values -- and the point with no x, which is its own negation, keeps the code
+  that was there
+  [#142](https://github.com/kazu-yamamoto/crypton/pull/142)
 * perf(ecc): multiply points in C on curves over a prime field.  P-256 has had
   a C implementation all along; every other prime curve -- P-384, P-521,
   secp256k1 and the rest -- multiplied points with `Integer` arithmetic, which
