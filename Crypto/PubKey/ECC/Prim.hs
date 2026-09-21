@@ -23,7 +23,7 @@ module Crypto.PubKey.ECC.Prim (
 ) where
 
 import Crypto.Error (maybeCryptoError)
-import Crypto.Internal.ECC (MulResult (..), primeCurveMul)
+import Crypto.Internal.ECC (MulResult (..), binaryCurveMul, primeCurveMul)
 import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
@@ -229,19 +229,24 @@ pointBaseMul c n = pointMul c n (ecc_g $ common_curve c)
 
 -- | Elliptic curve point multiplication.
 --
--- Over a prime field this works in Jacobian coordinates, so that the
--- division each addition and doubling would otherwise need is deferred to a
--- single one at the end, and it adds at every bit whether or not the bit is
--- set, so the number of operations depends on the size of the curve's order
--- rather than on the scalar.  Binary curves keep the affine double-and-add.
+-- Over a prime field this goes to C, four bits of scalar at a time, with the
+-- multiple to add taken from a table read by touching every entry of it.
+-- Over a binary field it is Montgomery's ladder, which carries the x
+-- coordinates of two consecutive multiples -- their difference being the
+-- point is what lets it carry no more than that -- and spends one addition
+-- and one doubling on every bit whichever way the bit goes.  Either way the
+-- work follows the width of the curve's order and not the scalar.
 --
--- On P-256 none of that applies: the multiplication goes to the C
--- implementation in "Crypto.PubKey.ECC.P256", which is constant time.
+-- What falls back on the 'Integer' arithmetic below is a point that is not on
+-- the curve, the one point of a binary curve that has no x, and a prime the C
+-- will not take.
 --
--- /WARNING:/ On every other curve, still vulnerable to timing attacks.
--- Uniform operation counts are not constant time: the operations are
--- 'Integer' arithmetic, whose cost depends on the values, and the choice at
--- each bit is a branch.
+-- On P-256 the multiplication goes to the C implementation in
+-- "Crypto.PubKey.ECC.P256", which has a table for the base point.
+--
+-- /WARNING:/ Over a binary field, still vulnerable to timing attacks.
+-- Uniform operation counts are not constant time: those operations are
+-- 'Integer' arithmetic, whose cost depends on the values.
 pointMul :: Curve -> Integer -> Point -> Point
 pointMul _ _ PointO = PointO
 pointMul c n p
@@ -258,7 +263,7 @@ pointMul c n p
     | otherwise =
         case c of
             CurveFP (CurvePrime pr cc) -> primeMul pr cc
-            CurveF2m{} -> affineMul n p
+            CurveF2m (CurveBinary fx cc) -> binaryMul fx cc
   where
     -- The C answers for a point on the curve; anything else keeps the
     -- answers it has always had from the code below.
@@ -283,6 +288,20 @@ pointMul c n p
                 (max (integerBits n) (integerBits (ecc_n cc)))
                 n
                 p
+
+    -- The ladder answers for a point on the curve that has an x; the one
+    -- point with no x, and anything off the curve, keep what they had.
+    binaryMul fx cc = case p of
+        Point px py
+            | px /= 0
+            , isPointValid c p ->
+                case binaryCurveMul fx (ecc_b cc) bits n px py of
+                    MulPoint x y -> Point x y
+                    MulInfinity -> PointO
+                    MulUnsupported -> affineMul n p
+        _ -> affineMul n p
+      where
+        bits = max (integerBits n) (integerBits (ecc_n cc))
 
     affineMul k q
         | k == 0 = PointO
