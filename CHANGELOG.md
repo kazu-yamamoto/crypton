@@ -2,6 +2,25 @@
 
 ## 1.2.0
 
+* fix(number): make `expSafe` hide the exponent again.  It asked integer-gmp
+  for `powModSecInteger` and fell back on the ordinary `powModInteger` when
+  that was missing; since integer-gmp 1.1 it is always missing, so on every
+  GHC this package supports `expSafe` was the same windowed exponentiation as
+  `expFast`, table indexed by the exponent's bits, for RSA, DSA, DH, ElGamal
+  and Rabin alike.  It now goes to C: four bits of exponent at a time, the
+  table of sixteen read by touching every entry and keeping one with a mask,
+  and a Montgomery multiplication whose final subtraction is masked too.  The
+  exponent's length is still visible, rounded up to a whole 64-bit word, which
+  is what GMP's own `mpz_powm_sec` lets slip.  Hiding the exponent costs 1.6x
+  at 512 bits and 2.4x at 2048: RSA-2048 signing goes from 0.46 to 0.80 ms and
+  DH-2048 `getShared` from 1.04 to 2.43
+  [#136](https://github.com/kazu-yamamoto/crypton/pull/136)
+* perf(prime): stop running a Fermat test that Miller-Rabin subsumes.  Every
+  candidate was tested to base 2 before the Miller-Rabin rounds, which begin
+  with the same base and prove more; the primes it passed paid for it twice
+  and the composites it caught were nearly all caught by trial division first.
+  RSA-2048 key generation goes from 55.0 to 32.8 ms
+  [#135](https://github.com/kazu-yamamoto/crypton/pull/135)
 * perf(f2m): reduce the binary field by folding the top back in rather than
   taking a step per bit of excess, square a byte at a time through a table of
   the patterns a byte spreads into, and take four bits of a multiplier at a
