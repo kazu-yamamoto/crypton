@@ -250,6 +250,18 @@ spec = do
             bits = 5 + baseBits -- generating lower than 5 bits causes an error ..
             prime = withTestDRG testDRG $ generatePrime bits
          in bits == numBits prime
+    -- what generatePrime settles on has to answer to the test anyone else
+    -- would put it to, whatever it did to convince itself
+    prop "generate-prime-is-prime" $ \testDRG (Int0_2901 baseBits') ->
+        let baseBits = baseBits' `mod` 800
+            bits = 5 + baseBits
+            prime = withTestDRG testDRG $ generatePrime bits
+         in isProbablyPrime prime
+    prop "generate-safe-prime-is-prime" $ \testDRG (Int0_2901 baseBits') ->
+        let baseBits = baseBits' `mod` 200
+            bits = 6 + baseBits
+            prime = withTestDRG testDRG $ generateSafePrime bits
+         in isProbablyPrime prime && isProbablyPrime ((prime - 1) `div` 2)
     prop "generate-safe-prime" $ \testDRG (Int0_2901 baseBits') ->
         let baseBits = baseBits' `mod` 200
             bits = 6 + baseBits

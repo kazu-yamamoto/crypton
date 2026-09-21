@@ -43,11 +43,48 @@ import Data.Bits
 -- that turned out to be prime -- 2167 of the 3480 microseconds spent on a
 -- 512-bit prime, and about two thirds of the time to generate one.
 isProbablyPrime :: Integer -> Bool
-isProbablyPrime !n
+isProbablyPrime = probablyPrime 30
+
+-- | The same, with the number of rounds said outright.
+--
+-- Thirty rounds is what a number from anywhere gets: whoever handed it over
+-- may have built it to pass, and against that the only thing to go on is that
+-- each round with a base drawn at random catches three quarters of the
+-- composites there are, whatever the number is.  Thirty of them leave one
+-- chance in 2^60.
+probablyPrime :: Int -> Integer -> Bool
+probablyPrime rounds !n
     | n < 2 = False
     | any (\p -> p `divides` n) (filter (< n) firstPrimes) = False
     | n <= 2903 = True
-    | otherwise = primalityTestMillerRabin 30 n
+    | otherwise = primalityTestMillerRabin rounds n
+
+-- | How many rounds a candidate drawn here needs.
+--
+-- A number nobody chose is a different matter from one somebody did.  The
+-- composites that survive a round are rare, and the ones that survive several
+-- are rarer than the bound above says: Damgard, Landrock and Pomerance
+-- worked out how much rarer for a candidate drawn at random, and Table 4.4 of
+-- the Handbook of Applied Cryptography puts their numbers in a table -- two
+-- rounds at 1300 bits, three at 850, five at 550, and so on, for one chance
+-- in 2^80.
+--
+-- This is twice that, and never more than the thirty a number from anywhere
+-- gets, which leaves the chance far under one in 2^100 at every size.  It is
+-- what makes generating a prime worth doing: the thirty rounds were half the
+-- time it took.
+roundsForDrawn :: Int -> Int
+roundsForDrawn bits
+    | bits >= 1300 = 6
+    | bits >= 850 = 8
+    | bits >= 650 = 10
+    | bits >= 550 = 12
+    | bits >= 450 = 14
+    | bits >= 400 = 16
+    | bits >= 350 = 18
+    | bits >= 300 = 20
+    | bits >= 250 = 24
+    | otherwise = 30
 
 -- | Generate a prime number of the required bitsize (i.e. in the range
 -- [2^(b-1)+2^(b-2), 2^b)).
@@ -64,7 +101,7 @@ generatePrime bits = do
             throwCryptoError $ CryptoFailed $ CryptoError_PrimeSizeInvalid
         else do
             sp <- generateParams bits (Just SetTwoHighest) True
-            let prime = findPrimeFrom sp
+            let prime = findPrimeFromDrawn (roundsForDrawn bits) sp
             if prime < 1 `shiftL` bits
                 then
                     return $ prime
@@ -85,7 +122,12 @@ generateSafePrime bits = do
             throwCryptoError $ CryptoFailed $ CryptoError_PrimeSizeInvalid
         else do
             sp <- generateParams bits (Just SetTwoHighest) True
-            let p = findPrimeFromWith (\i -> isProbablyPrime (2 * i + 1)) (sp `div` 2)
+            let rounds = roundsForDrawn bits
+                p =
+                    findPrimeFromWithRounds
+                        rounds
+                        (\i -> probablyPrime rounds (2 * i + 1))
+                        (sp `div` 2)
             let val = 2 * p + 1
             if val < 1 `shiftL` bits
                 then
@@ -94,15 +136,25 @@ generateSafePrime bits = do
 
 -- | Find a prime from a starting point where the property hold.
 findPrimeFromWith :: (Integer -> Bool) -> Integer -> Integer
-findPrimeFromWith prop !n
-    | even n = findPrimeFromWith prop (n + 1)
+findPrimeFromWith = findPrimeFromWithRounds 30
+
+-- | The same, with the number of rounds said outright: the walk starts where
+-- the caller says, and only a caller that drew that starting point itself is
+-- entitled to the smaller number.
+findPrimeFromWithRounds :: Int -> (Integer -> Bool) -> Integer -> Integer
+findPrimeFromWithRounds rounds prop !n
+    | even n = findPrimeFromWithRounds rounds prop (n + 1)
     | otherwise =
-        if not (isProbablyPrime n)
-            then findPrimeFromWith prop (n + 2)
+        if not (probablyPrime rounds n)
+            then findPrimeFromWithRounds rounds prop (n + 2)
             else
                 if prop n
                     then n
-                    else findPrimeFromWith prop (n + 2)
+                    else findPrimeFromWithRounds rounds prop (n + 2)
+
+-- | Find a prime from a starting point that the caller drew itself.
+findPrimeFromDrawn :: Int -> Integer -> Integer
+findPrimeFromDrawn rounds = findPrimeFromWithRounds rounds (\_ -> True)
 
 -- | Find a prime from a starting point with no specific property.
 findPrimeFrom :: Integer -> Integer
