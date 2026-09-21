@@ -20,14 +20,7 @@ module Crypto.ECC.Simple.Prim (
 
 import Crypto.ECC.Simple.Types
 import Crypto.Error
-import Crypto.Internal.ECC (
-    MulResult (..),
-    baseTable,
-    binaryCurveC,
-    binaryCurveMul,
-    primeCurveMul,
-    primeCurveTableMul,
- )
+import Crypto.Internal.ECC (CurveField (..), MulResult (..), curveMul)
 import Crypto.Number.Basic (numBits, numBytes)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
@@ -178,47 +171,43 @@ pointMul (Scalar n) p
   where
     cc = curveParameters (Proxy :: Proxy curve)
     a = curveEccA cc
+    -- Count to the width of the order, which is public, so a scalar in range
+    -- -- which is every secret one -- takes the same number of steps whatever
+    -- it is.  A scalar may still be given out of range, and then the count has
+    -- to follow it or the high bits would be dropped.
+    bits = max (integerBits n) (integerBits (curveEccN cc))
 
     -- The C answers for a point on the curve; anything else keeps the
     -- answers it has always had from the code below.
     primeMul pr = case p of
         Point px py
-            | p == curveEccG cc
-            , klen == numBytes (curveEccN cc)
-            , Just table <- baseTable pr a (curveEccB cc) klen px py ->
-                answer (primeCurveTableMul table pr a (curveEccB cc) klen n)
             | isPointValid (Proxy :: Proxy curve) px py ->
-                answer (primeCurveMul pr a (curveEccB cc) klen n px py)
+                answer slow $
+                    curveMul
+                        (Prime pr a (curveEccB cc))
+                        (curveEccN cc)
+                        n
+                        px
+                        py
+                        (p == curveEccG cc)
         _ -> slow
       where
-        klen = max (numBytes n) (numBytes (curveEccN cc))
         slow = jacobianMul pr a bits n p
-        answer (MulPoint x y) = Point x y
-        answer MulInfinity = PointO
-        answer MulUnsupported = slow
-    -- Count to the width of the order, which is public, so a scalar in
-    -- range -- which is every secret one -- takes the same number of steps
-    -- whatever it is.  A scalar may still be given out of range, and then
-    -- the count has to follow it or the high bits would be dropped.
-    bits = max (integerBits n) (integerBits (curveEccN cc))
 
     -- The ladder answers for a point on the curve that has an x; the one
     -- point with no x, and anything off the curve, keep what they had.
     binaryMul fx = case p of
         Point px py
-            | px /= 0
-            , isPointValid (Proxy :: Proxy curve) px py ->
-                case binaryCurveC fx (curveEccB cc) klenB n px py of
-                    MulPoint x y -> Point x y
-                    MulInfinity -> PointO
-                    -- the ladder in Haskell, for a field the C will not take
-                    MulUnsupported -> case binaryCurveMul fx (curveEccB cc) bits n px py of
-                        MulPoint x y -> Point x y
-                        MulInfinity -> PointO
-                        MulUnsupported -> affineMul n p
+            | isPointValid (Proxy :: Proxy curve) px py ->
+                answer (affineMul n p) $
+                    curveMul (Binary fx (curveEccB cc)) (curveEccN cc) n px py False
         _ -> affineMul n p
-      where
-        klenB = max (numBytes n) (numBytes (curveEccN cc))
+
+    -- what the C could not take goes back to the code that was here before
+    answer fallback r = case r of
+        MulPoint x y -> Point x y
+        MulInfinity -> PointO
+        MulUnsupported -> fallback
 
     affineMul k q
         | k == 0 = PointO
