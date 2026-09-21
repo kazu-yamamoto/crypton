@@ -59,35 +59,24 @@ static void block128_sse_print(__m128i m)
 #endif
 
 void crypton_aesni_init(aes_key *key, uint8_t *origkey, uint8_t size);
-void crypton_aesni_encrypt_block128(aes_block *out, aes_key *key, aes_block *in);
-void crypton_aesni_encrypt_block256(aes_block *out, aes_key *key, aes_block *in);
-void crypton_aesni_decrypt_block128(aes_block *out, aes_key *key, aes_block *in);
-void crypton_aesni_decrypt_block256(aes_block *out, aes_key *key, aes_block *in);
-void crypton_aesni_encrypt_ecb128(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks);
-void crypton_aesni_encrypt_ecb256(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_ecb128(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_ecb256(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks);
-void crypton_aesni_encrypt_cbc128(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks);
-void crypton_aesni_encrypt_cbc256(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_cbc128(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_cbc256(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks);
-void crypton_aesni_encrypt_ctr128(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length);
-void crypton_aesni_encrypt_ctr256(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length);
-void crypton_aesni_encrypt_c32_128(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length);
-void crypton_aesni_encrypt_c32_256(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length);
-void crypton_aesni_encrypt_xts128(aes_block *out, aes_key *key1, aes_key *key2,
-                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
-void crypton_aesni_encrypt_xts256(aes_block *out, aes_key *key1, aes_key *key2,
-                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_xts128(aes_block *out, aes_key *key1, aes_key *key2,
-                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
-void crypton_aesni_decrypt_xts256(aes_block *out, aes_key *key1, aes_key *key2,
-                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks);
-
-void crypton_aesni_gcm_encrypt128(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
-void crypton_aesni_gcm_encrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
-void crypton_aesni_gcm_decrypt128(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
-void crypton_aesni_gcm_decrypt256(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
+#define AESNI_DECLS(sz) \
+	void crypton_aesni_encrypt_block##sz(aes_block *out, aes_key *key, aes_block *in); \
+	void crypton_aesni_decrypt_block##sz(aes_block *out, aes_key *key, aes_block *in); \
+	void crypton_aesni_encrypt_ecb##sz(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_decrypt_ecb##sz(aes_block *out, aes_key *key, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_encrypt_cbc##sz(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_decrypt_cbc##sz(aes_block *out, aes_key *key, aes_block *_iv, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_encrypt_ctr##sz(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length); \
+	void crypton_aesni_encrypt_c32_##sz(uint8_t *out, aes_key *key, aes_block *_iv, uint8_t *in, uint32_t length); \
+	void crypton_aesni_encrypt_xts##sz(aes_block *out, aes_key *key1, aes_key *key2, \
+	                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_decrypt_xts##sz(aes_block *out, aes_key *key1, aes_key *key2, \
+	                           aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks); \
+	void crypton_aesni_gcm_encrypt##sz(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length); \
+	void crypton_aesni_gcm_decrypt##sz(uint8_t *out, aes_gcm *gcm, aes_key *key, uint8_t *in, uint32_t length);
+AESNI_DECLS(128)
+AESNI_DECLS(192)
+AESNI_DECLS(256)
 
 #ifdef WITH_PCLMUL
 void crypton_aesni_init_pclmul(void);

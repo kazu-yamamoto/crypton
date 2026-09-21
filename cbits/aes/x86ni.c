@@ -56,6 +56,22 @@ static __m128i aes_128_key_expansion_ff(__m128i key, __m128i keygened)
 	return _mm_xor_si128(key, keygened);
 }
 
+/*
+ * SubWord(RotWord(w)), which is the one part of a key schedule that would
+ * otherwise want the S-box out of a table.  AESKEYGENASSIST computes it for
+ * the words in lanes 1 and 3 and exclusive-ors the round constant into the
+ * result; the constant is an immediate, so it is left at zero here and
+ * applied by the caller, which keeps the 192-bit schedule a loop.
+ */
+TARGET_AESNI
+static uint32_t key_sub_rot(uint32_t w)
+{
+	const __m128i t =
+	    _mm_aeskeygenassist_si128(_mm_setr_epi32(0, (int) w, 0, 0), 0x00);
+
+	return (uint32_t) _mm_cvtsi128_si32(_mm_srli_si128(t, 4));
+}
+
 TARGET_AESNI
 static __m128i aes_128_key_expansion_aa(__m128i key, __m128i keygened)
 {
@@ -105,6 +121,34 @@ void crypton_aesni_init(aes_key *key, uint8_t *ikey, uint8_t size)
 		for (i = 0; i < 20; i++)
 			_mm_storeu_si128(((__m128i *) out) + i, k[i]);
 		break;
+	case 24: {
+		/*
+		 * The 192-bit schedule takes six words at a time where a round
+		 * key is four, so it does not fall into 128-bit pieces the way
+		 * the other two do; it is built a word at a time instead.
+		 * Thirteen round keys, then the eleven inverted ones.
+		 */
+		static const uint32_t rcon[8] = {
+			0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80,
+		};
+		uint32_t w[52];
+
+		memcpy(w, ikey, 24);
+		for (i = 6; i < 52; i++) {
+			uint32_t t = w[i - 1];
+
+			if (i % 6 == 0)
+				t = key_sub_rot(t) ^ rcon[i / 6 - 1];
+			w[i] = w[i - 6] ^ t;
+		}
+		memcpy(out, w, sizeof(w));
+
+		for (i = 1; i < 12; i++)
+			_mm_storeu_si128(((__m128i *) out) + 12 + i,
+			    _mm_aesimc_si128(_mm_loadu_si128(
+			        ((const __m128i *) w) + (12 - i))));
+		break;
+	}
 	case 32:
 #define AES_256_key_exp_1(K1, K2, RCON) aes_128_key_expansion_ff(K1, _mm_aeskeygenassist_si128(K2, RCON))
 #define AES_256_key_exp_2(K1, K2)       aes_128_key_expansion_aa(K1, _mm_aeskeygenassist_si128(K2, 0x00))
@@ -434,6 +478,11 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 	__m128i K9  = _mm_loadu_si128(((__m128i *) k)+9); \
 	__m128i K10 = _mm_loadu_si128(((__m128i *) k)+10);
 
+#define PRELOAD_ENC_KEYS192(k) \
+	PRELOAD_ENC_KEYS128(k) \
+	__m128i K11 = _mm_loadu_si128(((__m128i *) k)+11); \
+	__m128i K12 = _mm_loadu_si128(((__m128i *) k)+12);
+
 #define PRELOAD_ENC_KEYS256(k) \
 	PRELOAD_ENC_KEYS128(k) \
 	__m128i K11 = _mm_loadu_si128(((__m128i *) k)+11); \
@@ -453,6 +502,21 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 	m = _mm_aesenc_si128(m, K8); \
 	m = _mm_aesenc_si128(m, K9); \
 	m = _mm_aesenclast_si128(m, K10);
+
+#define DO_ENC_BLOCK192(m) \
+	m = _mm_xor_si128(m, K0); \
+	m = _mm_aesenc_si128(m, K1); \
+	m = _mm_aesenc_si128(m, K2); \
+	m = _mm_aesenc_si128(m, K3); \
+	m = _mm_aesenc_si128(m, K4); \
+	m = _mm_aesenc_si128(m, K5); \
+	m = _mm_aesenc_si128(m, K6); \
+	m = _mm_aesenc_si128(m, K7); \
+	m = _mm_aesenc_si128(m, K8); \
+	m = _mm_aesenc_si128(m, K9); \
+	m = _mm_aesenc_si128(m, K10); \
+	m = _mm_aesenc_si128(m, K11); \
+	m = _mm_aesenclast_si128(m, K12);
 
 #define DO_ENC_BLOCK256(m) \
 	m = _mm_xor_si128(m, K0); \
@@ -513,6 +577,11 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 	XOR8(K0) AESENC8(K1) AESENC8(K2) AESENC8(K3) AESENC8(K4) AESENC8(K5) \
 	AESENC8(K6) AESENC8(K7) AESENC8(K8) AESENC8(K9) AESENCLAST8(K10)
 
+#define DO_ENC_BLOCK8_192(m) \
+	XOR8(K0) AESENC8(K1) AESENC8(K2) AESENC8(K3) AESENC8(K4) AESENC8(K5) \
+	AESENC8(K6) AESENC8(K7) AESENC8(K8) AESENC8(K9) AESENC8(K10) \
+	AESENC8(K11) AESENCLAST8(K12)
+
 #define DO_ENC_BLOCK8_256(m) \
 	XOR8(K0) AESENC8(K1) AESENC8(K2) AESENC8(K3) AESENC8(K4) AESENC8(K5) \
 	AESENC8(K6) AESENC8(K7) AESENC8(K8) AESENC8(K9) AESENC8(K10) \
@@ -521,6 +590,12 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #define PRELOAD_DEC_KEYS128(k) \
 	PRELOAD_DEC_KEYS_AT(k, 10) \
 	__m128i K10 = _mm_loadu_si128(((__m128i *) k)+0);
+
+#define PRELOAD_DEC_KEYS192(k) \
+	PRELOAD_DEC_KEYS_AT(k, 12) \
+	__m128i K10 = _mm_loadu_si128(((__m128i *) k)+12+10); \
+	__m128i K11 = _mm_loadu_si128(((__m128i *) k)+12+11); \
+	__m128i K12 = _mm_loadu_si128(((__m128i *) k)+0);
 
 #define PRELOAD_DEC_KEYS256(k) \
 	PRELOAD_DEC_KEYS_AT(k, 14) \
@@ -545,6 +620,11 @@ static inline __m128i ghash_add8(__m128i tag, const table_4bit htable, const __m
 #define DO_DEC_BLOCK8_128(m) \
 	XOR8(K0) AESDEC8(K1) AESDEC8(K2) AESDEC8(K3) AESDEC8(K4) AESDEC8(K5) \
 	AESDEC8(K6) AESDEC8(K7) AESDEC8(K8) AESDEC8(K9) AESDECLAST8(K10)
+
+#define DO_DEC_BLOCK8_192(m) \
+	XOR8(K0) AESDEC8(K1) AESDEC8(K2) AESDEC8(K3) AESDEC8(K4) AESDEC8(K5) \
+	AESDEC8(K6) AESDEC8(K7) AESDEC8(K8) AESDEC8(K9) AESDEC8(K10) \
+	AESDEC8(K11) AESDECLAST8(K12)
 
 #define DO_DEC_BLOCK8_256(m) \
 	XOR8(K0) AESDEC8(K1) AESDEC8(K2) AESDEC8(K3) AESDEC8(K4) AESDEC8(K5) \
@@ -584,6 +664,21 @@ static inline __m128i gfmulx_sse(__m128i v)
 	m = _mm_aesdec_si128(m, K9); \
 	m = _mm_aesdeclast_si128(m, K10);
 
+#define DO_DEC_BLOCK192(m) \
+	m = _mm_xor_si128(m, K0); \
+	m = _mm_aesdec_si128(m, K1); \
+	m = _mm_aesdec_si128(m, K2); \
+	m = _mm_aesdec_si128(m, K3); \
+	m = _mm_aesdec_si128(m, K4); \
+	m = _mm_aesdec_si128(m, K5); \
+	m = _mm_aesdec_si128(m, K6); \
+	m = _mm_aesdec_si128(m, K7); \
+	m = _mm_aesdec_si128(m, K8); \
+	m = _mm_aesdec_si128(m, K9); \
+	m = _mm_aesdec_si128(m, K10); \
+	m = _mm_aesdec_si128(m, K11); \
+	m = _mm_aesdeclast_si128(m, K12);
+
 #define DO_DEC_BLOCK256(m) \
 	m = _mm_xor_si128(m, K0); \
 	m = _mm_aesdec_si128(m, K1); \
@@ -609,6 +704,25 @@ static inline __m128i gfmulx_sse(__m128i v)
 #define PRELOAD_DEC PRELOAD_DEC_KEYS128
 #define DO_DEC_BLOCK DO_DEC_BLOCK128
 #define DO_DEC_BLOCK8 DO_DEC_BLOCK8_128
+#include <aes/x86ni_impl.c>
+
+#undef SIZE
+#undef SIZED
+#undef PRELOAD_ENC
+#undef PRELOAD_DEC
+#undef DO_ENC_BLOCK
+#undef DO_ENC_BLOCK8
+#undef DO_DEC_BLOCK
+#undef DO_DEC_BLOCK8
+
+#define SIZED(m) m##192
+#define SIZE 192
+#define PRELOAD_ENC PRELOAD_ENC_KEYS192
+#define DO_ENC_BLOCK DO_ENC_BLOCK192
+#define DO_ENC_BLOCK8 DO_ENC_BLOCK8_192
+#define PRELOAD_DEC PRELOAD_DEC_KEYS192
+#define DO_DEC_BLOCK DO_DEC_BLOCK192
+#define DO_DEC_BLOCK8 DO_DEC_BLOCK8_192
 #include <aes/x86ni_impl.c>
 
 #undef SIZE

@@ -71,6 +71,7 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
 	void crypton_aes_armv8_encrypt_xts##sz(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks); \
 	void crypton_aes_armv8_decrypt_xts##sz(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 ARMV8_DECLS(128)
+ARMV8_DECLS(192)
 ARMV8_DECLS(256)
 int crypton_aes_armv8_available(void);
 int crypton_aes_armv8_pmull_available(void);
@@ -270,37 +271,50 @@ static void initialize_table_ni(int aesni, int pclmul)
 	crypton_aes_cpu_options[CPU_AESNI] = 1;
 
 	crypton_aes_branch_table[INIT_128] = crypton_aesni_init;
+	crypton_aes_branch_table[INIT_192] = crypton_aesni_init;
 	crypton_aes_branch_table[INIT_256] = crypton_aesni_init;
 
 	crypton_aes_branch_table[ENCRYPT_BLOCK_128] = crypton_aesni_encrypt_block128;
 	crypton_aes_branch_table[DECRYPT_BLOCK_128] = crypton_aesni_decrypt_block128;
+	crypton_aes_branch_table[ENCRYPT_BLOCK_192] = crypton_aesni_encrypt_block192;
 	crypton_aes_branch_table[ENCRYPT_BLOCK_256] = crypton_aesni_encrypt_block256;
+	crypton_aes_branch_table[DECRYPT_BLOCK_192] = crypton_aesni_decrypt_block192;
 	crypton_aes_branch_table[DECRYPT_BLOCK_256] = crypton_aesni_decrypt_block256;
 	/* ECB */
 	crypton_aes_branch_table[ENCRYPT_ECB_128] = crypton_aesni_encrypt_ecb128;
 	crypton_aes_branch_table[DECRYPT_ECB_128] = crypton_aesni_decrypt_ecb128;
+	crypton_aes_branch_table[ENCRYPT_ECB_192] = crypton_aesni_encrypt_ecb192;
 	crypton_aes_branch_table[ENCRYPT_ECB_256] = crypton_aesni_encrypt_ecb256;
+	crypton_aes_branch_table[DECRYPT_ECB_192] = crypton_aesni_decrypt_ecb192;
 	crypton_aes_branch_table[DECRYPT_ECB_256] = crypton_aesni_decrypt_ecb256;
 	/* CBC */
 	crypton_aes_branch_table[ENCRYPT_CBC_128] = crypton_aesni_encrypt_cbc128;
 	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aesni_decrypt_cbc128;
+	crypton_aes_branch_table[ENCRYPT_CBC_192] = crypton_aesni_encrypt_cbc192;
 	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aesni_encrypt_cbc256;
+	crypton_aes_branch_table[DECRYPT_CBC_192] = crypton_aesni_decrypt_cbc192;
 	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aesni_decrypt_cbc256;
 	/* CTR */
 	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aesni_encrypt_ctr128;
+	crypton_aes_branch_table[ENCRYPT_CTR_192] = crypton_aesni_encrypt_ctr192;
 	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aesni_encrypt_ctr256;
 	/* CTR with 32-bit wrapping */
 	crypton_aes_branch_table[ENCRYPT_C32_128] = crypton_aesni_encrypt_c32_128;
+	crypton_aes_branch_table[ENCRYPT_C32_192] = crypton_aesni_encrypt_c32_192;
 	crypton_aes_branch_table[ENCRYPT_C32_256] = crypton_aesni_encrypt_c32_256;
 	/* XTS */
 	crypton_aes_branch_table[ENCRYPT_XTS_128] = crypton_aesni_encrypt_xts128;
+	crypton_aes_branch_table[ENCRYPT_XTS_192] = crypton_aesni_encrypt_xts192;
 	crypton_aes_branch_table[ENCRYPT_XTS_256] = crypton_aesni_encrypt_xts256;
 	crypton_aes_branch_table[DECRYPT_XTS_128] = crypton_aesni_decrypt_xts128;
+	crypton_aes_branch_table[DECRYPT_XTS_192] = crypton_aesni_decrypt_xts192;
 	crypton_aes_branch_table[DECRYPT_XTS_256] = crypton_aesni_decrypt_xts256;
 	/* GCM */
 	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aesni_gcm_encrypt128;
+	crypton_aes_branch_table[ENCRYPT_GCM_192] = crypton_aesni_gcm_encrypt192;
 	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aesni_gcm_encrypt256;
 	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aesni_gcm_decrypt128;
+	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aesni_gcm_decrypt192;
 	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aesni_gcm_decrypt256;
 	/* OCB */
 	/*
@@ -328,31 +342,40 @@ static void initialize_table_armv8(void)
 		return;
 	crypton_aes_cpu_options[CPU_AESNI] = 1;
 
-	/* AES-192 is left to the generic code, as it is on x86 */
 	crypton_aes_branch_table[INIT_128] = crypton_aes_armv8_init;
+	crypton_aes_branch_table[INIT_192] = crypton_aes_armv8_init;
 	crypton_aes_branch_table[INIT_256] = crypton_aes_armv8_init;
 
 	crypton_aes_branch_table[ENCRYPT_BLOCK_128] = crypton_aes_armv8_encrypt_block128;
 	crypton_aes_branch_table[DECRYPT_BLOCK_128] = crypton_aes_armv8_decrypt_block128;
+	crypton_aes_branch_table[ENCRYPT_BLOCK_192] = crypton_aes_armv8_encrypt_block192;
 	crypton_aes_branch_table[ENCRYPT_BLOCK_256] = crypton_aes_armv8_encrypt_block256;
+	crypton_aes_branch_table[DECRYPT_BLOCK_192] = crypton_aes_armv8_decrypt_block192;
 	crypton_aes_branch_table[DECRYPT_BLOCK_256] = crypton_aes_armv8_decrypt_block256;
 	/* ECB */
 	crypton_aes_branch_table[ENCRYPT_ECB_128] = crypton_aes_armv8_encrypt_ecb128;
 	crypton_aes_branch_table[DECRYPT_ECB_128] = crypton_aes_armv8_decrypt_ecb128;
+	crypton_aes_branch_table[ENCRYPT_ECB_192] = crypton_aes_armv8_encrypt_ecb192;
 	crypton_aes_branch_table[ENCRYPT_ECB_256] = crypton_aes_armv8_encrypt_ecb256;
+	crypton_aes_branch_table[DECRYPT_ECB_192] = crypton_aes_armv8_decrypt_ecb192;
 	crypton_aes_branch_table[DECRYPT_ECB_256] = crypton_aes_armv8_decrypt_ecb256;
 	/* CBC */
 	crypton_aes_branch_table[ENCRYPT_CBC_128] = crypton_aes_armv8_encrypt_cbc128;
 	crypton_aes_branch_table[DECRYPT_CBC_128] = crypton_aes_armv8_decrypt_cbc128;
+	crypton_aes_branch_table[ENCRYPT_CBC_192] = crypton_aes_armv8_encrypt_cbc192;
 	crypton_aes_branch_table[ENCRYPT_CBC_256] = crypton_aes_armv8_encrypt_cbc256;
+	crypton_aes_branch_table[DECRYPT_CBC_192] = crypton_aes_armv8_decrypt_cbc192;
 	crypton_aes_branch_table[DECRYPT_CBC_256] = crypton_aes_armv8_decrypt_cbc256;
 	/* CTR, which the generic loop would otherwise drive one block at a time */
 	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aes_armv8_encrypt_ctr128;
+	crypton_aes_branch_table[ENCRYPT_CTR_192] = crypton_aes_armv8_encrypt_ctr192;
 	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aes_armv8_encrypt_ctr256;
 	/* XTS, likewise, in both directions */
 	crypton_aes_branch_table[ENCRYPT_XTS_128] = crypton_aes_armv8_encrypt_xts128;
 	crypton_aes_branch_table[DECRYPT_XTS_128] = crypton_aes_armv8_decrypt_xts128;
+	crypton_aes_branch_table[ENCRYPT_XTS_192] = crypton_aes_armv8_encrypt_xts192;
 	crypton_aes_branch_table[ENCRYPT_XTS_256] = crypton_aes_armv8_encrypt_xts256;
+	crypton_aes_branch_table[DECRYPT_XTS_192] = crypton_aes_armv8_decrypt_xts192;
 	crypton_aes_branch_table[DECRYPT_XTS_256] = crypton_aes_armv8_decrypt_xts256;
 
 	/* GHASH, which GCM spends its time in once AES itself is fast */
@@ -367,7 +390,9 @@ static void initialize_table_armv8(void)
 	 * be there; the generic loop stands in otherwise */
 	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aes_armv8_gcm_encrypt128;
 	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aes_armv8_gcm_decrypt128;
+	crypton_aes_branch_table[ENCRYPT_GCM_192] = crypton_aes_armv8_gcm_encrypt192;
 	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aes_armv8_gcm_encrypt256;
+	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aes_armv8_gcm_decrypt192;
 	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aes_armv8_gcm_decrypt256;
 }
 #endif
