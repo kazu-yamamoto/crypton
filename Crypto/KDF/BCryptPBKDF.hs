@@ -17,8 +17,7 @@ where
 
 import qualified Control.Exception as E
 import Control.Monad (when)
-import qualified Crypto.Cipher.Blowfish.Box as Blowfish
-import qualified Crypto.Cipher.Blowfish.Primitive as Blowfish
+import Crypto.Cipher.Blowfish.Primitive (bcryptPbkdfHash)
 import Crypto.Error
 import Crypto.Hash.Algorithms (SHA512 (..))
 import Crypto.Hash.Types (
@@ -92,8 +91,6 @@ generate' params pass salt
         -- Allocate all necessary memory. The algorithm shall not allocate
         -- any more dynamic memory after this point. ForeignPtrs allocate
         -- pinned memory, so raw pointers to them are stable.
-        ksClean <- Blowfish.createKeySchedule
-        ksDirty <- Blowfish.createKeySchedule
         ctxFP <- mallocForeignPtrBytes ctxLen :: IO (ForeignPtr Word8)
         outFP <- mallocForeignPtrBytes outLen :: IO (ForeignPtr Word8)
         tmpFP <- mallocForeignPtrBytes tmpLen :: IO (ForeignPtr Word8)
@@ -132,8 +129,7 @@ generate' params pass salt
                                                     hashInternalUpdate shaPtr blkPtr (fromIntegral blkLen)
                                                     hashInternalFinalize shaPtr (castPtr saltHashPtr)
                                                     let saltHashBS = BSI.fromForeignPtr saltHashFP 0 hashLen
-                                                    Blowfish.copyKeySchedule ksDirty ksClean
-                                                    hashInternalMutable ksDirty passHashBS saltHashBS tmpPtr
+                                                    hashInternalMutable passHashBS saltHashBS tmpPtr
                                                     memCopy outPtr tmpPtr outLen
                                                     -- Remaining rounds.
                                                     forM_ [2 .. iterCounts params] $ const $ do
@@ -141,8 +137,7 @@ generate' params pass salt
                                                         hashInternalUpdate shaPtr tmpPtr (fromIntegral tmpLen)
                                                         hashInternalFinalize shaPtr (castPtr saltHashPtr)
                                                         let saltHashBS2 = BSI.fromForeignPtr saltHashFP 0 hashLen
-                                                        Blowfish.copyKeySchedule ksDirty ksClean
-                                                        hashInternalMutable ksDirty passHashBS saltHashBS2 tmpPtr
+                                                        hashInternalMutable passHashBS saltHashBS2 tmpPtr
                                                         memXor outPtr outPtr tmpPtr outLen
                                                     -- Spread the current out buffer evenly over the key buffer.
                                                     -- After both loops have run every byte of the key buffer
@@ -181,40 +176,16 @@ hashInternal' passHash saltHash
     | B.length passHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
     | B.length saltHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
-        ks0 <- Blowfish.createKeySchedule
-        B.alloc 32 $ \outPtr -> hashInternalMutable ks0 passHash saltHash outPtr
+        B.alloc 32 $ \outPtr -> hashInternalMutable passHash saltHash outPtr
 
 hashInternalMutable
     :: (B.ByteArrayAccess pass, B.ByteArrayAccess salt)
-    => Blowfish.KeySchedule
-    -> pass
+    => pass
     -> salt
     -> Ptr Word8
     -> IO ()
-hashInternalMutable bfks passHash saltHash outPtr = do
-    Blowfish.expandKeyWithSalt bfks passHash saltHash
-    forM_ [0 .. 63 :: Int] $ const $ do
-        Blowfish.expandKey bfks saltHash
-        Blowfish.expandKey bfks passHash
-    -- "OxychromaticBlowfishSwatDynamite" represented as 4 Word64 in big-endian.
-    store 0 =<< cipher 64 0x4f78796368726f6d
-    store 8 =<< cipher 64 0x61746963426c6f77
-    store 16 =<< cipher 64 0x6669736853776174
-    store 24 =<< cipher 64 0x44796e616d697465
-  where
-    store :: Int -> Word64 -> IO ()
-    store o w64 = do
-        pokeByteOff outPtr (o + 0) (fromIntegral (w64 `shiftR` 32) :: Word8)
-        pokeByteOff outPtr (o + 1) (fromIntegral (w64 `shiftR` 40) :: Word8)
-        pokeByteOff outPtr (o + 2) (fromIntegral (w64 `shiftR` 48) :: Word8)
-        pokeByteOff outPtr (o + 3) (fromIntegral (w64 `shiftR` 56) :: Word8)
-        pokeByteOff outPtr (o + 4) (fromIntegral (w64 `shiftR` 0) :: Word8)
-        pokeByteOff outPtr (o + 5) (fromIntegral (w64 `shiftR` 8) :: Word8)
-        pokeByteOff outPtr (o + 6) (fromIntegral (w64 `shiftR` 16) :: Word8)
-        pokeByteOff outPtr (o + 7) (fromIntegral (w64 `shiftR` 24) :: Word8)
-    cipher :: Int -> Word64 -> IO Word64
-    cipher 0 block = return block
-    cipher i block = Blowfish.cipherBlockMutable bfks block >>= cipher (i - 1)
+hashInternalMutable passHash saltHash outPtr =
+    bcryptPbkdfHash passHash saltHash outPtr
 
 finallyErase :: ForeignPtr Word8 -> Int -> IO () -> IO ()
 finallyErase fp len action =
