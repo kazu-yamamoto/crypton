@@ -38,7 +38,8 @@ static const int8_t rot8_tbl[32] = {
 	 : _mm256_or_si256(_mm256_slli_epi32((x), (n)), _mm256_srli_epi32((x), 32 - (n))))
 
 TARGET
-static void core8(int rounds, block out[8], const crypton_chacha_state *in)
+static inline void core8(int rounds, const crypton_chacha_state *in,
+                         const uint8_t *src, uint8_t *dst, int combine)
 {
 	__m256i v0, v1, v2, v3, v4, v5, v6, v7;
 	__m256i v8, v9, v10, v11, v12, v13, v14, v15;
@@ -87,7 +88,21 @@ static void core8(int rounds, block out[8], const crypton_chacha_state *in)
 	 * The interleave works within each 128-bit half, so four registers
 	 * holding word w of blocks 0..7 come apart into words w..w+3 of
 	 * blocks 0..3 in the low halves and of blocks 4..7 in the high ones.
+	 *
+	 * Each piece is exclusive-ored with the input and stored where it
+	 * belongs as it comes out.  Writing the keystream to a buffer and
+	 * reading it back to combine it cost a pass over every byte, which is
+	 * a tenth of what this loop does.
 	 */
+#define OUT(j, g, v)                                                         \
+	do {                                                                 \
+		__m128i o_ = (v);                                            \
+		if (combine)                                                 \
+			o_ = _mm_xor_si128(o_, _mm_loadu_si128(              \
+			    (const __m128i *) (src + 64 * (j) + 4 * (g))));  \
+		_mm_storeu_si128((__m128i *) (dst + 64 * (j) + 4 * (g)), o_);\
+	} while (0)
+
 #define GROUP(g, qa, qb, qc, qd)                                             \
 	do {                                                                 \
 		__m256i t0_ = _mm256_unpacklo_epi32(qa, qb);                 \
@@ -98,48 +113,34 @@ static void core8(int rounds, block out[8], const crypton_chacha_state *in)
 		__m256i u1_ = _mm256_unpackhi_epi64(t0_, t2_);               \
 		__m256i u2_ = _mm256_unpacklo_epi64(t1_, t3_);               \
 		__m256i u3_ = _mm256_unpackhi_epi64(t1_, t3_);               \
-		_mm_storeu_si128((__m128i *) (out[0].d + (g)), _mm256_castsi256_si128(u0_)); \
-		_mm_storeu_si128((__m128i *) (out[1].d + (g)), _mm256_castsi256_si128(u1_)); \
-		_mm_storeu_si128((__m128i *) (out[2].d + (g)), _mm256_castsi256_si128(u2_)); \
-		_mm_storeu_si128((__m128i *) (out[3].d + (g)), _mm256_castsi256_si128(u3_)); \
-		_mm_storeu_si128((__m128i *) (out[4].d + (g)), _mm256_extracti128_si256(u0_, 1)); \
-		_mm_storeu_si128((__m128i *) (out[5].d + (g)), _mm256_extracti128_si256(u1_, 1)); \
-		_mm_storeu_si128((__m128i *) (out[6].d + (g)), _mm256_extracti128_si256(u2_, 1)); \
-		_mm_storeu_si128((__m128i *) (out[7].d + (g)), _mm256_extracti128_si256(u3_, 1)); \
+		OUT(0, (g), _mm256_castsi256_si128(u0_));                    \
+		OUT(1, (g), _mm256_castsi256_si128(u1_));                    \
+		OUT(2, (g), _mm256_castsi256_si128(u2_));                    \
+		OUT(3, (g), _mm256_castsi256_si128(u3_));                    \
+		OUT(4, (g), _mm256_extracti128_si256(u0_, 1));               \
+		OUT(5, (g), _mm256_extracti128_si256(u1_, 1));               \
+		OUT(6, (g), _mm256_extracti128_si256(u2_, 1));               \
+		OUT(7, (g), _mm256_extracti128_si256(u3_, 1));               \
 	} while (0)
 	GROUP(0,  v0,  v1,  v2,  v3);
 	GROUP(4,  v4,  v5,  v6,  v7);
 	GROUP(8,  v8,  v9,  v10, v11);
 	GROUP(12, v12, v13, v14, v15);
 #undef GROUP
+#undef OUT
 }
 
 TARGET
 void crypton_chacha_avx2_combine(int rounds, uint8_t *dst, const uint8_t *src,
                                  const crypton_chacha_state *in)
 {
-	block k[8];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	core8(rounds, k, in);
-	for (i = 0; i < 512; i += 32)
-		_mm256_storeu_si256((__m256i *) (dst + i),
-		    _mm256_xor_si256(_mm256_loadu_si256((const __m256i *) (src + i)),
-		                     _mm256_loadu_si256((const __m256i *) (ks + i))));
+	core8(rounds, in, src, dst, 1);
 }
 
 TARGET
 void crypton_chacha_avx2_generate(int rounds, uint8_t *dst, const crypton_chacha_state *in)
 {
-	block k[8];
-	const uint8_t *ks = (const uint8_t *) k;
-	int i;
-
-	core8(rounds, k, in);
-	for (i = 0; i < 512; i += 32)
-		_mm256_storeu_si256((__m256i *) (dst + i),
-		                    _mm256_loadu_si256((const __m256i *) (ks + i)));
+	core8(rounds, in, NULL, dst, 0);
 }
 
 #endif /* WITH_TARGET_ATTRIBUTES */
