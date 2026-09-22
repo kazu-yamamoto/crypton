@@ -204,46 +204,59 @@ TARGET_AESNI
 void SIZED(crypton_aesni_encrypt_xts)(aes_block *out, aes_key *key1, aes_key *key2,
                                aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks)
 {
-	__m128i tweak = _mm_loadu_si128((__m128i *) _tweak);
+	uint64_t tlo, thi;
 
 	do {
 		__m128i *k2 = (__m128i *) key2->data;
+		__m128i tweak = _mm_loadu_si128((__m128i *) _tweak);
+		aes_block first ALIGNMENT(16);
+
 		PRELOAD_ENC(k2);
 		DO_ENC_BLOCK(tweak);
+		_mm_storeu_si128((__m128i *) &first, tweak);
+		tlo = first.q[0];
+		thi = first.q[1];
 
 		while (spoint-- > 0)
-			tweak = gfmulx_sse(tweak);
+			XTS_TWEAK_STEP(tlo, thi);
 	} while (0) ;
 
 	do {
 		__m128i *k1 = (__m128i *) key1->data;
-		PRELOAD_ENC(k1);
 
-		/* eight at a time: the tweaks are a short chain that runs while
-		 * the eight AES chains are in flight */
+		/*
+		 * Eight at a time.  The eight tweaks are kept from one group
+		 * to the next and each is advanced by eight doublings at
+		 * once, which is a single multiplication and does not wait
+		 * for the other seven; doubling along the group instead,
+		 * which is what this did, puts a chain of eight in front of
+		 * every set of rounds, and on a processor whose AES is fast
+		 * that chain is most of the block.
+		 */
 		for ( ; blocks >= 8; blocks -= 8, in += 8, out += 8) {
 			__m128i m[8], t[8];
 			int i;
 
-			for (i = 0; i < 8; i++) {
-				t[i] = tweak;
-				tweak = gfmulx_sse(tweak);
+			XTS_TWEAKS8(t, tlo, thi);
+			for (i = 0; i < 8; i++)
 				m[i] = _mm_xor_si128(
 				    _mm_loadu_si128((__m128i *) (in + i)), t[i]);
-			}
-			DO_ENC_BLOCK8(m);
+			DO_ENC_BLOCK8_MEM(m, k1, NBR, ROUNDS8_EXTRA);
 			for (i = 0; i < 8; i++)
 				_mm_storeu_si128((__m128i *) (out + i),
 				                 _mm_xor_si128(m[i], t[i]));
 		}
-		for ( ; blocks-- > 0; in += 1, out += 1, tweak = gfmulx_sse(tweak)) {
+		for ( ; blocks-- > 0; in += 1, out += 1) {
+			const __m128i tweak =
+			    _mm_set_epi64x((long long) thi, (long long) tlo);
 			__m128i m = _mm_loadu_si128((__m128i *) in);
 
 			m = _mm_xor_si128(m, tweak);
-			DO_ENC_BLOCK(m);
+			DO_ENC_BLOCK_MEM(m, k1, NBR);
 			m = _mm_xor_si128(m, tweak);
 
 			_mm_storeu_si128((__m128i *) out, m);
+			XTS_TWEAK_STEP(tlo, thi);
 		}
 	} while (0);
 }
@@ -258,37 +271,44 @@ TARGET_AESNI
 void SIZED(crypton_aesni_decrypt_xts)(aes_block *out, aes_key *key1, aes_key *key2,
                                aes_block *_tweak, uint32_t spoint, aes_block *in, uint32_t blocks)
 {
-	__m128i tweak = _mm_loadu_si128((__m128i *) _tweak);
+	uint64_t tlo, thi;
 
 	do {
 		__m128i *k2 = (__m128i *) key2->data;
+		__m128i tweak = _mm_loadu_si128((__m128i *) _tweak);
+		aes_block first ALIGNMENT(16);
+
 		PRELOAD_ENC(k2);
 		DO_ENC_BLOCK(tweak);
+		_mm_storeu_si128((__m128i *) &first, tweak);
+		tlo = first.q[0];
+		thi = first.q[1];
 
 		while (spoint-- > 0)
-			tweak = gfmulx_sse(tweak);
+			XTS_TWEAK_STEP(tlo, thi);
 	} while (0) ;
 
 	do {
 		__m128i *k1 = (__m128i *) key1->data;
 		PRELOAD_DEC(k1);
 
+		/* the tweaks kept and advanced, as encryption has them */
 		for ( ; blocks >= 8; blocks -= 8, in += 8, out += 8) {
 			__m128i m[8], t[8];
 			int i;
 
-			for (i = 0; i < 8; i++) {
-				t[i] = tweak;
-				tweak = gfmulx_sse(tweak);
+			XTS_TWEAKS8(t, tlo, thi);
+			for (i = 0; i < 8; i++)
 				m[i] = _mm_xor_si128(
 				    _mm_loadu_si128((__m128i *) (in + i)), t[i]);
-			}
 			DO_DEC_BLOCK8(m);
 			for (i = 0; i < 8; i++)
 				_mm_storeu_si128((__m128i *) (out + i),
 				                 _mm_xor_si128(m[i], t[i]));
 		}
-		for ( ; blocks-- > 0; in += 1, out += 1, tweak = gfmulx_sse(tweak)) {
+		for ( ; blocks-- > 0; in += 1, out += 1) {
+			const __m128i tweak =
+			    _mm_set_epi64x((long long) thi, (long long) tlo);
 			__m128i m = _mm_loadu_si128((__m128i *) in);
 
 			m = _mm_xor_si128(m, tweak);
@@ -296,6 +316,7 @@ void SIZED(crypton_aesni_decrypt_xts)(aes_block *out, aes_key *key1, aes_key *ke
 			m = _mm_xor_si128(m, tweak);
 
 			_mm_storeu_si128((__m128i *) out, m);
+			XTS_TWEAK_STEP(tlo, thi);
 		}
 	} while (0);
 }
