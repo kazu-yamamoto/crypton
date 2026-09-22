@@ -418,6 +418,7 @@ library
         cc-options: -DWITH_ARMV8_SHA2 -DWITH_ARMV8_SHA512 -DWITH_ARMV8_NEON
         c-sources:
             cbits/chacha_neon.c
+            cbits/poly1305_neon.c
             cbits/sha256_armv8.c
             cbits/sha512_armv8.c
 
