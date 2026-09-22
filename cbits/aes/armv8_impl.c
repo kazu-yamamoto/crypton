@@ -396,28 +396,78 @@ void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key
  */
 #define XTS_IN(i)   s[i] = veorq_u8(vld1q_u8((const uint8_t *) (input + (i))), t[i]);
 #define XTS_OUT(i)  vst1q_u8((uint8_t *) (output + (i)), veorq_u8(s[i], t[i]));
-#define XTS_TWEAK(i) do { t[i] = tw; tw = gfmulx_neon(tw); } while (0);
+/*
+ * The tweak is kept in general-purpose registers and moved into a vector
+ * one per block.  Doubling it costs three integer operations, and the
+ * integer units have nothing else to do here, where the vector ones are
+ * busy with the rounds and the exclusive ors: done in vector registers,
+ * which is what this did, the eight doublings of a group take about as
+ * long as the eight blocks of AES they are for.
+ */
+#define XTS_TWEAK(i) do {                                                  \
+	t[i] = vreinterpretq_u8_u64(                                       \
+	    vcombine_u64(vcreate_u64(tlo), vcreate_u64(thi)));             \
+	{                                                                  \
+		const uint64_t _c = thi >> 63;                             \
+		thi = (thi << 1) | (tlo >> 63);                            \
+		tlo = (tlo << 1) ^ (_c ? 0x87 : 0);                        \
+	}                                                                  \
+} while (0);
+/*
+ * The group after this one's.  Doubling is a chain -- each tweak waits for
+ * the one before it -- and eight of them in front of the rounds that want
+ * them is time in which nothing else happens, which on a processor whose
+ * AES is this fast is most of the block.  Worked out a group early they
+ * have nothing to wait for and go through the rounds of the group before,
+ * which do not want the same units.  There are registers enough here for
+ * both groups at once.
+ */
+#define XTS_TWEAK_NEXT(i) do {                                             \
+	tn[i] = vreinterpretq_u8_u64(                                      \
+	    vcombine_u64(vcreate_u64(tlo), vcreate_u64(thi)));             \
+	{                                                                  \
+		const uint64_t _c = thi >> 63;                             \
+		thi = (thi << 1) | (tlo >> 63);                            \
+		tlo = (tlo << 1) ^ (_c ? 0x87 : 0);                        \
+	}                                                                  \
+} while (0);
+#define XTS_TWEAK_ROLL(i) do { t[i] = tn[i]; } while (0);
 
 TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_xts)(aes_block *output, aes_key *key, aes_key *key2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *rk = FWD(key);
-	uint8x16_t s[WAY], t[WAY], tw;
+	uint8x16_t s[WAY], t[WAY], tn[WAY];
+	uint64_t tlo, thi;
 
 	{
 		aes_block first;
 
 		SIZED(crypton_aes_armv8_encrypt_block)(&first, key2, dataunit);
-		tw = vld1q_u8((const uint8_t *) &first);
+		tlo = first.q[0];
+		thi = first.q[1];
 	}
-	while (spoint-- > 0)
-		tw = gfmulx_neon(tw);
+	while (spoint-- > 0) {
+		const uint64_t c = thi >> 63;
 
+		thi = (thi << 1) | (tlo >> 63);
+		tlo = (tlo << 1) ^ (c ? 0x87 : 0);
+	}
+
+	EACH8(XTS_TWEAK);
 	for (; nb_blocks >= WAY; nb_blocks -= WAY, input += WAY, output += WAY) {
-		EACH8(XTS_TWEAK);
 		EACH8(XTS_IN);
+		EACH8(XTS_TWEAK_NEXT);
 		ENC_ROUNDS(EACH8);
 		EACH8(XTS_OUT);
+		EACH8(XTS_TWEAK_ROLL);
+	}
+	/* the group that was made ready and not used */
+	{
+		const uint64x2_t back = vreinterpretq_u64_u8(t[0]);
+
+		tlo = vgetq_lane_u64(back, 0);
+		thi = vgetq_lane_u64(back, 1);
 	}
 	for (; nb_blocks > 0; nb_blocks--, input++, output++) {
 		EACH1(XTS_TWEAK);
@@ -432,23 +482,38 @@ void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_k
 {
 	const uint8_t *fwd = FWD(key);
 	const uint8_t *inv = INV(key);
-	uint8x16_t s[WAY], t[WAY], tw;
+	uint8x16_t s[WAY], t[WAY], tn[WAY];
+	uint64_t tlo, thi;
 
 	{
 		aes_block first;
 
 		/* the tweak is always enciphered, whichever way the data goes */
 		SIZED(crypton_aes_armv8_encrypt_block)(&first, key2, dataunit);
-		tw = vld1q_u8((const uint8_t *) &first);
+		tlo = first.q[0];
+		thi = first.q[1];
 	}
-	while (spoint-- > 0)
-		tw = gfmulx_neon(tw);
+	while (spoint-- > 0) {
+		const uint64_t c = thi >> 63;
 
+		thi = (thi << 1) | (tlo >> 63);
+		tlo = (tlo << 1) ^ (c ? 0x87 : 0);
+	}
+
+	EACH8(XTS_TWEAK);
 	for (; nb_blocks >= WAY; nb_blocks -= WAY, input += WAY, output += WAY) {
-		EACH8(XTS_TWEAK);
 		EACH8(XTS_IN);
+		EACH8(XTS_TWEAK_NEXT);
 		DEC_ROUNDS(EACH8);
 		EACH8(XTS_OUT);
+		EACH8(XTS_TWEAK_ROLL);
+	}
+	/* the group that was made ready and not used */
+	{
+		const uint64x2_t back = vreinterpretq_u64_u8(t[0]);
+
+		tlo = vgetq_lane_u64(back, 0);
+		thi = vgetq_lane_u64(back, 1);
 	}
 	for (; nb_blocks > 0; nb_blocks--, input++, output++) {
 		EACH1(XTS_TWEAK);

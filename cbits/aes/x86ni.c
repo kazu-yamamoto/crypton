@@ -798,6 +798,30 @@ static inline __m128i gfmulx_sse(__m128i v)
 	                     _mm_and_si128(out, poly));
 }
 
+/*
+ * The tweak doubles in a pair of general-purpose registers and is moved
+ * into a vector one per block.  The doubling is three integer operations,
+ * and the integer units have nothing else to do here, where there are only
+ * sixteen vector registers and the rounds want as many of them as they can
+ * get: done in vector registers, which is what this did, the eight
+ * doublings of a group both lengthen the critical path and push the round
+ * keys out to memory.
+ */
+#define XTS_TWEAK_STEP(lo, hi) do {                                          \
+	const uint64_t _c = (hi) >> 63;                                      \
+	(hi) = ((hi) << 1) | ((lo) >> 63);                                   \
+	(lo) = ((lo) << 1) ^ (_c ? 0x87 : 0);                                \
+} while (0)
+
+/* the eight tweaks a group needs, from the one it starts at */
+#define XTS_TWEAKS8(dst, lo, hi) do {                                        \
+	int _i;                                                              \
+	for (_i = 0; _i < 8; _i++) {                                         \
+		(dst)[_i] = _mm_set_epi64x((long long) (hi), (long long) (lo)); \
+		XTS_TWEAK_STEP(lo, hi);                                      \
+	}                                                                    \
+} while (0)
+
 #define DO_DEC_BLOCK128(m) \
 	m = _mm_xor_si128(m, K0); \
 	m = _mm_aesdec_si128(m, K1); \
