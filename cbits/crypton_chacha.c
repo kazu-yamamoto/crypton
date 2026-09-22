@@ -67,10 +67,12 @@ void crypton_chacha_simd_generate(int rounds, uint8_t *dst,
  * Twenty rounds and the 256-bit constants are built into it, and it takes
  * the counter as 32 bits wide, so it is given only the states it fits.
  */
-#if defined(WITH_ARMV8_CHACHA_ASM) && !defined(__AARCH64EB__)
+#if (defined(WITH_ARMV8_CHACHA_ASM) && !defined(__AARCH64EB__)) \
+    || defined(WITH_X86_CHACHA_ASM)
 #define CHACHA_ASM 1
-void crypton_chacha20_ctr32(uint8_t *out, const uint8_t *in, size_t len,
-                            const uint32_t key[8], const uint32_t counter[4]);
+#include "crypton_cpu.h"
+void crypton_chacha20_asm_ctr32(uint8_t *out, const uint8_t *in, size_t len,
+                                const uint32_t key[8], const uint32_t counter[4]);
 
 /* crypton_cpu.c defines the crypton_armcap_P that the assembly reads to
  * find out whether the processor has NEON. */
@@ -83,8 +85,19 @@ static int chacha_asm_state(const crypton_chacha_state *st)
 	    && st->d[2] == 0x79622d32 && st->d[3] == 0x6b206574;
 }
 
-/* what the assembly wants before it uses its vector path */
+/*
+ * How much is worth handing over.  On AArch64 the module's vector path
+ * starts at three blocks and below that its scalar path measures level with
+ * the C here, so there is nothing to gain; on x86-64 it is ahead from one
+ * block, the C there having no vector path until eight.
+ */
+#ifndef CHACHA_ASM_MIN_BLOCKS
+#ifdef WITH_X86_CHACHA_ASM
+#define CHACHA_ASM_MIN_BLOCKS 1
+#else
 #define CHACHA_ASM_MIN_BLOCKS 3
+#endif
+#endif
 #endif
 
 #define QR(a,b,c,d) \
@@ -319,7 +332,13 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 		if (blocks >= CHACHA_ASM_MIN_BLOCKS) {
 			const uint32_t done = blocks * 64;
 
-			crypton_chacha20_ctr32(dst, src, done, &st->d[4], &st->d[12]);
+#ifdef CRYPTON_X86_ASM
+			/* what the module dispatches on, which it reads
+			 * directly; resolved once */
+			crypton_x86_ia32cap_resolve();
+#endif
+			crypton_chacha20_asm_ctr32(dst, src, done, &st->d[4],
+			                           &st->d[12]);
 			st->d[12] += blocks;
 			bytes -= done; src += done; dst += done;
 		}

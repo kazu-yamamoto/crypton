@@ -15,10 +15,10 @@
 .byte	67,104,97,67,104,97,50,48,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,64,100,111,116,45,97,115,109,0
 .align	2
 
-.globl	crypton_chacha20_ctr32
-.type	crypton_chacha20_ctr32,%function
+.globl	crypton_chacha20_asm_ctr32
+.type	crypton_chacha20_asm_ctr32,%function
 .align	5
-crypton_chacha20_ctr32:
+crypton_chacha20_asm_ctr32:
 	cbz	x2,.Labort
 	cmp	x2,#192
 	b.lo	.Lshort
@@ -27,7 +27,7 @@ crypton_chacha20_ctr32:
 	adrp	x17,crypton_armcap_P
 	ldr	w17,[x17,#:lo12:crypton_armcap_P]
 	tst	w17,#ARMV7_NEON
-	b.ne	.Lcrypton_chacha20_neon
+	b.ne	.Lcrypton_chacha20_asm_neon
 #endif
 
 .Lshort:
@@ -302,15 +302,15 @@ crypton_chacha20_ctr32:
 	ldp	x29,x30,[sp],#12*__SIZEOF_POINTER__
 .inst	0xd50323bf			// autiasp
 	ret
-.size	crypton_chacha20_ctr32,.-crypton_chacha20_ctr32
+.size	crypton_chacha20_asm_ctr32,.-crypton_chacha20_asm_ctr32
 
 #ifdef	__KERNEL__
-.globl	crypton_chacha20_neon
+.globl	crypton_chacha20_asm_neon
 #endif
-.type	crypton_chacha20_neon,%function
+.type	crypton_chacha20_asm_neon,%function
 .align	5
-crypton_chacha20_neon:
-.Lcrypton_chacha20_neon:
+crypton_chacha20_asm_neon:
+.Lcrypton_chacha20_asm_neon:
 .inst	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-12*__SIZEOF_POINTER__]!
 	add	x29,sp,#0
@@ -892,10 +892,10 @@ crypton_chacha20_neon:
 	eor	v2.16b,v2.16b,v2.16b
 	eor	v3.16b,v3.16b,v3.16b
 	b	.Less_than_64
-.size	crypton_chacha20_neon,.-crypton_chacha20_neon
-.type	crypton_chacha20_512_neon,%function
+.size	crypton_chacha20_asm_neon,.-crypton_chacha20_asm_neon
+.type	crypton_chacha20_asm_512_neon,%function
 .align	5
-crypton_chacha20_512_neon:
+crypton_chacha20_asm_512_neon:
 .inst	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-12*__SIZEOF_POINTER__]!
 	add	x29,sp,#0
@@ -2050,6 +2050,6 @@ crypton_chacha20_512_neon:
 	ldp	x29,x30,[sp],#12*__SIZEOF_POINTER__
 .inst	0xd50323bf			// autiasp
 	ret
-.size	crypton_chacha20_512_neon,.-crypton_chacha20_512_neon
+.size	crypton_chacha20_asm_512_neon,.-crypton_chacha20_asm_512_neon
 
 .section	.note.GNU-stack,"",%progbits
