@@ -26,8 +26,9 @@
   written in C that interleaving does not survive the compiler, which sinks
   every multiply to the end of the group, and the disassembly of what
   [#160](https://github.com/kazu-yamamoto/crypton/pull/160) produced says so.
-  On a Xeon, a message per call, AES-128-GCM: 2672 to 3172 MB/s at 1152
-  bytes, 3394 to 4271 at 4 KiB and 3657 to 5110 at 16 KiB, where openssl
+  On a Haswell-generation x86-64, a message per call, AES-128-GCM: 2672 to
+  3172 MB/s at 1152 bytes, 3394 to 4271 at 4 KiB and 3657 to 5110 at 16 KiB,
+  where openssl
   speed on the same machine reports 4896; decryption within a couple of
   points of that, and AES-256-GCM 3147 to 4297 at 16 KiB against openssl's
   4206.  `cbits/asm` holds the module, the translator it needs and the

@@ -44,8 +44,9 @@
  * blocks in plain counter mode before the stitched loop starts, which is
  * why it has to be given a good deal more before it comes out ahead.
  *
- * Measured on a Xeon: decryption is ahead from 288 bytes up, by 5 to 20 per
- * cent, and below that loses by about as much.  Encryption between 288 and
+ * Measured on a Haswell-generation x86-64: decryption is ahead from 288
+ * bytes up, by 5 to 20 per cent, and below that loses by about as much.
+ * Encryption between 288 and
  * 1024 bytes is a wash -- it swings either way by up to ten per cent
  * depending on how the length divides into groups -- and from 1152 bytes it
  * is ahead by 9 per cent or more, reaching 25 to 40 per cent once the
