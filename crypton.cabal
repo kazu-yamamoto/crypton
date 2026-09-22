@@ -1,7 +1,7 @@
-cabal-version:      2.0
+cabal-version:      3.0
 name:               crypton
 version:            2.0.0
-license:            BSD3
+license:            BSD-3-Clause
 license-file:       LICENSE
 copyright:          Vincent Hanquez <vincent@snarc.org>
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
@@ -469,14 +469,13 @@ library
                 c-sources:  cbits/aes/gcm_x86_asm.c
 
                 if os(osx)
-                    c-sources: cbits/asm/aesni-gcm-x86_64-macosx.S
+                    asm-sources: cbits/asm/aesni-gcm-x86_64-macosx.S
+
+                elif os(windows)
+                    asm-sources: cbits/asm/aesni-gcm-x86_64-mingw64.S
 
                 else
-                    if os(windows)
-                        c-sources: cbits/asm/aesni-gcm-x86_64-mingw64.S
-
-                    else
-                        c-sources: cbits/asm/aesni-gcm-x86_64-elf.S
+                    asm-sources: cbits/asm/aesni-gcm-x86_64-elf.S
 
     else
         c-sources:
