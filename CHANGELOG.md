@@ -2,6 +2,69 @@
 
 ## 2.0.0
 
+* docs(sidechannel): say what the modules that still work in `Integer` keep
+  from the clock, and fix the two places where something could be done about
+  it.  ElGamal inverted the shared secret with the extended Euclidean
+  algorithm, whose steps follow the bits it is given -- the modulus is prime,
+  so Fermat reaches it.  Its signing inverts the ephemeral value modulo an even
+  number, where Fermat does not reach, so `sign` blinds instead: the algorithm
+  is handed that value times a fresh random unit and the blinder divided out
+  afterwards.  What is left is written down rather than fixed -- the Jacobi
+  symbols Rabin takes modulo its private primes, and the cost of `Integer`
+  arithmetic following the size of the numbers -- and `Crypto.Cipher.AES` now
+  says which implementation a machine gets and that the fallback, being
+  table-driven, is not constant time
+  [#164](https://github.com/kazu-yamamoto/crypton/pull/164)
+* perf(poly1305): shorten the carry chain and stop the AVX2 loop spilling.  The
+  carries go in pairs, since the two halves of that chain do not depend on each
+  other; the powers of r are read from memory, there being sixteen registers
+  and ten of them wanted for the accumulator and the products; and the message
+  is added limb by limb as the block comes apart rather than five limbs being
+  formed first.  4203 to 4452 MB/s, and ChaCha20-Poly1305 together from 1412 to
+  1488.  What is left is the instruction count: 107 per 64 bytes, of which 25
+  are the multiply
+  [#163](https://github.com/kazu-yamamoto/crypton/pull/163)
+* perf(chacha): combine as the keystream comes out of the registers.  All three
+  vector implementations wrote it to a buffer on the stack and read it back to
+  exclusive-or it with the input, which is a pass over every byte for something
+  the registers were already holding.  2128 to 2230 MB/s on x86-64, and nothing
+  on Apple silicon, where the round trip was free.  Measured while doing it:
+  the AVX2 path already did eight blocks at a time, and what is left of the gap
+  to openssl in this AEAD is Poly1305 rather than the cipher
+  [#162](https://github.com/kazu-yamamoto/crypton/pull/162)
+* perf(sha): compute the message schedule in vector registers on x86.  SHA-512
+  has no instruction there and SHA-256 has none on a processor older than
+  Goldmont or Zen, which includes the Ice Lake and Cascade Lake server parts.
+  The rounds are a chain and stay where they are; the schedule is a quarter of
+  the work, comes out four words at a time and depends on nothing but the
+  message, so it goes into the vector registers and runs alongside rounds that
+  need the general ones.  SHA-256 228 to 314 MB/s, SHA-512 354 to 480
+  [#161](https://github.com/kazu-yamamoto/crypton/pull/161)
+* perf(gcm): take the GHASH of the group before, alongside this group's rounds.
+  Held a group apart the multiply and the rounds run through each other, where
+  in step neither could start until the other finished.  With it, the multiply
+  called directly rather than through a branch pointer the compiler cannot see
+  through, and the round keys read from memory rather than spilled: AES-128-GCM
+  2797 to 3458 MB/s and AES-256-GCM 2458 to 3053.  openssl does 4895 and 4205
+  on the same machine; the rest of that is instruction-level interleaving,
+  which does not survive being written in intrinsics
+  [#160](https://github.com/kazu-yamamoto/crypton/pull/160)
+* perf(ocb): drive OCB through the ECB paths a group at a time.  It ran one
+  block at a time through the single-block entry point and so cost four times
+  what GCM costs, for a mode that does less work than GCM.  The offsets have to
+  be worked out in order but the block cipher calls under them do not depend on
+  each other, so eight go through ECB together.  OCB-128 1130 to 3500 MB/s on
+  Apple silicon and 694 to 2173 on x86-64, the authenticated data 1141 to 5900
+  and 692 to 2526.  CCM is unchanged and stays that way: what is left there is
+  CBC-MAC, where each block waits for the one before it
+  [#159](https://github.com/kazu-yamamoto/crypton/pull/159)
+* test(aes): run the XTS vectors, and add OCB and CCM at 192 and 256 bits.  The
+  XTS known-answer tests never ran: the call was commented out and the test it
+  would have called did not compile, so vectors at both key sizes sat in the
+  tree unused.  XTS is defined only for a 128-bit block, which the general KAT
+  runner cannot promise, so it gains a counterpart for a cipher that can.  OCB
+  and CCM had vectors at 128 bits only.  2613 examples to 2679
+  [#158](https://github.com/kazu-yamamoto/crypton/pull/158)
 * perf(aes): build the AArch64 key schedule with the instructions rather than
   the S-box table.  The AArch64 path expanded a key by calling the generic
   implementation and then inverting the round keys, so every schedule went
