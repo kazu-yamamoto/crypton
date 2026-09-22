@@ -56,6 +56,40 @@ void crypton_chacha_simd_generate(int rounds, uint8_t *dst,
 #define CHACHA_SIMD_OK(st, n) ((st)->d[12] <= 0xffffffffU - (uint32_t) (n))
 #endif
 
+/*
+ * ChaCha20 from CRYPTOGAMS, in cbits/asm/chacha-armv8-*.S.  It keeps four
+ * vector blocks and a fifth in the general registers in flight at once, or
+ * six and two above 512 bytes, which is more than the intrinsics above can
+ * be made to do: the vector registers hold four states and there is no room
+ * for another, so the extra parallelism has to come from the integer side,
+ * and that means saying which register holds what.
+ *
+ * Twenty rounds and the 256-bit constants are built into it, and it takes
+ * the counter as 32 bits wide, so it is given only the states it fits.
+ */
+#if defined(WITH_ARMV8_CHACHA_ASM) && !defined(__AARCH64EB__)
+#define CHACHA_ASM 1
+void crypton_chacha20_ctr32(uint8_t *out, const uint8_t *in, size_t len,
+                            const uint32_t key[8], const uint32_t counter[4]);
+
+/* The assembly asks whether the processor has NEON, the way OpenSSL asks;
+ * on AArch64 it is not optional.  Hidden, so that the reference to it from
+ * the assembly is resolved at link time in a shared object as well as in a
+ * static one. */
+__attribute__((visibility("hidden"))) unsigned int crypton_armcap_P = 1;
+
+/* The four words at the head of the state are the constants that go with a
+ * 256-bit key, and the assembly has only those. */
+static int chacha_asm_state(const crypton_chacha_state *st)
+{
+	return st->d[0] == 0x61707865 && st->d[1] == 0x3320646e
+	    && st->d[2] == 0x79622d32 && st->d[3] == 0x6b206574;
+}
+
+/* what the assembly wants before it uses its vector path */
+#define CHACHA_ASM_MIN_BLOCKS 3
+#endif
+
 #define QR(a,b,c,d) \
 	a += b; d = rol32(d ^ a,16); \
 	c += d; b = rol32(b ^ c,12); \
@@ -276,6 +310,24 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 		return;
 
 	st = &ctx->st;
+
+#ifdef CHACHA_ASM
+	if (ctx->nb_rounds == 20 && chacha_asm_state(st)) {
+		uint32_t blocks = bytes / 64;
+
+		/* the counter is the caller's to advance, and the assembly
+		 * carries it no further than its own 32 bits */
+		if (blocks > 0xffffffffU - st->d[12])
+			blocks = 0xffffffffU - st->d[12];
+		if (blocks >= CHACHA_ASM_MIN_BLOCKS) {
+			const uint32_t done = blocks * 64;
+
+			crypton_chacha20_ctr32(dst, src, done, &st->d[4], &st->d[12]);
+			st->d[12] += blocks;
+			bytes -= done; src += done; dst += done;
+		}
+	}
+#endif
 
 #ifdef CHACHA_SIMD
 	{
