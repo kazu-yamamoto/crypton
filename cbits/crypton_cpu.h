@@ -74,9 +74,10 @@ void crypton_x86_ia32cap_resolve(void);
 #endif
 
 #if defined(WITH_ARMV8_CHACHA_ASM) || defined(WITH_ARMV8_POLY1305_ASM) \
-    || defined(WITH_ARMV8_SHA256_ASM)
+    || defined(WITH_ARMV8_SHA1_ASM) || defined(WITH_ARMV8_SHA256_ASM)
 #define CRYPTON_ARM_ASM 1
 #define CRYPTON_ARMCAP_NEON   1
+#define CRYPTON_ARMCAP_SHA1   (1 << 3)
 #define CRYPTON_ARMCAP_SHA256 (1 << 4)
 extern unsigned int crypton_armcap_P;
 #endif

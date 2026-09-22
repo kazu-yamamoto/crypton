@@ -52,12 +52,13 @@ extra-source-files:
     cbits/asm/arm_arch.h
     cbits/asm/chacha-armv8.pl
     cbits/asm/chacha-x86_64.pl
-    cbits/asm/keccak1600-armv8.pl
     cbits/asm/generate.sh
+    cbits/asm/keccak1600-armv8.pl
     cbits/asm/poly1305-armv8.pl
     cbits/asm/poly1305-x86_64.pl
-    cbits/asm/sha512-x86_64.pl
+    cbits/asm/sha1-armv8.pl
     cbits/asm/sha512-armv8.pl
+    cbits/asm/sha512-x86_64.pl
     cbits/asm/x86_64-xlate.pl
     cbits/chacha_sse_impl.c
     cbits/argon2/*.c
@@ -483,21 +484,23 @@ library
         -- integer side, which is a matter of naming registers and so
         -- cannot be written in C; Poly1305 there is the whole of the
         -- arithmetic, hand-scheduled, and replaces both the C loops;
-        -- SHA-256 and Keccak there use the same instructions as the
-        -- intrinsics do but schedule them across a run of blocks rather
-        -- than one at a time.  See
+        -- the SHA-1, SHA-256 and Keccak there use the same instructions
+        -- as the intrinsics do but schedule them across a run of blocks
+        -- rather than one at a time.  See
         -- cbits/asm/README.md.  Windows on AArch64 is left out: the object
         -- format is neither of these two.
         if !os(windows)
             cc-options:
                 -DWITH_ARMV8_CHACHA_ASM -DWITH_ARMV8_POLY1305_ASM
-                -DWITH_ARMV8_SHA256_ASM -DWITH_ARMV8_SHA3_ASM
+                -DWITH_ARMV8_SHA1_ASM -DWITH_ARMV8_SHA256_ASM
+                -DWITH_ARMV8_SHA3_ASM
 
             if os(osx)
                 asm-sources:
                     cbits/asm/chacha-armv8-ios64.S
                     cbits/asm/poly1305-armv8-ios64.S
                     cbits/asm/keccak1600-armv8-ios64.S
+                    cbits/asm/sha1-armv8-ios64.S
                     cbits/asm/sha256-armv8-ios64.S
 
             else
@@ -505,6 +508,7 @@ library
                     cbits/asm/chacha-armv8-linux64.S
                     cbits/asm/poly1305-armv8-linux64.S
                     cbits/asm/keccak1600-armv8-linux64.S
+                    cbits/asm/sha1-armv8-linux64.S
                     cbits/asm/sha256-armv8-linux64.S
 
     if ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64)))
