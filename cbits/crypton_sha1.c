@@ -33,6 +33,8 @@
  */
 #ifdef WITH_ARMV8_SHA1
 extern void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+extern void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
+                                         uint32_t blocks);
 extern int crypton_sha1_armv8_available(void);
 
 static int sha1_use_armv8 = -1;
@@ -178,6 +180,8 @@ static void sha1_do_chunk_generic(struct sha1_ctx *ctx, uint32_t *buf)
  * Two threads racing to answer here both write the same value.
  */
 extern void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+extern void crypton_sha1_x86_do_chunks(uint32_t state[5], const uint8_t *data,
+                                       uint32_t blocks);
 
 static int sha1_use_x86 = -1;
 #endif
@@ -221,6 +225,36 @@ void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len
 		data += to_fill;
 		index = 0;
 	}
+
+	/*
+	 * Where there are instructions for this, the whole run of blocks
+	 * goes over at once: the state then stays in registers from one
+	 * block to the next, and the message is read as bytes, so neither
+	 * the alignment nor the copy below is wanted.
+	 */
+#ifdef WITH_ARMV8_SHA1
+	if (sha1_use_armv8 < 0)
+		sha1_use_armv8 = crypton_sha1_armv8_available();
+	if (sha1_use_armv8 && len >= 64) {
+		uint32_t blocks = len / 64;
+
+		crypton_sha1_armv8_do_chunks(ctx->h, data, blocks);
+		data += blocks * 64;
+		len -= blocks * 64;
+	}
+#endif
+#ifdef WITH_X86_SHA_NI
+	if (sha1_use_x86 < 0)
+		sha1_use_x86 =
+		    (crypton_x86_simd_features() & CRYPTON_X86_SHA_NI) != 0;
+	if (sha1_use_x86 && len >= 64) {
+		uint32_t blocks = len / 64;
+
+		crypton_sha1_x86_do_chunks(ctx->h, data, blocks);
+		data += blocks * 64;
+		len -= blocks * 64;
+	}
+#endif
 
 	if (need_alignment(data, 4)) {
 		uint32_t tramp[16];

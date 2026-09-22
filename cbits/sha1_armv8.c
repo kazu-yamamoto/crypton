@@ -56,7 +56,8 @@
  * order, `buf` the block as it arrived, which SHA-1 reads big-endian.
  */
 TARGET_ARMV8_CRYPTO
-void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16])
+void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
+                                  uint32_t blocks)
 {
 	const uint32x4_t k0 = vdupq_n_u32(0x5a827999);
 	const uint32x4_t k1 = vdupq_n_u32(0x6ed9eba1);
@@ -69,6 +70,10 @@ void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16])
 
 	abcd = vld1q_u32(state);
 	e0 = state[4];
+
+	for (; blocks > 0; blocks--, data += 64) {
+	const uint32_t *buf = (const uint32_t *) data;
+
 	abcd_prev = abcd;
 	e_prev = e0;
 
@@ -137,8 +142,18 @@ void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16])
 	e0 = vsha1h_u32(vgetq_lane_u32(abcd, 0));
 	abcd = vsha1pq_u32(abcd, e1, wk1);
 
-	vst1q_u32(state, vaddq_u32(abcd, abcd_prev));
-	state[4] = e0 + e_prev;
+	abcd = vaddq_u32(abcd, abcd_prev);
+	e0 += e_prev;
+	}
+
+	vst1q_u32(state, abcd);
+	state[4] = e0;
+}
+
+/* the one-block form, for the partial block a message ends with */
+void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16])
+{
+	crypton_sha1_armv8_do_chunks(state, (const uint8_t *) buf, 1);
 }
 
 /*
