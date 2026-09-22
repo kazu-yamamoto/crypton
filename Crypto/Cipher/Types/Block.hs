@@ -57,6 +57,7 @@ import qualified Crypto.Internal.ByteArray as B
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 
+import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr
 import Foreign.Storable
 
@@ -213,11 +214,15 @@ ivAdd (IV b) i = IV $ copy b
 
 cbcEncryptGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
-cbcEncryptGeneric cipher ivini input = mconcat $ doEnc ivini $ chunk (blockSize cipher) input
+cbcEncryptGeneric cipher ivini input =
+    B.concat $ doEnc ivini $ slices (blockSize cipher) input
   where
+    -- the blocks of the message as shared slices rather than copies: each
+    -- block already costs an exclusive or and a call into the cipher, both of
+    -- which allocate, and the chain makes it one block at a time
     doEnc _ [] = []
     doEnc iv (i : is) =
-        let o = ecbEncrypt cipher $ B.xor iv i
+        let o = ecbEncrypt cipher (B.bxor iv i) `asTypeOf` input
          in o : doEnc (IV o) is
 
 -- | How many blocks to hand the cipher at a time in the modes whose blocks do
@@ -255,7 +260,7 @@ cbcDecryptGeneric cipher ivini input =
   where
     bsz = blockSize cipher
     conv x = B.convert x `asTypeOf` input
-    xorB a b = B.xor a b `asTypeOf` input
+    xorB a b = B.bxor a b `asTypeOf` input
     doDec _ [] = []
     doDec iv (c : cs) =
         xorB (ecbDecrypt cipher (conv c)) (conv (shiftedBy bsz iv c))
@@ -263,11 +268,12 @@ cbcDecryptGeneric cipher ivini input =
 
 cfbEncryptGeneric
     :: (ByteArray ba, BlockCipher cipher) => cipher -> IV cipher -> ba -> ba
-cfbEncryptGeneric cipher ivini input = mconcat $ doEnc ivini $ chunk (blockSize cipher) input
+cfbEncryptGeneric cipher ivini input =
+    B.concat $ doEnc ivini $ slices (blockSize cipher) input
   where
     doEnc _ [] = []
     doEnc (IV iv) (i : is) =
-        let o = B.xor i $ ecbEncrypt cipher iv
+        let o = B.bxor i (ecbEncrypt cipher iv) `asTypeOf` input
          in o : doEnc (IV o) is
 
 -- | Nor does this one: @P_i@ is @C_i@ exclusive-ored with @E(C_(i-1))@, and
@@ -279,7 +285,7 @@ cfbDecryptGeneric cipher ivini input =
   where
     bsz = blockSize cipher
     conv x = B.convert x `asTypeOf` input
-    xorB a b = B.xor a b `asTypeOf` input
+    xorB a b = B.bxor a b `asTypeOf` input
     doDec _ [] = []
     doDec iv (c : cs) =
         xorB (conv c) (ecbEncrypt cipher (conv (shiftedBy bsz iv c)))
@@ -294,13 +300,44 @@ ctrCombineGeneric cipher ivini input =
   where
     bsz = blockSize cipher
     conv x = B.convert x `asTypeOf` input
-    xorB a b = B.xor a b `asTypeOf` input
+    xorB a b = B.bxor a b `asTypeOf` input
     doCnt _ [] = []
     doCnt iv (m : ms) =
-        xorB (conv m) (ecbEncrypt cipher counters) : doCnt (ivAdd iv n) ms
+        xorB (conv m) (ecbEncrypt cipher (counters iv n `asTypeOf` input))
+            : doCnt (ivAdd iv n) ms
       where
         n = (S.length m + bsz - 1) `div` bsz
-        counters = conv (S.concat [B.convert (ivAdd iv i) | i <- [0 .. n - 1]])
+
+-- | The counters for a slice: the given one, then each next as the one before
+-- it plus one.
+--
+-- One buffer, filled in place.  Asking 'ivAdd' for each of them separately
+-- allocated a block per block and walked the whole width of the counter from
+-- the original every time, which cost more than the cipher did: counter mode
+-- ran at a quarter of what the same cipher managed in ECB, and at an eighth
+-- for Blowfish.
+counters :: (ByteArray ba, BlockCipher cipher) => IV cipher -> Int -> ba
+counters iv n = B.allocAndFreeze (n * bsz) fill
+  where
+    bsz = B.length iv
+
+    fill p = do
+        B.copyByteArrayToPtr iv p
+        let go k prev
+                | k >= n = return ()
+                | otherwise = do
+                    let this = prev `plusPtr` bsz
+                    copyBytes this prev bsz
+                    increment this (bsz - 1)
+                    go (k + 1) this
+        go 1 p
+
+    increment p ofs
+        | ofs < 0 = return ()
+        | otherwise = do
+            v <- peek (p `plusPtr` ofs) :: IO Word8
+            poke (p `plusPtr` ofs) (v + 1)
+            if v == 0xff then increment p (ofs - 1) else return ()
 
 xtsEncryptGeneric :: (ByteArray ba, BlockCipher128 cipher) => XTS ba cipher
 xtsEncryptGeneric = xtsGeneric ecbEncrypt
@@ -317,13 +354,13 @@ xtsGeneric
     -> ba
     -> ba
 xtsGeneric f (cipher, tweakCipher) (IV iv) sPoint input =
-    mconcat $ doXts iniTweak $ chunk (blockSize cipher) input
+    B.concat $ doXts iniTweak $ slices (blockSize cipher) input
   where
     encTweak = ecbEncrypt tweakCipher iv
     iniTweak = iterate xtsGFMul encTweak !! fromIntegral sPoint
     doXts _ [] = []
     doXts tweak (i : is) =
-        let o = B.xor (f cipher $ B.xor i tweak) tweak
+        let o = B.bxor (f cipher (B.bxor i tweak)) tweak `asTypeOf` input
          in o : doXts (xtsGFMul tweak) is
 
 {-
