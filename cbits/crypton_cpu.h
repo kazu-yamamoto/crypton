@@ -66,7 +66,8 @@ uint32_t crypton_x86_simd_features(void);
  * leaf 7 EBX, with the bits for what the operating system will not preserve
  * cleared.  Filled on first use; see cbits/crypton_cpu.c.
  */
-#if defined(WITH_X86_POLY1305_ASM) || defined(WITH_X86_CHACHA_ASM)
+#if defined(WITH_X86_POLY1305_ASM) || defined(WITH_X86_CHACHA_ASM) \
+    || defined(WITH_X86_SHA256_ASM) || defined(WITH_X86_SHA512_ASM)
 #define CRYPTON_X86_ASM 1
 extern unsigned int crypton_ia32cap_P[4];
 void crypton_x86_ia32cap_resolve(void);

@@ -141,36 +141,31 @@ extern int crypton_sha512_armv8_available(void);
 static int sha512_use_armv8 = -1;
 #endif
 
-#if defined(WITH_X86_AVX2_SHA512) && defined(WITH_TARGET_ATTRIBUTES)
-/*
- * x86 has no instruction for this compression function, but the message
- * schedule is a quarter of the work and can be computed four words at a time;
- * see sha512_x86.c.  AVX2 needs the operating system's agreement as well as
- * the processor's, so ask.  Two threads racing to answer here both write the
- * same value.
- */
-#include "crypton_cpu.h"
-extern void crypton_sha512_avx2_do_chunk(uint64_t state[8], const uint64_t buf[16]);
 
-static int sha512_use_avx2 = -1;
+#ifdef WITH_X86_SHA512_ASM
+/*
+ * SHA-512 from CRYPTOGAMS, in cbits/asm/sha512-x86_64-*.S, which takes any
+ * number of blocks at once and schedules across them, and picks between
+ * AVX2, AVX, SSSE3 and plain integer code from crypton_ia32cap_P.
+ */
+#define SHA512_ASM 1
+#include "crypton_cpu.h"
+extern void crypton_sha512_asm_block_data_order(uint64_t state[8],
+                                                const void *data, size_t blocks);
 #endif
 
 static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
 {
+#ifdef SHA512_ASM
+	crypton_x86_ia32cap_resolve();
+	crypton_sha512_asm_block_data_order(ctx->h, buf, 1);
+	return;
+#endif
 #ifdef WITH_ARMV8_SHA512
 	if (sha512_use_armv8 < 0)
 		sha512_use_armv8 = crypton_sha512_armv8_available();
 	if (sha512_use_armv8) {
 		crypton_sha512_armv8_do_chunk(ctx->h, buf);
-		return;
-	}
-#endif
-#if defined(WITH_X86_AVX2_SHA512) && defined(WITH_TARGET_ATTRIBUTES)
-	if (sha512_use_avx2 < 0)
-		sha512_use_avx2 =
-		    (crypton_x86_simd_features() & CRYPTON_X86_AVX2) != 0;
-	if (sha512_use_avx2) {
-		crypton_sha512_avx2_do_chunk(ctx->h, buf);
 		return;
 	}
 #endif
@@ -203,6 +198,18 @@ void crypton_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t
 		index = 0;
 	}
 
+#ifdef SHA512_ASM
+	/* the assembly reads the message as bytes, so it wants neither the
+	 * alignment nor the copy, and takes the whole run in one call */
+	if (len >= 128) {
+		size_t blocks = len / 128;
+
+		crypton_x86_ia32cap_resolve();
+		crypton_sha512_asm_block_data_order(ctx->h, data, blocks);
+		data += blocks * 128;
+		len -= (uint32_t) blocks * 128;
+	}
+#else
 	if (need_alignment(data, 8)) {
 		uint64_t tramp[16];
 		ASSERT_ALIGNMENT(tramp, 8);
@@ -215,6 +222,7 @@ void crypton_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t
 		for (; len >= 128; len -= 128, data += 128)
 			sha512_do_chunk(ctx, (uint64_t *) data);
 	}
+#endif
 
 	/* append data into buf */
 	if (len)
