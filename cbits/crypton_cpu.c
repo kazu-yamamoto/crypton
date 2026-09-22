@@ -104,15 +104,18 @@ static uint64_t xcr0(void)
 __attribute__((visibility("hidden"))) unsigned int crypton_ia32cap_P[4];
 
 /*
- * The AVX-512 bits of leaf 7 EBX.  They are cleared whatever the processor
- * says: the code they would select in cbits/asm/poly1305-x86_64-*.S cannot
- * be run, let alone measured, on any machine here, and shipping a path
- * nothing has executed is not worth the few per cent it might be worth.
- * Turning them on is a one-line change for whoever has the hardware.
+ * The AVX-512 bits of leaf 7 EBX -- F, DQ, IFMA, PF, ER, CD, BW and VL,
+ * which is every bit from 16 up except 21's neighbours and 29, the SHA
+ * extensions, which are not AVX-512 and are wanted.  They are cleared
+ * whatever the processor says: the code they would select in the vendored
+ * assembly cannot be run, let alone measured, on any machine here, and
+ * shipping a path nothing has executed is not worth the few per cent it
+ * might be worth.  Turning them on is a one-line change for whoever has
+ * the hardware.
  */
 #define IA32CAP_AVX512 \
 	((1u << 16) | (1u << 17) | (1u << 21) | (1u << 26) | (1u << 27) \
-	 | (1u << 28) | (1u << 29) | (1u << 30) | (1u << 31))
+	 | (1u << 28) | (1u << 30) | (1u << 31))
 
 /*
  * cpuid as the assembly reads it, with the two bits it dispatches on -- AVX
@@ -128,12 +131,19 @@ void crypton_x86_ia32cap_resolve(void)
 		uint32_t eax, ebx, ecx, edx, maxleaf;
 		uint32_t f = crypton_x86_simd_features();
 		uint32_t leaf1_ecx, leaf7_ebx = 0;
+		int intel;
 
 		cpuid(0, &eax, &ebx, &ecx, &edx);
 		maxleaf = eax;
+		/* "GenuineIntel", which OpenSSL records in a bit of leaf 1
+		 * EDX that cpuid leaves reserved: some of the assembly asks,
+		 * having found a path worth taking on one make and not the
+		 * other */
+		intel = (ebx == 0x756e6547 && edx == 0x49656e69
+		         && ecx == 0x6c65746e);
 
 		cpuid(1, &eax, &ebx, &ecx, &edx);
-		crypton_ia32cap_P[0] = edx;
+		crypton_ia32cap_P[0] = intel ? (edx | (1u << 30)) : edx;
 		leaf1_ecx = ecx;
 		if (!(f & CRYPTON_X86_AVX))
 			leaf1_ecx &= ~(1u << 28);

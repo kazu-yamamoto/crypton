@@ -10,6 +10,7 @@ Polyakov, checked in unmodified together with the translators they need:
 | `aesni-gcm-x86_64.pl` | AES-NI/PCLMULQDQ stitched AES-GCM for x86-64 |
 | `chacha-x86_64.pl` | ChaCha20 for x86-64 |
 | `poly1305-x86_64.pl` | Poly1305 for x86-64 |
+| `sha512-x86_64.pl` | SHA-256 and SHA-512 for x86-64 (one generator, two outputs, as on AArch64) |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
 | `sha512-armv8.pl` | SHA-256 for AArch64 (the generator emits SHA-512 or SHA-256 according to the name it is given, and only the latter is wanted) |
@@ -59,12 +60,15 @@ can run those paths, an assembler old enough to be in use cannot always
 assemble them, and a path nothing has executed is not worth the few per cent
 it might be worth.
 
-**SHA-256.** The instructions are the same ones the intrinsics here already
-use.  What the module does is schedule them across a whole run of blocks
-instead of one at a time, and keep the message schedule of the next block
-moving while the rounds of this one are still going, which a per-block C
-function cannot do at all.  A quarter faster, and it needs no alignment and
-no copy since it reads the message as bytes.
+**SHA-256 and SHA-512.** On AArch64 the instructions are the same ones the
+intrinsics here already use.  What the module does is schedule them across a
+whole run of blocks instead of one at a time, and keep the message schedule of
+the next block moving while the rounds of this one are still going, which a
+per-block C function cannot do at all.  A quarter faster, and it needs no
+alignment and no copy since it reads the message as bytes.  The x86-64 module
+is the same idea with more paths to choose from -- the SHA extensions, AVX2,
+AVX, SSSE3 -- and is about a fifth faster than the C on a machine with AVX2
+and no SHA extensions.
 
 ## Interfaces
 

@@ -126,15 +126,15 @@ extern int crypton_sha256_armv8_available(void);
 static int sha256_use_armv8 = -1;
 #endif
 
-#if defined(WITH_ARMV8_SHA256_ASM) && defined(WITH_ARMV8_SHA2)
+#if (defined(WITH_ARMV8_SHA256_ASM) && defined(WITH_ARMV8_SHA2)) \
+    || defined(WITH_X86_SHA256_ASM)
 /*
- * SHA-256 from CRYPTOGAMS, in cbits/asm/sha256-armv8-*.S, which takes any
- * number of blocks at once and schedules the instructions across them --
- * which is where it is ahead of the intrinsics above, the instructions
- * being the same ones.  It picks its own path from crypton_armcap_P, so
- * the answer to the runtime check goes there rather than into a branch
- * here, and the paths it would pick without the SHA-2 instructions are
- * ahead of the C as well.
+ * SHA-256 from CRYPTOGAMS, in cbits/asm/sha256-armv8-*.S and
+ * cbits/asm/sha256-x86_64-*.S, which take any number of blocks at once and
+ * schedule the instructions across them -- which is where they are ahead
+ * of the intrinsics above, the instructions being the same ones.  Each
+ * picks its own path from the word the processor was asked about, so the
+ * answer to the runtime check goes there rather than into a branch here.
  */
 #define SHA256_ASM 1
 #include "crypton_cpu.h"
@@ -143,27 +143,18 @@ extern void crypton_sha256_asm_block_data_order(uint32_t state[8],
 
 static void sha256_asm_ready(void)
 {
+#ifdef WITH_ARMV8_SHA256_ASM
 	if (sha256_use_armv8 < 0) {
 		if (crypton_sha256_armv8_available())
 			crypton_armcap_P |= CRYPTON_ARMCAP_SHA256;
 		sha256_use_armv8 = 1;
 	}
+#else
+	crypton_x86_ia32cap_resolve();
+#endif
 }
 #endif
 
-#ifdef WITH_X86_SHA_NI
-/*
- * x86 can do two rounds at a time with the SHA extensions; see sha256_x86.c.
- * They arrived long after the x86-64 baseline, so ask before using them.
- * Two threads racing to answer here both write the same value.
- */
-extern void crypton_sha256_x86_do_chunk(uint32_t state[8], const uint32_t buf[16]);
-/* and, where it does not have them, the message schedule in SSE registers */
-extern void crypton_sha256_ssse3_do_chunk(uint32_t state[8], const uint32_t buf[16]);
-
-static int sha256_use_x86 = -1;
-static int sha256_use_ssse3 = -1;
-#endif
 
 static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 {
@@ -177,22 +168,6 @@ static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 		sha256_use_armv8 = crypton_sha256_armv8_available();
 	if (sha256_use_armv8) {
 		crypton_sha256_armv8_do_chunk(ctx->h, buf);
-		return;
-	}
-#endif
-#ifdef WITH_X86_SHA_NI
-	if (sha256_use_x86 < 0)
-		sha256_use_x86 =
-		    (crypton_x86_simd_features() & CRYPTON_X86_SHA_NI) != 0;
-	if (sha256_use_x86) {
-		crypton_sha256_x86_do_chunk(ctx->h, buf);
-		return;
-	}
-	if (sha256_use_ssse3 < 0)
-		sha256_use_ssse3 =
-		    (crypton_x86_simd_features() & CRYPTON_X86_SSSE3) != 0;
-	if (sha256_use_ssse3) {
-		crypton_sha256_ssse3_do_chunk(ctx->h, buf);
 		return;
 	}
 #endif

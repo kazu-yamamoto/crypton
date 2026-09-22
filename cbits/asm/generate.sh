@@ -6,7 +6,8 @@
 #
 #   https://github.com/dot-asm/cryptogams
 #     x86_64/aesni-gcm-x86_64.pl	x86_64/chacha-x86_64.pl
-#     x86_64/poly1305-x86_64.pl	x86_64/x86_64-xlate.pl
+#     x86_64/poly1305-x86_64.pl	x86_64/sha512-x86_64.pl
+#     x86_64/x86_64-xlate.pl
 #     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
 #     arm/sha512-armv8.pl		arm/arm-xlate.pl
 #     arm/arm_arch.h
@@ -70,10 +71,23 @@ for flavour in elf macosx mingw64; do
 	sed -e 's/ChaCha20_/crypton_chacha20_asm_/g' \
 	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
 	    tmp-$flavour.S > chacha-x86_64-$flavour.S
-	rm -f tmp-$flavour.S
+
+	# as on AArch64, this generator emits SHA-512 or SHA-256 according
+	# to the name it is given, and both are wanted here
+	perl sha512-x86_64.pl $flavour tmp-$flavour.S
+	sed -e 's/sha256_block_/crypton_sha256_asm_block_/g' \
+	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
+	    tmp-$flavour.S > sha256-x86_64-$flavour.S
+
+	perl sha512-x86_64.pl $flavour tmp-512-$flavour.S
+	sed -e 's/sha512_block_/crypton_sha512_asm_block_/g' \
+	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
+	    tmp-512-$flavour.S > sha512-x86_64-$flavour.S
+	rm -f tmp-$flavour.S tmp-512-$flavour.S
 done
 
-for f in aesni-gcm-x86_64-elf.S poly1305-x86_64-elf.S chacha-x86_64-elf.S; do
+for f in aesni-gcm-x86_64-elf.S poly1305-x86_64-elf.S chacha-x86_64-elf.S \
+	 sha256-x86_64-elf.S sha512-x86_64-elf.S; do
 	cat >> $f <<-NOTE
 
 	.section	.note.GNU-stack,"",@progbits
