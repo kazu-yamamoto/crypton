@@ -23,6 +23,21 @@
 -- The signature primitive is likewise raw, and an ephemeral value must never
 -- be reused between signatures: two signatures under the same @k@ reveal the
 -- private key.
+--
+-- == What is kept from the clock, and what is not
+--
+-- Every exponentiation with a secret exponent is
+-- 'Crypto.Number.ModArithmetic.expSafe'.  Decryption inverts the shared
+-- secret by Fermat's little theorem rather than by the extended Euclidean
+-- algorithm, whose steps follow the bits it is given.  'sign' cannot do that
+-- -- @k@ is inverted modulo @p-1@, which is even -- so it blinds instead: the
+-- algorithm is handed @k@ times a fresh random unit, and the blinder is
+-- divided out afterwards.  'signWith', having no randomness of its own, hands
+-- it @k@.
+--
+-- What is left is the 'Integer' arithmetic around all of that, whose cost
+-- follows the size of the numbers.  See "Crypto.PubKey.DSA" for the same note
+-- at more length.
 module Crypto.PubKey.ElGamal (
     Params,
     PublicNumber,
@@ -54,7 +69,7 @@ import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Basic (gcde)
 import Crypto.Number.Generate (generateBetween, generateMax)
-import Crypto.Number.ModArithmetic (expFast, expSafe, inverse)
+import Crypto.Number.ModArithmetic (expFast, expSafe, inverse, inverseSafe)
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.DH (
     Params (..),
@@ -144,10 +159,14 @@ decrypt
 decrypt (Params p _ _) (PrivateNumber a) (c1, c2)
     | c1 <= 0 || c1 >= p = CryptoFailed CryptoError_ParameterInvalid
     | c2 < 0 || c2 >= p = CryptoFailed CryptoError_ParameterInvalid
-    | otherwise = case inverse s p of
+    | otherwise = case inverseSafe s p of
         Nothing -> CryptoFailed CryptoError_ParameterInvalid
         Just sm1 -> CryptoPassed ((c2 * sm1) `mod` p)
   where
+    -- the shared secret, which the extended Euclidean algorithm would take
+    -- apart: its steps follow the bits of what it is given, and this one is
+    -- worth the private number.  p is prime, so Fermat gives the inverse
+    -- without reading it
     s = expSafe c1 a p
 
 -- | sign a message with an explicit ephemeral value
@@ -175,15 +194,34 @@ signWith
     -> msg
     -- ^ message to sign
     -> Maybe Signature
-signWith k (Params p g _) (PrivateNumber x) hashAlg msg
-    | k <= 0 || k >= p - 1 || d > 1 = Nothing -- gcd(k,p-1) is not 1
+signWith = signWithBlinder 1
+
+-- | The same with a blinder for the inversion of @k@.
+--
+-- @k@ is inverted modulo @p-1@, which is even, so Fermat's little theorem
+-- does not reach it the way it reaches DSA's @k@ modulo a prime order: the
+-- extended Euclidean algorithm is the only way there, and its steps follow
+-- the bits of what it is given.  What can be done instead is to hand it
+-- something else: for a unit @b@, the inverse of @k*b@ times @b@ is the
+-- inverse of @k@, and the steps then follow @k*b@, which is a fresh random
+-- number.  A blinder of 1 is no blinding, which is what the exported
+-- 'signWith' has to do, having no randomness of its own.
+--
+-- When @b@ shares a factor with @p-1@ the algorithm reports it the same way
+-- it reports one in @k@, and the answer is the same: draw again.
+signWithBlinder
+    :: (ByteArrayAccess msg, HashAlgorithm hash)
+    => Integer -> Integer -> Params -> PrivateNumber -> hash -> msg -> Maybe Signature
+signWithBlinder b k (Params p g _) (PrivateNumber x) hashAlg msg
+    | k <= 0 || k >= p - 1 || b <= 0 || d > 1 = Nothing
     | s == 0 = Nothing
     | otherwise = Just $ Signature r s
   where
     r = expSafe g k p
     h = os2ip $ hashWith hashAlg msg
     s = ((h - x * r) * kInv) `mod` (p - 1)
-    (kInv, _, d) = gcde k (p - 1)
+    kInv = (kbInv * b) `mod` (p - 1)
+    (kbInv, _, d) = gcde ((k * b) `mod` (p - 1)) (p - 1)
 
 -- | sign message
 --
@@ -203,7 +241,10 @@ sign
     -> m Signature
 sign params@(Params p _ _) priv hashAlg msg = do
     k <- generateMax (p - 1)
-    case signWith k params priv hashAlg msg of
+    -- and a blinder for the inversion of k, which is the one step here that
+    -- the extended Euclidean algorithm has to do
+    b <- generateMax (p - 1)
+    case signWithBlinder b k params priv hashAlg msg of
         Nothing -> sign params priv hashAlg msg
         Just sig -> return sig
 

@@ -8,6 +8,23 @@
 -- Portability : unknown
 --
 -- Rabin cryptosystem for public-key cryptography and digital signature.
+--
+-- == What is kept from the clock, and what is not
+--
+-- The square roots modulo the secret primes are taken with
+-- 'Crypto.Number.ModArithmetic.expSafe', which does not read the exponent it
+-- is given.  Two things here do read what they are given.
+--
+-- Signing asks for the Jacobi symbol of the hash modulo each of the two
+-- private primes, and the Jacobi symbol is computed by a sequence of
+-- reductions whose number follows both of its arguments -- so the work done
+-- per signature follows the primes.  Key generation runs the extended
+-- Euclidean algorithm on the two primes for the same reason.  Neither has a
+-- drop-in replacement here: a Jacobi symbol that does not read its arguments
+-- is a different algorithm, not a different call.
+--
+-- Around all of that is 'Integer' arithmetic, whose cost follows the size of
+-- the numbers; see "Crypto.PubKey.DSA" for that note at more length.
 module Crypto.PubKey.Rabin.Basic (
     PublicKey (..),
     PrivateKey (..),

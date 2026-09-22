@@ -6,6 +6,7 @@ import Crypto.Error
 import Crypto.Hash (SHA256 (..))
 import qualified Crypto.PubKey.DH as DH
 import qualified Crypto.PubKey.ElGamal as ElGamal
+import Crypto.Random (drgNewTest, withDRG)
 
 import Imports
 
@@ -102,6 +103,22 @@ signatureTests = describe "signature" $ do
                     `shouldBe` False
     it "rejects a signature with r out of range" $
         ElGamal.verify params pub SHA256 msg (ElGamal.Signature 0 1) `shouldBe` False
+    -- 'sign' draws a blinder for the inversion of k, so it takes a path
+    -- 'signWith' does not: the inverse comes back from a different number
+    -- than the one wanted, times the blinder
+    it "verifies what it signs when it draws k itself" $
+        mapM_
+            ( \seed ->
+                let (sig, _) =
+                        withDRG (drgNewTest seed) (ElGamal.sign params priv SHA256 msg)
+                 in ElGamal.verify params pub SHA256 msg sig `shouldBe` True
+            )
+            [ (1, 2, 3, 4, 5)
+            , (5, 4, 3, 2, 1)
+            , (0, 0, 0, 0, 1)
+            , (9, 8, 7, 6, 5)
+            , (0x1234, 0x5678, 0x9abc, 0xdef0, 0x2468)
+            ]
   where
     msg = "message" :: ByteString
     k = 0x5d79a2c4e60813579bdf2468ace01f3b
