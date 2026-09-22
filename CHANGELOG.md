@@ -2,6 +2,106 @@
 
 ## 2.0.0
 
+* perf(chacha): take the CRYPTOGAMS ChaCha20 for AArch64.  The vector
+  registers hold four ChaCha states and there is no room for a fifth, so once
+  four blocks are in flight the only place further parallelism can come from
+  is the integer side: that module runs a fifth block through the general
+  registers alongside four in the vector ones, and above 512 bytes two
+  alongside six.  Which register holds which word is the whole of the trick
+  and C has no way to say it, which is why the intrinsics here sat at about
+  0.63 of what openssl gets out of this very file.  On Apple silicon, a
+  message per call: 1911 to 3069 MB/s at 512 bytes, 1913 to 3093 at 4 KiB and
+  2056 to 3112 at 64 KiB, against openssl 3.6's 3164 on the same machine,
+  which is this code.  It is handed only the states it fits -- twenty rounds,
+  a 256-bit key, and as many blocks as the 32-bit counter has room for, since
+  crypton's counter is 64 bits wide and carries where the assembly wraps --
+  and nothing below 192 bytes, where its own vector path starts.  The tests
+  came first: the properties here generated one shape of state, so the
+  256-bit constants were never exercised by them
+  [#173](https://github.com/kazu-yamamoto/crypton/pull/173)
+* perf(gcm): take the CRYPTOGAMS stitched AES-GCM for x86-64, which is the
+  first assembly in the package.  Counter-mode AES and GHASH do not compete
+  for the same execution ports, so a loop that interleaves them at
+  instruction granularity runs both in about the time the rounds alone take;
+  written in C that interleaving does not survive the compiler, which sinks
+  every multiply to the end of the group, and the disassembly of what
+  [#160](https://github.com/kazu-yamamoto/crypton/pull/160) produced says so.
+  On a Xeon, a message per call, AES-128-GCM: 2672 to 3172 MB/s at 1152
+  bytes, 3394 to 4271 at 4 KiB and 3657 to 5110 at 16 KiB, where openssl
+  speed on the same machine reports 4896; decryption within a couple of
+  points of that, and AES-256-GCM 3147 to 4297 at 16 KiB against openssl's
+  4206.  `cbits/asm` holds the module, the translator it needs and the
+  generated assembly, one file per object format, so that building needs no
+  perl; `cbits/asm/README.md` records where it came from and what was done to
+  it, which is to rename the entry points, a program linking both crypton
+  and openssl being entitled to object to two definitions of
+  `aesni_gcm_encrypt`.  What the assembly reads is laid out OpenSSL's way and
+  is built per message in `cbits/aes/gcm_x86_asm.c`, the powers of H being
+  the ones crypton already has, shifted up a bit.  Short messages are not
+  handed over at all.  `cabal-version` is now 3.0, for `asm-sources`
+  [#172](https://github.com/kazu-yamamoto/crypton/pull/172)
+* perf(sha3): use the ARMv8.2 SHA-3 instructions.  Keccak was the plain C
+  everywhere, a round at a time over tables of rotation amounts and lane
+  positions, at half of what openssl manages on the same machine.  EOR3,
+  RAX1, XAR and BCAX exist for exactly this permutation and take a round from
+  around a hundred and fifty operations to sixty-six; they come with the
+  SHA-512 extension the tree already asks for.  Rho and pi move one lane of
+  every row into every other row, so the round cannot be done in place, and
+  four rounds go in an iteration, which is worth a fifth over one.  SHA3-256
+  551 to 991 MB/s (openssl 1064), SHAKE128 700 to 1166, Keccak-256 559 to
+  944.  The body is generated from the definitions in FIPS 202 rather than
+  copied in, and the script that worked out the rotations and the lane
+  permutation checked itself against the published digests of the empty
+  string and of "abc" before emitting any C, which is how a first attempt
+  with chi reading lanes another row had already overwritten was caught.  x86
+  is untouched: nothing there has instructions for this
+  [#171](https://github.com/kazu-yamamoto/crypton/pull/171)
+* perf(sha1): use the ARMv8 SHA-1 instructions.  The AArch64 paths for
+  SHA-256 and SHA-512 went in with #104 and #110 and x86 got its SHA-1
+  instructions in [#165](https://github.com/kazu-yamamoto/crypton/pull/165),
+  but the AArch64 SHA-1 ones were never used -- and they are part of the same
+  optional feature as the SHA-256 ones, so every processor that has those has
+  these.  SHA1C, SHA1P and SHA1M each do four rounds with one of the three
+  round functions, SHA1H carries E from one group to the next, and SHA1SU0
+  and SHA1SU1 do the message schedule between them.  On Apple silicon: 1272
+  to 3180 MB/s, against openssl 3.6's 3350 on the same machine.  Checked
+  against the hardware rather than through an emulation of the instructions,
+  the machine here having them: the digests agree with the generic
+  implementation over every message length from 0 to 2000, with each input
+  split in two updates
+  [#170](https://github.com/kazu-yamamoto/crypton/pull/170)
+* perf(poly1305): four blocks at a time with NEON.  AArch64 had only the
+  scalar loop, whose five 26-bit limbs and 32-bit multiplies are the shape a
+  32-bit machine wants.  This is the arithmetic of the AVX2 path in NEON,
+  written as a transliteration of that file rather than a fresh formulation,
+  since the maths there is already pinned by the known-answer tests; what
+  differs is the width, AVX2 holding four 64-bit products in a register where
+  NEON holds two, so each product becomes a pair and the limbs are packed
+  back into four 32-bit lanes before the next multiply.  On Apple silicon:
+  Poly1305 2783 to 4840 MB/s, and ChaCha20-Poly1305 together 1164 to 1368.
+  Checked against the scalar implementation over forty keys and every message
+  length from 0 to 400, with each input split in two updates.  Also measured
+  and left alone: BLAKE2b at 1612 MB/s against openssl's 1378, the reference
+  C being the faster of the two
+  [#169](https://github.com/kazu-yamamoto/crypton/pull/169)
+* perf(modes): stop the generic cipher modes allocating per byte.  Counter
+  mode with a cipher whose modes are not in C ran at a third of what the same
+  cipher managed in ECB, and at an eighth for Blowfish, for two reasons
+  outside the cipher.  The counters were built one at a time by `ivAdd`,
+  which allocates a block and walks the whole width of the counter from the
+  original for each of them; they are now one buffer filled in place.  And
+  the exclusive or was `Data.ByteArray`'s, which walks a byte at a time
+  through an IO applicative -- 420 MB of heap for 8 MiB of counter mode,
+  against 17 MB for the same data through ECB, which is fifty bytes allocated
+  per byte produced and cost more than the cipher did.  There is a
+  `crypton_memxor` to call instead, a pass of words, which the modes and CMAC
+  use.  The serial modes also took each block as a copy and take shared
+  slices now.  On Apple silicon, counter mode: Camellia-128 79.7 to 285.9
+  MB/s, Blowfish 60.4 to 282.6, DES 46.2 to 114.9, CAST5 40.2 to 86.6,
+  Twofish-128 37.4 to 57.6, 3DES 25.2 to 36.3, and CBC and CMAC by a third to
+  a half as much again.  AES is unchanged: its modes are in C and never came
+  this way
+  [#168](https://github.com/kazu-yamamoto/crypton/pull/168)
 * build: compile the C at -O3, which is what came of looking at P-256 against
   openssl.  The comparison in the problem list was wrong -- a base point
   multiplication here against openssl's ECDH, which is a variable point one --
