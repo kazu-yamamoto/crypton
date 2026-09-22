@@ -9,8 +9,8 @@
 #     x86_64/poly1305-x86_64.pl	x86_64/sha512-x86_64.pl
 #     x86_64/x86_64-xlate.pl
 #     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
-#     arm/sha512-armv8.pl		arm/arm-xlate.pl
-#     arm/arm_arch.h
+#     arm/sha512-armv8.pl		arm/keccak1600-armv8.pl
+#     arm/arm-xlate.pl		arm/arm_arch.h
 #
 # The .pl files are the generator, not the product: each one emits
 # assembly for a given "flavour", which is the calling convention and the
@@ -114,6 +114,11 @@ for flavour in linux64 ios64; do
 	sed -e 's/sha256_block_/crypton_sha256_asm_block_/g' \
 	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
 	    tmp-$flavour.S > sha256-armv8-$flavour.S
+
+	perl keccak1600-armv8.pl $flavour tmp-$flavour.S
+	sed -e 's/SHA3_absorb/crypton_keccak_asm_absorb/g' \
+	    -e 's/SHA3_squeeze/crypton_keccak_asm_squeeze/g' \
+	    tmp-$flavour.S > keccak1600-armv8-$flavour.S
 	rm -f tmp-$flavour.S
 done
 
@@ -127,7 +132,9 @@ cat >> poly1305-armv8-linux64.S <<'NOTE'
 .section	.note.GNU-stack,"",%progbits
 NOTE
 
-cat >> sha256-armv8-linux64.S <<'NOTE'
+for f in sha256-armv8-linux64.S keccak1600-armv8-linux64.S; do
+	cat >> $f <<-NOTE
 
-.section	.note.GNU-stack,"",%progbits
-NOTE
+	.section	.note.GNU-stack,"",%progbits
+	NOTE
+done
