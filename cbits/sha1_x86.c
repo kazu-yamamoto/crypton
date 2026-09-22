@@ -77,11 +77,19 @@
 	} while (0)
 
 /*
- * One 64-byte block.  `state` is the five words of chaining value in host
- * order, `buf` the block as it arrived, which SHA-1 reads big-endian.
+ * Any number of 64-byte blocks.  `state` is the five words of chaining
+ * value in host order, `data` the blocks as they arrived, which SHA-1
+ * reads big-endian.
+ *
+ * The state stays in registers from one block to the next.  Taking them a
+ * block at a time, which is what this did, spends a load, a store and two
+ * shuffles either side of every block putting state back where it already
+ * was, and against the hundred-odd cycles a block costs with these
+ * instructions that is worth having.
  */
 TARGET_X86_SHA
-void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16])
+void crypton_sha1_x86_do_chunks(uint32_t state[5], const uint8_t *data,
+                                uint32_t blocks)
 {
 	/* the whole register reversed, which byte-swaps each word and puts
 	 * the first of them in the top lane */
@@ -92,6 +100,10 @@ void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16])
 
 	abcd = _mm_shuffle_epi32(_mm_loadu_si128((const __m128i *) state), 0x1b);
 	e0 = _mm_set_epi32((int) state[4], 0, 0, 0);
+
+	for (; blocks > 0; blocks--, data += 64) {
+	const uint32_t *buf = (const uint32_t *) data;
+
 	abcd_prev = abcd;
 	e_prev = e0;
 
@@ -149,7 +161,14 @@ void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16])
 	 * have carried it into a fifth round */
 	e0 = _mm_sha1nexte_epu32(e0, e_prev);
 	abcd = _mm_add_epi32(abcd, abcd_prev);
+	}
 
 	_mm_storeu_si128((__m128i *) state, _mm_shuffle_epi32(abcd, 0x1b));
 	state[4] = (uint32_t) _mm_extract_epi32(e0, 3);
+}
+
+/* the one-block form, for the partial block a message ends with */
+void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16])
+{
+	crypton_sha1_x86_do_chunks(state, (const uint8_t *) buf, 1);
 }
