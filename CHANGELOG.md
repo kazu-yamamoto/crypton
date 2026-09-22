@@ -2,6 +2,63 @@
 
 ## 2.0.0
 
+* perf(xts): double the XTS tweak in the integer registers.  The tweak
+  advances by doubling in GF(2^128) once per block, and it was doing that in a
+  vector register: six operations on the same units that are running the
+  rounds and the exclusive ors, in a chain where each waits for the one
+  before.  On a processor whose AES is fast that is not a detail -- taking the
+  doubling out of a diagnostic build, which gives the wrong answer but says
+  where the time goes, left XTS running at the speed of ECB.  It costs three
+  integer operations instead, and the integer units have nothing else to do
+  here; what crosses over is one move per block.  On x86-64 that also gets
+  eight values out of a register file with sixteen entries, so the round keys
+  stay where they were.  AES-128-XTS at 16 KiB: 9644 to 18646 MB/s on Apple
+  silicon and 4504 to 7660 on a Haswell-generation x86-64, against openssl's
+  17382 and 6997 on the same machines, so both are now a little ahead where
+  they were at 0.55 and 0.64.  No assembly: the AArch64 module in CRYPTOGAMS
+  has no XTS, and the x86-64 one's is inside a module this does not otherwise
+  want
+  [#180](https://github.com/kazu-yamamoto/crypton/pull/180)
+* perf(sha1): hand the SHA-1 block loop a run of blocks rather than one at a
+  time.  A block at a time means the state goes out to memory and comes back
+  either side of every block, with the two shuffles that put it in the order
+  the instructions want; against the hundred-odd cycles a block costs with the
+  SHA extensions that is most of what stood between this and openssl.  On an
+  EPYC 7763: 1364 to 1677 MB/s, against openssl's 1670 on the same machine,
+  and on a Xeon 8370C 1506 to 1619.  On Apple silicon it measures nothing at
+  all -- that processor hides the cost -- and is kept there only so the two
+  paths have one shape.  The intended file for this was CRYPTOGAMS'
+  `sha1-x86_64.pl`, which turns out to be the 2006 scalar implementation: no
+  SSSE3, no AVX, no SHA extensions.  Processors without the extensions are
+  therefore where they were, 664 MB/s against openssl's 791 on a Haswell
+  [#179](https://github.com/kazu-yamamoto/crypton/pull/179)
+* perf(sha2): take the CRYPTOGAMS SHA-256 and SHA-512 for x86-64.  One
+  generator gives both, as on AArch64, and each dispatches on what the
+  processor has: the SHA extensions, AVX2, AVX, SSSE3 or plain integer code.
+  That replaces everything written here for x86-64 -- `sha256_x86.c` and
+  `sha512_x86.c` go -- since it is ahead of all of it either way.  At 16 KiB:
+  on an EPYC 7763, SHA-256 1430 to 1584 MB/s and SHA-512 423 to 769; on a
+  Haswell-generation part, SHA-256 318 to 379 and SHA-512 488 to 593, where
+  openssl reports 378 and 589.  The block loops hand over the whole run of
+  blocks rather than one at a time, and the alignment trampoline goes with it.
+  This also fixes a bug in the capability word
+  [#176](https://github.com/kazu-yamamoto/crypton/pull/176) added: bit 29 of
+  leaf 7 EBX is the SHA extensions, not an AVX-512 bit, and was being cleared
+  along with them -- which cost the SHA-256 assembly two thirds of its speed
+  on a processor that has them, and which no machine here could have shown,
+  since none has them
+  [#178](https://github.com/kazu-yamamoto/crypton/pull/178)
+* perf(chacha): take the CRYPTOGAMS ChaCha20 for x86-64 as well.  The C here
+  vectorises from eight blocks up and takes anything shorter one block at a
+  time, so a message of a few hundred bytes -- a QUIC packet, a small TLS
+  record -- ran at a fifth of the bulk rate.  The module has vector code for
+  those lengths and is a few per cent ahead in bulk besides: 494 to 1091 MB/s
+  at 256 bytes, 477 to 701 at 128, and 2201 to 2374 at 16 KiB, which is
+  openssl's 2389 on the same machine.  It is handed everything from one block
+  up, where the AArch64 module is handed nothing below three, that one's
+  scalar path measuring level with the C.  Keystream generation is still the
+  C on both, having no input to exclusive-or
+  [#177](https://github.com/kazu-yamamoto/crypton/pull/177)
 * perf(poly1305): take the CRYPTOGAMS Poly1305 for x86-64 as well.  The same
   module for the other architecture, through the same three functions, so what
   this adds is the capability word: where the AArch64 one reads
