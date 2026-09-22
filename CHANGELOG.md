@@ -2,6 +2,32 @@
 
 ## 2.0.0
 
+* perf(sha1): take the CRYPTOGAMS SHA-1 for AArch64.  The instructions are the
+  ones [#170](https://github.com/kazu-yamamoto/crypton/pull/170) put in, and
+  the arrangement is what the module has over them: the message schedule of
+  the next four rounds runs against the rounds of this one, which is not
+  something a C function is going to be made to do --
+  [#179](https://github.com/kazu-yamamoto/crypton/pull/179) tried the one
+  thing C can do here, handing over a run of blocks, and on this processor it
+  measured nothing at all.  The entry point for processors that have the
+  instructions is not exported, so the module's own dispatch picks it and the
+  answer to the runtime question goes into the word that dispatch reads.  On
+  Apple silicon: 3155 to 3379 MB/s at 16 KiB, against openssl's 3350 on the
+  same machine, so where this was at 0.94 it is now a shade ahead.  The
+  intrinsics stay for the block a message ends with, and for any processor
+  that has the instructions but is built without the assembly
+  [#182](https://github.com/kazu-yamamoto/crypton/pull/182)
+* perf(sha3): take the CRYPTOGAMS Keccak for AArch64.  The instructions are
+  the ones [#171](https://github.com/kazu-yamamoto/crypton/pull/171) put in --
+  EOR3, RAX1, XAR and BCAX -- and what this module does with them is take a
+  run of blocks rather than one at a time, and schedule the round it is in
+  against the next one.  The absorb loop hands over the whole run, which also
+  drops the alignment trampoline on that path: the assembly reads the message
+  as bytes.  SHA3-256 on Apple silicon: 1002 to 1104 MB/s at 16 KiB, against
+  openssl's 1058 on the same machine.  Only the absorb side is handed over;
+  the squeeze, which SHAKE uses to produce output, is entangled with this
+  side's buffer bookkeeping and is not where the time goes
+  [#181](https://github.com/kazu-yamamoto/crypton/pull/181)
 * perf(xts): double the XTS tweak in the integer registers.  The tweak
   advances by doubling in GF(2^128) once per block, and it was doing that in a
   vector register: six operations on the same units that are running the
