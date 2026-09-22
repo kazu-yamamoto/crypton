@@ -517,6 +517,7 @@ test-suite test-crypton
         BlockCipher.AES.CTR
         BlockCipher.AES.ECB
         BlockCipher.AES.GCM
+        BlockCipher.AES.GCMLong
         BlockCipher.AES.OCB3
         BlockCipher.AES.XTS
         BlockCipher.AESGCMSIVSpec

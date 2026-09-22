@@ -6,6 +6,7 @@ import BlockCipher
 import qualified Crypto.Cipher.AES as AES
 import Crypto.Cipher.Types
 import Crypto.Error
+import Crypto.Hash (Digest, SHA256, hash)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as B
 import Data.Maybe
@@ -16,6 +17,7 @@ import qualified BlockCipher.AES.CCM as KATCCM
 import qualified BlockCipher.AES.CTR as KATCTR
 import qualified BlockCipher.AES.ECB as KATECB
 import qualified BlockCipher.AES.GCM as KATGCM
+import qualified BlockCipher.AES.GCMLong as KATGCMLong
 import qualified BlockCipher.AES.OCB3 as KATOCB3
 import qualified BlockCipher.AES.XTS as KATXTS
 
@@ -181,6 +183,45 @@ aeadTagLengthTests =
     openWith t = aeadSimpleDecrypt aead aad ciphertext (AuthTag (BA.convert t))
     openWith' n t = aeadSimpleDecrypt' aead aad ciphertext n (AuthTag (BA.convert t))
 
+-- The bulk loops -- eight blocks at a time under AES-NI, six at a time in
+-- the assembly -- only start once the message is long enough to fill them,
+-- and what they leave over goes down a different path.  These lengths sit
+-- either side of each of those boundaries, so a group that hashes the wrong
+-- blocks or a tail that is picked up at the wrong offset shows up here.
+gcmLongTests :: Spec
+gcmLongTests =
+    describe "GCM long messages" $ mapM_ test KATGCMLong.vectors
+  where
+    test v@(klen, aadlen, ptlen, _, _) =
+        it
+            ( show klen
+                ++ "-byte key, "
+                ++ show aadlen
+                ++ "-byte AAD, "
+                ++ show ptlen
+                ++ "-byte message"
+            ) $
+            case klen of
+                16 -> run (undefined :: AES.AES128) v
+                24 -> run (undefined :: AES.AES192) v
+                _ -> run (undefined :: AES.AES256) v
+    run
+        :: BlockCipher cipher
+        => cipher
+        -> KATGCMLong.KATGCMLong
+        -> Expectation
+    run witness (klen, aadlen, ptlen, tag, ctHash) = do
+        BA.convert authTag `shouldBe` tag
+        digest ciphertext `shouldBe` ctHash
+        aeadSimpleDecrypt aead aad ciphertext authTag `shouldBe` Just plaintext
+      where
+        cipher = throwCryptoError (cipherInit (KATGCMLong.gcmKey klen)) `asTypeOf` witness
+        aead = throwCryptoError (aeadInit AEAD_GCM cipher KATGCMLong.gcmIV)
+        aad = KATGCMLong.gcmAAD aadlen
+        plaintext = KATGCMLong.gcmPlaintext ptlen
+        (authTag, ciphertext) = aeadSimpleEncrypt aead aad plaintext 16
+    digest bs = BA.convert (hash bs :: Digest SHA256) :: ByteString
+
 spec :: Spec
 spec = do
     testBlockCipher128 kats128 (undefined :: AES.AES128)
@@ -188,3 +229,4 @@ spec = do
     testBlockCipher128 kats256 (undefined :: AES.AES256)
     aeadIVLengthTests
     aeadTagLengthTests
+    gcmLongTests
