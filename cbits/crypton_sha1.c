@@ -26,6 +26,9 @@
 #include "crypton_sha1.h"
 #include "crypton_bitfn.h"
 #include "crypton_align.h"
+#ifdef WITH_X86_SHA_NI
+#include "crypton_cpu.h"
+#endif
 
 void crypton_sha1_init(struct sha1_ctx *ctx)
 {
@@ -54,7 +57,7 @@ void crypton_sha1_init(struct sha1_ctx *ctx)
 #define M(i)  (w[i & 0x0f] = rol32(w[i & 0x0f] ^ w[(i - 14) & 0x0f] \
               ^ w[(i - 8) & 0x0f] ^ w[(i - 3) & 0x0f], 1))
 
-static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
+static void sha1_do_chunk_generic(struct sha1_ctx *ctx, uint32_t *buf)
 {
 	uint32_t a, b, c, d, e;
 	uint32_t w[16];
@@ -154,6 +157,31 @@ static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
 	ctx->h[2] += c;
 	ctx->h[3] += d;
 	ctx->h[4] += e;
+}
+
+#ifdef WITH_X86_SHA_NI
+/*
+ * x86 can do four rounds at a time with the SHA extensions; see sha1_x86.c.
+ * They arrived long after the x86-64 baseline, so ask before using them.
+ * Two threads racing to answer here both write the same value.
+ */
+extern void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+
+static int sha1_use_x86 = -1;
+#endif
+
+static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
+{
+#ifdef WITH_X86_SHA_NI
+	if (sha1_use_x86 < 0)
+		sha1_use_x86 =
+		    (crypton_x86_simd_features() & CRYPTON_X86_SHA_NI) != 0;
+	if (sha1_use_x86) {
+		crypton_sha1_x86_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
+	sha1_do_chunk_generic(ctx, buf);
 }
 
 void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len)

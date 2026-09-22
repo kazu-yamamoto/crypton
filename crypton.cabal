@@ -378,6 +378,7 @@ library
             cbits/chacha_avx2.c
             cbits/chacha_sse2.c
             cbits/poly1305_avx2.c
+            cbits/sha1_x86.c
             cbits/sha256_x86.c
             cbits/sha512_x86.c
 
