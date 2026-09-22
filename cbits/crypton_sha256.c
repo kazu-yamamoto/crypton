@@ -126,6 +126,31 @@ extern int crypton_sha256_armv8_available(void);
 static int sha256_use_armv8 = -1;
 #endif
 
+#if defined(WITH_ARMV8_SHA256_ASM) && defined(WITH_ARMV8_SHA2)
+/*
+ * SHA-256 from CRYPTOGAMS, in cbits/asm/sha256-armv8-*.S, which takes any
+ * number of blocks at once and schedules the instructions across them --
+ * which is where it is ahead of the intrinsics above, the instructions
+ * being the same ones.  It picks its own path from crypton_armcap_P, so
+ * the answer to the runtime check goes there rather than into a branch
+ * here, and the paths it would pick without the SHA-2 instructions are
+ * ahead of the C as well.
+ */
+#define SHA256_ASM 1
+#include "crypton_cpu.h"
+extern void crypton_sha256_asm_block_data_order(uint32_t state[8],
+                                                const void *data, size_t blocks);
+
+static void sha256_asm_ready(void)
+{
+	if (sha256_use_armv8 < 0) {
+		if (crypton_sha256_armv8_available())
+			crypton_armcap_P |= CRYPTON_ARMCAP_SHA256;
+		sha256_use_armv8 = 1;
+	}
+}
+#endif
+
 #ifdef WITH_X86_SHA_NI
 /*
  * x86 can do two rounds at a time with the SHA extensions; see sha256_x86.c.
@@ -142,7 +167,12 @@ static int sha256_use_ssse3 = -1;
 
 static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
 {
-#ifdef WITH_ARMV8_SHA2
+#ifdef SHA256_ASM
+	sha256_asm_ready();
+	crypton_sha256_asm_block_data_order(ctx->h, buf, 1);
+	return;
+#endif
+#if defined(WITH_ARMV8_SHA2) && !defined(SHA256_ASM)
 	if (sha256_use_armv8 < 0)
 		sha256_use_armv8 = crypton_sha256_armv8_available();
 	if (sha256_use_armv8) {
@@ -193,6 +223,19 @@ void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t
 		index = 0;
 	}
 
+#ifdef SHA256_ASM
+	/* the assembly reads the message a byte at a time as far as the
+	 * machine is concerned, so it wants no alignment and no copy, and
+	 * it takes the whole run of blocks in one call */
+	if (len >= 64) {
+		size_t blocks = len / 64;
+
+		sha256_asm_ready();
+		crypton_sha256_asm_block_data_order(ctx->h, data, blocks);
+		data += blocks * 64;
+		len -= (uint32_t) blocks * 64;
+	}
+#else
 	if (need_alignment(data, 4)) {
 		uint32_t tramp[16];
 		ASSERT_ALIGNMENT(tramp, 4);
@@ -205,6 +248,7 @@ void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t
 		for (; len >= 64; len -= 64, data += 64)
 			sha256_do_chunk(ctx, (uint32_t *) data);
 	}
+#endif
 
 	/* append data into buf */
 	if (len)

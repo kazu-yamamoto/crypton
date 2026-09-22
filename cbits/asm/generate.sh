@@ -7,7 +7,8 @@
 #   https://github.com/dot-asm/cryptogams
 #     x86_64/aesni-gcm-x86_64.pl	x86_64/x86_64-xlate.pl
 #     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
-#     arm/arm-xlate.pl		arm/arm_arch.h
+#     arm/sha512-armv8.pl		arm/arm-xlate.pl
+#     arm/arm_arch.h
 #
 # The .pl files are the generator, not the product: each one emits
 # assembly for a given "flavour", which is the calling convention and the
@@ -58,6 +59,13 @@ for flavour in linux64 ios64; do
 	sed -e 's/poly1305_/crypton_poly1305_asm_/g' \
 	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
 	    tmp-$flavour.S > poly1305-armv8-$flavour.S
+
+	# the same generator emits SHA-512 or SHA-256 according to the name
+	# it is given, and only the SHA-256 one is wanted here
+	perl sha512-armv8.pl $flavour tmp-$flavour.S
+	sed -e 's/sha256_block_/crypton_sha256_asm_block_/g' \
+	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
+	    tmp-$flavour.S > sha256-armv8-$flavour.S
 	rm -f tmp-$flavour.S
 done
 
@@ -67,6 +75,11 @@ cat >> chacha-armv8-linux64.S <<'NOTE'
 NOTE
 
 cat >> poly1305-armv8-linux64.S <<'NOTE'
+
+.section	.note.GNU-stack,"",%progbits
+NOTE
+
+cat >> sha256-armv8-linux64.S <<'NOTE'
 
 .section	.note.GNU-stack,"",%progbits
 NOTE

@@ -53,6 +53,7 @@ extra-source-files:
     cbits/asm/chacha-armv8.pl
     cbits/asm/generate.sh
     cbits/asm/poly1305-armv8.pl
+    cbits/asm/sha512-armv8.pl
     cbits/asm/x86_64-xlate.pl
     cbits/chacha_sse_impl.c
     cbits/argon2/*.c
@@ -441,28 +442,35 @@ library
         if !flag(use_target_attributes)
             cc-options: -march=armv8-a+crypto+sha3
 
-        -- ChaCha20 and Poly1305 from CRYPTOGAMS.  ChaCha20 there runs a
+        -- ChaCha20, Poly1305 and SHA-256 from CRYPTOGAMS.  ChaCha20 there runs a
         -- fifth block through the
         -- general registers alongside four in the vector ones -- eight
         -- and six above 512 bytes.  The vector registers hold four states
         -- and no more, so the rest of the parallelism has to come from the
         -- integer side, which is a matter of naming registers and so
         -- cannot be written in C; Poly1305 there is the whole of the
-        -- arithmetic, hand-scheduled, and replaces both the C loops.  See
+        -- arithmetic, hand-scheduled, and replaces both the C loops;
+        -- SHA-256 there uses the same instructions as the intrinsics do
+        -- but schedules them across a run of blocks rather than one at a
+        -- time.  See
         -- cbits/asm/README.md.  Windows on AArch64 is left out: the object
         -- format is neither of these two.
         if !os(windows)
-            cc-options: -DWITH_ARMV8_CHACHA_ASM -DWITH_ARMV8_POLY1305_ASM
+            cc-options:
+                -DWITH_ARMV8_CHACHA_ASM -DWITH_ARMV8_POLY1305_ASM
+                -DWITH_ARMV8_SHA256_ASM
 
             if os(osx)
                 asm-sources:
                     cbits/asm/chacha-armv8-ios64.S
                     cbits/asm/poly1305-armv8-ios64.S
+                    cbits/asm/sha256-armv8-ios64.S
 
             else
                 asm-sources:
                     cbits/asm/chacha-armv8-linux64.S
                     cbits/asm/poly1305-armv8-linux64.S
+                    cbits/asm/sha256-armv8-linux64.S
 
     if ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
