@@ -208,7 +208,16 @@ library
         Crypto.System.CPU
         Crypto.Tutorial
 
-    cc-options:       -std=gnu99
+    -- -O3 over -O2, which is what GHC passes: measured on x86-64, AES-128-GCM
+    -- 3455 to 3708 MB/s, AES-128-OCB 2187 to 2484, a P-256 base point
+    -- multiplication 71.0 to 59.8 us and SHA-256 312 to 318, with ChaCha20,
+    -- Poly1305, SHA-1 and MD5 within a couple of per cent either way; on Apple
+    -- silicon the same P-256 multiplication goes from 26.0 to 24.3 us.  The
+    -- code that must not branch on a secret does not: the masked selections in
+    -- the curve and field code compile to no conditional jumps at either
+    -- level, and what -O3 adds in cbits/crypton_powm.c is loop control over
+    -- limb counts, which are public.
+    cc-options:       -std=gnu99 -O3
     c-sources:
         cbits/argon2/argon2.c
         cbits/crypton_blake2b.c
