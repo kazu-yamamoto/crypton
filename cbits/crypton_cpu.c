@@ -100,6 +100,58 @@ static uint64_t xcr0(void)
 	return ((uint64_t) hi << 32) | lo;
 }
 
+#ifdef CRYPTON_X86_ASM
+__attribute__((visibility("hidden"))) unsigned int crypton_ia32cap_P[4];
+
+/*
+ * The AVX-512 bits of leaf 7 EBX.  They are cleared whatever the processor
+ * says: the code they would select in cbits/asm/poly1305-x86_64-*.S cannot
+ * be run, let alone measured, on any machine here, and shipping a path
+ * nothing has executed is not worth the few per cent it might be worth.
+ * Turning them on is a one-line change for whoever has the hardware.
+ */
+#define IA32CAP_AVX512 \
+	((1u << 16) | (1u << 17) | (1u << 21) | (1u << 26) | (1u << 27) \
+	 | (1u << 28) | (1u << 29) | (1u << 30) | (1u << 31))
+
+/*
+ * cpuid as the assembly reads it, with the two bits it dispatches on -- AVX
+ * in leaf 1 and AVX2 in leaf 7 -- left set only where the answer already
+ * agreed that the operating system saves the registers.  Two threads racing
+ * here write the same values.
+ */
+void crypton_x86_ia32cap_resolve(void)
+{
+	static int resolved = 0;
+
+	if (!resolved) {
+		uint32_t eax, ebx, ecx, edx, maxleaf;
+		uint32_t f = crypton_x86_simd_features();
+		uint32_t leaf1_ecx, leaf7_ebx = 0;
+
+		cpuid(0, &eax, &ebx, &ecx, &edx);
+		maxleaf = eax;
+
+		cpuid(1, &eax, &ebx, &ecx, &edx);
+		crypton_ia32cap_P[0] = edx;
+		leaf1_ecx = ecx;
+		if (!(f & CRYPTON_X86_AVX))
+			leaf1_ecx &= ~(1u << 28);
+		crypton_ia32cap_P[1] = leaf1_ecx;
+
+		if (maxleaf >= 7) {
+			cpuid_count(7, 0, &eax, &ebx, &ecx, &edx);
+			leaf7_ebx = ebx;
+		}
+		if (!(f & CRYPTON_X86_AVX2))
+			leaf7_ebx &= ~(1u << 5);
+		crypton_ia32cap_P[2] = leaf7_ebx & ~IA32CAP_AVX512;
+
+		resolved = 1;
+	}
+}
+#endif
+
 uint32_t crypton_x86_simd_features(void)
 {
 	static int resolved = 0;

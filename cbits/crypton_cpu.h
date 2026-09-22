@@ -60,6 +60,18 @@ uint32_t crypton_x86_simd_features(void);
  * the bit for them is set once the runtime check has answered.  See
  * cbits/crypton_cpu.c and cbits/asm/README.md.
  */
+/*
+ * And what the vendored x86-64 assembly asks, which is cpuid's own words in
+ * the order OpenSSL keeps them: [0] is leaf 1 EDX, [1] leaf 1 ECX and [2]
+ * leaf 7 EBX, with the bits for what the operating system will not preserve
+ * cleared.  Filled on first use; see cbits/crypton_cpu.c.
+ */
+#ifdef WITH_X86_POLY1305_ASM
+#define CRYPTON_X86_ASM 1
+extern unsigned int crypton_ia32cap_P[4];
+void crypton_x86_ia32cap_resolve(void);
+#endif
+
 #if defined(WITH_ARMV8_CHACHA_ASM) || defined(WITH_ARMV8_POLY1305_ASM) \
     || defined(WITH_ARMV8_SHA256_ASM)
 #define CRYPTON_ARM_ASM 1

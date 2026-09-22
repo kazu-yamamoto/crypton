@@ -8,6 +8,7 @@ Polyakov, checked in unmodified together with the translators they need:
 | generator | what it is |
 | --- | --- |
 | `aesni-gcm-x86_64.pl` | AES-NI/PCLMULQDQ stitched AES-GCM for x86-64 |
+| `poly1305-x86_64.pl` | Poly1305 for x86-64 |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
 | `sha512-armv8.pl` | SHA-256 for AArch64 (the generator emits SHA-512 or SHA-256 according to the name it is given, and only the latter is wanted) |
@@ -41,10 +42,18 @@ word is the whole trick, and that is not something C says.
 **Poly1305.** One multiplication modulo 2^130 - 5 depends on the one before it,
 so what there is to win is in how the multiplies and the carries are laid
 against each other, and in keeping the accumulator in whichever base costs
-less: this module works in base 2^64 while the message is short and switches to
-base 2^26 for the four-way vector loop, which is a decision no compiler will
-make for you.  It is twice the speed of the C here at 16 KiB and three and a
-half times at 64 bytes.
+less: these modules work in base 2^64 while the message is short and switch to
+base 2^26 for the vector loop, which is a decision no compiler will make for
+you.  On AArch64 that is twice the speed of the C here at 16 KiB and three and
+a half times at 64 bytes; on x86-64, a quarter faster at 16 KiB and nearly
+three times at 64.
+
+The x86-64 module also has paths for AVX-512, which are **not** taken.  What
+the generator emits is chosen from the version of the assembler it is told
+about, and `generate.sh` tells it one that predates AVX-512: no machine here
+can run those paths, an assembler old enough to be in use cannot always
+assemble them, and a path nothing has executed is not worth the few per cent
+it might be worth.
 
 **SHA-256.** The instructions are the same ones the intrinsics here already
 use.  What the module does is schedule them across a whole run of blocks
@@ -105,6 +114,12 @@ Initialisation hands back through `func` the pair of functions its own dispatch
 would use, the vector entry point not being exported, and
 `cbits/crypton_poly1305.c` calls those.  It reads `crypton_armcap_P` to choose
 between them; `cbits/crypton_cpu.c` defines that.
+
+The x86-64 Poly1305 module presents the same three functions, and reads
+`crypton_ia32cap_P` -- cpuid's own words, in the order OpenSSL keeps them --
+where the AArch64 one reads `crypton_armcap_P`.  `cbits/crypton_cpu.c` fills
+it, with the bits for anything the operating system will not preserve cleared,
+and the AVX-512 ones cleared whatever the processor says.
 
     void crypton_sha256_asm_block_data_order(unsigned int state[8],
                                              const void *data, size_t blocks);

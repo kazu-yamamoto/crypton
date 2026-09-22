@@ -5,7 +5,8 @@
 # The .pl files come from the CRYPTOGAMS distribution, unmodified:
 #
 #   https://github.com/dot-asm/cryptogams
-#     x86_64/aesni-gcm-x86_64.pl	x86_64/x86_64-xlate.pl
+#     x86_64/aesni-gcm-x86_64.pl	x86_64/poly1305-x86_64.pl
+#     x86_64/x86_64-xlate.pl
 #     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
 #     arm/sha512-armv8.pl		arm/arm-xlate.pl
 #     arm/arm_arch.h
@@ -34,18 +35,48 @@
 
 set -e
 
+# The x86-64 generators choose what to emit from the version of the
+# assembler they are told about, so they are told one, rather than left to
+# ask whatever compiler happens to be here: the checked-in files should not
+# depend on the host that produced them.  2.24 predates AVX-512, which is
+# the point -- the Poly1305 module has paths for it, and this does not take
+# them, no machine here being able to run them, and a path nothing has
+# executed not being worth the few per cent it might be worth.  It leaves
+# both modules with everything through AVX2.
+cat > tmp-cc <<'SHIM'
+#!/bin/sh
+case "$*" in
+*-Wa,-v*) echo "GNU assembler version 2.24" ;;
+esac
+exit 0
+SHIM
+chmod +x tmp-cc
+CC=./tmp-cc
+export CC
+
 for flavour in elf macosx mingw64; do
 	perl aesni-gcm-x86_64.pl $flavour tmp-$flavour.S
 	sed -e 's/aesni_gcm_/crypton_gcm_asm_/g' \
 	    -e 's/aesni_ctr32_/crypton_gcm_asm_ctr32_/g' \
 	    tmp-$flavour.S > aesni-gcm-x86_64-$flavour.S
+
+	perl poly1305-x86_64.pl $flavour tmp-$flavour.S
+	sed -e 's/poly1305_/crypton_poly1305_asm_/g' \
+	    -e 's/xor128_/crypton_xor128_/g' \
+	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
+	    tmp-$flavour.S > poly1305-x86_64-$flavour.S
 	rm -f tmp-$flavour.S
 done
 
-cat >> aesni-gcm-x86_64-elf.S <<'NOTE'
+for f in aesni-gcm-x86_64-elf.S poly1305-x86_64-elf.S; do
+	cat >> $f <<-NOTE
 
-.section	.note.GNU-stack,"",@progbits
-NOTE
+	.section	.note.GNU-stack,"",@progbits
+	NOTE
+done
+
+unset CC
+rm -f tmp-cc
 
 for flavour in linux64 ios64; do
 	perl chacha-armv8.pl $flavour tmp-$flavour.S
