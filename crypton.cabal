@@ -45,6 +45,11 @@ extra-source-files:
     cbits/aes/*.h
     cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
+    cbits/asm/LICENSE.cryptogams
+    cbits/asm/README.md
+    cbits/asm/aesni-gcm-x86_64.pl
+    cbits/asm/generate.sh
+    cbits/asm/x86_64-xlate.pl
     cbits/chacha_sse_impl.c
     cbits/argon2/*.c
     cbits/argon2/*.h
@@ -449,6 +454,29 @@ library
 
             if !flag(use_target_attributes)
                 cc-options: -msse4.1 -mpclmul
+
+            -- AES-GCM from CRYPTOGAMS, which interleaves the counter-mode
+            -- rounds with the multiplies of the block before at
+            -- instruction granularity.  The two do not want the same
+            -- execution ports, so held against each other they cost about
+            -- what the rounds alone cost; written in C the compiler sinks
+            -- every multiply to the end of the group instead.  See
+            -- cbits/asm/README.md.  The assembly is x86-64 only, and is
+            -- checked in per object format since it comes from a
+            -- generator.
+            if arch(x86_64)
+                cc-options: -DWITH_X86_GCM_ASM
+                c-sources:  cbits/aes/gcm_x86_asm.c
+
+                if os(osx)
+                    c-sources: cbits/asm/aesni-gcm-x86_64-macosx.S
+
+                else
+                    if os(windows)
+                        c-sources: cbits/asm/aesni-gcm-x86_64-mingw64.S
+
+                    else
+                        c-sources: cbits/asm/aesni-gcm-x86_64-elf.S
 
     else
         c-sources:

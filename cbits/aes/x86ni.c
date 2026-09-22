@@ -38,6 +38,7 @@
 #include <aes/gf.h>
 #include <aes/x86ni.h>
 #include <aes/block128.h>
+#include <aes/gcm_x86_asm.h>
 
 #ifdef ARCH_X86
 #define ALIGN_UP(addr, size) (((addr) + ((size) - 1)) & (~((size) - 1)))
