@@ -37,6 +37,24 @@ extern void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
                                          uint32_t blocks);
 extern int crypton_sha1_armv8_available(void);
 
+#ifdef WITH_ARMV8_SHA1_ASM
+/*
+ * SHA-1 from CRYPTOGAMS, in cbits/asm/sha1-armv8-*.S.  The instructions are
+ * the ones the intrinsics beside it use; what the module does with them is
+ * schedule the message schedule of the next four rounds against the rounds
+ * of this one, which a C function cannot be made to do.
+ *
+ * The entry point for processors that have the instructions is not
+ * exported, so the module's own dispatch is what picks it, and the answer
+ * to the question this file already asks goes into the word that dispatch
+ * reads.
+ */
+#define SHA1_ASM 1
+#include "crypton_cpu.h"
+extern void crypton_sha1_asm_block_data_order(uint32_t state[5],
+                                              const void *data, size_t blocks);
+#endif
+
 static int sha1_use_armv8 = -1;
 #endif
 
@@ -189,10 +207,19 @@ static int sha1_use_x86 = -1;
 static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
 {
 #ifdef WITH_ARMV8_SHA1
-	if (sha1_use_armv8 < 0)
+	if (sha1_use_armv8 < 0) {
 		sha1_use_armv8 = crypton_sha1_armv8_available();
+#ifdef SHA1_ASM
+		if (sha1_use_armv8)
+			crypton_armcap_P |= CRYPTON_ARMCAP_SHA1;
+#endif
+	}
 	if (sha1_use_armv8) {
+#ifdef SHA1_ASM
+		crypton_sha1_asm_block_data_order(ctx->h, buf, 1);
+#else
 		crypton_sha1_armv8_do_chunk(ctx->h, buf);
+#endif
 		return;
 	}
 #endif
@@ -233,12 +260,21 @@ void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len
 	 * the alignment nor the copy below is wanted.
 	 */
 #ifdef WITH_ARMV8_SHA1
-	if (sha1_use_armv8 < 0)
+	if (sha1_use_armv8 < 0) {
 		sha1_use_armv8 = crypton_sha1_armv8_available();
+#ifdef SHA1_ASM
+		if (sha1_use_armv8)
+			crypton_armcap_P |= CRYPTON_ARMCAP_SHA1;
+#endif
+	}
 	if (sha1_use_armv8 && len >= 64) {
 		uint32_t blocks = len / 64;
 
+#ifdef SHA1_ASM
+		crypton_sha1_asm_block_data_order(ctx->h, data, blocks);
+#else
 		crypton_sha1_armv8_do_chunks(ctx->h, data, blocks);
+#endif
 		data += blocks * 64;
 		len -= blocks * 64;
 	}

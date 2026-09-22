@@ -13,7 +13,9 @@ Polyakov, checked in unmodified together with the translators they need:
 | `sha512-x86_64.pl` | SHA-256 and SHA-512 for x86-64 (one generator, two outputs, as on AArch64) |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
+| `sha1-armv8.pl` | SHA-1 for AArch64 |
 | `sha512-armv8.pl` | SHA-256 for AArch64 (the generator emits SHA-512 or SHA-256 according to the name it is given, and only the latter is wanted) |
+| `keccak1600-armv8.pl` | Keccak for AArch64 |
 
 `x86_64-xlate.pl`, `arm-xlate.pl` and `arm_arch.h` are the machinery those
 modules use.  `generate.sh` runs the generators to produce the `.S` files, which are
@@ -60,7 +62,7 @@ can run those paths, an assembler old enough to be in use cannot always
 assemble them, and a path nothing has executed is not worth the few per cent
 it might be worth.
 
-**SHA-256 and SHA-512.** On AArch64 the instructions are the same ones the
+**SHA-1, SHA-256, SHA-512 and Keccak.** On AArch64 the instructions are the same ones the
 intrinsics here already use.  What the module does is schedule them across a
 whole run of blocks instead of one at a time, and keep the message schedule of
 the next block moving while the rounds of this one are still going, which a
@@ -68,7 +70,10 @@ per-block C function cannot do at all.  A quarter faster, and it needs no
 alignment and no copy since it reads the message as bytes.  The x86-64 module
 is the same idea with more paths to choose from -- the SHA extensions, AVX2,
 AVX, SSSE3 -- and is about a fifth faster than the C on a machine with AVX2
-and no SHA extensions.
+and no SHA extensions.  The AArch64 SHA-1 and Keccak modules are the same
+story again -- the instructions are the ones the intrinsics here use, and what
+the modules add is the arrangement: the schedule of the next four SHA-1 rounds
+against the rounds of this one, and one Keccak round against the next.
 
 ## Interfaces
 
@@ -131,14 +136,25 @@ where the AArch64 one reads `crypton_armcap_P`.  `cbits/crypton_cpu.c` fills
 it, with the bits for anything the operating system will not preserve cleared,
 and the AVX-512 ones cleared whatever the processor says.
 
+    void crypton_sha1_asm_block_data_order(unsigned int state[5],
+                                           const void *data, size_t blocks);
     void crypton_sha256_asm_block_data_order(unsigned int state[8],
                                              const void *data, size_t blocks);
+    size_t crypton_keccak_asm_absorb_cext(unsigned long long state[25],
+                                          const void *inp, size_t len,
+                                          size_t bsz);
 
-The state is the eight words of the digest in host order, and `blocks` whole
-64-byte blocks.  The entry point picks between the SHA-2 instructions, NEON and
-plain integer code from `crypton_armcap_P`, whose SHA-256 bit
-`cbits/crypton_sha256.c` sets once it has asked the operating system whether
-the processor has them -- they are optional in ARMv8.0.
+The state is the words of the digest in host order and `blocks` whole blocks of
+64 bytes.  Each entry point picks between the SHA-2 instructions, NEON and
+plain integer code from `crypton_armcap_P`, whose SHA-1 and SHA-256 bits
+`cbits/crypton_sha1.c` and `cbits/crypton_sha256.c` set once they have asked
+the operating system whether the processor has them -- they are optional in
+ARMv8.0.
+
+Keccak's absorb takes the state as its twenty-five lanes, `bsz` as the rate in
+bytes, and answers with what was left over; the `_cext` entry point is the one
+that uses the SHA-3 instructions, and `cbits/crypton_sha3.c` calls it only
+where its own runtime check has found them.
 
 ## Licence
 
