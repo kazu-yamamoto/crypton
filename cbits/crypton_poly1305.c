@@ -61,6 +61,15 @@ static int use_avx2(void)
 }
 #endif
 
+/*
+ * The same four at a time with NEON; see poly1305_neon.c.  NEON is part of
+ * AArch64, so there is nothing to ask the processor.
+ */
+#ifdef WITH_ARMV8_NEON
+#define POLY1305_NEON 1
+void crypton_poly1305_neon_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32_t groups);
+#endif
+
 static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int final)
 {
 	/* following is a cleanup copy of code available poly1305-donna */
@@ -76,6 +85,17 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 		uint32_t groups = (uint32_t) blocks / 4;
 
 		crypton_poly1305_avx2_blocks(ctx, data, groups);
+		data += (size_t) groups * 64;
+		blocks -= (int) groups * 4;
+		if (blocks == 0)
+			return;
+	}
+#endif
+#ifdef POLY1305_NEON
+	if (!final && blocks >= 4) {
+		uint32_t groups = (uint32_t) blocks / 4;
+
+		crypton_poly1305_neon_blocks(ctx, data, groups);
 		data += (size_t) groups * 64;
 		blocks -= (int) groups * 4;
 		if (blocks == 0)
