@@ -2,6 +2,45 @@
 
 ## 2.0.0
 
+* build: compile the C at -O3, which is what came of looking at P-256 against
+  openssl.  The comparison in the problem list was wrong -- a base point
+  multiplication here against openssl's ECDH, which is a variable point one --
+  and measured properly P-256 is 2.8 to 3.3 times slower rather than the 1.27
+  claimed.  The time is in the field arithmetic, five 51-bit limbs in
+  Montgomery form at 44.4 ns a multiplication, against hand-written assembly
+  using `mulx`, `adcx` and `adox`; a four-limb saturated Montgomery
+  multiplication written in C to see what a compiler would give measured 41.3
+  ns, so that is not the way in.  What did move is the optimisation level GHC
+  passes: a P-256 base point multiplication goes from 71.0 to 59.8 us on x86-64
+  and 26.0 to 24.3 on Apple silicon, AES-128-GCM from 3455 to 3708 MB/s and
+  AES-128-OCB from 2187 to 2484, with ChaCha20, Poly1305, SHA-1 and MD5 within
+  a couple of per cent either way.  The masked selections in the curve and
+  field code compile to no conditional jumps at either level
+  [#167](https://github.com/kazu-yamamoto/crypton/pull/167)
+* refactor(aes): drop the keystream generator nobody can call.  `genCTR` and
+  `genCounter` are exported from a module in `other-modules`, so nothing
+  outside the library could reach them and nothing inside used them; the only
+  mention left was a test commented out since the cryptonite days.  They were
+  also the slowest thing in the file, a block at a time through the
+  single-block entry point at 715 MB/s where counter mode does 5788, and the
+  three ways of fixing that are each worse than removing them: counter mode
+  over zeros costs Apple silicon a fifth, counters through ECB costs both, and
+  a keystream loop written out per key size is eighty lines for an API no
+  caller can see.  Also declares `crypton_aes_encrypt_ctr` and
+  `crypton_aes_encrypt_c32` in the header, which had them defined and imported
+  but never declared
+  [#166](https://github.com/kazu-yamamoto/crypton/pull/166)
+* perf(sha1): use the Intel SHA extensions on x86-64.  The extension that
+  carries the SHA-256 instructions carries four for SHA-1 as well, and the same
+  cpuid bit answers for both, so this is one file and one branch.  On an AMD
+  EPYC 7763: 725.1 to 1363.8 MB/s, against openssl's 1668.2 on the same
+  machine.  1.9x, where the SHA-256 instructions were worth 4.8x -- SHA-1's
+  rounds are cheaper to begin with, so there is less for an instruction to
+  replace.  The sequence was checked by replacing the four instructions with C
+  that follows the SDM and comparing against the generic implementation over
+  every length from 0 to 1024, which found the same missing schedule step
+  [#155](https://github.com/kazu-yamamoto/crypton/pull/155) had
+  [#165](https://github.com/kazu-yamamoto/crypton/pull/165)
 * docs(sidechannel): say what the modules that still work in `Integer` keep
   from the clock, and fix the two places where something could be done about
   it.  ElGamal inverted the shared secret with the extended Euclidean
