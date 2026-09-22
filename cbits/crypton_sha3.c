@@ -50,6 +50,18 @@ static const int keccak_rotc[24] =
 static const int keccak_piln[24] =
 	{ 10,7,11,17,18,3,5,16,8,21,24,4,15,23,19,13,12,2,20,14,22,9,6,1 };
 
+/*
+ * AArch64 has instructions for this permutation; see sha3_armv8.c.  They are
+ * an ARMv8.2 extension, so ask before using them.  Two threads racing to
+ * answer here both write the same value.
+ */
+#ifdef WITH_ARMV8_SHA3
+extern void crypton_sha3_armv8_permute(uint64_t state[25]);
+extern int crypton_sha3_armv8_available(void);
+
+static int sha3_use_armv8 = -1;
+#endif
+
 static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
 {
 	int i, j, r;
@@ -58,6 +70,15 @@ static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
 	/* merge buf with state */
 	for (i = 0; i < bufsz; i++)
 		state[i] ^= le64_to_cpu(buf[i]);
+
+#ifdef WITH_ARMV8_SHA3
+	if (sha3_use_armv8 < 0)
+		sha3_use_armv8 = crypton_sha3_armv8_available();
+	if (sha3_use_armv8) {
+		crypton_sha3_armv8_permute(state);
+		return;
+	}
+#endif
 
 	/* run keccak rounds */
 	for (r = 0; r < KECCAK_NB_ROUNDS; r++) {
