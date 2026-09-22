@@ -364,9 +364,17 @@ spec = do
                         == (n1 + n2) `mod` n
                         && ECC.scalarMul aCurve n1 n2
                             == (n1 * n2) `mod` n
+            -- against the long way round, not against pointMul: what
+            -- pointAddTwoMuls does with the two multiplications is the thing
+            -- under test, so holding it to the same pointMul it calls would
+            -- pin nothing.
             prop "double-scalar-mult" $ \aCurve (QAInteger n1) (QAInteger n2) -> do
                 p1 <- arbitraryPoint aCurve
                 p2 <- arbitraryPoint aCurve
                 let pRes = ECC.pointAddTwoMuls aCurve n1 p1 n2 p2
-                let pDef = ECC.pointAdd aCurve (ECC.pointMul aCurve n1 p1) (ECC.pointMul aCurve n2 p2)
+                let pDef =
+                        ECC.pointAdd
+                            aCurve
+                            (doubleAndAdd aCurve n1 p1)
+                            (doubleAndAdd aCurve n2 p2)
                 return $ pRes `propertyEq` pDef

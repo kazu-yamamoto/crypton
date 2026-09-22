@@ -379,10 +379,6 @@ fieldReduce (Field p k c) x
 -- multiplications of the sixteen.
 data Affine = AffineO | Affine !Integer !Integer
 
-toAffine :: Point -> Affine
-toAffine PointO = AffineO
-toAffine (Point x y) = Affine x y
-
 jacobianMul :: Integer -> Integer -> Int -> Integer -> Point -> Point
 jacobianMul _ _ _ _ PointO = PointO
 jacobianMul pr a bits n (Point px py) = fromJacobian f (go (bits - 1) JPointO)
@@ -449,58 +445,35 @@ fromJacobian f (JPoint x y z) =
                 zi2 = red (zi * zi)
              in Point (red (x * zi2)) (red (y * zi2 * zi))
 
--- | Elliptic curve double-scalar multiplication (uses Shamir's trick).
+-- | Elliptic curve double-scalar multiplication.
 --
 -- > pointAddTwoMuls c n1 p1 n2 p2 == pointAdd c (pointMul c n1 p1)
 -- >                                             (pointMul c n2 p2)
 --
--- On P-256, with one of the points the base point -- which is the shape
--- signature verification uses -- this reaches the C implementation.  Both
--- scalars are public there, so that one is variable time by design.
+-- which, apart from P-256, is how it is done: the two multiplications
+-- separately, and then one addition.  P-256 has a double multiplication of
+-- its own in C and takes it.
+--
+-- This used to be Shamir's trick, one pass over the bits of both scalars at
+-- once, which shares the doublings between them and is the right thing to do
+-- when the two multiplications would cost the same.  They no longer do.
+-- 'pointMul' goes to C, and over a prime field it multiplies the base point
+-- through a table of its multiples, which is a third of the price of an
+-- ordinary multiplication -- and the base point is one of the two here, since
+-- signature verification is what asks for this.  Sharing the doublings with a
+-- pass in 'Integer' arithmetic gives that up and more: on P-384 it costs
+-- twice what two multiplications in C cost, and on the curves over a binary
+-- field, whose addition needs an inversion where the C has a ladder that
+-- needs none, it costs two hundred times as much.
+--
+-- Both scalars are public wherever this is called from, so nothing here is
+-- meant to hide them.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
 pointAddTwoMuls :: Curve -> Integer -> Point -> Integer -> Point -> Point
-pointAddTwoMuls _ _ PointO _ PointO = PointO
-pointAddTwoMuls c _ PointO n2 p2 = pointMul c n2 p2
-pointAddTwoMuls c n1 p1 _ PointO = pointMul c n1 p1
 pointAddTwoMuls c n1 p1 n2 p2
     | c == p256Curve, Just r <- p256AddTwoMuls n1 p1 n2 p2 = r
-    | n1 < 0 || n2 < 0 = pointAdd c (pointMul c n1 p1) (pointMul c n2 p2)
-    | otherwise =
-        case c of
-            CurveFP (CurvePrime pr cc) -> jacobian pr (ecc_a cc) (ecc_n cc)
-            CurveF2m{} -> affine (n1, n2)
-  where
-    p0 = pointAdd c p1 p2
-
-    affine (0, 0) = PointO
-    affine (k1, k2) =
-        let q = pointDouble c $ affine (k1 `div` 2, k2 `div` 2)
-         in case (odd k1, odd k2) of
-                (True, True) -> pointAdd c p0 q
-                (True, False) -> pointAdd c p1 q
-                (False, True) -> pointAdd c p2 q
-                (False, False) -> q
-
-    -- Shamir's trick, with the division deferred as in pointMul.  Both
-    -- scalars are public here -- verification is the caller -- so this skips
-    -- the addition when a bit is clear rather than adding regardless.
-    jacobian pr a nn = fromJacobian f (go (bits - 1) JPointO)
-      where
-        f = mkField pr
-        bits = maximum [integerBits n1, integerBits n2, integerBits nn]
-        j0 = toAffine p0
-        j1 = toAffine p1
-        j2 = toAffine p2
-        go i acc
-            | i < 0 = acc
-            | otherwise =
-                let d = jDouble f a acc
-                 in go (i - 1) $ case (testBit n1 i, testBit n2 i) of
-                        (True, True) -> jAddAffine f a d j0
-                        (True, False) -> jAddAffine f a d j1
-                        (False, True) -> jAddAffine f a d j2
-                        (False, False) -> d
+    | otherwise = pointAdd c (pointMul c n1 p1) (pointMul c n2 p2)
 
 -- | Decompose a point into index, residue, and parity.
 --

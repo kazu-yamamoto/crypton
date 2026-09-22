@@ -329,58 +329,32 @@ fromJacobian f (JPoint x y z) =
                 zi2 = red (zi * zi)
              in Point (red (x * zi2)) (red (y * zi2 * zi))
 
--- | Elliptic curve double-scalar multiplication (uses Shamir's trick).
+-- | Elliptic curve double-scalar multiplication.
 --
 -- > pointAddTwoMuls n1 p1 n2 p2 == pointAdd (pointMul n1 p1)
 -- >                                         (pointMul n2 p2)
+--
+-- which is how it is done: the two multiplications separately, and then one
+-- addition.
+--
+-- This used to be Shamir's trick, one pass over the bits of both scalars at
+-- once, which shares the doublings between them and is the right thing to do
+-- when the two multiplications would cost the same.  They no longer do.
+-- 'pointMul' goes to C, and over a prime field it multiplies the base point
+-- through a table of its multiples, which is a third of the price of an
+-- ordinary multiplication -- and the base point is one of the two here,
+-- since ECDSA verification is what asks for this.  Sharing the doublings
+-- with a pass in "Integer" arithmetic gives that up and more: on P-384 it
+-- costs twice what two multiplications in C cost, and on the curves over a
+-- binary field, whose addition needs an inversion where C has a ladder that
+-- needs none, it costs two hundred times as much.
 --
 -- /WARNING:/ Vulnerable to timing attacks.
 pointAddTwoMuls
     :: forall curve
      . Curve curve
     => Scalar curve -> Point curve -> Scalar curve -> Point curve -> Point curve
-pointAddTwoMuls _ PointO _ PointO = PointO
-pointAddTwoMuls _ PointO n2 p2 = pointMul n2 p2
-pointAddTwoMuls n1 p1 _ PointO = pointMul n1 p1
-pointAddTwoMuls s1@(Scalar n1) p1 s2@(Scalar n2) p2
-    | n1 < 0 || n2 < 0 = pointAdd (pointMul s1 p1) (pointMul s2 p2)
-    | otherwise =
-        case curveType (Proxy :: Proxy curve) of
-            CurvePrime (CurvePrimeParam pr) -> jacobian pr
-            CurveBinary _ -> affine (n1, n2)
-  where
-    cc = curveParameters (Proxy :: Proxy curve)
-    a = curveEccA cc
-    p0 = pointAdd p1 p2
-
-    affine (0, 0) = PointO
-    affine (k1, k2) =
-        let q = pointDouble $ affine (k1 `div` 2, k2 `div` 2)
-         in case (odd k1, odd k2) of
-                (True, True) -> pointAdd p0 q
-                (True, False) -> pointAdd p1 q
-                (False, True) -> pointAdd p2 q
-                (False, False) -> q
-
-    -- Shamir's trick, with the division deferred as in pointMul.  Both
-    -- scalars are public here -- verification is the caller -- so this skips
-    -- the addition when a bit is clear rather than adding regardless.
-    jacobian pr = fromJacobian f (go (bits - 1) JPointO)
-      where
-        f = mkField pr
-        bits =
-            maximum [integerBits n1, integerBits n2, integerBits (curveEccN cc)]
-        add d PointO = d
-        add d (Point x y) = jAddAffine f a d x y
-        go i acc
-            | i < 0 = acc
-            | otherwise =
-                let d = jDouble f a acc
-                 in go (i - 1) $ case (testBit n1 i, testBit n2 i) of
-                        (True, True) -> add d p0
-                        (True, False) -> add d p1
-                        (False, True) -> add d p2
-                        (False, False) -> d
+pointAddTwoMuls n1 p1 n2 p2 = pointAdd (pointMul n1 p1) (pointMul n2 p2)
 
 -- | Check if a point is the point at infinity.
 isPointAtInfinity :: Point curve -> Bool
