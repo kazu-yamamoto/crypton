@@ -26,6 +26,18 @@
 #include "crypton_sha1.h"
 #include "crypton_bitfn.h"
 #include "crypton_align.h"
+/*
+ * AArch64 can do four rounds at a time with the SHA-1 instructions; see
+ * sha1_armv8.c.  They are optional in ARMv8.0, so ask before using them.
+ * Two threads racing to answer here both write the same value.
+ */
+#ifdef WITH_ARMV8_SHA1
+extern void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+extern int crypton_sha1_armv8_available(void);
+
+static int sha1_use_armv8 = -1;
+#endif
+
 #ifdef WITH_X86_SHA_NI
 #include "crypton_cpu.h"
 #endif
@@ -172,6 +184,14 @@ static int sha1_use_x86 = -1;
 
 static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
 {
+#ifdef WITH_ARMV8_SHA1
+	if (sha1_use_armv8 < 0)
+		sha1_use_armv8 = crypton_sha1_armv8_available();
+	if (sha1_use_armv8) {
+		crypton_sha1_armv8_do_chunk(ctx->h, buf);
+		return;
+	}
+#endif
 #ifdef WITH_X86_SHA_NI
 	if (sha1_use_x86 < 0)
 		sha1_use_x86 =
