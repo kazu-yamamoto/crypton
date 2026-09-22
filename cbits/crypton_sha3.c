@@ -60,6 +60,28 @@ extern void crypton_sha3_armv8_permute(uint64_t state[25]);
 extern int crypton_sha3_armv8_available(void);
 
 static int sha3_use_armv8 = -1;
+
+/* Two threads racing to answer this both write the same value. */
+static int sha3_armv8_ok(void)
+{
+	if (sha3_use_armv8 < 0)
+		sha3_use_armv8 = crypton_sha3_armv8_available();
+	return sha3_use_armv8;
+}
+#endif
+
+#if defined(WITH_ARMV8_SHA3_ASM) && !defined(__AARCH64EB__)
+/*
+ * Keccak from CRYPTOGAMS, in cbits/asm/keccak1600-armv8-*.S, which takes a
+ * run of blocks rather than one at a time and schedules the instructions
+ * across the round it is in and the next.  The instructions are the same
+ * ones the intrinsics beside it use; the arrangement is what is worth
+ * about a tenth here.  It reads the message as bytes, so the run wants
+ * neither alignment nor a copy.
+ */
+#define SHA3_ASM 1
+extern size_t crypton_keccak_asm_absorb_cext(uint64_t state[25], const void *inp,
+                                             size_t len, size_t bsz);
 #endif
 
 static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
@@ -72,9 +94,7 @@ static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
 		state[i] ^= le64_to_cpu(buf[i]);
 
 #ifdef WITH_ARMV8_SHA3
-	if (sha3_use_armv8 < 0)
-		sha3_use_armv8 = crypton_sha3_armv8_available();
-	if (sha3_use_armv8) {
+	if (sha3_armv8_ok()) {
 		crypton_sha3_armv8_permute(state);
 		return;
 	}
@@ -154,6 +174,16 @@ void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len
 		data += to_fill;
 		ctx->bufindex = 0;
 	}
+
+#ifdef SHA3_ASM
+	if (len >= ctx->bufsz && sha3_armv8_ok()) {
+		const size_t left = crypton_keccak_asm_absorb_cext(
+		    ctx->state, data, len, ctx->bufsz);
+
+		data += len - left;
+		len = (uint32_t) left;
+	}
+#endif
 
 	if (need_alignment(data, 8)) {
 		uint64_t tramp[SHA3_BUF_SIZE_MAX/8];
