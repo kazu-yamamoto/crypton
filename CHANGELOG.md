@@ -2,6 +2,56 @@
 
 ## 2.0.0
 
+* perf(poly1305): take the CRYPTOGAMS Poly1305 for x86-64 as well.  The same
+  module for the other architecture, through the same three functions, so what
+  this adds is the capability word: where the AArch64 one reads
+  `crypton_armcap_P`, this one reads `crypton_ia32cap_P`, which is cpuid's own
+  words in the order OpenSSL keeps them, filled with the bits for anything the
+  operating system will not preserve cleared.  What it brings over the AVX2
+  written here is a hand-scheduled scalar path, which is what a message of a
+  few hundred bytes actually uses, and an AVX path for machines with no AVX2:
+  on a Haswell-generation x86-64, 4298 to 5345 MB/s at 16 KiB and 556 to 1573
+  at 64 bytes, against the roughly 5270 openssl reaches there.  `poly1305_avx2.c`
+  goes the way the NEON did.  The module's AVX-512 paths are not taken: the
+  generator chooses what to emit from the version of the assembler it is told
+  about, and it is now told one that predates them, no machine here being able
+  to run them and an assembler still in use being unable to assemble them.
+  Pinning that version also makes the checked-in assembly independent of the
+  host that produced it
+  [#176](https://github.com/kazu-yamamoto/crypton/pull/176)
+* perf(sha256): take the CRYPTOGAMS SHA-256 for AArch64.  The instructions are
+  the ones the intrinsics here already use; what the module does with them is
+  schedule them across a whole run of blocks rather than one at a time, and
+  keep the message schedule of the next block moving while the rounds of this
+  one are still going, which a function that is handed one block and returns
+  cannot do whatever it is written in.  So the block loop hands over the whole
+  run, which also drops the alignment trampoline on this path -- the assembly
+  reads the message as bytes and wants neither the alignment nor the copy.  On
+  Apple silicon: 2637 to 3279 MB/s at 16 KiB, against openssl's 3323 on the
+  same machine, and 1576 to 1966 at 64 bytes.  SHA-512, which the same
+  generator emits, is not taken: 1876 here against openssl's 1880, the
+  ARMv8.2 instructions for it having gone in with #110
+  [#175](https://github.com/kazu-yamamoto/crypton/pull/175)
+* perf(poly1305): take the CRYPTOGAMS Poly1305 for AArch64.  One
+  multiplication modulo 2^130 - 5 depends on the one before it, so what there
+  is to win is in how the multiplies and the carries are laid against each
+  other, and in keeping the accumulator in whichever base costs less: the
+  module works in base 2^64 while the message is short and switches to base
+  2^26 for the four-way vector loop, deciding that for itself.  Unlike the
+  other two it is the whole of the arithmetic rather than a bulk loop bolted
+  to the side, so the context now holds either the 26-bit limbs the C works in
+  or the 192 bytes the assembly keeps, as a union, and grows from 84 bytes to
+  232.  On Apple silicon: 4269 to 8060 MB/s at 16 KiB and 1542 to 4355 at 64
+  bytes, and ChaCha20-Poly1305 together, which is what this is for, 1416 to
+  2284 against openssl's 2180 on the same machine.  `poly1305_neon.c`, which
+  [#169](https://github.com/kazu-yamamoto/crypton/pull/169) added, goes: the
+  assembly is faster at every length on every target that gets it, and the
+  scalar C remains for the targets that do not.  The tests came first and
+  found that the chunking property here had been testing nothing -- it used
+  the all-zero key, whose r is zero, so both sides were the nonce whatever
+  they did, which is how it came to feed the chunks to `update` in reverse
+  order and pass
+  [#174](https://github.com/kazu-yamamoto/crypton/pull/174)
 * perf(chacha): take the CRYPTOGAMS ChaCha20 for AArch64.  The vector
   registers hold four ChaCha states and there is no room for a fifth, so once
   four blocks are in flight the only place further parallelism can come from
