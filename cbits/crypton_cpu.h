@@ -53,6 +53,21 @@
 uint32_t crypton_x86_simd_features(void);
 #endif
 
+/*
+ * What the vendored AArch64 assembly asks about the processor, in the way
+ * OpenSSL asks it and with OpenSSL's bit numbering.  NEON is not optional
+ * on AArch64 and is set from the start; the SHA-256 instructions are, so
+ * the bit for them is set once the runtime check has answered.  See
+ * cbits/crypton_cpu.c and cbits/asm/README.md.
+ */
+#if defined(WITH_ARMV8_CHACHA_ASM) || defined(WITH_ARMV8_POLY1305_ASM) \
+    || defined(WITH_ARMV8_SHA256_ASM)
+#define CRYPTON_ARM_ASM 1
+#define CRYPTON_ARMCAP_NEON   1
+#define CRYPTON_ARMCAP_SHA256 (1 << 4)
+extern unsigned int crypton_armcap_P;
+#endif
+
 #ifdef USE_AESNI
 void crypton_aesni_initialize_hw(void (*init_table)(int, int));
 #else

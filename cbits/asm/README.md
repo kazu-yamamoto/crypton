@@ -10,6 +10,7 @@ Polyakov, checked in unmodified together with the translators they need:
 | `aesni-gcm-x86_64.pl` | AES-NI/PCLMULQDQ stitched AES-GCM for x86-64 |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
+| `sha512-armv8.pl` | SHA-256 for AArch64 (the generator emits SHA-512 or SHA-256 according to the name it is given, and only the latter is wanted) |
 
 `x86_64-xlate.pl`, `arm-xlate.pl` and `arm_arch.h` are the machinery those
 modules use.  `generate.sh` runs the generators to produce the `.S` files, which are
@@ -44,6 +45,13 @@ less: this module works in base 2^64 while the message is short and switches to
 base 2^26 for the four-way vector loop, which is a decision no compiler will
 make for you.  It is twice the speed of the C here at 16 KiB and three and a
 half times at 64 bytes.
+
+**SHA-256.** The instructions are the same ones the intrinsics here already
+use.  What the module does is schedule them across a whole run of blocks
+instead of one at a time, and keep the message schedule of the next block
+moving while the rounds of this one are still going, which a per-block C
+function cannot do at all.  A quarter faster, and it needs no alignment and
+no copy since it reads the message as bytes.
 
 ## Interfaces
 
@@ -97,6 +105,15 @@ Initialisation hands back through `func` the pair of functions its own dispatch
 would use, the vector entry point not being exported, and
 `cbits/crypton_poly1305.c` calls those.  It reads `crypton_armcap_P` to choose
 between them; `cbits/crypton_cpu.c` defines that.
+
+    void crypton_sha256_asm_block_data_order(unsigned int state[8],
+                                             const void *data, size_t blocks);
+
+The state is the eight words of the digest in host order, and `blocks` whole
+64-byte blocks.  The entry point picks between the SHA-2 instructions, NEON and
+plain integer code from `crypton_armcap_P`, whose SHA-256 bit
+`cbits/crypton_sha256.c` sets once it has asked the operating system whether
+the processor has them -- they are optional in ARMv8.0.
 
 ## Licence
 

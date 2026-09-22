@@ -32,18 +32,15 @@
 #include <stdint.h>
 
 /*
- * What the vendored AArch64 assembly asks about the processor, in the way
- * OpenSSL asks it.  NEON is not optional on AArch64, so the answer is yes;
- * the ChaCha20 module reads this to decide whether to use its vector path,
- * and the Poly1305 module to decide which pair of functions to hand back
- * from its initialisation.  Hidden, so that the reference to it from the
- * assembly resolves at link time in a shared object as well as a static
- * one.
+ * The word the assembly reads; crypton_cpu.h says what is in it.  Hidden,
+ * so that the reference to it from the assembly resolves at link time in a
+ * shared object as well as a static one.  The SHA-256 bit is set by
+ * cbits/crypton_sha256.c once it has asked whether the processor has those
+ * instructions.
  */
-#if defined(WITH_ARMV8_CHACHA_ASM) || defined(WITH_ARMV8_POLY1305_ASM)
-#define CRYPTON_ARMV7_NEON 1
+#ifdef CRYPTON_ARM_ASM
 __attribute__((visibility("hidden"))) unsigned int crypton_armcap_P =
-    CRYPTON_ARMV7_NEON;
+    CRYPTON_ARMCAP_NEON;
 #endif
 
 #ifdef ARCH_X86
