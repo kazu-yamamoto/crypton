@@ -5,8 +5,8 @@
 # The .pl files come from the CRYPTOGAMS distribution, unmodified:
 #
 #   https://github.com/dot-asm/cryptogams
-#     x86_64/aesni-gcm-x86_64.pl	x86_64/poly1305-x86_64.pl
-#     x86_64/x86_64-xlate.pl
+#     x86_64/aesni-gcm-x86_64.pl	x86_64/chacha-x86_64.pl
+#     x86_64/poly1305-x86_64.pl	x86_64/x86_64-xlate.pl
 #     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
 #     arm/sha512-armv8.pl		arm/arm-xlate.pl
 #     arm/arm_arch.h
@@ -65,10 +65,15 @@ for flavour in elf macosx mingw64; do
 	    -e 's/xor128_/crypton_xor128_/g' \
 	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
 	    tmp-$flavour.S > poly1305-x86_64-$flavour.S
+
+	perl chacha-x86_64.pl $flavour tmp-$flavour.S
+	sed -e 's/ChaCha20_/crypton_chacha20_asm_/g' \
+	    -e 's/OPENSSL_ia32cap_P/crypton_ia32cap_P/g' \
+	    tmp-$flavour.S > chacha-x86_64-$flavour.S
 	rm -f tmp-$flavour.S
 done
 
-for f in aesni-gcm-x86_64-elf.S poly1305-x86_64-elf.S; do
+for f in aesni-gcm-x86_64-elf.S poly1305-x86_64-elf.S chacha-x86_64-elf.S; do
 	cat >> $f <<-NOTE
 
 	.section	.note.GNU-stack,"",@progbits
@@ -80,9 +85,7 @@ rm -f tmp-cc
 
 for flavour in linux64 ios64; do
 	perl chacha-armv8.pl $flavour tmp-$flavour.S
-	sed -e 's/ChaCha20_ctr32/crypton_chacha20_ctr32/g' \
-	    -e 's/ChaCha20_512_neon/crypton_chacha20_512_neon/g' \
-	    -e 's/ChaCha20_neon/crypton_chacha20_neon/g' \
+	sed -e 's/ChaCha20_/crypton_chacha20_asm_/g' \
 	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
 	    tmp-$flavour.S > chacha-armv8-$flavour.S
 

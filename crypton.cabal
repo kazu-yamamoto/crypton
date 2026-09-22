@@ -51,6 +51,7 @@ extra-source-files:
     cbits/asm/arm-xlate.pl
     cbits/asm/arm_arch.h
     cbits/asm/chacha-armv8.pl
+    cbits/asm/chacha-x86_64.pl
     cbits/asm/generate.sh
     cbits/asm/poly1305-armv8.pl
     cbits/asm/poly1305-x86_64.pl
@@ -408,21 +409,29 @@ library
         if !flag(use_target_attributes)
             cc-options: -msha -msse4.1 -mssse3
 
-        -- Poly1305 from CRYPTOGAMS, hand-scheduled, with paths for AVX and
-        -- AVX2 where the C here has only the second.  It replaces the C
-        -- entirely on x86-64.  What it has beyond AVX2 is not asked for:
-        -- no machine here can run it, and a path nothing has executed is
-        -- not worth the few per cent.  See cbits/asm/README.md.
-        cc-options: -DWITH_X86_POLY1305_ASM
+        -- Poly1305 and ChaCha20 from CRYPTOGAMS, hand-scheduled.  Poly1305
+        -- there has paths for AVX and AVX2 where the C here has only the
+        -- second, and replaces it entirely; ChaCha20 there is ahead of the
+        -- C from one block up, having vector code for lengths the C takes
+        -- a block at a time.  What either has beyond AVX2 is not asked
+        -- for: no machine here can run it, and a path nothing has executed
+        -- is not worth the few per cent.  See cbits/asm/README.md.
+        cc-options: -DWITH_X86_POLY1305_ASM -DWITH_X86_CHACHA_ASM
 
         if os(osx)
-            asm-sources: cbits/asm/poly1305-x86_64-macosx.S
+            asm-sources:
+                cbits/asm/chacha-x86_64-macosx.S
+                cbits/asm/poly1305-x86_64-macosx.S
 
         elif os(windows)
-            asm-sources: cbits/asm/poly1305-x86_64-mingw64.S
+            asm-sources:
+                cbits/asm/chacha-x86_64-mingw64.S
+                cbits/asm/poly1305-x86_64-mingw64.S
 
         else
-            asm-sources: cbits/asm/poly1305-x86_64-elf.S
+            asm-sources:
+                cbits/asm/chacha-x86_64-elf.S
+                cbits/asm/poly1305-x86_64-elf.S
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND

@@ -15,10 +15,10 @@ Lrot24:
 .byte	67,104,97,67,104,97,50,48,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,64,100,111,116,45,97,115,109,0
 .align	2
 
-.globl	_crypton_chacha20_ctr32
+.globl	_crypton_chacha20_asm_ctr32
 
 .align	5
-_crypton_chacha20_ctr32:
+_crypton_chacha20_asm_ctr32:
 	cbz	x2,Labort
 	cmp	x2,#192
 	b.lo	Lshort
@@ -27,7 +27,7 @@ _crypton_chacha20_ctr32:
 	adrp	x17,_crypton_armcap_P@PAGE
 	ldr	w17,[x17,_crypton_armcap_P@PAGEOFF]
 	tst	w17,#ARMV7_NEON
-	b.ne	Lcrypton_chacha20_neon
+	b.ne	Lcrypton_chacha20_asm_neon
 #endif
 
 Lshort:
@@ -305,12 +305,12 @@ Loop_tail:
 
 
 #ifdef	__KERNEL__
-.globl	_crypton_chacha20_neon
+.globl	_crypton_chacha20_asm_neon
 #endif
 
 .align	5
-_crypton_chacha20_neon:
-Lcrypton_chacha20_neon:
+_crypton_chacha20_asm_neon:
+Lcrypton_chacha20_asm_neon:
 .long	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-12*__SIZEOF_POINTER__]!
 	add	x29,sp,#0
@@ -895,7 +895,7 @@ Less_than_64_neon:
 
 
 .align	5
-crypton_chacha20_512_neon:
+crypton_chacha20_asm_512_neon:
 .long	0xd503233f			// paciasp
 	stp	x29,x30,[sp,#-12*__SIZEOF_POINTER__]!
 	add	x29,sp,#0

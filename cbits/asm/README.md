@@ -8,6 +8,7 @@ Polyakov, checked in unmodified together with the translators they need:
 | generator | what it is |
 | --- | --- |
 | `aesni-gcm-x86_64.pl` | AES-NI/PCLMULQDQ stitched AES-GCM for x86-64 |
+| `chacha-x86_64.pl` | ChaCha20 for x86-64 |
 | `poly1305-x86_64.pl` | Poly1305 for x86-64 |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
@@ -33,11 +34,14 @@ survive: given the AES rounds and the multiplies of a group of blocks, GCC and
 Clang schedule all the multiplies after all the rounds, which is the sum of the
 two rather than the maximum.
 
-**ChaCha20.** The vector registers hold four ChaCha states and there is no room
-for a fifth, so further parallelism has to come from the integer side.  This
-module runs a fifth block through the general registers alongside four in the
-vector ones, and above 512 bytes two alongside six.  Which register holds which
-word is the whole trick, and that is not something C says.
+**ChaCha20.** On AArch64 the vector registers hold four ChaCha states and there
+is no room for a fifth, so further parallelism has to come from the integer
+side: that module runs a fifth block through the general registers alongside
+four in the vector ones, and above 512 bytes two alongside six.  Which register
+holds which word is the whole trick, and that is not something C says.  The
+x86-64 module is worth taking for a different reason -- it has vector code for
+lengths the C here still takes a block at a time, so a 256-byte message more
+than doubles -- and is a few per cent ahead in bulk besides.
 
 **Poly1305.** One multiplication modulo 2^130 - 5 depends on the one before it,
 so what there is to win is in how the multiplies and the carries are laid
@@ -92,10 +96,12 @@ The code needs AES-NI, PCLMULQDQ, AVX and MOVBE, which
 
 Twenty rounds, the constants that go with a 256-bit key, and a 32-bit counter
 which it does not write back: the caller advances it by the number of blocks.
-Any length is accepted, but the vector path starts at 192 bytes.  It asks
-`crypton_armcap_P` whether the processor has NEON, which on AArch64 it always
-does, and `cbits/crypton_chacha.c` defines that and calls this only for the
-states it fits.
+Any length is accepted; the AArch64 module's vector path starts at 192 bytes,
+the x86-64 one's rather lower.  They ask `crypton_armcap_P` and
+`crypton_ia32cap_P` respectively what the processor has, and
+`cbits/crypton_chacha.c` calls them only for the states they fit -- twenty
+rounds, a 256-bit key, and only as many blocks as the 32-bit counter has room
+for.
 
     int  crypton_poly1305_asm_init(void *ctx, const unsigned char key[16],
                                    void *func[2]);
