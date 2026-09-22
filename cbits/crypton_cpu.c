@@ -105,6 +105,14 @@ uint32_t crypton_x86_simd_features(void)
 			f |= CRYPTON_X86_SSSE3;
 		if (leaf1 & (1 << 1))
 			f |= CRYPTON_X86_PCLMUL;
+		if (leaf1 & (1 << 22))
+			f |= CRYPTON_X86_MOVBE;
+		/* AVX asks the same three things as AVX2 below: the
+		 * processor has it, OSXSAVE is on, and the operating system
+		 * says it saves the registers */
+		if ((leaf1 & (1 << 28)) && (leaf1 & (1 << 27))
+		    && ((xcr0() & 6) == 6))
+			f |= CRYPTON_X86_AVX;
 
 		/* leaf 7 answers for both of the rest, and a processor that
 		 * does not have it answers for the highest leaf it does have

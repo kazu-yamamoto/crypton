@@ -314,6 +314,23 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	gcm->length_input += length;
 
+#if defined(WITH_X86_GCM_ASM) && defined(WITH_PCLMUL)
+	/*
+	 * The stitched assembly first, which takes whole groups of six
+	 * blocks off the front of the message and leaves the counter and the
+	 * running tag where the loop below expects to find them.  It wants
+	 * eighteen blocks before it will start, and answers with what it did.
+	 */
+	if (nb_blocks >= GCM_ASM_MIN_BLOCKS_ENC) {
+		uint32_t done = crypton_gcm_asm_bulk_encrypt(output, gcm, key,
+		                                             input, nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
+
 	__m128i tag = _mm_loadu_si128((__m128i *) &gcm->tag);
 	__m128i iv = _mm_loadu_si128((__m128i *) &gcm->civ);
 	iv = _mm_shuffle_epi8(iv, bswap_mask);
@@ -444,6 +461,19 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 	int held = 0;
 
 	gcm->length_input += length;
+
+#if defined(WITH_X86_GCM_ASM) && defined(WITH_PCLMUL)
+	/* the same as encryption, except that decryption has nothing to
+	 * hold back and so will start on six blocks */
+	if (nb_blocks >= GCM_ASM_MIN_BLOCKS_DEC) {
+		uint32_t done = crypton_gcm_asm_bulk_decrypt(output, gcm, key,
+		                                             input, nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
 
 	__m128i tag = _mm_loadu_si128((__m128i *) &gcm->tag);
 	__m128i iv = _mm_loadu_si128((__m128i *) &gcm->civ);

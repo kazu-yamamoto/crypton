@@ -45,6 +45,10 @@
 #define CRYPTON_X86_PCLMUL 4
 /* the SHA extensions, and the SSSE3 and SSE4.1 the code around them uses */
 #define CRYPTON_X86_SHA_NI 8
+/* the 128-bit half of AVX, which is what the vendored assembly is written
+ * in, and the byte-swapping load it reads the message with */
+#define CRYPTON_X86_AVX    16
+#define CRYPTON_X86_MOVBE  32
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif
