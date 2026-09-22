@@ -48,6 +48,9 @@ extra-source-files:
     cbits/asm/LICENSE.cryptogams
     cbits/asm/README.md
     cbits/asm/aesni-gcm-x86_64.pl
+    cbits/asm/arm-xlate.pl
+    cbits/asm/arm_arch.h
+    cbits/asm/chacha-armv8.pl
     cbits/asm/generate.sh
     cbits/asm/x86_64-xlate.pl
     cbits/chacha_sse_impl.c
@@ -437,6 +440,22 @@ library
         -- emit where asked, not what the machine is assumed to have.
         if !flag(use_target_attributes)
             cc-options: -march=armv8-a+crypto+sha3
+
+        -- ChaCha20 from CRYPTOGAMS, which runs a fifth block through the
+        -- general registers alongside four in the vector ones -- eight
+        -- and six above 512 bytes.  The vector registers hold four states
+        -- and no more, so the rest of the parallelism has to come from the
+        -- integer side, which is a matter of naming registers and so
+        -- cannot be written in C.  See cbits/asm/README.md.  Windows on
+        -- AArch64 is left out: the object format is neither of these two.
+        if !os(windows)
+            cc-options: -DWITH_ARMV8_CHACHA_ASM
+
+            if os(osx)
+                asm-sources: cbits/asm/chacha-armv8-ios64.S
+
+            else
+                asm-sources: cbits/asm/chacha-armv8-linux64.S
 
     if ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
