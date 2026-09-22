@@ -597,6 +597,7 @@ test-suite test-crypton
         MAC.HMACSpec
         MAC.KMACSpec
         MAC.Poly1305Spec
+        MAC.Poly1305Vectors
         Number.F2mSpec
         NumberSpec
         OTPSpec
