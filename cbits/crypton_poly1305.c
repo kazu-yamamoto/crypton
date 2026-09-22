@@ -39,43 +39,22 @@
 #include "crypton_bitfn.h"
 #include "crypton_align.h"
 
-/*
- * Four blocks at a time with AVX2; see poly1305_avx2.c.  It is reached only
- * where the CPU and the OS both allow the wider registers, and only for whole
- * groups of four blocks that are not the last of a message -- the last one
- * has no high bit, which the vector code does not carry.
- */
-#if defined(WITH_X86_AVX2) && defined(WITH_TARGET_ATTRIBUTES)
-#define POLY1305_AVX2 1
-#include "crypton_cpu.h"
-void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32_t groups);
-
-static int poly1305_avx2 = -1;
-
-/* Two threads racing to answer this both write the same value. */
-static int use_avx2(void)
-{
-	if (poly1305_avx2 < 0)
-		poly1305_avx2 = (crypton_x86_simd_features() & CRYPTON_X86_AVX2) != 0;
-	return poly1305_avx2;
-}
-#endif
 
 /*
- * Poly1305 from CRYPTOGAMS, in cbits/asm/poly1305-armv8-*.S, which is the
- * whole of the arithmetic rather than a bulk loop bolted to the side: it
- * keeps its own accumulator -- in base 2^64 while the message is short and
- * base 2^26 once the vector loop has started, switching between the two
- * itself -- and its own powers of r, so what is left here is the buffering
- * of partial blocks.  The NEON entry point is called directly, NEON not
- * being optional on AArch64; it is what the module's own dispatch would
- * select, and it handles any number of blocks.
+ * Poly1305 from CRYPTOGAMS, in cbits/asm/poly1305-armv8-*.S and
+ * cbits/asm/poly1305-x86_64-*.S, which is the whole of the arithmetic
+ * rather than a bulk loop bolted to the side: it keeps its own accumulator
+ * -- in base 2^64 while the message is short and base 2^26 once the vector
+ * loop has started, switching between the two itself -- and its own powers
+ * of r, so what is left here is the buffering of partial blocks.
  *
  * 'padbit' is the high bit above each block, which is set for every block
  * of the message and clear for the padded last one.
  */
-#if defined(WITH_ARMV8_POLY1305_ASM) && !defined(__AARCH64EB__)
+#if (defined(WITH_ARMV8_POLY1305_ASM) && !defined(__AARCH64EB__)) \
+    || defined(WITH_X86_POLY1305_ASM)
 #define POLY1305_ASM 1
+#include "crypton_cpu.h"
 
 typedef void (*poly1305_blocks_f)(void *ctx, const uint8_t *inp, size_t len,
                                   uint32_t padbit);
@@ -86,11 +65,9 @@ int crypton_poly1305_asm_init(void *ctx, const uint8_t key[16], void *func[2]);
 
 /*
  * Initialisation hands back the pair of functions its own dispatch would
- * use -- the vector ones, NEON not being optional here -- and only those
- * two are exported, the vector entry point itself being local to the
- * module.  They are the same for every context, so they are kept here
- * rather than in each one; two threads racing to fill them write the same
- * values.
+ * use, the vector entry points themselves being local to the module.  They
+ * are the same for every context, so they are kept here rather than in each
+ * one; two threads racing to fill them write the same values.
  */
 static poly1305_blocks_f asm_blocks;
 static poly1305_emit_f asm_emit;
@@ -116,17 +93,6 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 	uint64_t d0,d1,d2,d3,d4;
 	uint32_t c;
 
-#ifdef POLY1305_AVX2
-	if (!final && blocks >= 4 && use_avx2()) {
-		uint32_t groups = (uint32_t) blocks / 4;
-
-		crypton_poly1305_avx2_blocks(ctx, data, groups);
-		data += (size_t) groups * 64;
-		blocks -= (int) groups * 4;
-		if (blocks == 0)
-			return;
-	}
-#endif
 
 	/* load r[i], h[i] */
 	h0 = ctx->st.limb.h[0]; h1 = ctx->st.limb.h[1]; h2 = ctx->st.limb.h[2]; h3 = ctx->st.limb.h[3]; h4 = ctx->st.limb.h[4];
@@ -175,6 +141,10 @@ void crypton_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
 	{
 		void *func[2];
 
+#ifdef CRYPTON_X86_ASM
+		/* what the module dispatches on, which it reads directly */
+		crypton_x86_ia32cap_resolve();
+#endif
 		crypton_poly1305_asm_init(ctx->st.opaque, k, func);
 		asm_blocks = (poly1305_blocks_f) func[0];
 		asm_emit = (poly1305_emit_f) func[1];

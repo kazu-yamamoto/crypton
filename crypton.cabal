@@ -53,6 +53,7 @@ extra-source-files:
     cbits/asm/chacha-armv8.pl
     cbits/asm/generate.sh
     cbits/asm/poly1305-armv8.pl
+    cbits/asm/poly1305-x86_64.pl
     cbits/asm/sha512-armv8.pl
     cbits/asm/x86_64-xlate.pl
     cbits/chacha_sse_impl.c
@@ -397,7 +398,6 @@ library
         c-sources:
             cbits/chacha_avx2.c
             cbits/chacha_sse2.c
-            cbits/poly1305_avx2.c
             cbits/sha1_x86.c
             cbits/sha256_x86.c
             cbits/sha512_x86.c
@@ -407,6 +407,22 @@ library
         -- AArch64 paths do.
         if !flag(use_target_attributes)
             cc-options: -msha -msse4.1 -mssse3
+
+        -- Poly1305 from CRYPTOGAMS, hand-scheduled, with paths for AVX and
+        -- AVX2 where the C here has only the second.  It replaces the C
+        -- entirely on x86-64.  What it has beyond AVX2 is not asked for:
+        -- no machine here can run it, and a path nothing has executed is
+        -- not worth the few per cent.  See cbits/asm/README.md.
+        cc-options: -DWITH_X86_POLY1305_ASM
+
+        if os(osx)
+            asm-sources: cbits/asm/poly1305-x86_64-macosx.S
+
+        elif os(windows)
+            asm-sources: cbits/asm/poly1305-x86_64-mingw64.S
+
+        else
+            asm-sources: cbits/asm/poly1305-x86_64-elf.S
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND
