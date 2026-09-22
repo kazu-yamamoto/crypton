@@ -54,6 +54,7 @@ extra-source-files:
     cbits/asm/chacha-x86_64.pl
     cbits/asm/generate.sh
     cbits/asm/keccak1600-armv8.pl
+    cbits/asm/keccak1600-x86_64.pl
     cbits/asm/poly1305-armv8.pl
     cbits/asm/poly1305-x86_64.pl
     cbits/asm/sha1-armv8.pl
@@ -419,11 +420,12 @@ library
         -- is not worth the few per cent.  See cbits/asm/README.md.
         cc-options:
             -DWITH_X86_POLY1305_ASM -DWITH_X86_CHACHA_ASM
-            -DWITH_X86_SHA256_ASM -DWITH_X86_SHA512_ASM
+            -DWITH_X86_SHA256_ASM -DWITH_X86_SHA512_ASM -DWITH_X86_SHA3_ASM
 
         if os(osx)
             asm-sources:
                 cbits/asm/chacha-x86_64-macosx.S
+                cbits/asm/keccak1600-x86_64-macosx.S
                 cbits/asm/poly1305-x86_64-macosx.S
                 cbits/asm/sha256-x86_64-macosx.S
                 cbits/asm/sha512-x86_64-macosx.S
@@ -431,6 +433,7 @@ library
         elif os(windows)
             asm-sources:
                 cbits/asm/chacha-x86_64-mingw64.S
+                cbits/asm/keccak1600-x86_64-mingw64.S
                 cbits/asm/poly1305-x86_64-mingw64.S
                 cbits/asm/sha256-x86_64-mingw64.S
                 cbits/asm/sha512-x86_64-mingw64.S
@@ -438,6 +441,7 @@ library
         else
             asm-sources:
                 cbits/asm/chacha-x86_64-elf.S
+                cbits/asm/keccak1600-x86_64-elf.S
                 cbits/asm/poly1305-x86_64-elf.S
                 cbits/asm/sha256-x86_64-elf.S
                 cbits/asm/sha512-x86_64-elf.S

@@ -11,6 +11,7 @@ Polyakov, checked in unmodified together with the translators they need:
 | `chacha-x86_64.pl` | ChaCha20 for x86-64 |
 | `poly1305-x86_64.pl` | Poly1305 for x86-64 |
 | `sha512-x86_64.pl` | SHA-256 and SHA-512 for x86-64 (one generator, two outputs, as on AArch64) |
+| `keccak1600-x86_64.pl` | Keccak for x86-64 |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
 | `poly1305-armv8.pl` | Poly1305 for AArch64 |
 | `sha1-armv8.pl` | SHA-1 for AArch64 |
@@ -73,7 +74,11 @@ AVX, SSSE3 -- and is about a fifth faster than the C on a machine with AVX2
 and no SHA extensions.  The AArch64 SHA-1 and Keccak modules are the same
 story again -- the instructions are the ones the intrinsics here use, and what
 the modules add is the arrangement: the schedule of the next four SHA-1 rounds
-against the rounds of this one, and one Keccak round against the next.
+against the rounds of this one, and one Keccak round against the next.  The
+x86-64 Keccak is there for a different reason: nothing on that side has
+instructions for this permutation, and what the module has over the C is that
+its twenty-five lanes stay in registers across a round, where a compiler given
+the C spills them.  Two and a half times, and level with openssl.
 
 ## Interfaces
 
@@ -152,9 +157,11 @@ the operating system whether the processor has them -- they are optional in
 ARMv8.0.
 
 Keccak's absorb takes the state as its twenty-five lanes, `bsz` as the rate in
-bytes, and answers with what was left over; the `_cext` entry point is the one
-that uses the SHA-3 instructions, and `cbits/crypton_sha3.c` calls it only
-where its own runtime check has found them.
+bytes, and answers with what was left over.  On AArch64 the `_cext` entry point
+is the one that uses the SHA-3 instructions, and `cbits/crypton_sha3.c` calls
+it only where its own runtime check has found them; the x86-64 module asks
+nothing of the processor beyond the baseline and is called wherever it is
+compiled in.
 
 ## Licence
 

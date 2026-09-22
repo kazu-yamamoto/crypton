@@ -80,8 +80,26 @@ static int sha3_armv8_ok(void)
  * neither alignment nor a copy.
  */
 #define SHA3_ASM 1
+/* the runtime question this file already asks decides whether it is used */
+#define SHA3_ASM_OPTIONAL 1
 extern size_t crypton_keccak_asm_absorb_cext(uint64_t state[25], const void *inp,
                                              size_t len, size_t bsz);
+#define sha3_asm_absorb crypton_keccak_asm_absorb_cext
+#endif
+
+#ifdef WITH_X86_SHA3_ASM
+/*
+ * And the same module for x86-64, where there are no instructions for this
+ * and what the assembly has over the C is the arrangement: the twenty-five
+ * lanes live in registers across a round, where a compiler given the C
+ * below spills them, and the rotations are folded into the operations that
+ * consume them.  It needs nothing of the processor beyond the baseline, so
+ * unlike the AArch64 one it is used wherever it is compiled in.
+ */
+#define SHA3_ASM 1
+extern size_t crypton_keccak_asm_absorb(uint64_t state[25], const void *inp,
+                                        size_t len, size_t bsz);
+#define sha3_asm_absorb crypton_keccak_asm_absorb
 #endif
 
 static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
@@ -176,9 +194,13 @@ void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len
 	}
 
 #ifdef SHA3_ASM
-	if (len >= ctx->bufsz && sha3_armv8_ok()) {
-		const size_t left = crypton_keccak_asm_absorb_cext(
-		    ctx->state, data, len, ctx->bufsz);
+	if (len >= ctx->bufsz
+#ifdef SHA3_ASM_OPTIONAL
+	    && sha3_armv8_ok()
+#endif
+	   ) {
+		const size_t left = sha3_asm_absorb(ctx->state, data, len,
+		                                    ctx->bufsz);
 
 		data += len - left;
 		len = (uint32_t) left;
