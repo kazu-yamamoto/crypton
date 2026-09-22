@@ -16,6 +16,7 @@ module Crypto.Internal.ByteArray (
     constAllZero,
     allocAndFreezePrimIO,
     allocAndFreezePrim,
+    bxor,
 ) where
 
 import Data.ByteArray
@@ -24,7 +25,7 @@ import Data.ByteArray.Mapping
 
 import Data.Bits ((.|.))
 import qualified Data.Primitive.ByteArray as Prim
-import Data.Word (Word8)
+import Data.Word (Word32, Word8)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.Storable (peekByteOff)
 
@@ -54,3 +55,22 @@ constAllZero b = unsafeDoIO $ withByteArray b $ \p -> loop p 0 0
             e <- peekByteOff p i
             loop p (i + 1) (acc .|. e)
     len = Data.ByteArray.length b
+
+-- | @a@ exclusive-ored with @b@, as long as the shorter of the two.
+--
+-- 'Data.ByteArray.xor' does this a byte at a time through an IO applicative,
+-- which allocates about fifty bytes of heap for every byte it produces.  That
+-- is more than a block cipher costs: it was four fifths of the time counter
+-- mode spent on anything but AES, whose modes are in C and do not come this
+-- way.
+bxor :: (ByteArrayAccess a, ByteArrayAccess b, ByteArray c) => a -> b -> c
+bxor a b = unsafeDoIO $
+    alloc n $ \pd ->
+        withByteArray a $ \pa ->
+            withByteArray b $ \pb ->
+                c_memxor pd pa pb (fromIntegral n)
+  where
+    n = min (Data.ByteArray.length a) (Data.ByteArray.length b)
+
+foreign import ccall unsafe "crypton_memxor.h crypton_memxor"
+    c_memxor :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32 -> IO ()

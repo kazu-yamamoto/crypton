@@ -75,4 +75,4 @@ step g iv msg =
     k = g iv
 
 bxor :: ByteArray ba => ba -> ba -> ba
-bxor = B.xor
+bxor = B.bxor

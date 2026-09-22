@@ -122,7 +122,7 @@ shiftL1W ws@(_ : ns) = rec' $ zip ws (ns ++ [0])
             sl1 = shiftL x 1
 
 bxor :: ByteArray ba => ba -> ba -> ba
-bxor = B.xor
+bxor = B.bxor
 
 -----
 

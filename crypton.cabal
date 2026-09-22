@@ -232,6 +232,7 @@ library
         cbits/crypton_ecc.c
         cbits/crypton_f2m.c
         cbits/crypton_md2.c
+        cbits/crypton_memxor.c
         cbits/crypton_md4.c
         cbits/crypton_md5.c
         cbits/crypton_pbkdf2.c
