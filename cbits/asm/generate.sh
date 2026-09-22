@@ -6,8 +6,8 @@
 #
 #   https://github.com/dot-asm/cryptogams
 #     x86_64/aesni-gcm-x86_64.pl	x86_64/x86_64-xlate.pl
-#     arm/chacha-armv8.pl		arm/arm-xlate.pl
-#     arm/arm_arch.h
+#     arm/chacha-armv8.pl		arm/poly1305-armv8.pl
+#     arm/arm-xlate.pl		arm/arm_arch.h
 #
 # The .pl files are the generator, not the product: each one emits
 # assembly for a given "flavour", which is the calling convention and the
@@ -53,10 +53,20 @@ for flavour in linux64 ios64; do
 	    -e 's/ChaCha20_neon/crypton_chacha20_neon/g' \
 	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
 	    tmp-$flavour.S > chacha-armv8-$flavour.S
+
+	perl poly1305-armv8.pl $flavour tmp-$flavour.S
+	sed -e 's/poly1305_/crypton_poly1305_asm_/g' \
+	    -e 's/OPENSSL_armcap_P/crypton_armcap_P/g' \
+	    tmp-$flavour.S > poly1305-armv8-$flavour.S
 	rm -f tmp-$flavour.S
 done
 
 cat >> chacha-armv8-linux64.S <<'NOTE'
+
+.section	.note.GNU-stack,"",%progbits
+NOTE
+
+cat >> poly1305-armv8-linux64.S <<'NOTE'
 
 .section	.note.GNU-stack,"",%progbits
 NOTE

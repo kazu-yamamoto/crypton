@@ -72,11 +72,8 @@ void crypton_chacha_simd_generate(int rounds, uint8_t *dst,
 void crypton_chacha20_ctr32(uint8_t *out, const uint8_t *in, size_t len,
                             const uint32_t key[8], const uint32_t counter[4]);
 
-/* The assembly asks whether the processor has NEON, the way OpenSSL asks;
- * on AArch64 it is not optional.  Hidden, so that the reference to it from
- * the assembly is resolved at link time in a shared object as well as in a
- * static one. */
-__attribute__((visibility("hidden"))) unsigned int crypton_armcap_P = 1;
+/* crypton_cpu.c defines the crypton_armcap_P that the assembly reads to
+ * find out whether the processor has NEON. */
 
 /* The four words at the head of the state are the constants that go with a
  * 256-bit key, and the assembly has only those. */

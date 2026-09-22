@@ -30,11 +30,24 @@
 #ifndef CRYPTON_POLY1305_H
 # define CRYPTON_POLY1305_H
 
-/* 8*8+1*16+1*4 = 84 */
+/*
+ * Either the 26-bit limbs the C implementation works in, or the state the
+ * assembly keeps: its accumulator, in whichever base it is using at the
+ * time, the clamped key, and the powers of that laid out for the four-way
+ * vector loop, which together come to exactly 192 bytes -- OpenSSL allots
+ * the same for the same thing.
+ *
+ * size = 192+16+4+16 = 228, 232 with the alignment the union asks for
+ */
 typedef struct
 {
-	uint32_t r[5];
-	uint32_t h[5];
+	union {
+		struct {
+			uint32_t r[5];
+			uint32_t h[5];
+		} limb;
+		uint64_t opaque[24];
+	} st;
 	uint32_t pad[4];
 	uint32_t index;
 	uint8_t buf[16]; /* previous partial block */

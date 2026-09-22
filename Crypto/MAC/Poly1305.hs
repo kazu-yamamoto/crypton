@@ -63,6 +63,12 @@ authTag b
 instance Eq Auth where
     (Auth a1) == (Auth a2) = B.constEq a1 a2
 
+-- | @sizeof(poly1305_ctx)@: the accumulator and the key, either as the
+-- limbs the C implementation works in or as the state the assembly keeps,
+-- and the buffer for a partial block.  See @cbits/crypton_poly1305.h@.
+sizeCtx :: Int
+sizeCtx = 232
+
 foreign import ccall unsafe "crypton_poly1305.h crypton_poly1305_init"
     c_poly1305_init :: Ptr State -> Ptr Word8 -> IO ()
 
@@ -79,7 +85,7 @@ initialize
     -> CryptoFailable State
 initialize key
     | B.length key /= 32 = CryptoFailed $ CryptoError_MacKeyInvalid
-    | otherwise = CryptoPassed $ State $ B.allocAndFreeze 84 $ \ctxPtr ->
+    | otherwise = CryptoPassed $ State $ B.allocAndFreeze sizeCtx $ \ctxPtr ->
         B.withByteArray key $ \keyPtr ->
             c_poly1305_init (castPtr ctxPtr) keyPtr
 {-# NOINLINE initialize #-}
@@ -115,7 +121,7 @@ auth :: (ByteArrayAccess key, ByteArrayAccess ba) => key -> ba -> Auth
 auth key d
     | B.length key /= 32 = error "Poly1305: key length expected 32 bytes"
     | otherwise = Auth $ B.allocAndFreeze 16 $ \dst -> do
-        _ <- B.alloc 84 (onCtx dst) :: IO ScrubbedBytes
+        _ <- B.alloc sizeCtx (onCtx dst) :: IO ScrubbedBytes
         return ()
   where
     onCtx dst ctxPtr =
