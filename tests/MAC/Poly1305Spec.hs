@@ -11,14 +11,20 @@ import Imports
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray as B (convert)
 
+import qualified MAC.Poly1305Vectors as Vectors
+
 instance Show Poly1305.Auth where
     show _ = "Auth"
 
-data Chunking = Chunking Int Int
+-- The key is part of this: with the all-zero key the property below held
+-- whatever either side did, r being zero and the tag therefore the nonce --
+-- which is how it came to feed the chunks in the wrong order and pass.
+data Chunking = Chunking Int Int ByteString
     deriving (Show, Eq)
 
 instance Arbitrary Chunking where
-    arbitrary = Chunking <$> choose (1, 34) <*> choose (1, 2048)
+    arbitrary =
+        Chunking <$> choose (1, 34) <*> choose (1, 2048) <*> arbitraryBS 32
 
 spec :: Spec
 spec = do
@@ -30,17 +36,29 @@ spec = do
             tag =
                 "\xa8\x06\x1d\xc1\x30\x51\x36\xc6\xc2\x2b\x8b\xaf\x0c\x01\x27\xa9" :: ByteString
          in B.convert (Poly1305.auth key msg) `shouldBe` tag
-    prop "Chunking" $ \(Chunking chunkLen totalLen) ->
-        let key = B.replicate 32 0
-            msg = B.pack $ take totalLen $ concat (replicate 10 [1 .. 255])
+    describe "vectors" $ mapM_ vectorTest Vectors.vectors
+    prop "Chunking" $ \(Chunking chunkLen totalLen key) ->
+        let msg = B.pack $ take totalLen $ concat (replicate 10 [1 .. 255])
          in Poly1305.auth key msg
                 == Poly1305.finalize
-                    ( foldr
-                        (flip Poly1305.update)
+                    ( foldl
+                        Poly1305.update
                         (throwCryptoError $ Poly1305.initialize key)
                         (chunks chunkLen msg)
                     )
   where
+    vectorTest (ki, mi, len, expected) =
+        it
+            ( "key "
+                ++ show ki
+                ++ ", message "
+                ++ show mi
+                ++ ", "
+                ++ show len
+                ++ " bytes"
+            )
+            $ B.convert (Poly1305.auth (Vectors.polyKey ki) (Vectors.polyMessage mi len))
+                `shouldBe` expected
     chunks i bs
         | B.length bs < i = [bs]
         | otherwise = let (b1, b2) = B.splitAt i bs in b1 : chunks i b2

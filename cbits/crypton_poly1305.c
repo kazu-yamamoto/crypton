@@ -62,13 +62,49 @@ static int use_avx2(void)
 #endif
 
 /*
- * The same four at a time with NEON; see poly1305_neon.c.  NEON is part of
- * AArch64, so there is nothing to ask the processor.
+ * Poly1305 from CRYPTOGAMS, in cbits/asm/poly1305-armv8-*.S, which is the
+ * whole of the arithmetic rather than a bulk loop bolted to the side: it
+ * keeps its own accumulator -- in base 2^64 while the message is short and
+ * base 2^26 once the vector loop has started, switching between the two
+ * itself -- and its own powers of r, so what is left here is the buffering
+ * of partial blocks.  The NEON entry point is called directly, NEON not
+ * being optional on AArch64; it is what the module's own dispatch would
+ * select, and it handles any number of blocks.
+ *
+ * 'padbit' is the high bit above each block, which is set for every block
+ * of the message and clear for the padded last one.
  */
-#ifdef WITH_ARMV8_NEON
-#define POLY1305_NEON 1
-void crypton_poly1305_neon_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32_t groups);
+#if defined(WITH_ARMV8_POLY1305_ASM) && !defined(__AARCH64EB__)
+#define POLY1305_ASM 1
+
+typedef void (*poly1305_blocks_f)(void *ctx, const uint8_t *inp, size_t len,
+                                  uint32_t padbit);
+typedef void (*poly1305_emit_f)(void *ctx, uint8_t mac[16],
+                                const uint32_t nonce[4]);
+
+int crypton_poly1305_asm_init(void *ctx, const uint8_t key[16], void *func[2]);
+
+/*
+ * Initialisation hands back the pair of functions its own dispatch would
+ * use -- the vector ones, NEON not being optional here -- and only those
+ * two are exported, the vector entry point itself being local to the
+ * module.  They are the same for every context, so they are kept here
+ * rather than in each one; two threads racing to fill them write the same
+ * values.
+ */
+static poly1305_blocks_f asm_blocks;
+static poly1305_emit_f asm_emit;
 #endif
+
+
+#ifdef POLY1305_ASM
+
+static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int final)
+{
+	asm_blocks(ctx->st.opaque, data, (size_t) blocks * 16, final ? 0 : 1);
+}
+
+#else
 
 static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int final)
 {
@@ -91,21 +127,10 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 			return;
 	}
 #endif
-#ifdef POLY1305_NEON
-	if (!final && blocks >= 4) {
-		uint32_t groups = (uint32_t) blocks / 4;
-
-		crypton_poly1305_neon_blocks(ctx, data, groups);
-		data += (size_t) groups * 64;
-		blocks -= (int) groups * 4;
-		if (blocks == 0)
-			return;
-	}
-#endif
 
 	/* load r[i], h[i] */
-	h0 = ctx->h[0]; h1 = ctx->h[1]; h2 = ctx->h[2]; h3 = ctx->h[3]; h4 = ctx->h[4];
-	r0 = ctx->r[0]; r1 = ctx->r[1]; r2 = ctx->r[2]; r3 = ctx->r[3]; r4 = ctx->r[4];
+	h0 = ctx->st.limb.h[0]; h1 = ctx->st.limb.h[1]; h2 = ctx->st.limb.h[2]; h3 = ctx->st.limb.h[3]; h4 = ctx->st.limb.h[4];
+	r0 = ctx->st.limb.r[0]; r1 = ctx->st.limb.r[1]; r2 = ctx->st.limb.r[2]; r3 = ctx->st.limb.r[3]; r4 = ctx->st.limb.r[4];
 
 	/* s[i] = r[i] * 5 */
 	s1 = r1 * 5; s2 = r2 * 5; s3 = r3 * 5; s4 = r4 * 5;
@@ -135,8 +160,10 @@ static void poly1305_do_chunk(poly1305_ctx *ctx, uint8_t *data, int blocks, int 
 	}
 
 	/* store h[i] */
-	ctx->h[0] = h0; ctx->h[1] = h1; ctx->h[2] = h2; ctx->h[3] = h3; ctx->h[4] = h4;
+	ctx->st.limb.h[0] = h0; ctx->st.limb.h[1] = h1; ctx->st.limb.h[2] = h2; ctx->st.limb.h[3] = h3; ctx->st.limb.h[4] = h4;
 }
+
+#endif
 
 void crypton_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
 {
@@ -144,11 +171,21 @@ void crypton_poly1305_init(poly1305_ctx *ctx, poly1305_key *key)
 
 	memset(ctx, 0, sizeof(poly1305_ctx));
 
-	ctx->r[0] = (load_le32(&k[ 0])     ) & 0x3ffffff;
-	ctx->r[1] = (load_le32(&k[ 3]) >> 2) & 0x3ffff03;
-	ctx->r[2] = (load_le32(&k[ 6]) >> 4) & 0x3ffc0ff;
-	ctx->r[3] = (load_le32(&k[ 9]) >> 6) & 0x3f03fff;
-	ctx->r[4] = (load_le32(&k[12]) >> 8) & 0x00fffff;
+#ifdef POLY1305_ASM
+	{
+		void *func[2];
+
+		crypton_poly1305_asm_init(ctx->st.opaque, k, func);
+		asm_blocks = (poly1305_blocks_f) func[0];
+		asm_emit = (poly1305_emit_f) func[1];
+	}
+#else
+	ctx->st.limb.r[0] = (load_le32(&k[ 0])     ) & 0x3ffffff;
+	ctx->st.limb.r[1] = (load_le32(&k[ 3]) >> 2) & 0x3ffff03;
+	ctx->st.limb.r[2] = (load_le32(&k[ 6]) >> 4) & 0x3ffc0ff;
+	ctx->st.limb.r[3] = (load_le32(&k[ 9]) >> 6) & 0x3f03fff;
+	ctx->st.limb.r[4] = (load_le32(&k[12]) >> 8) & 0x00fffff;
+#endif
 
 	ctx->pad[0] = load_le32(&k[16]);
 	ctx->pad[1] = load_le32(&k[20]);
@@ -188,11 +225,6 @@ void crypton_poly1305_update(poly1305_ctx *ctx, uint8_t *data, uint32_t length)
 
 void crypton_poly1305_finalize(poly1305_mac mac8, poly1305_ctx *ctx)
 {
-	uint32_t h0,h1,h2,h3,h4,c;
-	uint32_t g0,g1,g2,g3,g4;
-	uint64_t f;
-	uint32_t mask;
-	uint32_t *mac = (uint32_t *) mac8;
 	int i;
 
 	if (ctx->index) {
@@ -203,10 +235,22 @@ void crypton_poly1305_finalize(poly1305_mac mac8, poly1305_ctx *ctx)
 		poly1305_do_chunk(ctx, ctx->buf, 1, 1);
 	}
 
+#ifdef POLY1305_ASM
+	/* the carry, the reduction and the addition of the second half of
+	 * the key are the assembly's, since the accumulator is its own */
+	asm_emit(ctx->st.opaque, mac8, ctx->pad);
+#else
+	{
+	uint32_t h0,h1,h2,h3,h4,c;
+	uint32_t g0,g1,g2,g3,g4;
+	uint64_t f;
+	uint32_t mask;
+	uint32_t *mac = (uint32_t *) mac8;
+
 	/* following is a cleanup copy of code available poly1305-donna */
 
 	/* fully carry h */
-	h0 = ctx->h[0]; h1 = ctx->h[1]; h2 = ctx->h[2]; h3 = ctx->h[3]; h4 = ctx->h[4];
+	h0 = ctx->st.limb.h[0]; h1 = ctx->st.limb.h[1]; h2 = ctx->st.limb.h[2]; h3 = ctx->st.limb.h[3]; h4 = ctx->st.limb.h[4];
 
 	             c = h1 >> 26; h1 = h1 & 0x3ffffff;
 	h2 +=     c; c = h2 >> 26; h2 = h2 & 0x3ffffff;
@@ -254,4 +298,6 @@ void crypton_poly1305_finalize(poly1305_mac mac8, poly1305_ctx *ctx)
 
 	f = (uint64_t)h3 + ctx->pad[3] + (f >> 32);
 	mac[3] = cpu_to_le32((uint32_t) f);
+	}
+#endif
 }

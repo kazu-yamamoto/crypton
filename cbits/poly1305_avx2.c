@@ -180,17 +180,17 @@ void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32
 	uint32_t c;
 	int i;
 
-	memcpy(r1, ctx->r, sizeof r1);
+	memcpy(r1, ctx->st.limb.r, sizeof r1);
 	mul_limbs(r2, r1, r1);
 	mul_limbs(r3, r2, r1);
 	mul_limbs(r4, r3, r1);
 
 	/* the first group takes the accumulator in with its first block */
-	a0 = _mm256_set_epi64x(0, 0, 0, ctx->h[0]);
-	a1 = _mm256_set_epi64x(0, 0, 0, ctx->h[1]);
-	a2 = _mm256_set_epi64x(0, 0, 0, ctx->h[2]);
-	a3 = _mm256_set_epi64x(0, 0, 0, ctx->h[3]);
-	a4 = _mm256_set_epi64x(0, 0, 0, ctx->h[4]);
+	a0 = _mm256_set_epi64x(0, 0, 0, ctx->st.limb.h[0]);
+	a1 = _mm256_set_epi64x(0, 0, 0, ctx->st.limb.h[1]);
+	a2 = _mm256_set_epi64x(0, 0, 0, ctx->st.limb.h[2]);
+	a3 = _mm256_set_epi64x(0, 0, 0, ctx->st.limb.h[3]);
+	a4 = _mm256_set_epi64x(0, 0, 0, ctx->st.limb.h[4]);
 	LOAD4_ADD(a0, a1, a2, a3, a4, data, hibit);
 	data += 64;
 
@@ -233,7 +233,7 @@ void crypton_poly1305_avx2_blocks(poly1305_ctx *ctx, const uint8_t *data, uint32
 	h[0] &= MASK26;
 	h[1] += c;
 
-	memcpy(ctx->h, h, sizeof h);
+	memcpy(ctx->st.limb.h, h, sizeof h);
 }
 
 #endif /* WITH_TARGET_ATTRIBUTES */

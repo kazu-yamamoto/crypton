@@ -9,9 +9,10 @@ Polyakov, checked in unmodified together with the translators they need:
 | --- | --- |
 | `aesni-gcm-x86_64.pl` | AES-NI/PCLMULQDQ stitched AES-GCM for x86-64 |
 | `chacha-armv8.pl` | ChaCha20 for AArch64 |
+| `poly1305-armv8.pl` | Poly1305 for AArch64 |
 
-`x86_64-xlate.pl`, `arm-xlate.pl` and `arm_arch.h` are the machinery those two
-use.  `generate.sh` runs the generators to produce the `.S` files, which are
+`x86_64-xlate.pl`, `arm-xlate.pl` and `arm_arch.h` are the machinery those
+modules use.  `generate.sh` runs the generators to produce the `.S` files, which are
 what crypton actually compiles -- one per object format, since the calling
 convention and the assembler syntax differ.  The names of the entry points are
 changed on the way through, and the ELF output is given the note that says the
@@ -35,6 +36,14 @@ for a fifth, so further parallelism has to come from the integer side.  This
 module runs a fifth block through the general registers alongside four in the
 vector ones, and above 512 bytes two alongside six.  Which register holds which
 word is the whole trick, and that is not something C says.
+
+**Poly1305.** One multiplication modulo 2^130 - 5 depends on the one before it,
+so what there is to win is in how the multiplies and the carries are laid
+against each other, and in keeping the accumulator in whichever base costs
+less: this module works in base 2^64 while the message is short and switches to
+base 2^26 for the four-way vector loop, which is a decision no compiler will
+make for you.  It is twice the speed of the C here at 16 KiB and three and a
+half times at 64 bytes.
 
 ## Interfaces
 
@@ -70,6 +79,24 @@ Any length is accepted, but the vector path starts at 192 bytes.  It asks
 `crypton_armcap_P` whether the processor has NEON, which on AArch64 it always
 does, and `cbits/crypton_chacha.c` defines that and calls this only for the
 states it fits.
+
+    int  crypton_poly1305_asm_init(void *ctx, const unsigned char key[16],
+                                   void *func[2]);
+    void crypton_poly1305_asm_blocks(void *ctx, const unsigned char *inp,
+                                     size_t len, unsigned int padbit);
+    void crypton_poly1305_asm_emit(void *ctx, unsigned char mac[16],
+                                   const unsigned int nonce[4]);
+
+`ctx` is 192 bytes of state the module keeps for itself -- its accumulator, the
+clamped key and the powers of it -- and `key` is the first half of the Poly1305
+key, the second half being handed to `emit` as `nonce`.  `padbit` is the bit
+above each block, set for the blocks of the message and clear for the padded
+last one.  `len` is a whole number of blocks.
+
+Initialisation hands back through `func` the pair of functions its own dispatch
+would use, the vector entry point not being exported, and
+`cbits/crypton_poly1305.c` calls those.  It reads `crypton_armcap_P` to choose
+between them; `cbits/crypton_cpu.c` defines that.
 
 ## Licence
 
