@@ -21,8 +21,6 @@ module Crypto.Cipher.AES.Primitive (
     initAES,
 
     -- * Miscellanea
-    genCTR,
-    genCounter,
 
     -- * Encryption
     encryptECB,
@@ -248,61 +246,6 @@ encryptCBC
     -> ba
     -- ^ ciphertext
 encryptCBC = doCBC c_aes_encrypt_cbc
-
--- | generate a counter mode pad. this is generally xor-ed to an input
--- to make the standard counter mode block operations.
---
--- if the length requested is not a multiple of the block cipher size,
--- more data will be returned, so that the returned bytearray is
--- a multiple of the block cipher size.
-{-# NOINLINE genCTR #-}
-genCTR
-    :: ByteArray ba
-    => AES
-    -- ^ Cipher Key.
-    -> IV AES
-    -- ^ usually a 128 bit integer.
-    -> Int
-    -- ^ length of bytes required.
-    -> ba
-genCTR ctx (IV iv) len
-    | len <= 0 = B.empty
-    | otherwise = B.allocAndFreeze (nbBlocks * 16) generate
-  where
-    generate o = withKeyAndIV ctx iv $ \k i -> c_aes_gen_ctr (castPtr o) k i (fromIntegral nbBlocks)
-    (nbBlocks', r) = len `quotRem` 16
-    nbBlocks = if r == 0 then nbBlocks' else nbBlocks' + 1
-
--- | generate a counter mode pad. this is generally xor-ed to an input
--- to make the standard counter mode block operations.
---
--- if the length requested is not a multiple of the block cipher size,
--- more data will be returned, so that the returned bytearray is
--- a multiple of the block cipher size.
---
--- Similiar to 'genCTR' but also return the next IV for continuation
-{-# NOINLINE genCounter #-}
-genCounter
-    :: ByteArray ba
-    => AES
-    -> IV AES
-    -> Int
-    -> (ba, IV AES)
-genCounter ctx iv len
-    | len <= 0 = (B.empty, iv)
-    | otherwise = unsafeDoIO $
-        keyToPtr ctx $ \k ->
-            ivCopyPtr iv $ \i ->
-                B.alloc outputLength $ \o -> do
-                    c_aes_gen_ctr_cont (castPtr o) k i (fromIntegral nbBlocks)
-  where
-    (nbBlocks', r) = len `quotRem` 16
-    nbBlocks = if r == 0 then nbBlocks' else nbBlocks' + 1
-    outputLength = nbBlocks * 16
-
-{- TODO: when genCTR has same AESIV requirements for IV, add the following rules:
- - RULES "snd . genCounter" forall ctx iv len .  snd (genCounter ctx iv len) = genCTR ctx iv len
- -}
 
 -- | encrypt using Counter mode (CTR)
 --
@@ -737,12 +680,6 @@ foreign import ccall "crypton_aes.h crypton_aes_encrypt_xts"
 foreign import ccall "crypton_aes.h crypton_aes_decrypt_xts"
     c_aes_decrypt_xts
         :: CString -> Ptr AES -> Ptr AES -> Ptr Word8 -> CUInt -> CString -> CUInt -> IO ()
-
-foreign import ccall "crypton_aes.h crypton_aes_gen_ctr"
-    c_aes_gen_ctr :: CString -> Ptr AES -> Ptr Word8 -> CUInt -> IO ()
-
-foreign import ccall unsafe "crypton_aes.h crypton_aes_gen_ctr_cont"
-    c_aes_gen_ctr_cont :: CString -> Ptr AES -> Ptr Word8 -> CUInt -> IO ()
 
 foreign import ccall "crypton_aes.h crypton_aes_encrypt_ctr"
     c_aes_encrypt_ctr

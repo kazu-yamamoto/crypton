@@ -188,11 +188,3 @@ spec = do
     testBlockCipher128 kats256 (undefined :: AES.AES256)
     aeadIVLengthTests
     aeadTagLengthTests
-
-{-
-  , prop "genCtr" $ \(key, iv1) ->
-      let (bs1, iv2)    = AES.genCounter key iv1 32
-          (bs2, iv3)    = AES.genCounter key iv2 32
-          (bsAll, iv3') = AES.genCounter key iv1 64
-       in (B.concat [bs1,bs2] == bsAll && iv3 == iv3')
--}

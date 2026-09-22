@@ -457,33 +457,6 @@ void crypton_aes_decrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes
 	d(output, key, iv, input, nb_blocks);
 }
 
-void crypton_aes_gen_ctr(aes_block *output, aes_key *key, const aes_block *iv, uint32_t nb_blocks)
-{
-	aes_block block;
-
-	/* preload IV in block */
-	block128_copy(&block, iv);
-
-	for ( ; nb_blocks-- > 0; output++, block128_inc_be(&block)) {
-		crypton_aes_encrypt_block(output, key, &block);
-	}
-}
-
-void crypton_aes_gen_ctr_cont(aes_block *output, aes_key *key, aes_block *iv, uint32_t nb_blocks)
-{
-	aes_block block;
-
-	/* preload IV in block */
-	block128_copy(&block, iv);
-
-	for ( ; nb_blocks-- > 0; output++, block128_inc_be(&block)) {
-		crypton_aes_encrypt_block(output, key, &block);
-	}
-
-	/* copy back the IV */
-	block128_copy(iv, &block);
-}
-
 void crypton_aes_encrypt_ctr(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len)
 {
 	ctr_f e = GET_CTR_ENCRYPT(key->strength);
