@@ -2,6 +2,53 @@
 
 ## 2.0.0
 
+* perf(p256): inline the field arithmetic on AArch64.  `felem_mul` and
+  `felem_square` end in `felem_reduce_degree`, a carry chain the whole width
+  of the number, and that chain is what their latency is: one product feeding
+  the next costs 18.1 ns on an Apple M4, while four independent ones cost 11.4
+  ns each.  The curve arithmetic has independent products to offer -- the two
+  squarings that open a point doubling, the multiplication and the squaring
+  that close it -- but only if the compiler inlines the reduction instead of
+  calling it, since a call is a fence.  Plain `inline` does not change its
+  mind; `always_inline` does, and it is worth asking where there are registers
+  to hold two carry chains at once and not where there are not: 1.23x on an
+  M4, 1.12x and 1.05x on a Neoverse under clang and gcc, and 0.95x and 0.82x
+  on x86-64, whose fifteen general-purpose registers are not enough.  So it is
+  gated on the architecture and x86-64 is left byte-identical.  ECDH P-256 on
+  an M4: 69.16 to 56.24 us, against openssl's 24.68, so 0.36 becomes 0.44;
+  ECDSA P-256 signing and verification move with it.  The cost is code, 30 to
+  116 kilobytes of it
+  [#188](https://github.com/kazu-yamamoto/crypton/pull/188)
+* perf(number): count bytes from the bit count, not from base 256.  `numBytes`
+  asked GMP how many base-256 digits a number has, and GHC's bignum answers
+  that by dividing the number down to nothing, one digit at a time, where the
+  same question in base two is a look at the highest limb.  On a 2048-bit
+  `Integer` that is 1.65 us against 0.01.  Every serialization here asks for
+  the size before it allocates and `i2ospOf` asks twice, so the cost landed on
+  every RSA, DSA and DH operation leaving the `Integer` world: `i2ospOf_` at
+  256 bytes goes from 2.87 to 0.09 us and RSA-2048 verification from 18.4 to
+  15.5 us on an M4.  Signing moves by a percent; it is two exponentiations and
+  hardly touches this
+  [#187](https://github.com/kazu-yamamoto/crypton/pull/187)
+* perf(ecc): stop sharing the doublings in the double multiplication.
+  `pointAddTwoMuls` was Shamir's trick, one pass over the bits of both scalars
+  at once in `Integer` arithmetic, which is the right trade when the two
+  multiplications would cost the same.  They have not for a while: `pointMul`
+  goes to C, and over a prime field it multiplies the base point through a
+  table of its multiples at about a third of the price -- and the base point
+  is one of the two, since ECDSA verification is the only caller.  Doing them
+  separately and adding: ECDSA P-384 verification 1397 to 698 us on an M4 in
+  the typed API, 9839 to 738 in the older one, and a curve over a binary field
+  641 ms to 2.6.  P-256 keeps the double multiplication it has in C
+  [#186](https://github.com/kazu-yamamoto/crypton/pull/186)
+* perf(sha3): take the CRYPTOGAMS Keccak for x86-64 as well.  The same module
+  as [#181](https://github.com/kazu-yamamoto/crypton/pull/181) on the other
+  architecture, and the reason it was not taken at the time was a measurement
+  taken on the wrong machine: crypton on Apple silicon against openssl on
+  x86-64, which said there was nothing to gain.  Measured on one machine there
+  was: SHA3-256 on an EPYC 7763 goes from 109 to 421 MB/s, against openssl's
+  426, so 0.26 becomes 0.99
+  [#184](https://github.com/kazu-yamamoto/crypton/pull/184)
 * perf(sha1): take the CRYPTOGAMS SHA-1 for AArch64.  The instructions are the
   ones [#170](https://github.com/kazu-yamamoto/crypton/pull/170) put in, and
   the arrangement is what the module has over them: the message schedule of
