@@ -74,30 +74,30 @@ Throughput in MB/s, **higher is better**:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | 2.0.0 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 126 | 8690 | 10682 | 0.81 |
-| AES-256-GCM | 97 | 7575 | 9120 | 0.83 |
-| ChaCha20-Poly1305 | 757 | 2282 | 2241 | 1.02 |
-| SHA-1 | 1199 | 3386 | 3350 | 1.01 |
-| SHA-256 | 466 | 3381 | 3304 | 1.02 |
-| SHA-512 | 724 | 1873 | 1806 | 1.04 |
-| SHA3-256 | 548 | 1074 | 1050 | 1.02 |
+| AES-128-GCM | 126 | 8702 | 10719 | 0.81 |
+| AES-256-GCM | 98 | 7648 | 9154 | 0.84 |
+| ChaCha20-Poly1305 | 758 | 2323 | 2244 | 1.04 |
+| SHA-1 | 1199 | 3380 | 3346 | 1.01 |
+| SHA-256 | 467 | 3394 | 3352 | 1.01 |
+| SHA-512 | 723 | 1868 | 1851 | 1.01 |
+| SHA3-256 | 548 | 1091 | 1054 | 1.04 |
 
 Time per operation in microseconds, **lower is better**; the last column again
 divides OpenSSL's time by crypton's:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | OpenSSL / 2.0.0 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 18.35 | 18.34 | 18.37 | 1.00 |
-| ECDH P-256 | 69.20 | 69.16 | 24.68 | 0.36 |
-| ECDH P-384 | 3324 | 508.4 | 373.5 | 0.73 |
-| Ed25519 sign | 13.64 | 13.09 | 15.83 | 1.21 |
-| Ed25519 verify | 18.12 | 17.98 | 39.31 | 2.19 |
-| ECDSA P-256 sign | 32.41 | 32.30 | 11.03 | 0.34 |
-| ECDSA P-256 verify | 96.23 | 95.98 | 32.77 | 0.34 |
-| ECDSA P-384 sign | 3257 | 169.5 | 395.9 | 2.34 |
-| ECDSA P-384 verify | 3876 | 683.8 | 332.9 | 0.49 |
-| RSA-2048 sign/decrypt | 450.6 | 601.9 | 323.8 | 0.54 |
-| RSA-2048 verify/encrypt | 18.21 | 15.21 | 8.49 | 0.56 |
+| X25519 | 18.44 | 18.41 | 18.41 | 1.00 |
+| ECDH P-256 | 69.46 | 56.24 | 24.68 | 0.44 |
+| ECDH P-384 | 3252 | 511.1 | 379.7 | 0.74 |
+| Ed25519 sign | 13.75 | 13.14 | 15.90 | 1.21 |
+| Ed25519 verify | 18.17 | 18.04 | 39.27 | 2.18 |
+| ECDSA P-256 sign | 32.56 | 27.91 | 11.05 | 0.40 |
+| ECDSA P-256 verify | 96.50 | 80.19 | 32.82 | 0.41 |
+| ECDSA P-384 sign | 3219 | 169.3 | 403.4 | 2.38 |
+| ECDSA P-384 verify | 3807 | 688.1 | 335.1 | 0.49 |
+| RSA-2048 sign/decrypt | 451.8 | 605.4 | 325.0 | 0.54 |
+| RSA-2048 verify/encrypt | 18.32 | 15.28 | 8.50 | 0.56 |
 
 ### What the numbers say
 
@@ -105,17 +105,28 @@ divides OpenSSL's time by crypton's:
 sixty-nine times what it was.  On x86-64 it had AES-NI and nothing else.  The
 curves over a prime field other than P-256 moved from Haskell `Integer`
 arithmetic into C, which is the nineteenfold change in ECDSA P-384 signing on
-the M4.  X25519, P-256 and Ed25519 are unchanged between the two releases, and
-the rows say so: where they differ by half a percent, that is the measurement
-and not the code.
+the M4.  X25519 and Ed25519 are unchanged between the two releases, and the
+rows say so: where they differ by half a percent, that is the measurement and
+not the code.  P-256 is unchanged on x86-64 and a fifth faster on AArch64,
+which is the paragraph below.
 
 Where crypton is behind, it is behind for three separate reasons.
 
 *P-256.*  crypton's field arithmetic is C where OpenSSL's is hand-written
-assembly, and that is the whole of the difference: the two differ by about the
-same factor on every P-256 row, and nothing above the field -- a wider window,
-a different addition formula, another field representation -- recovers a useful
-part of it.
+assembly, and that is what is left of the difference: the two differ by about
+the same factor on every P-256 row, and nothing above the field -- a wider
+window, a different addition formula, another field representation -- recovers
+a useful part of it.
+
+The AArch64 rows are better than the x86-64 ones because of where a field
+multiplication's latency goes.  It ends in a carry chain the width of the
+number, and the curve arithmetic has independent products that could cover
+that chain -- but only if the compiler inlines the reduction instead of
+calling it, since a call is a fence.  Asking it to costs code and pays where
+there are registers enough to hold two chains at once: a quarter on AArch64,
+where there are thirty-one, and nothing on x86-64, where there are fifteen and
+the same request makes it slower.  So x86-64 is left to the compiler's own
+judgement and stays at 0.3.
 
 *RSA signing.*  2.0.0 is slower than 1.1.5 here on purpose.  Its modular
 exponentiation no longer indexes a table with the bits of the exponent, and
