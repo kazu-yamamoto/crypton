@@ -400,7 +400,7 @@ boundTests =
                 evaluate (B.length (HKDF.expand prk info (maxLen + 1) :: ByteString))
                     `shouldThrow` (== CryptoError_OutputLengthTooBig)
             it "reports one byte past the maximum without raising" $
-                (HKDF.expand' prk info (maxLen + 1) :: CryptoFailable ByteString)
+                (HKDF.tryExpand prk info (maxLen + 1) :: CryptoFailable ByteString)
                     `shouldBe` CryptoFailed CryptoError_OutputLengthTooBig
       where
         maxLen = 255 * hashLen

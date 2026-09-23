@@ -16,7 +16,7 @@ module Crypto.KDF.HKDF (
     extract,
     extractSkip,
     expand,
-    expand',
+    tryExpand,
     toPRK,
 ) where
 
@@ -65,7 +65,7 @@ extractSkip ikm = PRK_NoExpand $ B.convert ikm
 -- | Expand key material of specific length out of the parameters
 --
 -- Requests exceeding the RFC 5869 limit of @255 * HashLen@ raise
--- 'CryptoError_OutputLengthTooBig'; 'expand'' reports the same condition as
+-- 'CryptoError_OutputLengthTooBig'; 'tryExpand' reports the same condition as
 -- 'CryptoFailed'.
 expand
     :: forall a info out
@@ -79,11 +79,11 @@ expand
     -> out
     -- ^ Output data
 expand prkAt infoAt outputLength =
-    throwCryptoError (expand' prkAt infoAt outputLength)
+    throwCryptoError (tryExpand prkAt infoAt outputLength)
 
 -- | Expand key material of specific length out of the parameters, reporting a
 -- length the RFC refuses rather than raising.
-expand'
+tryExpand
     :: forall a info out
      . (HashAlgorithm a, ByteArrayAccess info, ByteArray out)
     => PRK a
@@ -94,7 +94,7 @@ expand'
     -- ^ Output length in bytes
     -> CryptoFailable out
     -- ^ Output data
-expand' prkAt infoAt outputLength
+tryExpand prkAt infoAt outputLength
     | outputLength > 255 * hashDigestSize (undefined :: a) =
         CryptoFailed CryptoError_OutputLengthTooBig
     | otherwise =

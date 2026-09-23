@@ -14,7 +14,7 @@
 module Crypto.KDF.Scrypt (
     Parameters (..),
     generate,
-    generate',
+    tryGenerate,
 ) where
 
 import Control.Monad (forM_)
@@ -47,7 +47,7 @@ foreign import ccall "crypton_scrypt_smix"
 
 -- | Generate the scrypt key derivation data
 --
--- Parameters the implementation refuses raise a 'CryptoError'; 'generate''
+-- Parameters the implementation refuses raise a 'CryptoError'; 'tryGenerate'
 -- reports the same condition as 'CryptoFailed'.
 generate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
@@ -55,19 +55,19 @@ generate
     -> password
     -> salt
     -> output
-generate params password salt = throwCryptoError (generate' params password salt)
+generate params password salt = throwCryptoError (tryGenerate params password salt)
 
 -- | Generate the scrypt key derivation data, reporting parameters the
 -- implementation refuses rather than raising.
 --
 -- @n@ has to be a power of two, and @r@ times @p@ has to stay below 2^30.
-generate'
+tryGenerate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
     => Parameters
     -> password
     -> salt
     -> CryptoFailable output
-generate' params password salt
+tryGenerate params password salt
     | r params * p params >= 0x40000000 = CryptoFailed CryptoError_ParameterInvalid
     | popCount (n params) /= 1 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
@@ -92,4 +92,4 @@ generate' params password salt
   where
     prf = PBKDF2.prfHMAC SHA256
     intLen = p params * 128 * r params
-{-# NOINLINE generate' #-}
+{-# NOINLINE tryGenerate #-}

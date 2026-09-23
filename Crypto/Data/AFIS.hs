@@ -15,9 +15,9 @@
 -- destroy a key stored on disk.
 module Crypto.Data.AFIS (
     split,
-    split',
+    trySplit,
     merge,
-    merge',
+    tryMerge,
 ) where
 
 import Control.Monad (foldM, forM_)
@@ -55,7 +55,7 @@ import Data.Memory.PtrMethods (memCopy, memSet)
 --
 -- The data has to be at least one byte long and the number of times to diffuse
 -- it at least two; anything else raises 'CryptoError_ParameterInvalid', which
--- 'split'' reports as 'CryptoFailed' instead.
+-- 'trySplit' reports as 'CryptoFailed' instead.
 split
     :: (ByteArray ba, HashAlgorithm hash, DRG rng)
     => hash
@@ -69,13 +69,13 @@ split
     -> (ba, rng)
     -- ^ The diffused data
 split hashAlg rng expandTimes src =
-    throwCryptoError (split' hashAlg rng expandTimes src)
+    throwCryptoError (trySplit hashAlg rng expandTimes src)
 
 -- | Split data to diffused data, reporting parameters the splitter cannot work
 -- with rather than raising.
 --
 -- See 'split'.
-split'
+trySplit
     :: (ByteArray ba, HashAlgorithm hash, DRG rng)
     => hash
     -- ^ Hash algorithm to use as diffuser
@@ -87,8 +87,8 @@ split'
     -- ^ original data to diffuse.
     -> CryptoFailable (ba, rng)
     -- ^ The diffused data
-{-# NOINLINE split' #-}
-split' hashAlg rng expandTimes src
+{-# NOINLINE trySplit #-}
+trySplit hashAlg rng expandTimes src
     | expandTimes < 2 = CryptoFailed CryptoError_ParameterInvalid
     -- an empty secret splits into nothing at all, which merge cannot undo
     | blockSize == 0 = CryptoFailed CryptoError_ParameterInvalid
@@ -119,7 +119,7 @@ split' hashAlg rng expandTimes src
 -- The diffused data has to be a non-empty multiple of the number of times it
 -- was diffused, and that number at least two -- the same values 'split'
 -- accepts.  Anything else raises 'CryptoError_ParameterInvalid', which
--- 'merge'' reports as 'CryptoFailed' instead.
+-- 'tryMerge' reports as 'CryptoFailed' instead.
 merge
     :: (ByteArray ba, HashAlgorithm hash)
     => hash
@@ -131,13 +131,13 @@ merge
     -> ba
     -- ^ Original data
 merge hashAlg expandTimes bs =
-    throwCryptoError (merge' hashAlg expandTimes bs)
+    throwCryptoError (tryMerge hashAlg expandTimes bs)
 
 -- | Merge previously diffused data back to the original data, reporting
 -- parameters the merger cannot work with rather than raising.
 --
 -- See 'merge'.
-merge'
+tryMerge
     :: (ByteArray ba, HashAlgorithm hash)
     => hash
     -- ^ Hash algorithm used as diffuser
@@ -147,8 +147,8 @@ merge'
     -- ^ Diffused data
     -> CryptoFailable ba
     -- ^ Original data
-{-# NOINLINE merge' #-}
-merge' hashAlg expandTimes bs
+{-# NOINLINE tryMerge #-}
+tryMerge hashAlg expandTimes bs
     -- guards the quotRem below, which for zero would divide by zero; a count
     -- of one would return the diffused data itself as the secret
     | expandTimes < 2 = CryptoFailed CryptoError_ParameterInvalid

@@ -14,7 +14,7 @@ module Crypto.PubKey.ECC.DH (
     generatePrivate,
     calculatePublic,
     getShared,
-    getShared',
+    tryGetShared,
 ) where
 
 import Crypto.Error (
@@ -54,10 +54,10 @@ calculatePublic curve d = q
 -- | Generating a shared key using our private number and
 --   the other party public point.
 --
--- This raises the 'Crypto.Error.CryptoError' that 'getShared'' reports.  Use
--- 'getShared'' where the failure has to be handled.
+-- This raises the 'Crypto.Error.CryptoError' that 'tryGetShared' reports.  Use
+-- 'tryGetShared' where the failure has to be handled.
 getShared :: Curve -> PrivateNumber -> PublicPoint -> SharedKey
-getShared curve db qa = throwCryptoError $ getShared' curve db qa
+getShared curve db qa = throwCryptoError $ tryGetShared curve db qa
 
 -- | Generating a shared key using our private number and the other party
 --   public point, reporting a rejected point instead of raising.
@@ -75,8 +75,8 @@ getShared curve db qa = throwCryptoError $ getShared' curve db qa
 --
 -- An exchange that yields the point at infinity, and so has no x coordinate to
 -- derive the key from, is reported as 'CryptoError_ScalarMultiplicationInvalid'.
-getShared' :: Curve -> PrivateNumber -> PublicPoint -> CryptoFailable SharedKey
-getShared' curve db qa
+tryGetShared :: Curve -> PrivateNumber -> PublicPoint -> CryptoFailable SharedKey
+tryGetShared curve db qa
     | not (isPointValid curve qa) = CryptoFailed CryptoError_PointCoordinatesInvalid
     | otherwise = case pointMul curve db qa of
         Point x _ -> CryptoPassed $ SharedKey $ i2ospOf_ ((nbBits + 7) `div` 8) x

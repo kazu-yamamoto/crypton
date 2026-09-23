@@ -59,40 +59,40 @@ invalidParameterTests :: Spec
 invalidParameterTests =
     describe "invalid parameters" $ do
         it "merge refuses an expand count of zero" $
-            evaluate (merge' 0 diffused) `shouldThrow` refused
+            evaluate (tryMerge 0 diffused) `shouldThrow` refused
         it "merge refuses a negative expand count" $
-            evaluate (merge' (-1) diffused) `shouldThrow` refused
+            evaluate (tryMerge (-1) diffused) `shouldThrow` refused
         it "merge refuses an expand count of one" $
-            evaluate (merge' 1 diffused) `shouldThrow` refused
+            evaluate (tryMerge 1 diffused) `shouldThrow` refused
         it "merge refuses data that is not a multiple of the expand count" $
-            evaluate (merge' 3 diffused) `shouldThrow` refused
+            evaluate (tryMerge 3 diffused) `shouldThrow` refused
         it "merge refuses empty data" $
-            evaluate (merge' 4 B.empty) `shouldThrow` refused
+            evaluate (tryMerge 4 B.empty) `shouldThrow` refused
         it "split refuses an expand count below two" $ do
-            evaluate (split' 0 secret) `shouldThrow` refused
-            evaluate (split' 1 secret) `shouldThrow` refused
-            evaluate (split' (-1) secret) `shouldThrow` refused
+            evaluate (trySplit 0 secret) `shouldThrow` refused
+            evaluate (trySplit 1 secret) `shouldThrow` refused
+            evaluate (trySplit (-1) secret) `shouldThrow` refused
         it "split refuses an empty secret" $
-            evaluate (split' 4 B.empty) `shouldThrow` refused
+            evaluate (trySplit 4 B.empty) `shouldThrow` refused
         it "the recoverable variants report instead of raising" $ do
-            AFIS.merge' SHA1 0 diffused `shouldBe` failed
-            AFIS.merge' SHA1 1 diffused `shouldBe` failed
-            AFIS.merge' SHA1 3 diffused `shouldBe` failed
-            AFIS.merge' SHA1 4 B.empty `shouldBe` failed
-            fmap fst (AFIS.split' SHA1 rng 1 secret) `shouldBe` failed
-            fmap fst (AFIS.split' SHA1 rng 4 B.empty) `shouldBe` failed
+            AFIS.tryMerge SHA1 0 diffused `shouldBe` failed
+            AFIS.tryMerge SHA1 1 diffused `shouldBe` failed
+            AFIS.tryMerge SHA1 3 diffused `shouldBe` failed
+            AFIS.tryMerge SHA1 4 B.empty `shouldBe` failed
+            fmap fst (AFIS.trySplit SHA1 rng 1 secret) `shouldBe` failed
+            fmap fst (AFIS.trySplit SHA1 rng 4 B.empty) `shouldBe` failed
         it "the recoverable variants still split and merge" $ do
-            let d = fmap fst (AFIS.split' SHA1 rng 4 secret)
+            let d = fmap fst (AFIS.trySplit SHA1 rng 4 secret)
             d `shouldBe` CryptoPassed diffused
-            (d >>= AFIS.merge' SHA1 4) `shouldBe` CryptoPassed secret
+            (d >>= AFIS.tryMerge SHA1 4) `shouldBe` CryptoPassed secret
         it "a good split still merges back" $
             AFIS.merge SHA1 4 diffused `shouldBe` secret
   where
     rng = drgNewTest (1, 2, 3, 4, 5)
     secret = "0123456789abcdef0123" :: B.ByteString
     diffused = fst (AFIS.split SHA1 rng 4 secret) :: B.ByteString
-    merge' e d = AFIS.merge SHA1 e d :: B.ByteString
-    split' e d = fst (AFIS.split SHA1 rng e d) :: B.ByteString
+    tryMerge e d = AFIS.merge SHA1 e d :: B.ByteString
+    trySplit e d = fst (AFIS.split SHA1 rng e d) :: B.ByteString
     failed = CryptoFailed CryptoError_ParameterInvalid :: CryptoFailable B.ByteString
     refused e = e == CryptoError_ParameterInvalid
 

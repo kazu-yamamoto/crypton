@@ -821,9 +821,9 @@
   is now 2.0
   [#95](https://github.com/kazu-yamamoto/crypton/pull/95)
 
-* feat(aead): add `aeadSimpleDecrypt'`, which takes the tag length as its own argument instead of reading it off the supplied tag
+* feat(aead): add `tryAeadSimpleDecrypt`, which takes the tag length as its own argument instead of reading it off the supplied tag
   [#94](https://github.com/kazu-yamamoto/crypton/pull/94)
-* Breaking change: feat(dh): add `getShared'` to `Crypto.PubKey.DH` and `Crypto.PubKey.ECC.DH`, reporting a rejected peer value as `CryptoFailable`; `getShared` is now defined in terms of it and so raises a `CryptoError` rather than an `ErrorCall`
+* Breaking change: feat(dh): add `tryGetShared` to `Crypto.PubKey.DH` and `Crypto.PubKey.ECC.DH`, reporting a rejected peer value as `CryptoFailable`; `getShared` is now defined in terms of it and so raises a `CryptoError` rather than an `ErrorCall`
   [#93](https://github.com/kazu-yamamoto/crypton/pull/93)
 * fix(otp): compare TOTP candidates without an early exit
   [#92](https://github.com/kazu-yamamoto/crypton/pull/92)
@@ -854,17 +854,27 @@
 
 ### API changes
 
-* New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.getShared'`,
-  `Crypto.PubKey.ECC.DH.getShared'`, `Crypto.Cipher.Types.AEAD.aeadSimpleDecrypt'`,
+* New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.tryGetShared`,
+  `Crypto.PubKey.ECC.DH.tryGetShared`, `Crypto.Cipher.Types.AEAD.tryAeadSimpleDecrypt`,
   `Crypto.Number.ModArithmetic.inverseSafe`, `Crypto.PubKey.ECC.Prim.scalarInverse`,
   `scalarAdd` and `scalarMul`, `Crypto.PubKey.ECC.P256.scalarReduce`,
   and the whole of `Crypto.PubKey.ElGamal`, which was present but not exposed.
+  The variant of an entry point that reports a refusal rather than raising is
+  named `try` followed by the name it varies, `tryExpand` beside `expand`.  A
+  trailing apostrophe was the obvious spelling and is what these were called
+  until shortly before release; it collides too easily, since a caller that
+  imports one of these modules unqualified and has its own `expand'` or
+  `split'` no longer compiles, and `tls` did.  `Safe` was considered and set
+  aside: this library already uses that suffix for something else, in
+  `Crypto.Number.ModArithmetic.expSafe` and `inverseSafe` and in
+  `Crypto.PubKey.ECC.P256.scalarInvSafe`, where it means the value being
+  worked on stays out of the timing.
   The KDFs gained a variant of each entry point that can refuse its parameters,
-  returning `CryptoFailable` instead of raising: `Crypto.KDF.Scrypt.generate'`,
-  `Crypto.KDF.BCrypt.bcrypt'`, `Crypto.KDF.BCryptPBKDF.generate'` and
-  `hashInternal'`, `Crypto.KDF.HKDF.expand'`, `Crypto.KDF.PBKDF2.generate'` and
-  `fastPBKDF2_SHA1'`, `fastPBKDF2_SHA256'` and `fastPBKDF2_SHA512'`, and
-  `Crypto.Data.AFIS.split'` and `merge'`.  These are additions and break nothing.
+  returning `CryptoFailable` instead of raising: `Crypto.KDF.Scrypt.tryGenerate`,
+  `Crypto.KDF.BCrypt.tryBcrypt`, `Crypto.KDF.BCryptPBKDF.tryGenerate` and
+  `tryHashInternal`, `Crypto.KDF.HKDF.tryExpand`, `Crypto.KDF.PBKDF2.tryGenerate` and
+  `tryFastPBKDF2_SHA1`, `tryFastPBKDF2_SHA256` and `tryFastPBKDF2_SHA512`, and
+  `Crypto.Data.AFIS.trySplit` and `tryMerge`.  These are additions and break nothing.
 * Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
   appended, so the `Enum` values of the existing constructors are unchanged, but an
   exhaustive `case` without a wildcard will warn.  Adding a constructor to an exported
@@ -872,7 +882,7 @@
   1.2.0; this release goes to 2.0.0.  Everything else below changes behaviour rather
   than types.
 * Breaking change: `getShared` in both DH modules raises a `CryptoError` where it
-  previously raised an `ErrorCall`, since it is now defined in terms of `getShared'`.
+  previously raised an `ErrorCall`, since it is now defined in terms of `tryGetShared`.
   The same is now true of `Crypto.KDF.Scrypt.generate`, `Crypto.KDF.BCrypt.bcrypt`,
   `Crypto.KDF.BCryptPBKDF.generate` and `hashInternal`, and `Crypto.Data.AFIS.split`
   and `merge`, each of which is defined in terms of the variant above.
