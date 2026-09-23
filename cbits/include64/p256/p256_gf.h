@@ -63,6 +63,38 @@ typedef u64 limb;
 #define NLIMBS 5
 typedef limb felem[NLIMBS];
 
+/* On AArch64, the three functions that do the field arithmetic are asked to
+ * be inlined rather than left for the compiler to decide.
+ *
+ * felem_mul and felem_square end in felem_reduce_degree, a carry chain the
+ * whole width of the number, and that chain is what their latency is: one
+ * product feeding the next costs 18.1 ns on an Apple M4, while four
+ * independent ones cost 11.4 ns each.  The curve arithmetic has independent
+ * products to offer -- the two squarings that open a point doubling, the
+ * multiplication and the squaring that close it -- but only if the compiler
+ * can see one reduction while the other is still going.  Left alone it emits
+ * felem_reduce_degree once and calls it, and a call is a fence: the two
+ * chains cannot overlap.  Plain `inline` does not change its mind.
+ *
+ * Asking costs code: this file's object goes from 30 to 116 kilobytes.  That
+ * is worth it where there are registers to hold two chains at once and not
+ * where there are not, which is the architecture talking rather than the
+ * compiler.  Measured on a variable-point scalar multiplication:
+ *
+ *   Apple M4, Apple clang 21      1.23x
+ *   Neoverse, clang 18            1.12x
+ *   Neoverse, gcc 13              1.05x
+ *   EPYC 7763, clang 18           0.95x
+ *   Xeon 8370C, gcc 13            0.82x
+ *
+ * so x86-64 keeps the compiler's own judgement.
+ */
+#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+#define FELEM_INLINE static inline __attribute__((always_inline))
+#else
+#define FELEM_INLINE static
+#endif
+
 static const limb kBottom51Bits = 0x7ffffffffffff;
 static const limb kBottom52Bits = 0xfffffffffffff;
 
@@ -278,7 +310,7 @@ static void felem_diff(felem out, const felem in, const felem in2) {
  *
  * On entry: tmp[i] < 2**128
  * On exit: out[0,2,...] < 2**52, out[1,3,...] < 2**53 */
-static void felem_reduce_degree(felem out, u128 tmp[9]) {
+FELEM_INLINE void felem_reduce_degree(felem out, u128 tmp[9]) {
    /* The following table may be helpful when reading this code:
     *
     * Limb number:   0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
@@ -468,7 +500,7 @@ static void felem_reduce_degree(felem out, u128 tmp[9]) {
  *
  * On entry: in[0,2,...] < 2**52, in[1,3,...] < 2**53.
  * On exit: out[0,2,...] < 2**52, out[1,3,...] < 2**53. */
-static void felem_square(felem out, const felem in) {
+FELEM_INLINE void felem_square(felem out, const felem in) {
   u128 tmp[9], x1x1, x3x3;
 
   x1x1 = ((u128) in[1]) * in[1];
@@ -496,7 +528,7 @@ static void felem_square(felem out, const felem in) {
  * On entry: in[0,2,...] < 2**52, in[1,3,...] < 2**53 and
  *           in2[0,2,...] < 2**52, in2[1,3,...] < 2**53.
  * On exit: out[0,2,...] < 2**52, out[1,3,...] < 2**53. */
-static void felem_mul(felem out, const felem in, const felem in2) {
+FELEM_INLINE void felem_mul(felem out, const felem in, const felem in2) {
   u128 tmp[9], x1y1, x1y3, x3y1, x3y3;
 
   x1y1 = ((u128) in[1]) * in2[1];
