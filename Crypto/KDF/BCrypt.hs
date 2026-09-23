@@ -57,7 +57,7 @@ module Crypto.KDF.BCrypt (
     validatePassword,
     validatePasswordEither,
     bcrypt,
-    bcrypt',
+    tryBcrypt,
 )
 where
 
@@ -102,7 +102,7 @@ hashPassword cost password = do
 -- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
 --
 -- A salt that is not 16 bytes long raises 'CryptoError_ParameterInvalid';
--- 'bcrypt'' reports the same condition as 'CryptoFailed'.
+-- 'tryBcrypt' reports the same condition as 'CryptoFailed'.
 bcrypt
     :: (ByteArray salt, ByteArray password, ByteArray output)
     => Int
@@ -115,13 +115,13 @@ bcrypt
     -- Only the first 72 bytes are used; see the module documentation.
     -> output
     -- ^ The bcrypt hash in standard format.
-bcrypt cost salt password = throwCryptoError (bcrypt' cost salt password)
+bcrypt cost salt password = throwCryptoError (tryBcrypt cost salt password)
 
 -- | Create a bcrypt hash for a password with a provided cost value and salt,
 -- reporting a salt the implementation refuses rather than raising.
 --
 -- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
-bcrypt'
+tryBcrypt
     :: (ByteArray salt, ByteArray password, ByteArray output)
     => Int
     -- ^ The cost parameter. Should be between 4 and 31 (inclusive).
@@ -133,7 +133,7 @@ bcrypt'
     -- Only the first 72 bytes are used; see the module documentation.
     -> CryptoFailable output
     -- ^ The bcrypt hash in standard format.
-bcrypt' cost salt password
+tryBcrypt cost salt password
     | B.length salt /= 16 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise =
         CryptoPassed $

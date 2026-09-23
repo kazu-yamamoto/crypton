@@ -11,9 +11,9 @@ import Crypto.Error
 import Crypto.KDF.BCryptPBKDF (
     Parameters (..),
     generate,
-    generate',
+    tryGenerate,
     hashInternal,
-    hashInternal',
+    tryHashInternal,
  )
 
 spec :: Spec
@@ -39,7 +39,7 @@ spec = do
             evaluate
                 (hashInternal (B.replicate 63 0x61) (B.replicate 64 0x61) :: B.ByteString)
                 `shouldThrow` cryptoError
-            ( hashInternal' (B.replicate 64 0x61) (B.replicate 63 0x61)
+            ( tryHashInternal (B.replicate 64 0x61) (B.replicate 63 0x61)
                     :: CryptoFailable B.ByteString
                 )
                 `shouldBe` refused
@@ -48,7 +48,7 @@ spec = do
         generate params ("password" :: B.ByteString) ("salt" :: B.ByteString)
             :: B.ByteString
     run' params =
-        generate' params ("password" :: B.ByteString) ("salt" :: B.ByteString)
+        tryGenerate params ("password" :: B.ByteString) ("salt" :: B.ByteString)
             :: CryptoFailable B.ByteString
     refused = CryptoFailed CryptoError_ParameterInvalid
     cryptoError e = e == CryptoError_ParameterInvalid

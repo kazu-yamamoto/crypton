@@ -159,17 +159,17 @@ aeadTagLengthTests =
         -- taken from the tag is the peer's choice of how much to verify
         it "4-byte tag accepted, since the tag sets the length" $
             openWith (B.take 4 fullTag) `shouldBe` Just message
-        it "aeadSimpleDecrypt' verifies the full tag" $
+        it "tryAeadSimpleDecrypt verifies the full tag" $
             openWith' 16 fullTag `shouldBe` Just message
-        it "aeadSimpleDecrypt' refuses a truncated tag" $
+        it "tryAeadSimpleDecrypt refuses a truncated tag" $
             openWith' 16 (B.take 4 fullTag) `shouldBe` Nothing
-        it "aeadSimpleDecrypt' refuses an overlong tag" $
+        it "tryAeadSimpleDecrypt refuses an overlong tag" $
             openWith' 16 (fullTag `B.append` B.singleton 0) `shouldBe` Nothing
-        it "aeadSimpleDecrypt' refuses a length below the minimum" $
+        it "tryAeadSimpleDecrypt refuses a length below the minimum" $
             openWith' 3 (B.take 3 fullTag) `shouldBe` Nothing
-        it "aeadSimpleDecrypt' verifies a short tag the caller asked for" $
+        it "tryAeadSimpleDecrypt verifies a short tag the caller asked for" $
             openWith' 8 (B.take 8 fullTag) `shouldBe` Just message
-        it "aeadSimpleDecrypt' refuses a wrong tag" $
+        it "tryAeadSimpleDecrypt refuses a wrong tag" $
             openWith' 16 (B.map (+ 1) fullTag) `shouldBe` Nothing
   where
     key = B.replicate 16 0
@@ -181,7 +181,7 @@ aeadTagLengthTests =
     (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead aad message 16
     fullTag = BA.convert tag :: ByteString
     openWith t = aeadSimpleDecrypt aead aad ciphertext (AuthTag (BA.convert t))
-    openWith' n t = aeadSimpleDecrypt' aead aad ciphertext n (AuthTag (BA.convert t))
+    openWith' n t = tryAeadSimpleDecrypt aead aad ciphertext n (AuthTag (BA.convert t))
 
 -- The bulk loops -- eight blocks at a time under AES-NI, six at a time in
 -- the assembly -- only start once the message is long enough to fill them,

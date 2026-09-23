@@ -18,8 +18,8 @@ import Imports
 force :: DH.SharedKey -> IO Int
 force sk = evaluate (B.length (convert sk :: ByteString))
 
--- | getShared raises whatever getShared' reports, so any CryptoError means the
--- exchange was refused; the exact one is asserted on getShared' below.
+-- | getShared raises whatever tryGetShared reports, so any CryptoError means the
+-- exchange was refused; the exact one is asserted on tryGetShared below.
 anyCryptoError :: Selector CryptoError
 anyCryptoError = const True
 
@@ -47,17 +47,17 @@ ecdhTests =
             ECDH.getShared p256 da (Point (-1) 1)
         rejected "the point at infinity is refused" $
             ECDH.getShared p256 da PointO
-        it "getShared' agrees with getShared on a valid exchange" $ do
+        it "tryGetShared agrees with getShared on a valid exchange" $ do
             let qb = ECDH.calculatePublic p256 db
-            ECDH.getShared' p256 da qb `shouldBe` CryptoPassed (ECDH.getShared p256 da qb)
-        it "getShared' reports a point not on the curve" $
-            ECDH.getShared' p256 da (Point 1 1)
+            ECDH.tryGetShared p256 da qb `shouldBe` CryptoPassed (ECDH.getShared p256 da qb)
+        it "tryGetShared reports a point not on the curve" $
+            ECDH.tryGetShared p256 da (Point 1 1)
                 `shouldBe` CryptoFailed CryptoError_PointCoordinatesInvalid
-        it "getShared' reports a negative coordinate" $
-            ECDH.getShared' p256 da (Point (-1) 1)
+        it "tryGetShared reports a negative coordinate" $
+            ECDH.tryGetShared p256 da (Point (-1) 1)
                 `shouldBe` CryptoFailed CryptoError_PointCoordinatesInvalid
-        it "getShared' reports the point at infinity" $
-            ECDH.getShared' p256 da PointO
+        it "tryGetShared reports the point at infinity" $
+            ECDH.tryGetShared p256 da PointO
                 `shouldBe` CryptoFailed CryptoError_ScalarMultiplicationInvalid
   where
     da = 0x2eb7ef8e5dcbd0f0fbf70b5d4d43ea0b5f0dbcb45a3e3d8b3f1eaf7a35b1fb31
@@ -84,13 +84,13 @@ ffdhTests =
             DH.getShared params xa (DH.PublicNumber (p - 1))
         rejected "y = p is refused" $ DH.getShared params xa (DH.PublicNumber p)
         rejected "y > p is refused" $ DH.getShared params xa (DH.PublicNumber (p + 1))
-        it "getShared' agrees with getShared on a valid exchange" $ do
+        it "tryGetShared agrees with getShared on a valid exchange" $ do
             let yb = DH.calculatePublic params xb
-            DH.getShared' params xa yb `shouldBe` CryptoPassed (DH.getShared params xa yb)
-        it "getShared' reports a public number out of range" $
+            DH.tryGetShared params xa yb `shouldBe` CryptoPassed (DH.getShared params xa yb)
+        it "tryGetShared reports a public number out of range" $
             mapM_
                 ( \y ->
-                    DH.getShared' params xa (DH.PublicNumber y)
+                    DH.tryGetShared params xa (DH.PublicNumber y)
                         `shouldBe` CryptoFailed CryptoError_ParameterInvalid
                 )
                 [0, 1, p - 1, p, p + 1]

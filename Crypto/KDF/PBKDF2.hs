@@ -14,13 +14,13 @@ module Crypto.KDF.PBKDF2 (
     prfHMAC,
     Parameters (..),
     generate,
-    generate',
+    tryGenerate,
     fastPBKDF2_SHA1,
-    fastPBKDF2_SHA1',
+    tryFastPBKDF2_SHA1,
     fastPBKDF2_SHA256,
-    fastPBKDF2_SHA256',
+    tryFastPBKDF2_SHA256,
     fastPBKDF2_SHA512,
-    fastPBKDF2_SHA512',
+    tryFastPBKDF2_SHA512,
 ) where
 
 import Data.Bits
@@ -79,7 +79,7 @@ validateParameters params
 -- | generate the pbkdf2 key derivation function from the output
 --
 -- Parameters outside the ranges documented for 'Parameters' raise
--- 'CryptoError_ParameterInvalid'; 'generate'' reports the same condition as
+-- 'CryptoError_ParameterInvalid'; 'tryGenerate' reports the same condition as
 -- 'CryptoFailed'.
 generate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray ba)
@@ -89,18 +89,18 @@ generate
     -> salt
     -> ba
 generate prf params password salt =
-    throwCryptoError (generate' prf params password salt)
+    throwCryptoError (tryGenerate prf params password salt)
 
 -- | generate the pbkdf2 key derivation function from the output, reporting
 -- parameters the implementation refuses rather than raising.
-generate'
+tryGenerate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray ba)
     => PRF password
     -> Parameters
     -> password
     -> salt
     -> CryptoFailable ba
-generate' prf params password salt
+tryGenerate prf params password salt
     | Just err <- validateParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \p -> do
         memSet p 0 (outputLength params)
@@ -147,12 +147,12 @@ generate' prf params password salt
         b = fromIntegral ((w `shiftR` 16) .&. 0xff)
         c = fromIntegral ((w `shiftR` 8) .&. 0xff)
         d = fromIntegral (w .&. 0xff)
-{-# NOINLINE generate' #-}
+{-# NOINLINE tryGenerate #-}
 
 -- | PBKDF2 with HMAC-SHA1, using the bundled C implementation.
 --
 -- Parameters outside the ranges documented for 'Parameters' raise
--- 'CryptoError_ParameterInvalid'; 'fastPBKDF2_SHA1'' reports the same condition
+-- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA1' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA1
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
@@ -161,17 +161,17 @@ fastPBKDF2_SHA1
     -> salt
     -> out
 fastPBKDF2_SHA1 params password salt =
-    throwCryptoError (fastPBKDF2_SHA1' params password salt)
+    throwCryptoError (tryFastPBKDF2_SHA1 params password salt)
 
 -- | PBKDF2 with HMAC-SHA1, reporting parameters the implementation refuses
 -- rather than raising.
-fastPBKDF2_SHA1'
+tryFastPBKDF2_SHA1
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
     => Parameters
     -> password
     -> salt
     -> CryptoFailable out
-fastPBKDF2_SHA1' params password salt
+tryFastPBKDF2_SHA1 params password salt
     | Just err <- validateParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
@@ -188,7 +188,7 @@ fastPBKDF2_SHA1' params password salt
 -- | PBKDF2 with HMAC-SHA256, using the bundled C implementation.
 --
 -- Parameters outside the ranges documented for 'Parameters' raise
--- 'CryptoError_ParameterInvalid'; 'fastPBKDF2_SHA256'' reports the same condition
+-- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA256' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA256
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
@@ -197,17 +197,17 @@ fastPBKDF2_SHA256
     -> salt
     -> out
 fastPBKDF2_SHA256 params password salt =
-    throwCryptoError (fastPBKDF2_SHA256' params password salt)
+    throwCryptoError (tryFastPBKDF2_SHA256 params password salt)
 
 -- | PBKDF2 with HMAC-SHA256, reporting parameters the implementation refuses
 -- rather than raising.
-fastPBKDF2_SHA256'
+tryFastPBKDF2_SHA256
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
     => Parameters
     -> password
     -> salt
     -> CryptoFailable out
-fastPBKDF2_SHA256' params password salt
+tryFastPBKDF2_SHA256 params password salt
     | Just err <- validateParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
@@ -224,7 +224,7 @@ fastPBKDF2_SHA256' params password salt
 -- | PBKDF2 with HMAC-SHA512, using the bundled C implementation.
 --
 -- Parameters outside the ranges documented for 'Parameters' raise
--- 'CryptoError_ParameterInvalid'; 'fastPBKDF2_SHA512'' reports the same condition
+-- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA512' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA512
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
@@ -233,17 +233,17 @@ fastPBKDF2_SHA512
     -> salt
     -> out
 fastPBKDF2_SHA512 params password salt =
-    throwCryptoError (fastPBKDF2_SHA512' params password salt)
+    throwCryptoError (tryFastPBKDF2_SHA512 params password salt)
 
 -- | PBKDF2 with HMAC-SHA512, reporting parameters the implementation refuses
 -- rather than raising.
-fastPBKDF2_SHA512'
+tryFastPBKDF2_SHA512
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
     => Parameters
     -> password
     -> salt
     -> CryptoFailable out
-fastPBKDF2_SHA512' params password salt
+tryFastPBKDF2_SHA512 params password salt
     | Just err <- validateParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->

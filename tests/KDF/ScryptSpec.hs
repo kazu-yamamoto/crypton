@@ -49,7 +49,7 @@ spec = do
         Scrypt.generate params ("password" :: ByteString) ("salt" :: ByteString)
             :: ByteString
     run' params =
-        Scrypt.generate' params ("password" :: ByteString) ("salt" :: ByteString)
+        Scrypt.tryGenerate params ("password" :: ByteString) ("salt" :: ByteString)
             :: CryptoFailable ByteString
     refused = CryptoFailed CryptoError_ParameterInvalid
     cryptoError e = e == CryptoError_ParameterInvalid

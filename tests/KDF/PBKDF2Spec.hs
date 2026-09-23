@@ -102,13 +102,13 @@ spec = do
             evaluate (fast256 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
             evaluate (fast512 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
         it "reports them without raising" $ do
-            PBKDF2.generate' badPrf (PBKDF2.Parameters 0 32) badPass badSalt
+            PBKDF2.tryGenerate badPrf (PBKDF2.Parameters 0 32) badPass badSalt
                 `shouldBe` refused
-            PBKDF2.fastPBKDF2_SHA1' (PBKDF2.Parameters 1 (-1)) badPass badSalt
+            PBKDF2.tryFastPBKDF2_SHA1 (PBKDF2.Parameters 1 (-1)) badPass badSalt
                 `shouldBe` refused
-            PBKDF2.fastPBKDF2_SHA256' (PBKDF2.Parameters 0 32) badPass badSalt
+            PBKDF2.tryFastPBKDF2_SHA256 (PBKDF2.Parameters 0 32) badPass badSalt
                 `shouldBe` refused
-            PBKDF2.fastPBKDF2_SHA512' (PBKDF2.Parameters 1 (-1)) badPass badSalt
+            PBKDF2.tryFastPBKDF2_SHA512 (PBKDF2.Parameters 1 (-1)) badPass badSalt
                 `shouldBe` refused
   where
     badPrf = PBKDF2.prfHMAC SHA256

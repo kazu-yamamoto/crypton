@@ -116,7 +116,7 @@ aeadSimpleDecrypt aeadIni header input authTag
 -- Here the length is a separate argument and a tag that is not exactly that
 -- long is refused before anything is compared, so the peer cannot weaken the
 -- check.  Prefer this wherever the tag is attacker reachable.
-aeadSimpleDecrypt'
+tryAeadSimpleDecrypt
     :: (ByteArrayAccess aad, ByteArray ba)
     => AEAD a
     -- ^ An AEAD Context
@@ -130,7 +130,7 @@ aeadSimpleDecrypt'
     -- ^ The authentication tag
     -> Maybe ba
     -- ^ Plaintext
-aeadSimpleDecrypt' aeadIni header input taglen authTag
+tryAeadSimpleDecrypt aeadIni header input taglen authTag
     | taglen < minimumTagLength = Nothing
     | B.length authTag /= taglen = Nothing
     | tag == authTag = Just output

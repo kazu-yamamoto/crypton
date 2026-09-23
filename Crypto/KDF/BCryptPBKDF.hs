@@ -9,9 +9,9 @@
 module Crypto.KDF.BCryptPBKDF (
     Parameters (..),
     generate,
-    generate',
+    tryGenerate,
     hashInternal,
-    hashInternal',
+    tryHashInternal,
 )
 where
 
@@ -52,7 +52,7 @@ data Parameters = Parameters
 -- | Derive a key of specified length using the bcrypt_pbkdf algorithm.
 --
 -- Parameters outside the ranges documented for 'Parameters' raise
--- 'CryptoError_ParameterInvalid'; 'generate'' reports the same condition as
+-- 'CryptoError_ParameterInvalid'; 'tryGenerate' reports the same condition as
 -- 'CryptoFailed'.
 generate
     :: (B.ByteArray pass, B.ByteArray salt, B.ByteArray output)
@@ -60,17 +60,17 @@ generate
     -> pass
     -> salt
     -> output
-generate params pass salt = throwCryptoError (generate' params pass salt)
+generate params pass salt = throwCryptoError (tryGenerate params pass salt)
 
 -- | Derive a key of specified length using the bcrypt_pbkdf algorithm,
 -- reporting parameters the implementation refuses rather than raising.
-generate'
+tryGenerate
     :: (B.ByteArray pass, B.ByteArray salt, B.ByteArray output)
     => Parameters
     -> pass
     -> salt
     -> CryptoFailable output
-generate' params pass salt
+tryGenerate params pass salt
     | iterCounts params < 1 = CryptoFailed CryptoError_ParameterInvalid
     | keyLen < 1 || keyLen > 1024 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = CryptoPassed $ B.unsafeCreate keyLen deriveKey
@@ -154,25 +154,25 @@ generate' params pass salt
 -- Normal users should not need this.
 --
 -- Inputs that are not 512 bits long raise 'CryptoError_ParameterInvalid';
--- 'hashInternal'' reports the same condition as 'CryptoFailed'.
+-- 'tryHashInternal' reports the same condition as 'CryptoFailed'.
 hashInternal
     :: (B.ByteArrayAccess pass, B.ByteArrayAccess salt, B.ByteArray output)
     => pass
     -> salt
     -> output
 hashInternal passHash saltHash =
-    throwCryptoError (hashInternal' passHash saltHash)
+    throwCryptoError (tryHashInternal passHash saltHash)
 
--- | Internal hash function used by 'generate'', reporting inputs the
+-- | Internal hash function used by 'tryGenerate', reporting inputs the
 -- implementation refuses rather than raising.
 --
 -- Normal users should not need this.
-hashInternal'
+tryHashInternal
     :: (B.ByteArrayAccess pass, B.ByteArrayAccess salt, B.ByteArray output)
     => pass
     -> salt
     -> CryptoFailable output
-hashInternal' passHash saltHash
+tryHashInternal passHash saltHash
     | B.length passHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
     | B.length saltHash /= 64 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
