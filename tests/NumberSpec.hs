@@ -232,6 +232,13 @@ spec = do
             ]
     prop "num-bits2" $ \(Positive i) ->
         not (i `testBit` numBits i) && (i `testBit` (numBits i - 1))
+    -- how many bytes it takes to write the number, which is what every
+    -- serialization here asks before it allocates.  Held to counting the
+    -- divisions, so that it is not the same expression on both sides.
+    prop "num-bytes" $ \(Positive i) ->
+        numBytes i == byteCount i
+    prop "num-bytes-small" $ \() ->
+        map numBytes [0, 1, 255, 256, 257, 65535, 65536] == [0, 1, 1, 2, 2, 2, 3]
     prop "generate-param" $ \testDRG (Int1_2901 bits) ->
         let r = withTestDRG testDRG $ generateParams bits (Just SetHighest) False
          in r >= 0 && numBits r == bits && testBit r (bits - 1)
@@ -306,3 +313,7 @@ spec = do
   where
     toSerializationKat i (sz, n, ba) = it (show i) (BE.i2ospOf_ sz n `shouldBe` ba)
     toSerializationKatInteger i (_, n, ba) = it (show i) (BE.os2ip ba `shouldBe` n)
+
+-- | How many bytes the number takes, by taking them off one at a time.
+byteCount :: Integer -> Int
+byteCount = length . takeWhile (> 0) . iterate (`div` 256)
