@@ -19,7 +19,8 @@ Performance
 The algorithms a TLS connection uses, measured against the previous release
 and against OpenSSL on the same machine.  Throughput is over 16 KiB messages;
 the public key operations are one operation each; every figure is the best of
-several runs.
+several runs, and crypton and OpenSSL are run alternately so that neither gets
+the quieter machine.
 
 Bulk encryption and hashing are measured through crypton's C layer, as
 `openssl speed` measures OpenSSL's.  The public key operations are measured
@@ -39,12 +40,12 @@ Throughput in MB/s, **higher is better**:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | 2.0.0 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 1330 | 4117 | 4260 | 0.97 |
-| AES-256-GCM | 1089 | 3810 | 3948 | 0.97 |
-| ChaCha20-Poly1305 | 398 | 2193 | 2175 | 1.01 |
-| SHA-1 | 737 | 1678 | 1673 | 1.00 |
-| SHA-256 | 285 | 1585 | 1570 | 1.01 |
-| SHA-512 | 449 | 769 | 748 | 1.03 |
+| AES-128-GCM | 1331 | 4118 | 4264 | 0.97 |
+| AES-256-GCM | 1090 | 3810 | 3951 | 0.96 |
+| ChaCha20-Poly1305 | 398 | 2195 | 2191 | 1.00 |
+| SHA-1 | 738 | 1678 | 1672 | 1.00 |
+| SHA-256 | 286 | 1585 | 1570 | 1.01 |
+| SHA-512 | 448 | 769 | 746 | 1.03 |
 | SHA3-256 | 109 | 421 | 426 | 0.99 |
 
 Time per operation in microseconds, **lower is better** -- so the last column
@@ -52,17 +53,17 @@ divides OpenSSL's time by crypton's, and is again better the larger it is:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | OpenSSL / 2.0.0 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 43.55 | 43.62 | 36.59 | 0.84 |
-| ECDH P-256 | 163.4 | 163.4 | 51.89 | 0.32 |
-| ECDH P-384 | 2236 | 1117 | 855.9 | 0.77 |
-| Ed25519 sign | 28.54 | 28.24 | 43.86 | 1.55 |
-| Ed25519 verify | 46.13 | 46.04 | 118.3 | 2.57 |
-| ECDSA P-256 sign | 76.12 | 76.46 | 22.85 | 0.30 |
-| ECDSA P-256 verify | 229.2 | 229.5 | 67.91 | 0.30 |
-| ECDSA P-384 sign | 2272 | 394.2 | 902.3 | 2.29 |
-| ECDSA P-384 verify | 2656 | 1517 | 739.3 | 0.49 |
-| RSA-2048 sign/decrypt | 759.7 | 1336 | 659.5 | 0.49 |
-| RSA-2048 verify/encrypt | 31.83 | 31.81 | 18.65 | 0.59 |
+| X25519 | 43.57 | 43.52 | 36.58 | 0.84 |
+| ECDH P-256 | 163.8 | 163.7 | 52.36 | 0.32 |
+| ECDH P-384 | 2241 | 1101 | 857.1 | 0.78 |
+| Ed25519 sign | 28.52 | 28.25 | 43.49 | 1.54 |
+| Ed25519 verify | 46.06 | 46.16 | 119.3 | 2.59 |
+| ECDSA P-256 sign | 76.04 | 75.02 | 22.91 | 0.31 |
+| ECDSA P-256 verify | 229.2 | 228.5 | 67.98 | 0.30 |
+| ECDSA P-384 sign | 2271 | 387.6 | 904.3 | 2.33 |
+| ECDSA P-384 verify | 2667 | 1493 | 746.2 | 0.50 |
+| RSA-2048 sign/decrypt | 759.8 | 1311 | 660.1 | 0.50 |
+| RSA-2048 verify/encrypt | 31.62 | 28.59 | 18.63 | 0.65 |
 
 ### AArch64
 
@@ -73,37 +74,37 @@ Throughput in MB/s, **higher is better**:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | 2.0.0 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 125 | 8375 | 10634 | 0.79 |
-| AES-256-GCM | 96 | 7403 | 9121 | 0.81 |
-| ChaCha20-Poly1305 | 751 | 2214 | 2239 | 0.99 |
-| SHA-1 | 1178 | 3270 | 2993 | 1.09 |
-| SHA-256 | 458 | 3256 | 3325 | 0.98 |
-| SHA-512 | 710 | 1767 | 1803 | 0.98 |
-| SHA3-256 | 539 | 1062 | 1047 | 1.01 |
+| AES-128-GCM | 126 | 8690 | 10682 | 0.81 |
+| AES-256-GCM | 97 | 7575 | 9120 | 0.83 |
+| ChaCha20-Poly1305 | 757 | 2282 | 2241 | 1.02 |
+| SHA-1 | 1199 | 3386 | 3350 | 1.01 |
+| SHA-256 | 466 | 3381 | 3304 | 1.02 |
+| SHA-512 | 724 | 1873 | 1806 | 1.04 |
+| SHA3-256 | 548 | 1074 | 1050 | 1.02 |
 
 Time per operation in microseconds, **lower is better**; the last column again
 divides OpenSSL's time by crypton's:
 
 | | crypton 1.1.5 | crypton 2.0.0 | OpenSSL | OpenSSL / 2.0.0 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 18.48 | 18.43 | 18.39 | 1.00 |
-| ECDH P-256 | 69.24 | 69.72 | 24.66 | 0.35 |
-| ECDH P-384 | 3359 | 521.1 | 377.2 | 0.72 |
-| Ed25519 sign | 13.73 | 13.14 | 16.22 | 1.23 |
-| Ed25519 verify | 18.26 | 18.10 | 39.54 | 2.18 |
-| ECDSA P-256 sign | 32.63 | 32.61 | 10.87 | 0.33 |
-| ECDSA P-256 verify | 96.63 | 96.76 | 32.71 | 0.34 |
-| ECDSA P-384 sign | 3313 | 176.0 | 395.1 | 2.24 |
-| ECDSA P-384 verify | 3944 | 712.6 | 331.0 | 0.46 |
-| RSA-2048 sign/decrypt | 456.3 | 619.8 | 324.6 | 0.52 |
-| RSA-2048 verify/encrypt | 18.30 | 18.44 | 8.49 | 0.46 |
+| X25519 | 18.35 | 18.34 | 18.37 | 1.00 |
+| ECDH P-256 | 69.20 | 69.16 | 24.68 | 0.36 |
+| ECDH P-384 | 3324 | 508.4 | 373.5 | 0.73 |
+| Ed25519 sign | 13.64 | 13.09 | 15.83 | 1.21 |
+| Ed25519 verify | 18.12 | 17.98 | 39.31 | 2.19 |
+| ECDSA P-256 sign | 32.41 | 32.30 | 11.03 | 0.34 |
+| ECDSA P-256 verify | 96.23 | 95.98 | 32.77 | 0.34 |
+| ECDSA P-384 sign | 3257 | 169.5 | 395.9 | 2.34 |
+| ECDSA P-384 verify | 3876 | 683.8 | 332.9 | 0.49 |
+| RSA-2048 sign/decrypt | 450.6 | 601.9 | 323.8 | 0.54 |
+| RSA-2048 verify/encrypt | 18.21 | 15.21 | 8.49 | 0.56 |
 
 ### What the numbers say
 
 1.1.5 had no AArch64 code of its own at all, which is why AES-GCM there is
-sixty-seven times what it was.  On x86-64 it had AES-NI and nothing else.  The
+sixty-nine times what it was.  On x86-64 it had AES-NI and nothing else.  The
 curves over a prime field other than P-256 moved from Haskell `Integer`
-arithmetic into C, which is the eighteenfold change in ECDSA P-384 signing on
+arithmetic into C, which is the nineteenfold change in ECDSA P-384 signing on
 the M4.  X25519, P-256 and Ed25519 are unchanged between the two releases, and
 the rows say so: where they differ by half a percent, that is the measurement
 and not the code.
@@ -118,13 +119,15 @@ part of it.
 
 *RSA signing.*  2.0.0 is slower than 1.1.5 here on purpose.  Its modular
 exponentiation no longer indexes a table with the bits of the exponent, and
-hiding the exponent is what the difference buys.
+hiding the exponent is what the difference buys.  What is left of the gap
+against OpenSSL is the Montgomery multiplication, which is assembly there and
+C here.
 
 *The AVX-512 instructions.*  Neither machine above has them.  On one that does
 -- an EPYC 9V74, measured the same way -- OpenSSL uses them for AES-GCM and
 ChaCha20 and reaches 12003 and 3789 MB/s, against 4745 and 2372 for crypton,
 whose vendored assembly is generated without them.  Those ratios are 0.40 and
-0.63 rather than 0.97 and 1.01.  Nothing else in either table moves by more
+0.63 rather than 0.97 and 1.00.  Nothing else in either table moves by more
 than a few percent between the two processors.
 
 One row wants a word of its own: crypton's `Ed25519.sign` derives the public
