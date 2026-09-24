@@ -160,6 +160,7 @@ module Crypto.Tutorial (
 -- > import           Data.ByteString (ByteString)
 -- > import qualified Data.ByteString as B
 -- >
+-- > import           Crypto.Error (throwCryptoError)
 -- > import qualified Crypto.Cipher.XSalsa as XSalsa
 -- > import qualified Crypto.MAC.Poly1305 as Poly1305
 -- > import qualified Crypto.PubKey.Curve25519 as X25519
@@ -175,7 +176,8 @@ module Crypto.Tutorial (
 -- >     state1       = XSalsa.derive state0 iv1
 -- >     (rs, state2) = XSalsa.generate state1 32
 -- >     (c, _)       = XSalsa.combine state2 content
--- >     tag          = Poly1305.auth (rs :: ByteString) c
+-- >     macKey       = throwCryptoError (Poly1305.key (rs :: ByteString))
+-- >     tag          = Poly1305.auth macKey c
 -- >
 -- > -- | Try to open a @crypto_box@ packet and recover the content using the
 -- > -- 192-bit nonce, sender public key and receiver private key.
@@ -192,4 +194,5 @@ module Crypto.Tutorial (
 -- >     state1       = XSalsa.derive state0 iv1
 -- >     (rs, state2) = XSalsa.generate state1 32
 -- >     (content, _) = XSalsa.combine state2 c
--- >     tag          = Poly1305.auth (rs :: ByteString) c
+-- >     macKey       = throwCryptoError (Poly1305.key (rs :: ByteString))
+-- >     tag          = Poly1305.auth macKey c
