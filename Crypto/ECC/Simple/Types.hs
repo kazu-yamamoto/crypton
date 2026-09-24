@@ -153,6 +153,19 @@ data SEC_t409r1 = SEC_t409r1 deriving (Show, Read, Eq)
 data SEC_t571k1 = SEC_t571k1 deriving (Show, Read, Eq)
 data SEC_t571r1 = SEC_t571r1 deriving (Show, Read, Eq)
 
+{-# DEPRECATED
+    SEC_t113r1, SEC_t113r2, SEC_t131r1, SEC_t131r2, SEC_t163k1, SEC_t163r1,
+    SEC_t163r2, SEC_t193r1, SEC_t193r2, SEC_t233k1, SEC_t233r1, SEC_t239k1,
+    SEC_t283k1, SEC_t283r1, SEC_t409k1, SEC_t409r1, SEC_t571k1, SEC_t571r1
+    [ "This curve is over a binary field, and those are obsolete."
+    , "They are also the curves whose cofactor is not 1, so a point from"
+    , "a peer needs the subgroup check that costs a further scalar"
+    , "multiplication; pyca/cryptography deprecated them for removal in"
+    , "the release that fixed CVE-2026-26007.  This one will go in a"
+    , "later major version of crypton.  Prefer a prime curve, or X25519."
+    ]
+    #-}
+
 -- | Define names for known recommended curves.
 instance Curve SEC_p112r1 where
     curveType _ = typeSEC_p112r1

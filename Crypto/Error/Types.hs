@@ -53,6 +53,10 @@ data CryptoError
     | -- | A parameter is outside the range the algorithm accepts.  Appended to
       -- keep the 'Enum' values of the constructors above unchanged.
       CryptoError_ParameterInvalid
+    | -- | A point satisfies the curve equation but lies outside the subgroup
+      -- the base point generates, so multiplying it would answer modulo a
+      -- small order.  Appended for the same reason as the constructor above.
+      CryptoError_PointSubgroupInvalid
     deriving (Show, Eq, Enum, Data)
 
 instance E.Exception CryptoError

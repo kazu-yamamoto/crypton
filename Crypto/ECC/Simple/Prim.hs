@@ -16,6 +16,7 @@ module Crypto.ECC.Simple.Prim (
     pointFromIntegers,
     isPointAtInfinity,
     isPointValid,
+    isPointInSubgroup,
 ) where
 
 import Crypto.ECC.Simple.Types
@@ -368,9 +369,13 @@ isPointAtInfinity _ = False
 pointFromIntegers
     :: forall curve. Curve curve => (Integer, Integer) -> CryptoFailable (Point curve)
 pointFromIntegers (x, y)
-    | isPointValid (Proxy :: Proxy curve) x y = CryptoPassed $ Point x y
-    | otherwise =
-        CryptoFailed $ CryptoError_PointCoordinatesInvalid
+    | not (isPointValid (Proxy :: Proxy curve) x y) =
+        CryptoFailed CryptoError_PointCoordinatesInvalid
+    | not (isPointInSubgroup (Proxy :: Proxy curve) p) =
+        CryptoFailed CryptoError_PointSubgroupInvalid
+    | otherwise = CryptoPassed p
+  where
+    p = Point x y
 
 -- | check if a point is on specific curve
 --
@@ -401,6 +406,24 @@ isPointValid proxy x y =
                     ]
   where
     ty = curveType proxy
+    cc = curveParameters proxy
+
+-- | Check that a point is in the subgroup the base point generates, which is
+-- the further check 'isPointValid' does not make.  A point that is on the
+-- curve but outside that subgroup answers a multiplication modulo an order
+-- smaller than the group's, so the multiplier -- a private number, where the
+-- point came from a peer -- is revealed modulo that small order.
+--
+-- Where the cofactor is 1 the subgroup is the whole curve group and the
+-- answer is 'True' for any point on the curve, at no cost.  Otherwise the
+-- point is multiplied by the group order and the answer is whether that
+-- reaches the point at infinity, which costs one scalar multiplication.
+isPointInSubgroup
+    :: forall proxy curve. Curve curve => proxy curve -> Point curve -> Bool
+isPointInSubgroup proxy p
+    | curveEccH cc == 1 = True
+    | otherwise = pointMul (Scalar (curveEccN cc) :: Scalar curve) p == PointO
+  where
     cc = curveParameters proxy
 
 -- | div and mod
