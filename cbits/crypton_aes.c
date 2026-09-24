@@ -642,6 +642,28 @@ void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_ke
 	memcpy(output + length, tag, taglen);
 }
 
+/* The same, and then the header protection mask.  QUIC takes its sample from
+ * the ciphertext, so the mask cannot be had before the encryption -- but it
+ * can be had before returning, which saves a second crossing for one AES
+ * block.  The block itself is about a nanosecond; what it saves is the call.
+ * sampleoff is where the sixteen bytes of sample start in the output. */
+void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+                                       uint8_t *iv, uint32_t ivlen,
+                                       uint8_t *aad, uint32_t aadlen,
+                                       uint8_t *input, uint32_t length, uint32_t taglen,
+                                       aes_key *hpkey, uint32_t sampleoff, uint8_t *mask)
+{
+	block128 sample, m;
+
+	crypton_aes_gcm_full_encrypt(output, gcmkey, key, iv, ivlen, aad, aadlen,
+	                             input, length, taglen);
+	/* copied rather than cast: the sample lands wherever the header put it
+	 * and a block128 is read as 64-bit words */
+	memcpy(&sample, output + sampleoff, 16);
+	crypton_aes_encrypt_block(&m, hpkey, &sample);
+	memcpy(mask, &m, 16);
+}
+
 /* The same the other way, with the tag checked here rather than by the
  * caller: returns 1 when it matches and 0 when it does not, comparing every
  * byte either way.  The plaintext is written whatever the answer, so a caller

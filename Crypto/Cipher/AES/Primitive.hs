@@ -43,6 +43,7 @@ module Crypto.Cipher.AES.Primitive (
     AESGCMKey,
     gcmKeyInit,
     gcmFullEncrypt,
+    gcmFullEncryptMask,
     gcmFullDecrypt,
     gcmAeadInit,
 
@@ -487,6 +488,53 @@ gcmFullEncrypt ctx (AESGCMKey gk) iv aad input taglen =
         | B.length input <= shortMessage = c_aes_gcm_full_encrypt_unsafe
         | otherwise = c_aes_gcm_full_encrypt
 
+-- | Encrypt, and from a sample of the ciphertext just produced make the
+-- header protection mask, into buffers the caller owns.  QUIC takes its
+-- sample from the ciphertext, so the mask cannot be had before the
+-- encryption; it can be had before coming back, and with the buffers already
+-- there nothing is allocated for either.
+--
+-- @sampleoff@ is where the sixteen bytes of sample begin in the output.
+{-# NOINLINE gcmFullEncryptMask #-}
+gcmFullEncryptMask
+    :: (ByteArrayAccess iv, ByteArrayAccess aad, ByteArrayAccess ba)
+    => AES
+    -> AESGCMKey
+    -> AES
+    -> iv
+    -> aad
+    -> ba
+    -> Int
+    -> Int
+    -> Ptr Word8
+    -> Ptr Word8
+    -> IO ()
+gcmFullEncryptMask ctx (AESGCMKey gk) hpctx iv aad input taglen sampleoff outp maskp =
+    B.withByteArray gk $ \gkp ->
+        keyToPtr ctx $ \k ->
+            keyToPtr hpctx $ \hk ->
+                B.withByteArray iv $ \ivp ->
+                    B.withByteArray aad $ \aadp ->
+                        B.withByteArray input $ \inp ->
+                            call
+                                outp
+                                (castPtr gkp)
+                                k
+                                ivp
+                                (fromIntegral $ B.length iv)
+                                aadp
+                                (fromIntegral $ B.length aad)
+                                inp
+                                (fromIntegral $ B.length input)
+                                (fromIntegral taglen)
+                                hk
+                                (fromIntegral sampleoff)
+                                maskp
+  where
+    call
+        | B.length input <= shortMessage = c_aes_gcm_full_encrypt_mask_unsafe
+        | otherwise = c_aes_gcm_full_encrypt_mask
+
 -- | The same the other way, with the tag compared here rather than by the
 -- caller: 'Nothing' when it does not match, and every byte of it is looked at
 -- either way.  The ciphertext comes in without its tag, which is given
@@ -842,6 +890,40 @@ foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_decrypt"
         -> Ptr Word8
         -> CUInt
         -> IO CInt
+
+foreign import ccall "crypton_aes.h crypton_aes_gcm_full_encrypt_mask"
+    c_aes_gcm_full_encrypt_mask
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> Ptr AES
+        -> CUInt
+        -> Ptr Word8
+        -> IO ()
+
+foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_encrypt_mask"
+    c_aes_gcm_full_encrypt_mask_unsafe
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> Ptr AES
+        -> CUInt
+        -> Ptr Word8
+        -> IO ()
 
 foreign import ccall "crypton_aes.h crypton_aes_gcm_init"
     c_aes_gcm_init :: Ptr AESGCM -> Ptr AES -> Ptr Word8 -> CUInt -> IO ()

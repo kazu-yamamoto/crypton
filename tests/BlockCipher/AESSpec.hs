@@ -22,6 +22,8 @@ import qualified BlockCipher.AES.OCB3 as KATOCB3
 import qualified BlockCipher.AES.XTS as KATXTS
 import qualified Crypto.Cipher.AES.GCM as GCM
 import Data.Bits (xor)
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Ptr (castPtr)
 
 {-
 instance Show AES.AES where
@@ -241,6 +243,14 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
     it "refuses input shorter than the tag" $
         (GCM.decrypt ctx16 iv16 B.empty (B.replicate 8 0) 16 :: Maybe B.ByteString)
             `shouldBe` Nothing
+    describe "header protection" $ do
+        it "writes the ciphertext encrypt gives" $
+            withMask 4 `shouldReturn` Just (plainSealed, expectedMask 4)
+        it "and at another offset" $
+            withMask 0 `shouldReturn` Just (plainSealed, expectedMask 0)
+        it "refuses a sample that does not fit, writing nothing" $ do
+            withMask (B.length plainSealed - 15) `shouldReturn` Nothing
+            withMask (-1) `shouldReturn` Nothing
   where
     run name vs =
         it name $
@@ -254,6 +264,25 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
                 `shouldBe` []
     ctx16 = throwCryptoError (GCM.newContext (B.replicate 16 0x2b))
     iv16 = B.replicate 12 0x77
+    -- header protection keeps a key of its own, as QUIC does
+    hpKeyBytes = B.replicate 16 0x9c
+    hpKey = throwCryptoError (GCM.newHeaderKey hpKeyBytes)
+    hpAes = throwCryptoError (cipherInit hpKeyBytes) :: AES.AES128
+    message = "a packet payload" :: B.ByteString
+    header = "\x40\x01\x02\x03" :: B.ByteString
+    plainSealed = GCM.encrypt ctx16 iv16 header message 16 :: B.ByteString
+    -- the buffers the caller owns, as a packet writer would have them
+    withMask off =
+        allocaBytes (B.length message + 16) $ \outp ->
+            allocaBytes 16 $ \maskp -> do
+                ok <- GCM.encryptWithMask ctx16 hpKey iv16 header message 16 off outp maskp
+                if ok
+                    then do
+                        sealed <- B.packCStringLen (castPtr outp, B.length message + 16)
+                        mask <- B.packCStringLen (castPtr maskp, 16)
+                        return (Just (sealed, mask))
+                    else return Nothing
+    expectedMask off = ecbEncrypt hpAes (B.take 16 (B.drop off plainSealed))
     flipFirst b = B.cons (B.head b `xor` 1) (B.tail b)
     tamper f =
         let sealed = GCM.encrypt ctx16 iv16 B.empty ("hello there" :: B.ByteString) 16
