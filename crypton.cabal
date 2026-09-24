@@ -557,7 +557,12 @@ library
                 else
                     asm-sources: cbits/asm/aesni-gcm-x86_64-elf.S
 
-    else
+    -- Neither of the two branches above.  This was an `else`, which pairs with
+    -- the x86 `if` alone and so fired on AArch64 as well, where the ARMv8
+    -- branch had already named every file it names.  Cabal drops the repeats,
+    -- so nothing was built twice, but the line read as the fallback for a
+    -- platform with no AES instructions and was not one.
+    if !((flag(support_aesni) && arch(aarch64)) || ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64))))
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c
