@@ -2,9 +2,9 @@ name: Haskell CI
 
 on:
   push:
-    branches: [ 'main', 'ci' ]
+    branches: [ 'main', 'ci', 'crypton-v2' ]
   pull_request:
-    branches: [ 'main' ]
+    branches: [ 'main', 'crypton-v2' ]
 
 # Pushing again to a branch that is still building leaves the earlier run
 # occupying macOS slots to produce a result nobody will read, so supersede it.
