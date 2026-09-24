@@ -49,7 +49,14 @@ jobs:
 
     env:
       cache-name: cabal-ghc
-      target-config: --test-show-details=streaming --enable-tests --disable-benchmarks
+      # --enable-benchmarks so that `all` means all.  With benchmarks
+      # disabled nothing ever compiled benchs/Bench.hs, and it sat broken
+      # through a release cycle: taking a checked key made
+      # ChaChaPoly1305.initialize total, and the throwCryptoError wrapped
+      # around it stopped type-checking.  Enabling them costs tasty-bench
+      # and random, both small and pure Haskell, and no running time --
+      # `cabal test` does not run a benchmark.
+      target-config: --test-show-details=streaming --enable-tests --enable-benchmarks
 
     steps:
     - run: git config --global core.autocrlf false
@@ -170,7 +177,7 @@ jobs:
         # from shadowing the built library, and -package crypton exposes it,
         # since cabal exec puts the project's package-db on the path without
         # exposing anything out of it.
-        cabal exec --enable-tests --disable-benchmarks -- \
+        cabal exec --enable-tests --enable-benchmarks -- \
           ghc -v0 -O0 -i -package crypton ci-cpu-check.hs -o ci-cpu-check
         options=$(./ci-cpu-check 2>/dev/null || ./ci-cpu-check.exe)
         echo "processorOptions = $options"
