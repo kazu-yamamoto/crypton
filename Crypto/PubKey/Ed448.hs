@@ -36,6 +36,7 @@ module Crypto.PubKey.Ed448 (
     generateSecretKey,
 ) where
 
+import Crypto.Debug (DebugShow (..), debugShowBytes)
 import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
@@ -55,6 +56,9 @@ import Crypto.Random
 -- | An Ed448 Secret key
 newtype SecretKey = SecretKey ScrubbedBytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+instance DebugShow SecretKey where
+    debugShow = debugShowBytes "SecretKey"
 
 -- | An Ed448 public key
 newtype PublicKey = PublicKey Bytes

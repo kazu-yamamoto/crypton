@@ -38,6 +38,7 @@ module Crypto.PubKey.Rabin.Basic (
     verify,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Data
@@ -70,7 +71,31 @@ data PrivateKey = PrivateKey
     , private_a :: Integer
     , private_b :: Integer
     }
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+-- | The public part is shown; the secret fields are not.  Use
+-- 'Crypto.Debug.debugShow' to see them.
+instance Show PrivateKey where
+    showsPrec d k =
+        showParen (d > 10) $
+            showString "PrivateKey {private_pub = "
+                . shows (private_pub k)
+                . showString ", private_p = <secret>, private_q = <secret>, private_a = <secret>, private_b = <secret>}"
+
+instance DebugShow PrivateKey where
+    debugShow k =
+        showString "PrivateKey {private_pub = "
+            . shows (private_pub k)
+            . showString ", private_p = "
+            . shows (private_p k)
+            . showString ", private_q = "
+            . shows (private_q k)
+            . showString ", private_a = "
+            . shows (private_a k)
+            . showString ", private_b = "
+            . shows (private_b k)
+            . showChar '}'
+            $ ""
 
 -- | Rabin Signature.
 data Signature = Signature (Integer, Integer) deriving (Show, Read, Eq, Data)

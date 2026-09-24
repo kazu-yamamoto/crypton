@@ -51,6 +51,7 @@ module Crypto.PubKey.EdDSA (
     generateSecretKey,
 ) where
 
+import Crypto.Debug (DebugShow (..), debugShowBytes)
 import Data.Bits
 import Data.ByteArray (
     ByteArray,
@@ -84,6 +85,9 @@ import Foreign.Storable
 -- | An EdDSA Secret key
 newtype SecretKey curve = SecretKey ScrubbedBytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+instance DebugShow (SecretKey curve) where
+    debugShow = debugShowBytes "SecretKey"
 
 -- | An EdDSA public key
 newtype PublicKey curve hash = PublicKey Bytes

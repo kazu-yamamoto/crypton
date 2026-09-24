@@ -29,6 +29,7 @@ module Crypto.PubKey.ECC.ECDSA (
     deterministicNonce,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Control.Monad
 import Data.Bits
 import Data.ByteArray (ByteArrayAccess, ScrubbedBytes)
@@ -70,7 +71,25 @@ data PrivateKey = PrivateKey
     { private_curve :: Curve
     , private_d :: PrivateNumber
     }
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+-- | The curve is shown; @private_d@ is not.  Use
+-- 'Crypto.Debug.debugShow' to see it.
+instance Show PrivateKey where
+    showsPrec d k =
+        showParen (d > 10) $
+            showString "PrivateKey {private_curve = "
+                . shows (private_curve k)
+                . showString ", private_d = <secret>}"
+
+instance DebugShow PrivateKey where
+    debugShow k =
+        showString "PrivateKey {private_curve = "
+            . shows (private_curve k)
+            . showString ", private_d = "
+            . shows (private_d k)
+            . showChar '}'
+            $ ""
 
 -- | ECDSA Public Key.
 data PublicKey = PublicKey
@@ -81,7 +100,26 @@ data PublicKey = PublicKey
 
 -- | ECDSA Key Pair.
 data KeyPair = KeyPair Curve PublicPoint PrivateNumber
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+instance Show KeyPair where
+    showsPrec d (KeyPair c q _) =
+        showParen (d > 10) $
+            showString "KeyPair "
+                . showsPrec 11 c
+                . showChar ' '
+                . showsPrec 11 q
+                . showString " <secret>"
+
+instance DebugShow KeyPair where
+    debugShow (KeyPair c q x) =
+        showString "KeyPair "
+            . showsPrec 11 c
+            . showChar ' '
+            . showsPrec 11 q
+            . showChar ' '
+            . showsPrec 11 x
+            $ ""
 
 -- | Public key of a ECDSA Key pair.
 toPublicKey :: KeyPair -> PublicKey

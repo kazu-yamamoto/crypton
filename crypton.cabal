@@ -162,6 +162,7 @@ library
         Crypto.Data.Padding
         Crypto.ECC
         Crypto.ECC.Edwards25519
+        Crypto.Debug
         Crypto.Error
         Crypto.Hash
         Crypto.Hash.Algorithms

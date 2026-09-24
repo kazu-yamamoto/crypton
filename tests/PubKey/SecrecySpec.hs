@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 -- | A key's 'Show' instance is what a log, a crash report and a test
 -- failure all reach for, and none of those is a place to put a private
 -- key.  So the types that hold one do not print it, and the module below
@@ -7,14 +8,23 @@ module PubKey.SecrecySpec (spec) where
 
 import Data.List (isInfixOf)
 
+import Crypto.Debug (DebugShow, debugShow)
+import Crypto.Error (CryptoFailable, throwCryptoError)
+import qualified Crypto.PubKey.Curve448 as X448
+import qualified Crypto.PubKey.Curve25519 as X25519
 import qualified Crypto.PubKey.DH as DH
 import qualified Crypto.PubKey.DSA as DSA
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECC
+import qualified Crypto.PubKey.Ed448 as Ed448
+import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA.Types as RSA
 import qualified Crypto.PubKey.Rabin.Basic as Basic
 import qualified Crypto.PubKey.Rabin.Modified as Modified
 import qualified Crypto.PubKey.Rabin.RW as RW
+
+import qualified Data.ByteString as BS
+import Data.Word (Word8)
 
 import Imports
 
@@ -77,9 +87,76 @@ cases =
         )
     ]
 
+-- | The values above again, paired with what 'debugShow' makes of them and
+-- with a reading of that back, which has to give the value returned.
+data Reveal = forall a. (Show a, Read a, Eq a, DebugShow a) => Reveal a
+
+reveals :: [(String, Reveal, [Integer])]
+reveals =
+    [ ("RSA.PrivateKey", Reveal rsaPriv, [d1, d2, d3, d4, d5, d6])
+    , ("RSA.KeyPair", Reveal (RSA.KeyPair rsaPriv), [d1, d2, d3, d4, d5, d6])
+    , ("DSA.PrivateKey", Reveal (DSA.PrivateKey dsaParams d1), [d1])
+    , ("DSA.KeyPair", Reveal (DSA.KeyPair dsaParams 0xabc4 d1), [d1])
+    , ("ECDSA.PrivateKey", Reveal (ECDSA.PrivateKey ecdsaCurve d1), [d1])
+    , ("ECDSA.KeyPair", Reveal (ECDSA.KeyPair ecdsaCurve ECC.PointO d1), [d1])
+    , ("DH.PrivateNumber", Reveal (DH.PrivateNumber d1), [d1])
+    ,
+        ( "Rabin.Basic.PrivateKey"
+        , Reveal (Basic.PrivateKey (Basic.PublicKey 32 0xabc5) d1 d2 d3 d4)
+        , [d1, d2, d3, d4]
+        )
+    ,
+        ( "Rabin.Modified.PrivateKey"
+        , Reveal (Modified.PrivateKey (Modified.PublicKey 32 0xabc6) d1 d2 d3)
+        , [d1, d2, d3]
+        )
+    ,
+        ( "Rabin.RW.PrivateKey"
+        , Reveal (RW.PrivateKey (RW.PublicKey 32 0xabc7) d1 d2 d3)
+        , [d1, d2, d3]
+        )
+    ]
+
+-- | The keys that keep their secret in a @ScrubbedBytes@.  Their 'Show' was
+-- already silent; what is new is that 'debugShow' can speak.  The bytes are
+-- distinct and not 0 or 255, so finding the hexadecimal of one in a rendering
+-- means it came from the key.
+scrubbed :: [(String, String, String, String)]
+scrubbed =
+    [ entry "Curve25519.SecretKey" 0x5a (X25519.secretKey . BS.replicate 32)
+    , entry "Curve448.SecretKey" 0x5b (X448.secretKey . BS.replicate 56)
+    , entry "Ed25519.SecretKey" 0x5c (Ed25519.secretKey . BS.replicate 32)
+    , entry "Ed448.SecretKey" 0x5d (Ed448.secretKey . BS.replicate 57)
+    ]
+  where
+    entry
+        :: (Show k, DebugShow k)
+        => String
+        -> Word8
+        -> (Word8 -> CryptoFailable k)
+        -> (String, String, String, String)
+    entry name b mk =
+        let k = throwCryptoError (mk b)
+         in (name, show k, debugShow k, hex b ++ hex b)
+    hex :: Word8 -> String
+    hex b = [digit (b `div` 16), digit (b `mod` 16)]
+    digit n = "0123456789abcdef" !! fromIntegral n
+
 spec :: Spec
-spec = describe "show does not print the secret" $ mapM_ check cases
+spec = do
+    describe "show does not print the secret" $ mapM_ check cases
+    describe "debugShow does print the secret" $ mapM_ reveal reveals
+    describe "debugShow round-trips through read" $ mapM_ roundTrip reveals
+    describe "a scrubbed secret key" $ mapM_ scrub scrubbed
   where
     check (name, rendered, secrets) =
         it name $
             [s | s <- secrets, show s `isInfixOf` rendered] `shouldBe` []
+    reveal (name, Reveal v, secrets) =
+        it name $
+            [s | s <- secrets, not (show s `isInfixOf` debugShow v)] `shouldBe` []
+    roundTrip (name, Reveal v, _) =
+        it name $ read (debugShow v) `shouldBe` v
+    scrub (name, shown, revealed, h) = describe name $ do
+        it "is not printed by show" $ (h `isInfixOf` shown) `shouldBe` False
+        it "is printed by debugShow" $ (h `isInfixOf` revealed) `shouldBe` True

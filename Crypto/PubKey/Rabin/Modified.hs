@@ -20,6 +20,7 @@ module Crypto.PubKey.Rabin.Modified (
     verify,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Data.ByteString
 import Data.Data
 
@@ -47,7 +48,29 @@ data PrivateKey = PrivateKey
     -- ^ q prime number
     , private_d :: Integer
     }
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+-- | The public part is shown; the secret fields are not.  Use
+-- 'Crypto.Debug.debugShow' to see them.
+instance Show PrivateKey where
+    showsPrec d k =
+        showParen (d > 10) $
+            showString "PrivateKey {private_pub = "
+                . shows (private_pub k)
+                . showString ", private_p = <secret>, private_q = <secret>, private_d = <secret>}"
+
+instance DebugShow PrivateKey where
+    debugShow k =
+        showString "PrivateKey {private_pub = "
+            . shows (private_pub k)
+            . showString ", private_p = "
+            . shows (private_p k)
+            . showString ", private_q = "
+            . shows (private_q k)
+            . showString ", private_d = "
+            . shows (private_d k)
+            . showChar '}'
+            $ ""
 
 -- | Generate a pair of (private, public) key of size in bytes.
 -- Prime p is congruent 3 mod 8 and prime q is congruent 7 mod 8.

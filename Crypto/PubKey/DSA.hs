@@ -51,6 +51,7 @@ module Crypto.PubKey.DSA (
     toPrivateKey,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Data.Data
 
 import Crypto.Hash
@@ -115,14 +116,51 @@ data PrivateKey = PrivateKey
     , private_x :: PrivateNumber
     -- ^ DSA private X
     }
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+-- | The parameters are shown; @private_x@ is not.  Use
+-- 'Crypto.Debug.debugShow' to see it.
+instance Show PrivateKey where
+    showsPrec d k =
+        showParen (d > 10) $
+            showString "PrivateKey {private_params = "
+                . shows (private_params k)
+                . showString ", private_x = <secret>}"
+
+instance DebugShow PrivateKey where
+    debugShow k =
+        showString "PrivateKey {private_params = "
+            . shows (private_params k)
+            . showString ", private_x = "
+            . shows (private_x k)
+            . showChar '}'
+            $ ""
 
 instance NFData PrivateKey where
     rnf (PrivateKey params x) = x `seq` params `seq` ()
 
 -- | Represent a DSA key pair
 data KeyPair = KeyPair Params PublicNumber PrivateNumber
-    deriving (Show, Read, Eq, Data)
+    deriving (Read, Eq, Data)
+
+instance Show KeyPair where
+    showsPrec d (KeyPair params y _) =
+        showParen (d > 10) $
+            showString "KeyPair "
+                . showsPrec 11 params
+                . showChar ' '
+                . showsPrec 11 y
+                . showString " <secret>"
+
+instance DebugShow KeyPair where
+    debugShow (KeyPair params y x) =
+        showString "KeyPair "
+            . showsPrec 11 params
+            . showChar ' '
+            . showsPrec 11 y
+            . showChar ' '
+            . showsPrec 11 x
+            $ ""
 
 instance NFData KeyPair where
     rnf (KeyPair params y x) = x `seq` y `seq` params `seq` ()

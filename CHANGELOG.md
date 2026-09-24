@@ -2,6 +2,26 @@
 
 ## 2.0.0
 
+* fix(pubkey): stop printing private keys.  `Show` is what `print`, a message
+  built with `error`, an exception and a test framework's failure output all
+  reach for, so it is the instance a key travels on when nobody meant to send
+  it anywhere; the library already kept that promise for the secret keys held
+  in a `ScrubbedBytes`, and the documentation for `ScrubbedBytes` advertises
+  it, while ten other types printed theirs in full.  Those ten --
+  `RSA.PrivateKey` and `RSA.KeyPair`, `DSA.PrivateKey` and `DSA.KeyPair`,
+  `ECDSA.PrivateKey` and `ECDSA.KeyPair`, `DH.PrivateNumber`, and the
+  `PrivateKey` of `Rabin.Basic`, `Rabin.Modified` and `Rabin.RW` -- now render
+  the public part and `<secret>` for the rest.  Nothing else about them
+  changes: `Read`, `Eq`, `Data`, `Generic` and `NFData` are all still derived.
+  The new `Crypto.Debug` exports a class `DebugShow` whose `debugShow` returns
+  exactly what the derived `Show` used to return, for those ten and for the
+  five `ScrubbedBytes` secret keys as well, which never had a `Show` that
+  spoke.  **Code that serialized a key through `show` has to say `debugShow`
+  instead**; `read (debugShow k) == k` still holds, but `read` given the
+  output of `show` will now fail at run time, which the compiler cannot point
+  at
+  [#72](https://github.com/kazu-yamamoto/crypton/issues/72)
+
 * deprecate(ecc): the curves over a binary field.  They are obsolete, they are
   the curves a cofactor makes delicate, and pyca/cryptography deprecated them
   for removal in the release that fixed CVE-2026-26007.  A `DEPRECATED` pragma

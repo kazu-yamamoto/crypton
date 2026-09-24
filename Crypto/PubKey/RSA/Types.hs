@@ -21,6 +21,7 @@ module Crypto.PubKey.RSA.Types (
     private_e,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Crypto.Internal.Imports
 import Data.Data
 
@@ -84,7 +85,38 @@ data PrivateKey = PrivateKey
     , private_qinv :: Integer
     -- ^ q^(-1) mod p
     }
-    deriving (Show, Read, Eq, Data, Generic)
+    deriving (Read, Eq, Data, Generic)
+
+-- | The public part is shown; the secret fields are not.  Use
+-- 'Crypto.Debug.debugShow' to see them.
+instance Show PrivateKey where
+    showsPrec d k =
+        showParen (d > 10) $
+            showString "PrivateKey {private_pub = "
+                . shows (private_pub k)
+                . showString
+                    ", private_d = <secret>, private_p = <secret>\
+                    \, private_q = <secret>, private_dP = <secret>\
+                    \, private_dQ = <secret>, private_qinv = <secret>}"
+
+instance DebugShow PrivateKey where
+    debugShow k =
+        showString "PrivateKey {private_pub = "
+            . shows (private_pub k)
+            . showString ", private_d = "
+            . shows (private_d k)
+            . showString ", private_p = "
+            . shows (private_p k)
+            . showString ", private_q = "
+            . shows (private_q k)
+            . showString ", private_dP = "
+            . shows (private_dP k)
+            . showString ", private_dQ = "
+            . shows (private_dQ k)
+            . showString ", private_qinv = "
+            . shows (private_qinv k)
+            . showChar '}'
+            $ ""
 
 instance NFData PrivateKey where
     rnf (PrivateKey pub d p q dp dq qinv) =
@@ -113,7 +145,14 @@ private_e = public_e . private_pub
 --
 -- note the RSA private key contains already an instance of public key for efficiency
 newtype KeyPair = KeyPair PrivateKey
-    deriving (Show, Read, Eq, Data, NFData)
+    deriving (Read, Eq, Data, NFData)
+
+instance Show KeyPair where
+    showsPrec d (KeyPair k) =
+        showParen (d > 10) $ showString "KeyPair " . showsPrec 11 k
+
+instance DebugShow KeyPair where
+    debugShow (KeyPair k) = "KeyPair (" ++ debugShow k ++ ")"
 
 -- | Public key of a RSA KeyPair
 toPublicKey :: KeyPair -> PublicKey
