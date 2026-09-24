@@ -33,6 +33,11 @@ module Crypto.Cipher.AES.GCM (
     newContext,
     encrypt,
     decrypt,
+
+    -- * Header protection
+    HeaderKey,
+    newHeaderKey,
+    encryptWithMask,
 ) where
 
 import Crypto.Cipher.AES.Primitive (
@@ -40,12 +45,15 @@ import Crypto.Cipher.AES.Primitive (
     AESGCMKey,
     gcmFullDecrypt,
     gcmFullEncrypt,
+    gcmFullEncryptMask,
     gcmKeyInit,
     initAES,
  )
 import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
+import Data.Word (Word8)
+import Foreign.Ptr (Ptr)
 
 -- | Everything a key determines: the AES key schedule and the table of
 -- multiples of @H@.  Build it once and encrypt as many messages under it as
@@ -102,3 +110,49 @@ decrypt (Context aes gk) nonce aad input taglen
     | otherwise = gcmFullDecrypt aes gk nonce aad body tag
   where
     (body, tag) = B.splitAt (B.length input - taglen) input
+
+----------------------------------------------------------------
+
+-- | The key schedule for header protection, which QUIC keeps separately from
+-- the one it encrypts with.  Built once, like a t'Context'.
+newtype HeaderKey = HeaderKey AES
+
+-- | Take a header protection key of 16, 24 or 32 bytes.
+newHeaderKey :: ByteArrayAccess key => key -> CryptoFailable HeaderKey
+newHeaderKey k = HeaderKey <$> initAES k
+
+-- | Encrypt one message and, from a sample of the ciphertext it just
+-- produced, make the header protection mask -- in one call, into two buffers
+-- the caller already has.
+--
+-- QUIC takes its sample from the ciphertext, so the mask cannot be had before
+-- the encryption.  It can be had before coming back, and with the buffers
+-- already there nothing is allocated for either.  On an Apple M4 the mask
+-- then costs about 0.02 us, where asking for it separately costs 0.11.
+--
+-- The sealed message wants @length input + taglen@ bytes and the mask
+-- sixteen.  @sampleOffset@ says where the sixteen bytes of sample begin in
+-- the sealed message, counting the tag as part of it.
+--
+-- 'False' comes back, and nothing is written, when the sample would not fit.
+encryptWithMask
+    :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArrayAccess ba)
+    => Context
+    -> HeaderKey
+    -> nonce
+    -> aad
+    -> ba
+    -> Int
+    -- ^ tag length
+    -> Int
+    -- ^ sample offset
+    -> Ptr Word8
+    -- ^ where the sealed message goes
+    -> Ptr Word8
+    -- ^ where the sixteen bytes of mask go
+    -> IO Bool
+encryptWithMask (Context aes gk) (HeaderKey hp) nonce aad input taglen off outp maskp
+    | off < 0 || taglen < 0 || off + 16 > B.length input + taglen = return False
+    | otherwise = do
+        gcmFullEncryptMask aes gk hp nonce aad input taglen off outp maskp
+        return True

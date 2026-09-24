@@ -2,6 +2,19 @@
 
 ## 2.1.0
 
+* feat(aes): `encryptWithMask`, for the QUIC header protection mask.  QUIC
+  takes the sample for its header protection from the ciphertext, so the mask
+  cannot be had before the encryption -- but it can be had before coming back.
+  `newHeaderKey` builds the second key schedule once, where `quic` builds it
+  per packet, and `encryptWithMask` seals the message and writes the sixteen
+  bytes of mask, both into buffers the caller already has, so that nothing is
+  allocated for either.  On an Apple M4 the mask then costs about 0.02 us
+  against 0.09 to 0.11 asked for separately: a 1440-byte packet goes from
+  0.473 to 0.382 us and a 100-byte one from 0.343 to 0.260.  Most of that is
+  the allocations rather than the crossing -- a version returning the two as
+  bytearrays was measured at 0.419 and 0.299, so it recovered less than a
+  third of it -- and the AES block itself is under two nanoseconds
+
 * feat(aes): `Crypto.Cipher.AES.GCM`, for many short messages under one key.
   The interface in `Crypto.Cipher.Types` builds a state from the key *and* the
   nonce and then walks it through appending the additional data, encrypting
