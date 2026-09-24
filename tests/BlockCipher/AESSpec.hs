@@ -210,12 +210,12 @@ gcmLongTests =
         => cipher
         -> KATGCMLong.KATGCMLong
         -> Expectation
-    run witness (klen, aadlen, ptlen, tag, ctHash) = do
+    run cipherWitness (klen, aadlen, ptlen, tag, ctHash) = do
         BA.convert authTag `shouldBe` tag
         digest ciphertext `shouldBe` ctHash
         aeadSimpleDecrypt aead aad ciphertext authTag `shouldBe` Just plaintext
       where
-        cipher = throwCryptoError (cipherInit (KATGCMLong.gcmKey klen)) `asTypeOf` witness
+        cipher = throwCryptoError (cipherInit (KATGCMLong.gcmKey klen)) `asTypeOf` cipherWitness
         aead = throwCryptoError (aeadInit AEAD_GCM cipher KATGCMLong.gcmIV)
         aad = KATGCMLong.gcmAAD aadlen
         plaintext = KATGCMLong.gcmPlaintext ptlen

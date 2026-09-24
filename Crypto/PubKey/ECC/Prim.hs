@@ -25,7 +25,7 @@ module Crypto.PubKey.ECC.Prim (
 
 import Crypto.Error (maybeCryptoError)
 import Crypto.Internal.ECC (CurveField (..), MulResult (..), curveMul)
-import Crypto.Number.Basic (numBits, numBytes)
+import Crypto.Number.Basic (numBits)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic
@@ -34,8 +34,6 @@ import Crypto.PubKey.ECC.Types
 import Crypto.Random
 import Data.Bits (shiftL, shiftR, testBit, (.&.))
 import Data.Maybe
-import Data.Word (Word8)
-import Foreign.ForeignPtr (ForeignPtr)
 
 -- | P-256, the one curve here that has a C implementation: 'SEC_p256r1', also
 -- known as NIST P-256 and prime256v1.

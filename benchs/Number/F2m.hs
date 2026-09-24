@@ -9,13 +9,16 @@ import Crypto.Number.Basic (log2)
 import Crypto.Number.F2m
 
 genInteger :: Int -> Int -> Integer
-genInteger salt bits =
-    head
-        . dropWhile ((< bits) . log2)
-        . scanl (\a r -> a * 2 ^ (31 :: Int) + abs r) 0
-        . randoms
-        . mkStdGen
-        $ salt + bits
+genInteger salt bits = case candidates of
+    x : _ -> x
+    [] -> error "genInteger: the stream of candidates ran out"
+  where
+    candidates =
+        dropWhile ((< bits) . log2)
+            . scanl (\a r -> a * 2 ^ (31 :: Int) + abs r) 0
+            . randoms
+            . mkStdGen
+            $ salt + bits
 
 benchMod :: Int -> Benchmark
 benchMod bits = bench (show bits) $ nf (modF2m m) a

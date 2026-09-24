@@ -153,7 +153,7 @@ oaepRejectTests =
             decrypt' (B.drop 1 (cipherText vec)) `shouldBe` Left MessageSizeIncorrect
   where
     key = rsaKey1
-    vec = head vectorsKey1
+    vec = firstVector vectorsKey1
     em = dp Nothing key (cipherText vec)
     reencrypt = ep (private_pub key)
     decrypt' = OAEP.decrypt Nothing (OAEP.defaultOAEPParams SHA1) key
@@ -185,7 +185,7 @@ oaepRangeTests =
     -- the first vector whose ciphertext can be shifted by n and still fit in k
     -- octets
     (vec, c) =
-        head
+        firstVector
             [ (v, ct)
             | v <- vectorsKey1
             , let ct = cipherText v
