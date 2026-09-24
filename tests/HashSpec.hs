@@ -135,13 +135,16 @@ expected =
             , "a8f04b0f7201a0d728101c9d26525b31764a3493fcd8458f"
             ]
         )
-    , {-
-          , ("Skein256-160", HashAlg Skein256_160, [
-              "ff800bed6d2044ee9d604a674e3fda50d9b24a72",
-              "3265703c166aa3e0d7da070b9cf1b1a5953f0a77",
-              "17b29aa1424b3ec022505bd215ff73fd2e6d1e5a" ])
-      -}
-
+    ,
+        ( "Skein256-160"
+        , HashAlg (Skein256 :: Skein256 160)
+        ,
+            [ "ff800bed6d2044ee9d604a674e3fda50d9b24a72"
+            , "3265703c166aa3e0d7da070b9cf1b1a5953f0a77"
+            , "17b29aa1424b3ec022505bd215ff73fd2e6d1e5a"
+            ]
+        )
+    ,
         ( "Skein256-256"
         , HashAlg Skein256_256
         ,
@@ -150,13 +153,16 @@ expected =
             , "fb2f2f2deed0e1dd7ee2b91cee34e2d1c22072e1f5eaee288c35a0723eb653cd"
             ]
         )
-    , {-
-          , ("Skein512-160", HashAlg Skein512_160, [
-              "49daf1ccebb3544bc93cb5019ba91b0eea8876ee",
-              "826325ee55a6dd18c3b2dbbc9c10420f5475975e",
-              "7544ec7a35712ec953f02b0d0c86641cae4eb6e5" ])
-      -}
-
+    ,
+        ( "Skein512-160"
+        , HashAlg (Skein512 :: Skein512 160)
+        ,
+            [ "49daf1ccebb3544bc93cb5019ba91b0eea8876ee"
+            , "826325ee55a6dd18c3b2dbbc9c10420f5475975e"
+            , "7544ec7a35712ec953f02b0d0c86641cae4eb6e5"
+            ]
+        )
+    ,
         ( "Skein512-384"
         , HashAlg Skein512_384
         ,
@@ -563,9 +569,41 @@ makeTestSHAKE128Truncation i byte =
         Nothing -> error ("invalid Nat: " ++ show n)
         Just (SomeNat p) -> convert (hashEmpty p)
 
+-- | The Skein types with the size in their name and the ones that take it as
+-- a type parameter are the same function, and the parameter also takes the
+-- sizes that have no name of their own.
+skeinNatTests :: Spec
+skeinNatTests = describe "Skein with the digest size as a type parameter" $ do
+    describe "agrees with the type of that name" $ do
+        it "Skein256 224" $ same (Skein256 :: Skein256 224) Skein256_224
+        it "Skein256 256" $ same (Skein256 :: Skein256 256) Skein256_256
+        it "Skein512 224" $ same (Skein512 :: Skein512 224) Skein512_224
+        it "Skein512 256" $ same (Skein512 :: Skein512 256) Skein512_256
+        it "Skein512 384" $ same (Skein512 :: Skein512 384) Skein512_384
+        it "Skein512 512" $ same (Skein512 :: Skein512 512) Skein512_512
+    describe "takes a size no named type offers" $ do
+        it "8 bits" $ len (Skein512 :: Skein512 8) `shouldBe` 1
+        it "1024 bits" $ len (Skein512 :: Skein512 1024) `shouldBe` 128
+        it "8192 bits" $ len (Skein512 :: Skein512 8192) `shouldBe` 1024
+        it "rounds a size that is not a whole number of bytes up" $ do
+            len (Skein512 :: Skein512 100) `shouldBe` 13
+            len (Skein256 :: Skein256 1) `shouldBe` 1
+    -- the length goes into the configuration block, so it changes the chaining
+    -- value the message is hashed from: a longer digest is not an extension of
+    -- a shorter one, which is the opposite of how SHAKE behaves
+    it "answers a different size with an unrelated digest, not a longer one" $ do
+        let short = convert (hashWith (Skein512 :: Skein512 256) v1) :: ByteString
+            long = convert (hashWith (Skein512 :: Skein512 512) v1) :: ByteString
+        B.take (B.length short) long `shouldNotBe` short
+  where
+    same a b = map (h a) vectors `shouldBe` map (h b) vectors
+    h alg m = convert (hashWith alg m) :: ByteString
+    len alg = B.length (convert (hashWith alg v1) :: ByteString)
+
 spec :: Spec
 spec = do
     describe "KATs" $ mapM_ makeTestAlg expected
+    skeinNatTests
     describe "KATs over several blocks" $
         mapM_ (makeTestAlgWith longVectors) expectedLong
     describe "Chunking" $ mapM_ makeTestChunk expected
