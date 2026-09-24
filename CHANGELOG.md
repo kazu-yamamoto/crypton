@@ -1,5 +1,24 @@
 # CHANGELOG for crypton
 
+## 2.0.1
+
+* fix(cpu): stop reading Intel's SDBG bit as AMD's XOP, which crashed SHA-512
+  and ChaCha20 on Broadwell and later.  The vendored assembly dispatches on a
+  capability word this library fills, and reads bit 11 of its second dword as
+  XOP -- which is CPUID leaf 0x80000001 ECX bit 11, an AMD extended leaf.
+  crypton put the raw leaf 1 ECX there, whose bit 11 is SDBG, the silicon
+  debug interface, which Intel has reported since Broadwell.  On such a
+  processor `sha512-x86_64.S` took `.Lxop_shortcut` and
+  `chacha-x86_64.S` took `.Lcrypton_chacha20_asm_4xop`, and the first
+  `vprotq` is an invalid opcode: SIGILL, for SHA-512 and SHA-384, and for
+  ChaCha20 and so ChaCha20-Poly1305.  OpenSSL clears leaf 1's bit 11 before
+  merging the real flag in; crypton now clears it and leaves it clear, so the
+  XOP paths are never taken.  Nothing is lost -- XOP ran from AMD's Bulldozer
+  to Excavator and Zen dropped it -- and it is the reason the AVX-512 bits
+  beside it are cleared as well.  Reported by @lucasdicioccio, who
+  disassembled the trap
+  [#202](https://github.com/kazu-yamamoto/crypton/issues/202)
+
 ## 2.0.0
 
 * fix(docs): export the names the documentation already referred to.
