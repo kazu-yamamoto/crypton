@@ -99,7 +99,7 @@ kmac
 kmac str key msg = finalize $ updates (initialize str key) [msg]
 
 -- | Represent an ongoing KMAC state, that can be appended with 'update' and
--- finalized to a 'KMAC' with 'finalize'.
+-- finalized to a t'KMAC' with 'finalize'.
 newtype Context a = Context (H.Context a)
 
 -- | Initialize a new incremental KMAC context with the supplied customization

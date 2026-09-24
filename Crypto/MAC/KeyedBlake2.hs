@@ -48,7 +48,7 @@ instance Eq (KeyedBlake2 a) where
     KeyedBlake2 x == KeyedBlake2 y = B.constEq x y
 
 -- | Represent an ongoing Blake2 state, that can be appended with 'update' and
--- finalized to a 'KeyedBlake2' with 'finalize'.
+-- finalized to a t'KeyedBlake2' with 'finalize'.
 newtype Context a = Context (H.Context a)
 
 -- | Initialize a new incremental keyed Blake2 context with the supplied key.

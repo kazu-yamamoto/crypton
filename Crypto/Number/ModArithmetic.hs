@@ -20,6 +20,10 @@
 -- as well means a fixed-width representation, which is what the curve modules
 -- and 'expSafe' itself use underneath.
 module Crypto.Number.ModArithmetic (
+    -- * Exceptions
+    CoprimesAssertionError (..),
+    ModulusAssertionError (..),
+
     -- * Exponentiation
     expSafe,
     expFast,
@@ -191,7 +195,7 @@ inverse g m = gmpInverse g m `onGmpUnsupported` v
 -- is known to exists.
 --
 -- If the numbers are not defined as coprime, this function
--- will raise a 'CoprimesAssertionError'.
+-- will raise a t'CoprimesAssertionError'.
 inverseCoprimes :: Integer -> Integer -> Integer
 inverseCoprimes g m =
     case inverse g m of
@@ -260,7 +264,7 @@ instance E.Exception ModulusAssertionError
 -- | Modular square root of @g@ modulo a prime @p@.
 --
 -- If the modulus is found not to be prime, the function will raise a
--- 'ModulusAssertionError'.
+-- t'ModulusAssertionError'.
 --
 -- This implementation is variable time and should be used with public
 -- parameters only.

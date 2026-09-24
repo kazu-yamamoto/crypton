@@ -78,7 +78,7 @@ generateWith
     -> Int
     -- ^ size in bytes
     -> Integer
-    -- ^ RSA public exponent 'e'
+    -- ^ RSA public exponent @e@
     -> Maybe (PublicKey, PrivateKey)
 generateWith (p, q) size e =
     case privateExponent of
@@ -141,7 +141,7 @@ generate
     => Int
     -- ^ size in bytes
     -> Integer
-    -- ^ RSA public exponent 'e'
+    -- ^ RSA public exponent @e@
     -> m (PublicKey, PrivateKey)
 generate size e = loop
   where

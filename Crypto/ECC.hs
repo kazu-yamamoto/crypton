@@ -15,9 +15,9 @@
 --
 -- == Timing
 --
--- 'Curve_P256R1' reaches a dedicated implementation whose scalar
--- multiplication does not branch on the scalar.  'Curve_P384R1' and
--- 'Curve_P521R1' do not: they are built on "Crypto.ECC.Simple.Prim", whose
+-- t'Curve_P256R1' reaches a dedicated implementation whose scalar
+-- multiplication does not branch on the scalar.  t'Curve_P384R1' and
+-- t'Curve_P521R1' do not: they are built on "Crypto.ECC.Simple.Prim", whose
 -- scalar multiplication is a double-and-add over @Integer@ and is
 -- documented there as vulnerable to timing attacks.
 --
@@ -28,8 +28,8 @@
 --
 -- Note also that @Integer@ arithmetic is variable-time underneath, so no
 -- curve built on "Crypto.ECC.Simple.Prim" can be made constant-time without
--- leaving it.  Where that matters, use 'Curve_P256R1', 'Curve_X25519',
--- 'Curve_X448' or 'Curve_Edwards25519'.
+-- leaving it.  Where that matters, use t'Curve_P256R1', t'Curve_X25519',
+-- t'Curve_X448' or t'Curve_Edwards25519'.
 module Crypto.ECC (
     Curve_P256R1 (..),
     Curve_P384R1 (..),

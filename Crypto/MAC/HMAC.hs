@@ -63,7 +63,7 @@ hmacLazy
 hmacLazy secret msg = finalize $ updates (initialize secret) (L.toChunks msg)
 
 -- | Represent an ongoing HMAC state, that can be appended with 'update'
--- and finalize to an HMAC with 'hmacFinalize'
+-- and finalize to an HMAC with 'finalize'
 data Context hashalg = Context !(Hash.Context hashalg) !(Hash.Context hashalg)
 
 -- | Initialize a new incremental HMAC context

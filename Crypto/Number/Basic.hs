@@ -56,7 +56,7 @@ sqrti i
 
 -- | Get the extended GCD of two integer using integer divMod
 --
--- gcde 'a' 'b' find (x,y,gcd(a,b)) where ax + by = d
+-- gcde @a@ @b@ find (x,y,gcd(a,b)) where ax + by = d
 gcde :: Integer -> Integer -> (Integer, Integer, Integer)
 gcde a b =
     onGmpUnsupported (gmpGcde a b) $

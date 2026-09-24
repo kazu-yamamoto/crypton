@@ -57,17 +57,17 @@ data Version = Version10 | Version13
 
 -- | The time cost, which defines the amount of computation realized and therefore the execution time, given in number of iterations.
 --
--- 'FFI.ARGON2_MIN_TIME' <= 'hashIterations' <= 'FFI.ARGON2_MAX_TIME'
+-- 'FFI.ARGON2_MIN_TIME' <= 'iterations' <= 'FFI.ARGON2_MAX_TIME'
 type TimeCost = Word32
 
 -- | The memory cost, which defines the memory usage, given in kibibytes.
 --
--- max 'FFI.ARGON2_MIN_MEMORY' (8 * 'hashParallelism') <= 'hashMemory' <= 'FFI.ARGON2_MAX_MEMORY'
+-- max 'FFI.ARGON2_MIN_MEMORY' (8 * 'parallelism') <= 'memory' <= 'FFI.ARGON2_MAX_MEMORY'
 type MemoryCost = Word32
 
 -- | A parallelism degree, which defines the number of parallel threads.
 --
--- 'FFI.ARGON2_MIN_LANES' <= 'hashParallelism' <= 'FFI.ARGON2_MAX_LANES' && 'FFI.ARGON_MIN_THREADS' <= 'hashParallelism' <= 'FFI.ARGON2_MAX_THREADS'
+-- 'FFI.ARGON2_MIN_LANES' <= 'parallelism' <= 'FFI.ARGON2_MAX_LANES' && 'FFI.ARGON_MIN_THREADS' <= 'parallelism' <= 'FFI.ARGON2_MAX_THREADS'
 type Parallelism = Word32
 
 -- | Parameters that can be adjusted to change the runtime performance of the

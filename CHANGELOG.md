@@ -2,6 +2,15 @@
 
 ## 2.0.0
 
+* fix(docs): export the names the documentation already referred to.
+  `Crypto.Number.ModArithmetic` throws `CoprimesAssertionError` and
+  `ModulusAssertionError` from `inverseCoprimes` and `squareRoot`, and said so
+  in the haddock, without exporting either, so a caller could not name the
+  exception it was told to expect; `Crypto.PubKey.Rabin.Types.generatePrimes`
+  takes a `PrimeCondition` in its exported signature and that synonym was not
+  exported either.  All three are now exported
+  [#195](https://github.com/kazu-yamamoto/crypton/pull/195)
+
 * Breaking change: fix(bcrypt): refuse a cost bcrypt does not have rather than
   substituting one.  A cost below 4 came back as a cost-10 hash and a cost
   above 31 as a cost-31 one, with nothing said either way, so a caller asking

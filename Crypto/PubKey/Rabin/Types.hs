@@ -6,6 +6,7 @@
 -- Portability : unknown
 module Crypto.PubKey.Rabin.Types (
     Error (..),
+    PrimeCondition,
     generatePrimes,
 ) where
 
