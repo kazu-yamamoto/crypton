@@ -532,19 +532,27 @@ static void gcm_ghash_add4(aes_gcm *gcm, const block128 *b)
 	crypton_gf_mul4(&gcm->tag, b, gcm->htable);
 }
 
-void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
+/* The part of the state that depends on the key alone: H = encrypt_K(0^128)
+ * and the table of its multiples.  It is 256 of the 320 bytes, and a caller
+ * that keeps a key can compute it once instead of once per message. */
+void crypton_aes_gcm_key_init(aes_gcm *gcm, aes_key *key)
 {
 	block128 h;
+
+	block128_zero(&h);
+	crypton_aes_encrypt_block(&h, key, &h);
+	crypton_hinit(gcm->htable, &h);
+}
+
+/* Everything else: what the nonce and the message determine.  Leaves htable
+ * alone, so it runs on a state whose key part is already there. */
+static void gcm_message_init(aes_gcm *gcm, uint8_t *iv, uint32_t len)
+{
 	gcm->length_aad = 0;
 	gcm->length_input = 0;
 
-	block128_zero(&h);
 	block128_zero(&gcm->tag);
 	block128_zero(&gcm->iv);
-
-	/* prepare H : encrypt_K(0^128) */
-	crypton_aes_encrypt_block(&h, key, &h);
-	crypton_hinit(gcm->htable, &h);
 
 	if (len == 12) {
 		block128_copy_bytes(&gcm->iv, iv, 12);
@@ -566,6 +574,12 @@ void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 	}
 
 	block128_copy_aligned(&gcm->civ, &gcm->iv);
+}
+
+void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
+{
+	crypton_aes_gcm_key_init(gcm, key);
+	gcm_message_init(gcm, iv, len);
 }
 
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length)
@@ -602,6 +616,58 @@ void crypton_aes_gcm_finish(uint8_t *tag, aes_gcm *gcm, aes_key *key)
 	for (i = 0; i < 16; i++) {
 		tag[i] = gcm->tag.b[i];
 	}
+}
+
+/* One message, one call.  The key part of the state comes in already built,
+ * the rest is set up on the stack, and the additional data, the encryption
+ * and the tag all happen before returning, so nothing crosses a language
+ * boundary between them and no intermediate state is copied out.  The output
+ * buffer takes the ciphertext and then the tag, so it wants length + taglen
+ * bytes. */
+void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+                                  uint8_t *iv, uint32_t ivlen,
+                                  uint8_t *aad, uint32_t aadlen,
+                                  uint8_t *input, uint32_t length, uint32_t taglen)
+{
+	aes_gcm gcm;
+	uint8_t tag[16];
+
+	memcpy(gcm.htable, gcmkey->htable, sizeof(gcm.htable));
+	gcm_message_init(&gcm, iv, ivlen);
+	if (aadlen)
+		crypton_aes_gcm_aad(&gcm, aad, aadlen);
+	if (length)
+		crypton_aes_gcm_encrypt(output, &gcm, key, input, length);
+	crypton_aes_gcm_finish(tag, &gcm, key);
+	memcpy(output + length, tag, taglen);
+}
+
+/* The same the other way, with the tag checked here rather than by the
+ * caller: returns 1 when it matches and 0 when it does not, comparing every
+ * byte either way.  The plaintext is written whatever the answer, so a caller
+ * that gets 0 must not use it. */
+int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+                                 uint8_t *iv, uint32_t ivlen,
+                                 uint8_t *aad, uint32_t aadlen,
+                                 uint8_t *input, uint32_t length,
+                                 const uint8_t *tag, uint32_t taglen)
+{
+	aes_gcm gcm;
+	uint8_t expected[16];
+	uint32_t i;
+	uint8_t diff = 0;
+
+	memcpy(gcm.htable, gcmkey->htable, sizeof(gcm.htable));
+	gcm_message_init(&gcm, iv, ivlen);
+	if (aadlen)
+		crypton_aes_gcm_aad(&gcm, aad, aadlen);
+	if (length)
+		crypton_aes_gcm_decrypt(output, &gcm, key, input, length);
+	crypton_aes_gcm_finish(expected, &gcm, key);
+
+	for (i = 0; i < taglen; i++)
+		diff |= (uint8_t) (expected[i] ^ tag[i]);
+	return diff == 0;
 }
 
 static inline uint8_t ccm_b0_flags(uint32_t has_adata, uint32_t m, uint32_t l)

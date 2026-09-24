@@ -143,6 +143,7 @@ flag use_target_attributes
 library
     exposed-modules:
         Crypto.Cipher.AES
+        Crypto.Cipher.AES.GCM
         Crypto.Cipher.AESGCMSIV
         Crypto.Cipher.Blowfish
         Crypto.Cipher.Camellia

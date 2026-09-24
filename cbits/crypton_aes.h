@@ -104,6 +104,16 @@ void crypton_aes_decrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes
                      uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 
 void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len);
+void crypton_aes_gcm_key_init(aes_gcm *gcm, aes_key *key);
+void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+                                  uint8_t *iv, uint32_t ivlen,
+                                  uint8_t *aad, uint32_t aadlen,
+                                  uint8_t *input, uint32_t length, uint32_t taglen);
+int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+                                 uint8_t *iv, uint32_t ivlen,
+                                 uint8_t *aad, uint32_t aadlen,
+                                 uint8_t *input, uint32_t length,
+                                 const uint8_t *tag, uint32_t taglen);
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length);
 void crypton_aes_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);

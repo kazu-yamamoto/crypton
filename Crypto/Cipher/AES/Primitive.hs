@@ -40,6 +40,10 @@ module Crypto.Cipher.AES.Primitive (
     -- * Incremental GCM
     gcmMode,
     gcmInit,
+    AESGCMKey,
+    gcmKeyInit,
+    gcmFullEncrypt,
+    gcmFullDecrypt,
     gcmAeadInit,
 
     -- * Incremental OCB
@@ -429,6 +433,99 @@ gcmInit ctx iv = unsafeDoIO $ do
             c_aes_gcm_init (castPtr gcmStPtr) k v (fromIntegral $ B.length iv)
     return $ AESGCM sm
 
+-- | How long a message may be and still be handed to an unsafe foreign call.
+-- Four kibibytes is about half a microsecond of work, and it takes in a
+-- datagram of any size a network will carry.
+shortMessage :: Int
+shortMessage = 4096
+
+-- | The part of a GCM state the key alone determines: H, which is the key
+-- applied to a block of zeroes, and the table of its multiples.  That is 256
+-- of the 320 bytes of a GCM state, and it is the same for every message sent
+-- under one key, so a caller that keeps a key can build this once rather than
+-- once for every message.
+newtype AESGCMKey = AESGCMKey ScrubbedBytes
+
+-- | Build the key part of a GCM state.
+{-# NOINLINE gcmKeyInit #-}
+gcmKeyInit :: AES -> AESGCMKey
+gcmKeyInit ctx = AESGCMKey $ B.allocAndFreeze sizeGCM $ \p ->
+    keyToPtr ctx $ \k -> c_aes_gcm_key_init (castPtr p) k
+
+-- | Authenticate and encrypt one message in a single call: the nonce, the
+-- additional data, the plaintext and the tag, with no state crossing back
+-- into Haskell in between.  The result is the ciphertext followed by the tag.
+{-# NOINLINE gcmFullEncrypt #-}
+gcmFullEncrypt
+    :: (ByteArrayAccess iv, ByteArrayAccess aad, ByteArrayAccess ba, ByteArray output)
+    => AES -> AESGCMKey -> iv -> aad -> ba -> Int -> output
+gcmFullEncrypt ctx (AESGCMKey gk) iv aad input taglen =
+    B.allocAndFreeze (B.length input + taglen) $ \out ->
+        B.withByteArray gk $ \gkp ->
+            keyToPtr ctx $ \k ->
+                B.withByteArray iv $ \ivp ->
+                    B.withByteArray aad $ \aadp ->
+                        B.withByteArray input $ \inp ->
+                            call
+                                out
+                                (castPtr gkp)
+                                k
+                                ivp
+                                (fromIntegral $ B.length iv)
+                                aadp
+                                (fromIntegral $ B.length aad)
+                                inp
+                                (fromIntegral $ B.length input)
+                                (fromIntegral taglen)
+  where
+    -- An unsafe call keeps a capability for as long as it runs, so it is only
+    -- right for work that is over quickly.  A message this side of
+    -- 'shortMessage' is, and it is the short ones the saving matters for: a
+    -- safe call costs about 0.075 us whatever the length, which is a fifth of
+    -- a 1440-byte packet and a percent of a 16 KiB record.
+    call
+        | B.length input <= shortMessage = c_aes_gcm_full_encrypt_unsafe
+        | otherwise = c_aes_gcm_full_encrypt
+
+-- | The same the other way, with the tag compared here rather than by the
+-- caller: 'Nothing' when it does not match, and every byte of it is looked at
+-- either way.  The ciphertext comes in without its tag, which is given
+-- separately.
+{-# NOINLINE gcmFullDecrypt #-}
+gcmFullDecrypt
+    :: ( ByteArrayAccess iv
+       , ByteArrayAccess aad
+       , ByteArrayAccess ba
+       , ByteArrayAccess tag
+       , ByteArray output
+       )
+    => AES -> AESGCMKey -> iv -> aad -> ba -> tag -> Maybe output
+gcmFullDecrypt ctx (AESGCMKey gk) iv aad input tag = unsafeDoIO $ do
+    (r, out) <- B.allocRet (B.length input) $ \outp ->
+        B.withByteArray gk $ \gkp ->
+            keyToPtr ctx $ \k ->
+                B.withByteArray iv $ \ivp ->
+                    B.withByteArray aad $ \aadp ->
+                        B.withByteArray input $ \inp ->
+                            B.withByteArray tag $ \tagp ->
+                                call
+                                    outp
+                                    (castPtr gkp)
+                                    k
+                                    ivp
+                                    (fromIntegral $ B.length iv)
+                                    aadp
+                                    (fromIntegral $ B.length aad)
+                                    inp
+                                    (fromIntegral $ B.length input)
+                                    tagp
+                                    (fromIntegral $ B.length tag)
+    return $ if r /= 0 then Just out else Nothing
+  where
+    call
+        | B.length input <= shortMessage = c_aes_gcm_full_decrypt_unsafe
+        | otherwise = c_aes_gcm_full_decrypt
+
 -- | append data which is only going to be authenticated to the GCM context.
 --
 -- needs to happen after initialization and before appending encryption/decryption data.
@@ -500,9 +597,11 @@ ocbInit ctx iv = unsafeDoIO $ do
 -- The tag length is expressed in bytes and must be in [0..16].
 -- The IV length must be in [1..15] bytes per RFC 7253.
 {-# NOINLINE ocbInitWithTagLength #-}
-ocbInitWithTagLength :: ByteArrayAccess iv => AES -> iv -> Int -> CryptoFailable AESOCB
+ocbInitWithTagLength
+    :: ByteArrayAccess iv => AES -> iv -> Int -> CryptoFailable AESOCB
 ocbInitWithTagLength ctx iv taglen
-    | taglen < 0 || taglen > 16 = CryptoFailed CryptoError_AuthenticationTagSizeInvalid
+    | taglen < 0 || taglen > 16 =
+        CryptoFailed CryptoError_AuthenticationTagSizeInvalid
     | ivlen < 1 || ivlen > 15 = CryptoFailed CryptoError_IvSizeInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
         sm <- B.alloc sizeOCB $ \ocbStPtr ->
@@ -682,6 +781,67 @@ foreign import ccall "crypton_aes.h crypton_aes_encrypt_ctr"
 foreign import ccall "crypton_aes.h crypton_aes_encrypt_c32"
     c_aes_encrypt_c32
         :: CString -> Ptr AES -> Ptr Word8 -> CString -> CUInt -> IO ()
+
+foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_key_init"
+    c_aes_gcm_key_init :: Ptr AESGCM -> Ptr AES -> IO ()
+
+foreign import ccall "crypton_aes.h crypton_aes_gcm_full_encrypt"
+    c_aes_gcm_full_encrypt
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> IO ()
+
+foreign import ccall "crypton_aes.h crypton_aes_gcm_full_decrypt"
+    c_aes_gcm_full_decrypt
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> IO CInt
+
+foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_encrypt"
+    c_aes_gcm_full_encrypt_unsafe
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> IO ()
+
+foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_decrypt"
+    c_aes_gcm_full_decrypt_unsafe
+        :: Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> IO CInt
 
 foreign import ccall "crypton_aes.h crypton_aes_gcm_init"
     c_aes_gcm_init :: Ptr AESGCM -> Ptr AES -> Ptr Word8 -> CUInt -> IO ()

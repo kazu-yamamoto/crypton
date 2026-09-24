@@ -2,6 +2,25 @@
 
 ## 2.1.0
 
+* feat(aes): `Crypto.Cipher.AES.GCM`, for many short messages under one key.
+  The interface in `Crypto.Cipher.Types` builds a state from the key *and* the
+  nonce and then walks it through appending the additional data, encrypting
+  and finalizing, copying the 320-byte state at each step.  For a stream that
+  is nothing next to the encryption; for a datagram it is most of the work.
+  Measured on an Apple M4, a 1440-byte packet with a 20-byte header took
+  1.30 us, of which 0.17 us was the encryption: the AES key schedule and the
+  table of multiples of `H` were rebuilt for every nonce although both depend
+  on the key alone, and three state copies and four foreign calls carried the
+  rest.  A `Context` now holds what the key determines and is built once, and
+  `encrypt` takes a nonce and a whole message and answers in one call, giving
+  the ciphertext with the tag after it -- the shape a packet wants.  `decrypt`
+  takes that shape back and compares the tag itself, in C, looking at every
+  byte either way.  1440 bytes: 1.30 to 0.37 us, 3.5x; 100 bytes 0.83 to 0.23;
+  a 16 KiB TLS record 2.86 to 2.20, where the saving is the setup rather than
+  the call.  A message of 4 KiB or less goes through an unsafe foreign call,
+  which is worth 0.075 us and is only right because such a call is over
+  quickly; anything longer keeps the safe one.  This computes what the general
+  interface computes, which the tests hold it to on the same vectors
 * Breaking change: fix(chachapoly1305): take a checked key, so that
   initializing cannot fail.  The nonce was already a checked type, built by
   `nonce8`, `nonce12` or `nonce24`, so the key length was the only way
