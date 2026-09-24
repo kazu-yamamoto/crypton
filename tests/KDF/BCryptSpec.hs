@@ -116,6 +116,33 @@ spec = do
                 :: CryptoFailable B.ByteString
             )
                 `shouldBe` CryptoFailed CryptoError_ParameterInvalid
+    describe "cost" $ do
+        -- What made the old behaviour wrong was not the floor but that it was
+        -- silent: a request for cost 3 came back as a cost-10 hash and a
+        -- request for cost 50 as a cost-31 one, with nothing said either way.
+        it "refuses a cost below the floor rather than substituting one" $
+            [ c
+            | c <- [minBound, -1, 0, 1, 2, 3]
+            , tryBcrypt c aSalt somePassword
+                /= (CryptoFailed CryptoError_ParameterInvalid :: CryptoFailable B.ByteString)
+            ]
+                `shouldBe` []
+        it "refuses a cost above the ceiling rather than substituting one" $
+            [ c
+            | c <- [32, 33, 64, maxBound]
+            , tryBcrypt c aSalt somePassword
+                /= (CryptoFailed CryptoError_ParameterInvalid :: CryptoFailable B.ByteString)
+            ]
+                `shouldBe` []
+        it "raises the same thing through bcrypt" $
+            evaluate (bcrypt (3 :: Int) aSalt somePassword :: B.ByteString)
+                `shouldThrow` (== CryptoError_ParameterInvalid)
+        it "takes the bottom of the range" $
+            validatePassword somePassword (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)
+                `shouldBe` True
+        it "writes the cost it was given, not another one" $
+            B.take 7 (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)
+                `shouldBe` "$2b$04$"
     describe "password length limit" $ do
         -- bcrypt keys Blowfish with at most the first 72 bytes of the
         -- password, so everything after that is ignored.  The Openwall
