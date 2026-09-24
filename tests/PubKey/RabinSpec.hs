@@ -4,7 +4,6 @@ module PubKey.RabinSpec (spec) where
 
 import qualified Data.ByteString as B
 
-import Control.Monad (replicateM)
 import Crypto.Hash
 import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.PubKey.Rabin.Basic as BRabin
@@ -234,11 +233,11 @@ rangeTests = describe "value range" $ do
         it "refuses a negated signature" $
             modVerify (negate modSig) `shouldBe` False
   where
-    basicEnc = head basicRabinEncryptionVectors
+    basicEnc = firstVector basicRabinEncryptionVectors
     basicCipher = cipherText basicEnc
     basicN = BRabin.public_n (BRabin.private_pub basicRabinKey)
     basicDecrypt = BRabin.decrypt (OAEP.defaultOAEPParams SHA1) basicRabinKey
-    basicSigVec = head basicRabinSignatureVectors
+    basicSigVec = firstVector basicRabinSignatureVectors
     basicSig = signature basicSigVec
     basicVerify s =
         BRabin.verify
@@ -247,16 +246,16 @@ rangeTests = describe "value range" $ do
             (message basicSigVec)
             (BRabin.Signature (os2ip (padding basicSigVec), s))
 
-    rwEnc = head rwEncryptionVectors
+    rwEnc = firstVector rwEncryptionVectors
     rwCipher = cipherText rwEnc
     rwN = RW.public_n (RW.private_pub rwKey)
     rwDecrypt = RW.decrypt (OAEP.defaultOAEPParams SHA1) rwKey
-    rwSigVec = head rwSignatureVectors
+    rwSigVec = firstVector rwSignatureVectors
     rwSig = signature rwSigVec
     rwVerify = RW.verify (RW.private_pub rwKey) SHA1 (message rwSigVec)
 
     modN = MRabin.public_n (MRabin.private_pub modifiedRabinKey)
-    modSigVec = head modifiedRabinSignatureVectors
+    modSigVec = firstVector modifiedRabinSignatureVectors
     modSig = signature modSigVec
     modVerify = MRabin.verify (MRabin.private_pub modifiedRabinKey) SHA1 (message modSigVec)
 
@@ -276,7 +275,7 @@ paddingTests = describe "signature padding" $ do
     it "verifies every signature it draws" $
         filter (not . verifies) signatures `shouldBe` []
   where
-    sigVec = head basicRabinSignatureVectors
+    sigVec = firstVector basicRabinSignatureVectors
     -- a fixed generator, so the same 400 paddings are drawn every run
     signatures =
         fst $
@@ -314,9 +313,9 @@ oaepTests = describe "OAEP" $ do
   where
     oaep = OAEP.defaultOAEPParams SHA1
     k = 128
-    seed = B.replicate 20 0x5a
+    oaepSeed = B.replicate 20 0x5a
     msg n = B.replicate n 0x41
-    block n = case OAEP.pad seed oaep k (msg n) of
+    block n = case OAEP.pad oaepSeed oaep k (msg n) of
         Right b -> b
         Left e -> error (show e)
     unpad' = OAEP.unpad oaep k

@@ -90,6 +90,7 @@ pad (ZERO sz) bin
 -- 'Nothing' when it is, rather than guess and hand back less than it was
 -- given.  Zero padding is only usable where the original length is known by
 -- other means.
+unpad :: ByteArray byteArray => Format -> byteArray -> Maybe byteArray
 unpad PKCS5 bin = unpad (PKCS7 8) bin
 unpad (PKCS7 sz) bin
     | not (pkcs7SizeValid sz) = Nothing

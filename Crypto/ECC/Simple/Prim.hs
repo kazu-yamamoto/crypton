@@ -22,7 +22,7 @@ module Crypto.ECC.Simple.Prim (
 import Crypto.ECC.Simple.Types
 import Crypto.Error
 import Crypto.Internal.ECC (CurveField (..), MulResult (..), curveMul)
-import Crypto.Number.Basic (numBits, numBytes)
+import Crypto.Number.Basic (numBits)
 import Crypto.Number.F2m
 import Crypto.Number.Generate (generateBetween)
 import Crypto.Number.ModArithmetic

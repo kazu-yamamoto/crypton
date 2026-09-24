@@ -171,8 +171,8 @@ unpadTests =
         rejects "a block of one octet" (B.singleton 0)
         rejects "a block of two octets" (B.pack [0, 2])
   where
-    block n msg =
-        B.concat [B.pack [0, 2], B.replicate n 0xff, B.singleton 0, msg]
+    block padLen payload =
+        B.concat [B.pack [0, 2], B.replicate padLen 0xff, B.singleton 0, payload]
     accepts name input expected =
         it name (RSA.unpad input `shouldBe` Right expected)
     rejects name input =
@@ -198,7 +198,7 @@ ciphertextRangeTests =
         it "a ciphertext representative equal to the modulus is refused" $
             decrypt' (i2ospOf_ k modulus) `shouldBe` sizeError
   where
-    vector = head vectorsSHA1
+    vector = firstVector vectorsSHA1
     k = size vector
     modulus = n vector
     decrypt' ct =
@@ -210,7 +210,7 @@ ciphertextRangeTests =
     -- the public key.  Whether c + n fits in k octets depends on the message;
     -- with this modulus about a quarter of the candidates below do.
     (m, c) =
-        head
+        firstVector
             [ (msg', ct)
             | i <- [1 .. 200 :: Int]
             , let msg' = B.append "message " (B.replicate i 0x78)
@@ -246,12 +246,12 @@ keyGenerationTests =
 blinderTests :: Spec
 blinderTests = describe "blinder" $ do
     prop "holds a number and its inverse" $ \testDRG ->
-        let key = vectorToPrivate (head vectorsSHA1)
-            n = RSA.public_n (RSA.private_pub key)
-            RSA.Blinder r rm1 = withTestDRG testDRG $ RSA.generateBlinder n
-         in (r * rm1) `mod` n === 1
+        let key = vectorToPrivate (firstVector vectorsSHA1)
+            modulus = RSA.public_n (RSA.private_pub key)
+            RSA.Blinder r rm1 = withTestDRG testDRG $ RSA.generateBlinder modulus
+         in (r * rm1) `mod` modulus === 1
     prop "leaves the decryption where it was" $ \testDRG ->
-        let vector = head vectorsSHA1
+        let vector = firstVector vectorsSHA1
             key = vectorToPrivate vector
             cipher = ep (vectorToPublic vector) (B.replicate 32 7)
             blinder =
@@ -266,12 +266,12 @@ blinderTests = describe "blinder" $ do
 privateExponentTests :: Spec
 privateExponentTests = describe "private exponent" $ do
     it "is the inverse of e modulo phi" $
-        [ (p, q, e)
-        | (p, q) <- primePairs
-        , e <- exponents
-        , let phi = (p - 1) * (q - 1)
-        , fmap (RSA.private_d . snd) (RSA.generateWith (p, q) 64 e)
-            /= inverse e phi
+        [ (pr, qr, ex)
+        | (pr, qr) <- primePairs
+        , ex <- exponents
+        , let phi = (pr - 1) * (qr - 1)
+        , fmap (RSA.private_d . snd) (RSA.generateWith (pr, qr) 64 ex)
+            /= inverse ex phi
         ]
             `shouldBe` []
   where

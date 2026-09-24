@@ -487,7 +487,7 @@ signatureRangeTests =
     -- the first vector whose signature can be shifted by n and still fit in k
     -- octets
     (vec, s) =
-        head
+        firstVector
             [ (v, sg)
             | v <- vectorsKey1
             , let sg = signature v

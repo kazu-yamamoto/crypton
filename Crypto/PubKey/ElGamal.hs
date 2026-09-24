@@ -69,7 +69,7 @@ import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Basic (gcde)
 import Crypto.Number.Generate (generateBetween, generateMax)
-import Crypto.Number.ModArithmetic (expFast, expSafe, inverse, inverseSafe)
+import Crypto.Number.ModArithmetic (expFast, expSafe, inverseSafe)
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.DH (
     Params (..),

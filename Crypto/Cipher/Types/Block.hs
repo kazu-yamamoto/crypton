@@ -43,7 +43,6 @@ module Crypto.Cipher.Types.Block (
 import Crypto.Cipher.Types.AEAD
 import Crypto.Cipher.Types.Base
 import Crypto.Cipher.Types.GF
-import Crypto.Cipher.Types.Utils
 import Crypto.Error
 import Data.Word
 

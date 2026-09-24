@@ -65,7 +65,6 @@ where
 import Control.Monad (unless, when)
 import Crypto.Cipher.Blowfish.Primitive (bcryptHash)
 import Crypto.Error
-import Crypto.Internal.Compat
 import Crypto.Random (MonadRandom, getRandomBytes)
 import Data.ByteArray (
     ByteArray,

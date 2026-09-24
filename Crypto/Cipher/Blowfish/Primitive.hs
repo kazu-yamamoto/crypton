@@ -30,7 +30,6 @@ import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat
 import Crypto.Internal.Imports
-import Data.Word (Word32, Word8)
 import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 

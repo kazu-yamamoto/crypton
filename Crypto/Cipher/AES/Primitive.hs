@@ -170,12 +170,6 @@ keyToPtr (AES b) f = withByteArray b (f . castPtr)
 ivToPtr :: ByteArrayAccess iv => iv -> (Ptr Word8 -> IO a) -> IO a
 ivToPtr iv f = withByteArray iv (f . castPtr)
 
-ivCopyPtr :: IV AES -> (Ptr Word8 -> IO a) -> IO (a, IV AES)
-ivCopyPtr (IV iv) f = (\(x, y) -> (x, IV y)) `fmap` copyAndModify iv f
-  where
-    copyAndModify :: ByteArray ba => ba -> (Ptr Word8 -> IO a) -> IO (a, ba)
-    copyAndModify ba f' = B.copyRet ba f'
-
 withKeyAndIV
     :: ByteArrayAccess iv => AES -> iv -> (Ptr AES -> Ptr Word8 -> IO a) -> IO a
 withKeyAndIV ctx iv f = keyToPtr ctx $ \kptr -> ivToPtr iv $ \ivp -> f kptr ivp

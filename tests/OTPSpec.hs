@@ -142,20 +142,20 @@ digestSizeTests =
 resyncTests :: [Spec]
 resyncTests =
     [ it "the value for the current counter moves the server on by one" $
-        resync 20 (at 0, []) `shouldBe` after 1
+        resync 20 (at 0, []) `shouldBe` serverAfter 1
     , it "a value from inside the window is found" $
-        resync 20 (at 7, []) `shouldBe` after 8
+        resync 20 (at 7, []) `shouldBe` serverAfter 8
     , it "the last value in the window is found" $
-        resync 20 (at 20, []) `shouldBe` after 21
+        resync 20 (at 20, []) `shouldBe` serverAfter 21
     , it "the value just past the window is not" $
         resync 20 (at 21, []) `shouldBe` Nothing
     , it "a value no counter produces is refused" $
         resync 20 (at 0 + 1, []) `shouldBe` Nothing
     , it "a window of zero looks at the current counter only" $ do
-        resync 0 (at 0, []) `shouldBe` after 1
+        resync 0 (at 0, []) `shouldBe` serverAfter 1
         resync 0 (at 1, []) `shouldBe` Nothing
     , it "the extra values carry the counter past all of them" $
-        resync 20 (at 7, [at 8, at 9]) `shouldBe` after 10
+        resync 20 (at 7, [at 8, at 9]) `shouldBe` serverAfter 10
     , it "an extra value that is wrong refuses the whole submission" $
         sequence_
             [ resync 20 (at 7, wrongAt i [at 8, at 9, at 10]) `shouldBe` Nothing
@@ -172,7 +172,7 @@ resyncTests =
     -- the value the client would show at the counter n ahead of the server's
     at n = hotp SHA1 OTP6 otpKey (ctr + n)
     -- the server counter n ahead of where it started
-    after n = Just (ctr + n)
+    serverAfter n = Just (ctr + n)
     wrongAt i vs = [if j == i then v + 1 else v | (j, v) <- zip [0 :: Int ..] vs]
 
 -- | totpVerify accepts a value from any step within the skew window and

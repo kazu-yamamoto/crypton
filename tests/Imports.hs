@@ -5,6 +5,9 @@ module Imports (
     Word64,
     ByteString,
 
+    -- * Test vectors
+    firstVector,
+
     -- * Modules
     module X,
 ) where
@@ -22,3 +25,11 @@ import Test.Hspec as X
 import Test.Hspec.QuickCheck as X (modifyMaxSuccess, prop)
 import Test.QuickCheck as X hiding (vector)
 import Utils as X
+
+-- | The first of a list of test vectors.  The lists these are taken from are
+-- literals in the modules that hold them and are never empty, so this says so
+-- once, with a name and a message, rather than leaving a partial 'head' at
+-- every use.
+firstVector :: [a] -> a
+firstVector (v : _) = v
+firstVector [] = error "firstVector: the vector list is empty"

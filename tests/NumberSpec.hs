@@ -178,7 +178,7 @@ exponentiationTests = describe "exponentiation" $ do
     safely (b, e, m) = expSafe b e m
     fastly (b, e, m) = expFast b e m
     -- an answer owing nothing to the library, for the corners to be held to
-    naivePow b e m = foldl (\acc bit -> acc * acc * (if bit then b else 1) `mod` m) 1 bits
+    naivePow b e m = foldl (\acc isSet -> acc * acc * (if isSet then b else 1) `mod` m) 1 bits
       where
         bits = [testBit e i | i <- [numBits e - 1, numBits e - 2 .. 0]]
 
