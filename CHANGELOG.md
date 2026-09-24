@@ -1,5 +1,22 @@
 # CHANGELOG for crypton
 
+## 2.1.0
+
+* feat(hash): Skein with the digest size as a type parameter.  Skein is
+  defined for any digest size and the C here has always taken one -- the
+  length goes to `crypton_skein512_init` and `crypton_skein512_finalize`, and
+  the output is produced in counter mode for as many blocks as are asked for
+  -- but Haskell could only reach the four sizes that had a type of their own.
+  `Skein256 (bitlen :: Nat)` and `Skein512 (bitlen :: Nat)` take any, in the
+  manner `SHAKE128` and `SHAKE256` already did; `Skein512 512` is
+  `Skein512_512`, which the tests hold it to, and the named types are
+  untouched.  This also brought back the `Skein256-160` and `Skein512-160`
+  known-answer vectors, which had been commented out of the test suite for
+  want of a type to run them against.  One large digest is a good deal cheaper
+  than the same bytes from repeated small ones: 512 KiB at 947 MB/s in one
+  digest against 172 MB/s as 8192 separate `Skein512_512` ones, on an M4
+  [#56](https://github.com/kazu-yamamoto/crypton/issues/56)
+
 ## 2.0.0
 
 * fix(docs): export the names the documentation already referred to.
