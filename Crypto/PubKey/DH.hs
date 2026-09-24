@@ -20,6 +20,7 @@ module Crypto.PubKey.DH (
     tryGetShared,
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Crypto.Error (
     CryptoError (..),
     CryptoFailable (..),
@@ -52,7 +53,15 @@ newtype PublicNumber = PublicNumber Integer
 
 -- | Represent Diffie Hellman private number X.
 newtype PrivateNumber = PrivateNumber Integer
-    deriving (Show, Read, Eq, Enum, Real, Num, Ord, NFData)
+    deriving (Read, Eq, Enum, Real, Num, Ord, NFData)
+
+-- | The number is not shown.  Use 'Crypto.Debug.debugShow' to see it.
+instance Show PrivateNumber where
+    show _ = "PrivateNumber <secret>"
+
+instance DebugShow PrivateNumber where
+    debugShow (PrivateNumber n) =
+        showString "PrivateNumber " . showsPrec 11 n $ ""
 
 -- | Represent Diffie Hellman shared secret.
 newtype SharedKey = SharedKey ScrubbedBytes

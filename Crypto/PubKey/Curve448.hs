@@ -28,6 +28,7 @@ module Crypto.PubKey.Curve448 (
     generateSecretKey,
 ) where
 
+import Crypto.Debug (DebugShow (..), debugShowBytes)
 import Data.Word
 import Foreign.Ptr
 
@@ -46,6 +47,9 @@ import Crypto.Random
 -- | A Curve448 Secret key
 newtype SecretKey = SecretKey ScrubbedBytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+instance DebugShow SecretKey where
+    debugShow = debugShowBytes "SecretKey"
 
 -- | A Curve448 public key
 newtype PublicKey = PublicKey Bytes

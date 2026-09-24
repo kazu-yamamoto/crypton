@@ -162,6 +162,7 @@ library
         Crypto.Data.Padding
         Crypto.ECC
         Crypto.ECC.Edwards25519
+        Crypto.Debug
         Crypto.Error
         Crypto.Hash
         Crypto.Hash.Algorithms
@@ -670,6 +671,7 @@ test-suite test-crypton
         PubKey.P256Spec
         PubKey.PSSSpec
         PubKey.RabinSpec
+        PubKey.SecrecySpec
         PubKey.RSASpec
         RuntimeSpec
         StreamCipher.ChaChaPoly1305Spec
