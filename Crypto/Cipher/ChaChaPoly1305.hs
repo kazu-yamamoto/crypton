@@ -193,8 +193,12 @@ initFromRootState :: ChaCha.State -> State
 initFromRootState rootState = State encState polyState 0 0
   where
     (polyKey, encState) = ChaCha.generate rootState 64
+    -- 64 bytes are generated so the ChaCha state advances a whole block; the
+    -- first 32 of them are the key, so the length is right by construction
     polyState =
-        throwCryptoError $ Poly1305.initialize (B.take 32 polyKey :: ScrubbedBytes)
+        Poly1305.initialize $
+            throwCryptoError $
+                Poly1305.key (B.take 32 polyKey :: ScrubbedBytes)
 
 -- | Initialize a new XChaChaPoly1305 State
 --

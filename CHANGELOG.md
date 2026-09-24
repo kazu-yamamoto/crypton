@@ -2,6 +2,21 @@
 
 ## 2.0.0
 
+* Breaking change: fix(poly1305): take a checked key, so that initializing
+  cannot fail.  A Poly1305 key is thirty-two bytes and nothing else about it
+  can be wrong, so `initialize` returning a `CryptoFailable` put an error case
+  in front of every caller for a length most of them know is right -- and they
+  answered it with `throwCryptoError`, this library included: the one in
+  `Crypto.Cipher.ChaChaPoly1305` guarded a `B.take 32`, and `auth` did not
+  even do that, it called `error`.  There is now a `Key` with `key` to build
+  one, the length is checked there, and `initialize :: Key -> State` and
+  `auth :: Key -> ba -> Auth` are total.  A caller checks once and then
+  initializes as often as it likes with nothing to handle.  `initialize k`
+  becomes `initialize <$> key k` where the length is unknown, and where it is
+  known the check moves to where the key is made.  `Key` has no `Show`, as
+  key material should not
+  [#28](https://github.com/kazu-yamamoto/crypton/issues/28)
+
 * fix(pubkey): stop printing private keys.  `Show` is what `print`, a message
   built with `error`, an exception and a test framework's failure output all
   reach for, so it is the instance a key travels on when nobody meant to send

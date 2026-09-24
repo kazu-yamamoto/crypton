@@ -12,6 +12,8 @@
 module Crypto.MAC.Poly1305 (
     Ctx,
     State,
+    Key,
+    key,
     Auth (..),
     authTag,
 
@@ -46,6 +48,20 @@ import Foreign.Ptr
 newtype State = State ScrubbedBytes
     deriving (ByteArrayAccess)
 
+-- | A Poly1305 key: thirty-two bytes, and the length is checked here rather
+-- than at every use.  'initialize' and 'auth' take one of these and cannot
+-- fail, so a caller that holds a key does not carry an error case for a
+-- length it already knows is right.
+newtype Key = Key ScrubbedBytes
+    deriving (ByteArrayAccess, Eq, NFData)
+
+-- | Take thirty-two bytes for a key.  A different length is reported as
+-- 'CryptoError_MacKeyInvalid'; nothing else about a key can be wrong.
+key :: ByteArrayAccess ba => ba -> CryptoFailable Key
+key k
+    | B.length k /= 32 = CryptoFailed CryptoError_MacKeyInvalid
+    | otherwise = CryptoPassed $ Key $ B.convert k
+
 -- | Poly1305 State. use State instead of Ctx
 type Ctx = State
 
@@ -79,15 +95,10 @@ foreign import ccall unsafe "crypton_poly1305.h crypton_poly1305_finalize"
     c_poly1305_finalize :: Ptr Word8 -> Ptr State -> IO ()
 
 -- | initialize a Poly1305 context
-initialize
-    :: ByteArrayAccess key
-    => key
-    -> CryptoFailable State
-initialize key
-    | B.length key /= 32 = CryptoFailed $ CryptoError_MacKeyInvalid
-    | otherwise = CryptoPassed $ State $ B.allocAndFreeze sizeCtx $ \ctxPtr ->
-        B.withByteArray key $ \keyPtr ->
-            c_poly1305_init (castPtr ctxPtr) keyPtr
+initialize :: Key -> State
+initialize k = State $ B.allocAndFreeze sizeCtx $ \ctxPtr ->
+    B.withByteArray k $ \keyPtr ->
+        c_poly1305_init (castPtr ctxPtr) keyPtr
 {-# NOINLINE initialize #-}
 
 -- | update a context with a bytestring
@@ -117,15 +128,13 @@ finalize (State prevCtx) = Auth $ B.allocAndFreeze 16 $ \dst -> do
 {-# NOINLINE finalize #-}
 
 -- | One-pass authorization creation
-auth :: (ByteArrayAccess key, ByteArrayAccess ba) => key -> ba -> Auth
-auth key d
-    | B.length key /= 32 = error "Poly1305: key length expected 32 bytes"
-    | otherwise = Auth $ B.allocAndFreeze 16 $ \dst -> do
-        _ <- B.alloc sizeCtx (onCtx dst) :: IO ScrubbedBytes
-        return ()
+auth :: ByteArrayAccess ba => Key -> ba -> Auth
+auth k d = Auth $ B.allocAndFreeze 16 $ \dst -> do
+    _ <- B.alloc sizeCtx (onCtx dst) :: IO ScrubbedBytes
+    return ()
   where
     onCtx dst ctxPtr =
-        B.withByteArray key $ \keyPtr -> do
+        B.withByteArray k $ \keyPtr -> do
             c_poly1305_init (castPtr ctxPtr) keyPtr
             B.withByteArray d $ \dataPtr ->
                 c_poly1305_update (castPtr ctxPtr) dataPtr (fromIntegral $ B.length d)
