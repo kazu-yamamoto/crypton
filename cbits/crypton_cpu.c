@@ -147,6 +147,20 @@ void crypton_x86_ia32cap_resolve(void)
 		leaf1_ecx = ecx;
 		if (!(f & CRYPTON_X86_AVX))
 			leaf1_ecx &= ~(1u << 28);
+		/*
+		 * Bit 11 is not leaf 1's to give.  The assembly reads it as
+		 * AMD's XOP, which lives in leaf 0x80000001, and OpenSSL
+		 * clears whatever leaf 1 put there before merging the real
+		 * flag into the place -- on Intel that is SDBG, the silicon
+		 * debug interface, reported since Broadwell, and reading it
+		 * as XOP sends SHA-512 and ChaCha20 into a vprotq and a
+		 * SIGILL.  It is cleared and left clear: nothing here can run
+		 * XOP to test it, and no processor still in service has it,
+		 * AMD having carried it from Bulldozer to Excavator and Zen
+		 * having dropped it.  That is the reason the AVX-512 bits
+		 * above are cleared too.
+		 */
+		leaf1_ecx &= ~(1u << 11);
 		crypton_ia32cap_P[1] = leaf1_ecx;
 
 		if (maxleaf >= 7) {
