@@ -319,6 +319,7 @@ library
         Crypto.Internal.ECC
         Crypto.Internal.Endian
         Crypto.Internal.Imports
+        Crypto.Internal.Poly1305
         Crypto.Internal.Nat
         Crypto.Internal.WordArray
         Crypto.Internal.Words

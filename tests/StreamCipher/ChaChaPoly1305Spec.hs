@@ -89,8 +89,39 @@ rfc8439decrypt = mpt `shouldBe` Just a5plain
         CryptoPassed st -> aeadSimpleDecrypt st a5aad a5cipher (AuthTag $ B.convert a5tag)
         _ -> Nothing
 
+-- | The key is checked once, where it is made, and initializing cannot fail
+-- after that.
+keyTests :: Spec
+keyTests = describe "key" $ do
+    it "takes thirty-two bytes" $
+        passed (CP.key (B.replicate 32 0x41)) `shouldBe` True
+    it "refuses any other length" $
+        [n | n <- [0, 1, 16, 31, 33, 64], passed (CP.key (B.replicate n 0x41))]
+            `shouldBe` []
+    it "says which error" $
+        -- Key has no Show, on purpose: it is key material
+        errorOf (CP.key (B.replicate 31 0x41))
+            `shouldBe` Just CryptoError_KeySizeInvalid
+    it "and the AEAD entry point reports the same thing" $
+        errorOf
+            (CP.aeadChacha20poly1305Init (B.replicate 31 0x41) (B.replicate 12 0x42))
+            `shouldBe` Just CryptoError_KeySizeInvalid
+    it "a key that was taken initializes without an error case" $ do
+        let k = throwCryptoError (CP.key (B.replicate 32 0x41))
+            n = throwCryptoError (CP.nonce12 (B.replicate 12 0x42))
+            st = CP.initialize k n
+            (out, st') = CP.encrypt ("hello" :: B.ByteString) (CP.finalizeAAD st)
+        B.length out `shouldBe` 5
+        B.length (B.convert (CP.finalize st') :: B.ByteString) `shouldBe` 16
+  where
+    passed (CryptoPassed _) = True
+    passed (CryptoFailed _) = False
+    errorOf (CryptoFailed e) = Just e
+    errorOf (CryptoPassed _) = Nothing
+
 spec :: Spec
 spec = do
+    keyTests
     it "V1" runEncrypt
     it "V1-decrypt" runDecrypt
     it "V1-extended" runEncryptX
@@ -101,8 +132,9 @@ spec = do
   where
     runEncrypt =
         let ini =
-                throwCryptoError $
-                    CP.initialize key (throwCryptoError $ CP.nonce8 constant iv)
+                CP.initialize
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce8 constant iv)
             afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
             (out, afterEncrypt) = CP.encrypt plaintext afterAAD
             outtag = CP.finalize afterEncrypt
@@ -112,7 +144,9 @@ spec = do
                 ]
     runEncryptX =
         let ini =
-                throwCryptoError $ CP.initializeX key (throwCryptoError $ CP.nonce24 ivX)
+                CP.initializeX
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce24 ivX)
             afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
             (out, afterEncrypt) = CP.encrypt plaintext afterAAD
             outtag = CP.finalize afterEncrypt
@@ -123,8 +157,9 @@ spec = do
 
     runDecrypt =
         let ini =
-                throwCryptoError $
-                    CP.initialize key (throwCryptoError $ CP.nonce8 constant iv)
+                CP.initialize
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce8 constant iv)
             afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
             (out, afterDecrypt) = CP.decrypt ciphertext afterAAD
             outtag = CP.finalize afterDecrypt
@@ -135,7 +170,9 @@ spec = do
 
     runDecryptX =
         let ini =
-                throwCryptoError $ CP.initializeX key (throwCryptoError $ CP.nonce24 ivX)
+                CP.initializeX
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce24 ivX)
             afterAAD = CP.finalizeAAD (CP.appendAAD aad ini)
             (out, afterDecrypt) = CP.decrypt ciphertextX afterAAD
             outtag = CP.finalize afterDecrypt

@@ -35,6 +35,7 @@ import Crypto.Internal.ByteArray (
  )
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.DeepSeq
+import Crypto.Internal.Poly1305 (Key (..), key)
 import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
@@ -47,20 +48,6 @@ import Foreign.Ptr
 -- cryptographic algorithms.
 newtype State = State ScrubbedBytes
     deriving (ByteArrayAccess)
-
--- | A Poly1305 key: thirty-two bytes, and the length is checked here rather
--- than at every use.  'initialize' and 'auth' take one of these and cannot
--- fail, so a caller that holds a key does not carry an error case for a
--- length it already knows is right.
-newtype Key = Key ScrubbedBytes
-    deriving (ByteArrayAccess, Eq, NFData)
-
--- | Take thirty-two bytes for a key.  A different length is reported as
--- 'CryptoError_MacKeyInvalid'; nothing else about a key can be wrong.
-key :: ByteArrayAccess ba => ba -> CryptoFailable Key
-key k
-    | B.length k /= 32 = CryptoFailed CryptoError_MacKeyInvalid
-    | otherwise = CryptoPassed $ Key $ B.convert k
 
 -- | Poly1305 State. use State instead of Ctx
 type Ctx = State
