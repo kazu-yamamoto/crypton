@@ -151,17 +151,17 @@ pointsMulVarTime n1 n2 p = withNewPoint $ \dx dy ->
     withScalar n1 $ \pn1 -> withScalar n2 $ \pn2 -> withPoint p $ \px py ->
         ccrypton_p256_points_mul_vartime pn1 pn2 px py dx dy
 
--- | Check if a 'Point' is valid
+-- | Check if a t'Point' is valid
 pointIsValid :: Point -> Bool
 pointIsValid p = unsafeDoIO $ withPoint p $ \px py -> do
     r <- ccrypton_p256_is_valid_point px py
     return (r /= 0)
 
--- | Check if a 'Point' is the point at infinity
+-- | Check if a t'Point' is the point at infinity
 pointIsAtInfinity :: Point -> Bool
 pointIsAtInfinity (Point b) = constAllZero b
 
--- | Return the x coordinate as a 'Scalar' if the point is not at infinity
+-- | Return the x coordinate as a t'Scalar' if the point is not at infinity
 pointX :: Point -> Maybe Scalar
 pointX p
     | pointIsAtInfinity p = Nothing

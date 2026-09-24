@@ -78,7 +78,7 @@ validateParameters params
 
 -- | generate the pbkdf2 key derivation function from the output
 --
--- Parameters outside the ranges documented for 'Parameters' raise
+-- Parameters outside the ranges documented for t'Parameters' raise
 -- 'CryptoError_ParameterInvalid'; 'tryGenerate' reports the same condition as
 -- 'CryptoFailed'.
 generate
@@ -151,7 +151,7 @@ tryGenerate prf params password salt
 
 -- | PBKDF2 with HMAC-SHA1, using the bundled C implementation.
 --
--- Parameters outside the ranges documented for 'Parameters' raise
+-- Parameters outside the ranges documented for t'Parameters' raise
 -- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA1' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA1
@@ -187,7 +187,7 @@ tryFastPBKDF2_SHA1 params password salt
 
 -- | PBKDF2 with HMAC-SHA256, using the bundled C implementation.
 --
--- Parameters outside the ranges documented for 'Parameters' raise
+-- Parameters outside the ranges documented for t'Parameters' raise
 -- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA256' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA256
@@ -223,7 +223,7 @@ tryFastPBKDF2_SHA256 params password salt
 
 -- | PBKDF2 with HMAC-SHA512, using the bundled C implementation.
 --
--- Parameters outside the ranges documented for 'Parameters' raise
+-- Parameters outside the ranges documented for t'Parameters' raise
 -- 'CryptoError_ParameterInvalid'; 'tryFastPBKDF2_SHA512' reports the same condition
 -- as 'CryptoFailed'.
 fastPBKDF2_SHA512

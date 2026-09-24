@@ -9,7 +9,7 @@
 -- The DES block operation, as FIPS 46-3 defines it, over the C in
 -- @cbits/crypton_des.c@.
 --
--- A 'Schedule' holds the round keys of one or more stages in the order they
+-- A t'Schedule' holds the round keys of one or more stages in the order they
 -- are applied, which is what lets single DES and the three stage constructions
 -- share one entry point.
 module Crypto.Cipher.DES.Primitive (

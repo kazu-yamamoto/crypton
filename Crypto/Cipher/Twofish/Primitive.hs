@@ -80,7 +80,7 @@ mapBlocks operation input
     | otherwise = B.mapAsWord128 operation input
 
 -- | The four little-endian words of a block, from the two big-endian words
--- 'Word128' is read as.
+-- t'Word128' is read as.
 load32ls :: Word128 -> (Word32, Word32, Word32, Word32)
 load32ls (Word128 hi lo) =
     ( byteSwap32 (fromIntegral (hi `shiftR` 32))

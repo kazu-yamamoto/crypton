@@ -225,7 +225,7 @@ integerBits = go 0
 
 -- | A point in Jacobian coordinates: @(X, Y, Z)@ stands for the affine
 -- @(X\/Z^2, Y\/Z^3)@, and @JPointO@ for the point at infinity.  Only ever
--- used inside this module, since 'Point' is what the curve exposes.
+-- used inside this module, since t'Point' is what the curve exposes.
 data JPoint = JPointO | JPoint !Integer !Integer !Integer
 
 -- | The prime, the width to fold at, and what to fold back in.  A @c@ of zero

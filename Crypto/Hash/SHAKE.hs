@@ -44,9 +44,9 @@ class HashAlgorithm a => HashSHAKE a where
 -- | SHAKE128 (128 bits) extendable output function.  Supports an arbitrary
 -- digest size, to be specified as a type parameter of kind 'Nat'.
 --
--- Note: outputs from @'SHAKE128' n@ and @'SHAKE128' m@ for the same input are
+-- Note: outputs from @t'SHAKE128' n@ and @t'SHAKE128' m@ for the same input are
 -- correlated (one being a prefix of the other).  Results are unrelated to
--- 'SHAKE256' results.
+-- t'SHAKE256' results.
 data SHAKE128 (bitlen :: Nat) = SHAKE128
     deriving (Show, Data)
 
@@ -68,9 +68,9 @@ instance KnownNat bitlen => HashSHAKE (SHAKE128 bitlen) where
 -- | SHAKE256 (256 bits) extendable output function.  Supports an arbitrary
 -- digest size, to be specified as a type parameter of kind 'Nat'.
 --
--- Note: outputs from @'SHAKE256' n@ and @'SHAKE256' m@ for the same input are
+-- Note: outputs from @t'SHAKE256' n@ and @t'SHAKE256' m@ for the same input are
 -- correlated (one being a prefix of the other).  Results are unrelated to
--- 'SHAKE128' results.
+-- t'SHAKE128' results.
 data SHAKE256 (bitlen :: Nat) = SHAKE256
     deriving (Show, Data)
 

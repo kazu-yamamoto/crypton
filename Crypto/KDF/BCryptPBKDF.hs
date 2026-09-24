@@ -51,7 +51,7 @@ data Parameters = Parameters
 
 -- | Derive a key of specified length using the bcrypt_pbkdf algorithm.
 --
--- Parameters outside the ranges documented for 'Parameters' raise
+-- Parameters outside the ranges documented for t'Parameters' raise
 -- 'CryptoError_ParameterInvalid'; 'tryGenerate' reports the same condition as
 -- 'CryptoFailed'.
 generate

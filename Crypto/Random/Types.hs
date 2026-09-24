@@ -53,6 +53,6 @@ instance DRG gen => MonadRandom (MonadPseudoRandom gen) where
     getRandomBytes n = MonadPseudoRandom (randomBytesGenerate n)
 
 -- | Run a pure computation with a Deterministic Random Generator
--- in the 'MonadPseudoRandom'
+-- in the t'MonadPseudoRandom'
 withDRG :: DRG gen => gen -> MonadPseudoRandom gen a -> (a, gen)
 withDRG gen m = runPseudoRandom m gen
