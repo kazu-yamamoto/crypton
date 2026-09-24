@@ -195,7 +195,9 @@ benchAE =
   where
     cp k (ini, plain) =
         let iniState =
-                throwCryptoError $ CP.initialize k (throwCryptoError $ CP.nonce12 nonce12)
+                CP.initialize
+                    (throwCryptoError $ CP.key k)
+                    (throwCryptoError $ CP.nonce12 nonce12)
             afterAAD = CP.finalizeAAD (CP.appendAAD ini iniState)
             (out, afterEncrypt) = CP.encrypt plain afterAAD
             outtag = CP.finalize afterEncrypt
