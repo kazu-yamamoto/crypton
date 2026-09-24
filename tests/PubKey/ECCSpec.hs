@@ -1,3 +1,6 @@
+-- The binary curves are deprecated and still supported, so the tests
+-- that hold them to their behaviour name them on purpose.
+{-# OPTIONS_GHC -Wno-deprecations #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module PubKey.ECCSpec (spec) where

@@ -2,6 +2,17 @@
 
 ## 2.0.0
 
+* deprecate(ecc): the curves over a binary field.  They are obsolete, they are
+  the curves a cofactor makes delicate, and pyca/cryptography deprecated them
+  for removal in the release that fixed CVE-2026-26007.  A `DEPRECATED` pragma
+  now covers the eighteen `SEC_t*` constructors of `CurveName` and the
+  eighteen types of the same names in `Crypto.ECC.Simple.Types`; nothing is
+  removed, so the only effect is a warning where one of them is named, and
+  they will go in a later major version.  The prime curves with a cofactor,
+  `SEC_p112r2` and `SEC_p128r2`, are not deprecated: the check above covers
+  them
+  [#66](https://github.com/kazu-yamamoto/crypton/issues/66)
+
 * fix(ecc): refuse a public point outside the prime-order subgroup.  A point
   that satisfies the curve equation is not necessarily in the subgroup the
   base point generates; the two coincide only where the cofactor is 1.  Of the
