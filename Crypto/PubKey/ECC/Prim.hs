@@ -20,6 +20,7 @@ module Crypto.PubKey.ECC.Prim (
     pointCompose,
     isPointAtInfinity,
     isPointValid,
+    isPointInSubgroup,
 ) where
 
 import Crypto.Error (maybeCryptoError)
@@ -567,6 +568,30 @@ isPointValid (CurveF2m (CurveBinary fx cc)) (Point x y) =
     add = addF2m
     mul = mulF2m fx
     isValid e = modF2m fx e == e
+
+-- | Check that a point is in the subgroup the base point generates, which is
+-- the further check 'isPointValid' does not make.  A point that is on the
+-- curve but outside that subgroup answers a multiplication modulo an order
+-- smaller than the group's, so the multiplier -- a private number, where the
+-- point came from a peer -- is revealed modulo that small order.
+--
+-- Where the cofactor is 1 the subgroup is the whole curve group and the
+-- answer is 'True' for any point on the curve, at no cost.  Otherwise the
+-- point is multiplied by the group order and the answer is whether that
+-- reaches the point at infinity, which costs one scalar multiplication.  This
+-- is the check OpenSSL's @EC_KEY_check_key@ makes.
+--
+-- The point at infinity is reported as in the subgroup, as 'isPointValid'
+-- reports it valid; it is a member, and unusable for other reasons.
+--
+-- A point that is not on the curve at all has no meaningful answer here, so
+-- check 'isPointValid' first.
+isPointInSubgroup :: Curve -> Point -> Bool
+isPointInSubgroup curve p
+    | ecc_h cc == 1 = True
+    | otherwise = pointMul curve (ecc_n cc) p == PointO
+  where
+    cc = common_curve curve
 
 -- | div and mod
 divmod :: Integer -> Integer -> Integer -> Maybe Integer

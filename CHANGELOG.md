@@ -2,6 +2,28 @@
 
 ## 2.0.0
 
+* fix(ecc): refuse a public point outside the prime-order subgroup.  A point
+  that satisfies the curve equation is not necessarily in the subgroup the
+  base point generates; the two coincide only where the cofactor is 1.  Of the
+  curves in `CurveName` twenty have a cofactor -- the eighteen binary ones,
+  and `SEC_p112r2` and `SEC_p128r2`, whose cofactor is 4 -- and on those the
+  other party could offer a point of small order, at which point the value
+  that came back depended on our private number only through its residue
+  modulo that order, and offering it and watching the answer handed them those
+  bits.  This is the flaw pyca/cryptography fixed as CVE-2026-26007; what is
+  fixed here is the same one, found by following that report.
+  `Crypto.PubKey.ECC.DH.getShared` and `tryGetShared`, and
+  `Crypto.ECC.Simple.Prim.pointFromIntegers`, now require the point to be in
+  the subgroup and report `CryptoError_PointSubgroupInvalid` when it is not.
+  The check is `isPointInSubgroup`, newly exported from both prim modules:
+  where the cofactor is 1 it answers without work, and otherwise it multiplies
+  by the group order and requires the point at infinity, which is what
+  OpenSSL's `EC_KEY_check_key` does and costs one further scalar
+  multiplication -- an exchange on an affected curve is about twice the price,
+  and one on every other curve is unchanged.  The typed `Crypto.ECC` interface
+  offers only cofactor-1 curves and dedicated implementations, so nothing
+  reaching elliptic curves through it, `tls` among them, was affected
+
 * perf(p256): inline the field arithmetic on AArch64.  `felem_mul` and
   `felem_square` end in `felem_reduce_degree`, a carry chain the whole width
   of the number, and that chain is what their latency is: one product feeding

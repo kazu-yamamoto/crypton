@@ -2,7 +2,7 @@
 
 module PubKey.ECCSpec (spec) where
 
-import Crypto.Error (CryptoFailable (..))
+import Crypto.Error (CryptoError (..), CryptoFailable (..))
 import Crypto.Number.Basic (numBits)
 import Crypto.Number.F2m (squareF2m)
 import qualified Crypto.PubKey.ECC.DH as ECDH
@@ -390,10 +390,21 @@ subgroupTests =
             ECC.pointMul c (ECC.ecc_n (ECC.common_curve c)) q
                 `shouldNotBe` ECC.PointO
         it "and an exchange refuses it, whatever the private number" $
-            [d | d <- privateNumbers, passed (ECDH.tryGetShared c d q)]
+            [ d
+            | d <- privateNumbers
+            , ECDH.tryGetShared c d q
+                /= CryptoFailed CryptoError_PointSubgroupInvalid
+            ]
+                `shouldBe` []
+        it "while a point the base point does generate is still accepted" $
+            [d | d <- privateNumbers, not (passed (ECDH.tryGetShared c d peer))]
                 `shouldBe` []
       where
         c = ECC.getCurveByName name
+        cc = ECC.common_curve c
+        -- what the other party would actually send: a multiple of the base
+        -- point, and so inside the subgroup by construction
+        peer = ECC.pointMul c 7 (ECC.ecc_g cc)
         passed (CryptoPassed _) = True
         passed (CryptoFailed _) = False
 
