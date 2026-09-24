@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Crypto.Cipher.ChaChaPoly1305
 -- License     : BSD-style
@@ -28,7 +30,7 @@
 -- >    -> ByteString -- input plaintext to be encrypted
 -- >    -> CryptoFailable ByteString -- ciphertext with a 128-bit tag attached
 -- >encrypt nonce key header plaintext = do
--- >    st1 <- C.nonce12 nonce >>= C.initialize key
+-- >    st1 <- C.initialize <$> C.key key <*> C.nonce12 nonce
 -- >    let
 -- >        st2 = C.finalizeAAD $ C.appendAAD header st1
 -- >        (out, st3) = C.encrypt plaintext st2
@@ -41,6 +43,8 @@ module Crypto.Cipher.ChaChaPoly1305 (
 
     -- * Low level
     State,
+    Key,
+    key,
     Nonce,
     XNonce,
     nonce12,
@@ -68,6 +72,7 @@ import Crypto.Internal.ByteArray (
  )
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
+import qualified Crypto.Internal.Poly1305 as PolyKey
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray.Pack as P
 import Data.Memory.Endian
@@ -174,44 +179,39 @@ incrementNonce' b offset = B.copyAndFreeze b $ \s ->
 --
 -- The key length need to be 256 bits, and the nonce
 -- procured using either `nonce8` or `nonce12`
-initialize
-    :: ByteArrayAccess key
-    => key -> Nonce -> CryptoFailable State
-initialize key (Nonce8 nonce) = initialize' key nonce
-initialize key (Nonce12 nonce) = initialize' key nonce
+-- | A ChaCha20Poly1305 key: thirty-two bytes, checked once here rather than
+-- at every use, so that 'initialize' and 'initializeX' cannot fail.
+newtype Key = Key ScrubbedBytes
+    deriving (ByteArrayAccess, Eq, NFData)
 
-initialize'
-    :: ByteArrayAccess key
-    => key -> Bytes -> CryptoFailable State
-initialize' key nonce
-    | B.length key /= 32 = CryptoFailed CryptoError_KeySizeInvalid
-    | otherwise = CryptoPassed $ initFromRootState rootState
-  where
-    rootState = ChaCha.initialize 20 key nonce
+-- | Take thirty-two bytes for a key.  A different length is reported as
+-- 'CryptoError_KeySizeInvalid'; nothing else about a key can be wrong.
+key :: ByteArrayAccess ba => ba -> CryptoFailable Key
+key k
+    | B.length k /= 32 = CryptoFailed CryptoError_KeySizeInvalid
+    | otherwise = CryptoPassed $ Key $ B.convert k
+
+initialize :: Key -> Nonce -> State
+initialize k (Nonce8 nonce) = initialize' k nonce
+initialize k (Nonce12 nonce) = initialize' k nonce
+
+initialize' :: Key -> Bytes -> State
+initialize' k nonce = initFromRootState (ChaCha.initialize 20 k nonce)
 
 initFromRootState :: ChaCha.State -> State
 initFromRootState rootState = State encState polyState 0 0
   where
     (polyKey, encState) = ChaCha.generate rootState 64
-    -- 64 bytes are generated so the ChaCha state advances a whole block; the
-    -- first 32 of them are the key, so the length is right by construction
-    polyState =
-        Poly1305.initialize $
-            throwCryptoError $
-                Poly1305.key (B.take 32 polyKey :: ScrubbedBytes)
+    -- 64 bytes are generated so the ChaCha state advances a whole block, and
+    -- the first 32 of them are the key, so there is no length left to check
+    polyState = Poly1305.initialize (PolyKey.Key (B.take 32 polyKey))
 
 -- | Initialize a new XChaChaPoly1305 State
 --
 -- The key length needs to be 256 bits, and the nonce
 -- procured using `nonce24`.
-initializeX
-    :: ByteArrayAccess key
-    => key -> XNonce -> CryptoFailable State
-initializeX key (Nonce24 nonce)
-    | B.length key /= 32 = CryptoFailed CryptoError_KeySizeInvalid
-    | otherwise = CryptoPassed $ initFromRootState rootState
-  where
-    rootState = ChaCha.initializeX 20 key nonce
+initializeX :: Key -> XNonce -> State
+initializeX k (Nonce24 nonce) = initFromRootState (ChaCha.initializeX 20 k nonce)
 
 -- | Append Authenticated Data to the State and return
 -- the new modified State.
@@ -267,8 +267,8 @@ finalize (State _ macState aadLength plainLength) =
 aeadChacha20poly1305Init
     :: (ByteArrayAccess k, ByteArrayAccess n)
     => k -> n -> CryptoFailable (AEAD ChaCha20Poly1305)
-aeadChacha20poly1305Init key nonce = do
-    st0 <- nonce12 nonce >>= initialize key
+aeadChacha20poly1305Init k nonce = do
+    st0 <- initialize <$> key k <*> nonce12 nonce
     return $ AEAD model st0
   where
     model =

@@ -2,6 +2,22 @@
 
 ## 2.1.0
 
+* Breaking change: fix(chachapoly1305): take a checked key, so that
+  initializing cannot fail.  The nonce was already a checked type, built by
+  `nonce8`, `nonce12` or `nonce24`, so the key length was the only way
+  `initialize` and `initializeX` could fail -- and callers answered that with
+  `throwCryptoError`, `tls` among them, where
+  `noFail (ChaChaPoly1305.nonce12 nonce >>= ChaChaPoly1305.initialize key)`
+  re-checked a length once per record for a key fixed for the connection.
+  There is now a `Key` with `key` to build one, and
+  `initialize :: Key -> Nonce -> State` and
+  `initializeX :: Key -> XNonce -> State` are total.
+  `aeadChacha20poly1305Init` is unchanged and still reports a bad key length.
+  This also closes the last of #28: `initFromRootState` wrapped a
+  `throwCryptoError` around a `B.take 32`, and the Poly1305 key type now has a
+  home in a hidden module so the modules here that know the length can say so
+  [#193](https://github.com/kazu-yamamoto/crypton/issues/193)
+
 * feat(hash): Skein with the digest size as a type parameter.  Skein is
   defined for any digest size and the C here has always taken one -- the
   length goes to `crypton_skein512_init` and `crypton_skein512_finalize`, and
