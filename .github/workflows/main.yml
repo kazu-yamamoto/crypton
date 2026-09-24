@@ -76,7 +76,17 @@ jobs:
         # the second save of a commit would be refused as a duplicate, and
         # each would restore the other's store and dist-newstyle -- built for
         # the wrong architecture and so of no use to it.
-        prefix="${{ runner.os }}-${{ runner.arch }}-${{ env.cache-name }}-${ghc_version}-"
+        # The package version, so that a branch building one version cannot
+        # restore a cache saved by a branch building another.  restore-keys
+        # matches on the prefix alone and caches saved from the default branch
+        # are visible to every branch, so without this the 2.0 maintenance
+        # branch picks up main's dist-newstyle, ends up with two crypton units
+        # registered at once, and `cabal exec -- ghc -package crypton` cannot
+        # say which one is meant.  Unlike the .cabal hash this changes once a
+        # release rather than once an edit, so it costs a cold cache per
+        # release and nothing in between.
+        pkg_version=$(sed -n 's/^version:[[:space:]]*//p' crypton.cabal | head -1)
+        prefix="${{ runner.os }}-${{ runner.arch }}-${{ env.cache-name }}-${ghc_version}-${pkg_version}-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "cache=${prefix}${{ github.sha }}" >> "$GITHUB_OUTPUT"
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
