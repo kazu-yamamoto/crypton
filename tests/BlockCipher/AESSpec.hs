@@ -20,6 +20,8 @@ import qualified BlockCipher.AES.GCM as KATGCM
 import qualified BlockCipher.AES.GCMLong as KATGCMLong
 import qualified BlockCipher.AES.OCB3 as KATOCB3
 import qualified BlockCipher.AES.XTS as KATXTS
+import qualified Crypto.Cipher.AES.GCM as GCM
+import Data.Bits (xor)
 
 {-
 instance Show AES.AES where
@@ -200,8 +202,8 @@ gcmLongTests =
                 ++ "-byte AAD, "
                 ++ show ptlen
                 ++ "-byte message"
-            ) $
-            case klen of
+            )
+            $ case klen of
                 16 -> run (undefined :: AES.AES128) v
                 24 -> run (undefined :: AES.AES192) v
                 _ -> run (undefined :: AES.AES256) v
@@ -215,12 +217,50 @@ gcmLongTests =
         digest ciphertext `shouldBe` ctHash
         aeadSimpleDecrypt aead aad ciphertext authTag `shouldBe` Just plaintext
       where
-        cipher = throwCryptoError (cipherInit (KATGCMLong.gcmKey klen)) `asTypeOf` cipherWitness
+        cipher =
+            throwCryptoError (cipherInit (KATGCMLong.gcmKey klen)) `asTypeOf` cipherWitness
         aead = throwCryptoError (aeadInit AEAD_GCM cipher KATGCMLong.gcmIV)
         aad = KATGCMLong.gcmAAD aadlen
         plaintext = KATGCMLong.gcmPlaintext ptlen
         (authTag, ciphertext) = aeadSimpleEncrypt aead aad plaintext 16
     digest bs = BA.convert (hash bs :: Digest SHA256) :: ByteString
+
+-- | Crypto.Cipher.AES.GCM builds the key part of the state once and does a
+-- whole message in one call.  It has to answer exactly what the general
+-- interface answers, so it is run over the same vectors, and a tampered
+-- message has to come back as Nothing rather than as plaintext.
+oneShotTests :: Spec
+oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
+    describe "agrees with the general interface" $ do
+        run "AES-128" KATGCM.vectors_aes128_enc
+        run "AES-192" KATGCM.vectors_aes192_enc
+        run "AES-256" KATGCM.vectors_aes256_enc
+    describe "refuses a message that was interfered with" $ do
+        it "a flipped bit in the tag" $ tamper (\(c, t) -> (c, flipFirst t))
+        it "a flipped bit in the ciphertext" $ tamper (\(c, t) -> (flipFirst c, t))
+    it "refuses input shorter than the tag" $
+        (GCM.decrypt ctx16 iv16 B.empty (B.replicate 8 0) 16 :: Maybe B.ByteString)
+            `shouldBe` Nothing
+  where
+    run name vs =
+        it name $
+            [ (key, iv)
+            | (key, iv, aad, input, out, taglen, tag) <- vs
+            , let ctx = throwCryptoError (GCM.newContext key)
+            , let sealed = GCM.encrypt ctx iv aad input taglen :: B.ByteString
+            , sealed /= out `B.append` tag
+                || GCM.decrypt ctx iv aad sealed taglen /= Just input
+            ]
+                `shouldBe` []
+    ctx16 = throwCryptoError (GCM.newContext (B.replicate 16 0x2b))
+    iv16 = B.replicate 12 0x77
+    flipFirst b = B.cons (B.head b `xor` 1) (B.tail b)
+    tamper f =
+        let sealed = GCM.encrypt ctx16 iv16 B.empty ("hello there" :: B.ByteString) 16
+            (c, t) = B.splitAt (B.length sealed - 16) sealed
+            (c', t') = f (c, t)
+         in (GCM.decrypt ctx16 iv16 B.empty (c' `B.append` t') 16 :: Maybe B.ByteString)
+                `shouldBe` Nothing
 
 spec :: Spec
 spec = do
@@ -230,3 +270,4 @@ spec = do
     aeadIVLengthTests
     aeadTagLengthTests
     gcmLongTests
+    oneShotTests
