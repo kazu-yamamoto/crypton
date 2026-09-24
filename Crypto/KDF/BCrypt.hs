@@ -54,6 +54,7 @@
 -- depending on the account, since it is unique to an individual hash.
 module Crypto.KDF.BCrypt (
     hashPassword,
+    tryHashPassword,
     validatePassword,
     validatePasswordEither,
     bcrypt,
@@ -83,31 +84,50 @@ data BCryptHash = BCH Char Int Bytes Bytes
 --
 -- Each increment of the cost approximately doubles the time taken.
 -- The 16 bytes of random salt will be generated internally.
+--
+-- A cost outside 4 to 31 raises 'CryptoError_ParameterInvalid';
+-- 'tryHashPassword' reports it instead.
 hashPassword
     :: (MonadRandom m, ByteArray password, ByteArray hash)
     => Int
-    -- ^ The cost parameter. Should be between 4 and 31 (inclusive).
-    -- Values which lie outside this range will be adjusted accordingly.
+    -- ^ The cost parameter. Must be between 4 and 31 inclusive; anything
+    -- else is refused.
     -> password
     -- ^ The password. Should be the UTF-8 encoded bytes of the password text.
     -- Only the first 72 bytes are used; see the module documentation.
     -> m hash
     -- ^ The bcrypt hash in standard format.
-hashPassword cost password = do
+hashPassword cost password = throwCryptoError <$> tryHashPassword cost password
+
+-- | Create a bcrypt hash for a password with a provided cost value,
+-- reporting a cost the implementation refuses rather than raising.
+--
+-- The salt is generated internally and is always the right length, so the
+-- cost is the only thing here that can be wrong.
+tryHashPassword
+    :: (MonadRandom m, ByteArray password, ByteArray hash)
+    => Int
+    -- ^ The cost parameter. Must be between 4 and 31 inclusive; anything
+    -- else is reported.
+    -> password
+    -- ^ The password. Should be the UTF-8 encoded bytes of the password text.
+    -- Only the first 72 bytes are used; see the module documentation.
+    -> m (CryptoFailable hash)
+    -- ^ The bcrypt hash in standard format.
+tryHashPassword cost password = do
     salt <- getRandomBytes 16
-    return $ bcrypt cost (salt :: Bytes) password
+    return $ tryBcrypt cost (salt :: Bytes) password
 
 -- | Create a bcrypt hash for a password with a provided cost value and salt.
 --
--- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
---
--- A salt that is not 16 bytes long raises 'CryptoError_ParameterInvalid';
--- 'tryBcrypt' reports the same condition as 'CryptoFailed'.
+-- A cost outside 4 to 31, or a salt that is not 16 bytes long, raises
+-- 'CryptoError_ParameterInvalid'; 'tryBcrypt' reports the same conditions as
+-- 'CryptoFailed'.
 bcrypt
     :: (ByteArray salt, ByteArray password, ByteArray output)
     => Int
-    -- ^ The cost parameter. Should be between 4 and 31 (inclusive).
-    -- Values which lie outside this range will be adjusted accordingly.
+    -- ^ The cost parameter. Must be between 4 and 31 inclusive; anything
+    -- else is refused.
     -> salt
     -- ^ The salt. Must be 16 bytes in length or an error will be raised.
     -> password
@@ -118,14 +138,17 @@ bcrypt
 bcrypt cost salt password = throwCryptoError (tryBcrypt cost salt password)
 
 -- | Create a bcrypt hash for a password with a provided cost value and salt,
--- reporting a salt the implementation refuses rather than raising.
+-- reporting a parameter the implementation refuses rather than raising.
 --
--- Cost value under 4 will be automatically adjusted back to 10 for safety reason.
+-- bcrypt is defined for a cost of 4 to 31, and a cost outside that is
+-- reported rather than replaced by one inside it: a caller that asks for
+-- something this does not do should hear so, not receive a hash at a cost it
+-- did not choose.
 tryBcrypt
     :: (ByteArray salt, ByteArray password, ByteArray output)
     => Int
-    -- ^ The cost parameter. Should be between 4 and 31 (inclusive).
-    -- Values which lie outside this range will be adjusted accordingly.
+    -- ^ The cost parameter. Must be between 4 and 31 inclusive; anything
+    -- else is refused.
     -> salt
     -- ^ The salt. Must be 16 bytes in length.
     -> password
@@ -134,24 +157,21 @@ tryBcrypt
     -> CryptoFailable output
     -- ^ The bcrypt hash in standard format.
 tryBcrypt cost salt password
+    | cost < 4 || cost > 31 = CryptoFailed CryptoError_ParameterInvalid
     | B.length salt /= 16 = CryptoFailed CryptoError_ParameterInvalid
     | otherwise =
         CryptoPassed $
             B.concat [header, B.snoc costBytes dollar, b64 salt, b64 hash]
   where
-    hash = rawHash 'b' realCost salt password
+    hash = rawHash 'b' cost salt password
     header = B.pack [dollar, fromIntegral (ord '2'), fromIntegral (ord 'b'), dollar]
     dollar = fromIntegral (ord '$')
     zero = fromIntegral (ord '0')
     costBytes =
         B.pack
-            [ zero + fromIntegral (realCost `div` 10)
-            , zero + fromIntegral (realCost `mod` 10)
+            [ zero + fromIntegral (cost `div` 10)
+            , zero + fromIntegral (cost `mod` 10)
             ]
-    realCost
-        | cost < 4 = 10 -- 4 is virtually pointless so go for 10
-        | cost > 31 = 31
-        | otherwise = cost
 
     b64 :: ByteArray ba => ba -> ba
     b64 = convertToBase Base64OpenBSD

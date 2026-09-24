@@ -2,6 +2,18 @@
 
 ## 2.0.0
 
+* Breaking change: fix(bcrypt): refuse a cost bcrypt does not have rather than
+  substituting one.  A cost below 4 came back as a cost-10 hash and a cost
+  above 31 as a cost-31 one, with nothing said either way, so a caller asking
+  for something bcrypt does not do was answered with something else and had no
+  way to tell -- `hashPassword 3` and `hashPassword 10` returned the same
+  thing.  Both ends are now reported as `CryptoError_ParameterInvalid`, which
+  is what every other KDF here already did for a refused parameter.
+  `hashPassword` can therefore fail where it could not before, so
+  `tryHashPassword` is added beside it; the salt it generates is always the
+  right length, so the cost is the only thing it can report
+  [#59](https://github.com/kazu-yamamoto/crypton/issues/59)
+
 * Breaking change: fix(poly1305): take a checked key, so that initializing
   cannot fail.  A Poly1305 key is thirty-two bytes and nothing else about it
   can be wrong, so `initialize` returning a `CryptoFailable` put an error case

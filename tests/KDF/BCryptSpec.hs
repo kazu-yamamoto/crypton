@@ -143,6 +143,13 @@ spec = do
         it "writes the cost it was given, not another one" $
             B.take 7 (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)
                 `shouldBe` "$2b$04$"
+        it "reports it from hashPassword too, without raising" $ do
+            r <- tryHashPassword (3 :: Int) somePassword
+            (r :: CryptoFailable B.ByteString)
+                `shouldBe` CryptoFailed CryptoError_ParameterInvalid
+        it "hashes through hashPassword when the cost is one bcrypt takes" $ do
+            h <- hashPassword (4 :: Int) somePassword
+            validatePassword somePassword (h :: B.ByteString) `shouldBe` True
     describe "password length limit" $ do
         -- bcrypt keys Blowfish with at most the first 72 bytes of the
         -- password, so everything after that is ignored.  The Openwall
