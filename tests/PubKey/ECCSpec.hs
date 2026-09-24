@@ -2,8 +2,10 @@
 
 module PubKey.ECCSpec (spec) where
 
+import Crypto.Error (CryptoFailable (..))
 import Crypto.Number.Basic (numBits)
 import Crypto.Number.F2m (squareF2m)
+import qualified Crypto.PubKey.ECC.DH as ECDH
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import Data.Bits (testBit)
@@ -326,12 +328,82 @@ binaryTests = describe "binary curves" $ mapM_ check names
             , order * order
             ]
 
+-- | Points that satisfy the curve equation but lie outside the subgroup the
+-- base point generates.  One exists on every curve whose cofactor is not one,
+-- and multiplying such a point by our private number gives a result that
+-- depends on that number only through its residue modulo a small order, so
+-- the other party learns those bits by offering the point and watching what
+-- comes back.  An exchange has to refuse them.
+--
+-- On a binary curve the point with no x serves: y^2 = b has a root, since
+-- squaring is a bijection there, and the point is its own negation, so its
+-- order is two.  The two prime curves that have a cofactor are given by their
+-- coordinates, found by walking x upwards until the curve equation has a root
+-- and the point it names is outside the subgroup.
+outOfSubgroup :: [(ECC.CurveName, ECC.Point)]
+outOfSubgroup =
+    [(name, orderTwo name) | name <- binaryNames]
+        ++ [ (ECC.SEC_p112r2, ECC.Point 0x2 0xbe6aa4938ef7cfe6fe29595b6b00)
+           , (ECC.SEC_p128r2, ECC.Point 0x1 0xcc7215732e64bd2ed528938cd8ef7b63)
+           ]
+  where
+    binaryNames =
+        [ ECC.SEC_t113r1
+        , ECC.SEC_t113r2
+        , ECC.SEC_t131r1
+        , ECC.SEC_t131r2
+        , ECC.SEC_t163k1
+        , ECC.SEC_t163r1
+        , ECC.SEC_t163r2
+        , ECC.SEC_t193r1
+        , ECC.SEC_t193r2
+        , ECC.SEC_t233k1
+        , ECC.SEC_t233r1
+        , ECC.SEC_t239k1
+        , ECC.SEC_t283k1
+        , ECC.SEC_t283r1
+        , ECC.SEC_t409k1
+        , ECC.SEC_t409r1
+        , ECC.SEC_t571k1
+        , ECC.SEC_t571r1
+        ]
+    orderTwo name =
+        let c = ECC.getCurveByName name
+            cc = ECC.common_curve c
+            fx = case c of
+                ECC.CurveF2m bc -> ECC.ecc_fx bc
+                _ -> error "orderTwo: not a binary curve"
+         in ECC.Point 0 (iterate (squareF2m fx) (ECC.ecc_b cc) !! (numBits fx - 2))
+
+subgroupTests :: Spec
+subgroupTests =
+    describe "public points outside the prime-order subgroup" $
+        mapM_ check outOfSubgroup
+  where
+    -- either side of even, and either side of a number that needs more than
+    -- one limb, since what leaks is the residue and nothing else
+    privateNumbers = [2, 3, 100, 101, 3141592653589793238, 3141592653589793239]
+    check (name, q) = describe (show name) $ do
+        it "the point is on the curve" $
+            ECC.isPointValid c q `shouldBe` True
+        it "the base point does not generate it" $
+            ECC.pointMul c (ECC.ecc_n (ECC.common_curve c)) q
+                `shouldNotBe` ECC.PointO
+        it "and an exchange refuses it, whatever the private number" $
+            [d | d <- privateNumbers, passed (ECDH.tryGetShared c d q)]
+                `shouldBe` []
+      where
+        c = ECC.getCurveByName name
+        passed (CryptoPassed _) = True
+        passed (CryptoFailed _) = False
+
 spec :: Spec
 spec = do
     describe "valid-point" $ zipWithM_ doPointValidTest [katZero ..] vectorsPoint
     p256Tests
     weightTests
     binaryTests
+    subgroupTests
     modifyMaxSuccess (const 20) $
         describe "property" $ do
             prop "point-add" $ \aCurve (QAInteger r1) (QAInteger r2) ->
