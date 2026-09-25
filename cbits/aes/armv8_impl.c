@@ -652,6 +652,92 @@ void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
 	}
 }
 
+
+/*
+ * The same for decryption.  GCM_DEC leaves the ciphertext in s[] once it has
+ * written the plaintext out, which is what GHASH wants, so the only other
+ * difference is the end: the tag is compared here rather than written, every
+ * byte of it whichever way the answer goes.
+ */
+TARGET_ARMV8_CRYPTO
+int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
+                                           aes_key *key, const uint8_t *nonce,
+                                           const uint8_t *aad, uint32_t aadlen,
+                                           const uint8_t *in, uint32_t inlen,
+                                           const uint8_t *tagp, uint32_t taglen)
+{
+	const uint8_t *rk = FWD(key);
+	uint8x16_t s[WAY];
+	uint8x16_t tag = vdupq_n_u8(0), glo = tag, ghi = tag, ek0;
+	uint32x4_t base;
+	uint32_t c = 1, bn = 0, blen = 0, gidx = 0;
+	uint32_t gtotal = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
+	uint32_t i, done;
+	uint8_t y0[16], lenb[16], want[16];
+	uint64_t la, lc;
+	uint8_t diff = 0;
+
+	memcpy(y0, nonce, 12);
+	y0[12] = 0; y0[13] = 0; y0[14] = 0; y0[15] = 1;
+	base = vreinterpretq_u32_u8(vld1q_u8(y0));
+
+	s[0] = vld1q_u8(y0);
+	ENC_ROUNDS(EACH1);
+	ek0 = s[0];
+
+	for (i = 0; i + 16 <= aadlen; i += 16)
+		FG_ABSORB(vld1q_u8(aad + i));
+	if (i < aadlen)
+		FG_ABSORB(FG_PARTIAL(aad + i, aadlen - i));
+
+	for (done = 0; done + 16 * WAY <= inlen; done += 16 * WAY) {
+		const uint8_t *p = in + done;
+		uint8_t *q = out + done;
+
+		EACH8(GCM_CTR);
+		c += WAY;
+		ENC_ROUNDS(EACH8);
+		{
+			const uint8_t *input = p;
+			uint8_t *output = q;
+			EACH8(GCM_DEC);
+		}
+		FG_ABSORB(s[0]); FG_ABSORB(s[1]); FG_ABSORB(s[2]); FG_ABSORB(s[3]);
+		FG_ABSORB(s[4]); FG_ABSORB(s[5]); FG_ABSORB(s[6]); FG_ABSORB(s[7]);
+	}
+
+	for (; done < inlen; done += 16) {
+		uint32_t n = inlen - done < 16 ? inlen - done : 16;
+		uint8x16_t m_ = n == 16 ? vld1q_u8(in + done)
+		                        : FG_PARTIAL(in + done, n);
+		c++;
+		s[0] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c), base, 3));
+		ENC_ROUNDS(EACH1);
+		{
+			uint8x16_t pl = veorq_u8(s[0], m_);
+			if (n == 16) {
+				vst1q_u8(out + done, pl);
+			} else {
+				uint8_t buf_[16];
+				vst1q_u8(buf_, pl);
+				memcpy(out + done, buf_, n);
+			}
+		}
+		FG_ABSORB(m_);
+	}
+
+	la = (uint64_t) aadlen << 3;
+	lc = (uint64_t) inlen << 3;
+	for (i = 0; i < 8; i++) lenb[i] = (uint8_t) (la >> (56 - 8 * i));
+	for (i = 0; i < 8; i++) lenb[8 + i] = (uint8_t) (lc >> (56 - 8 * i));
+	FG_ABSORB(vld1q_u8(lenb));
+
+	vst1q_u8(want, veorq_u8(tag, ek0));
+	for (i = 0; i < taglen; i++)
+		diff |= (uint8_t) (want[i] ^ tagp[i]);
+	return diff == 0;
+}
+
 #undef FG_ABSORB
 #undef FG_PARTIAL
 

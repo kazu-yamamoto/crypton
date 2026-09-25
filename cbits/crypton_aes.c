@@ -61,6 +61,11 @@ void crypton_aes_generic_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key
 
 #ifdef WITH_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
+int crypton_aes_armv8_gcm_fused_dec(uint8_t *out, const block128 *ht,
+                                    aes_key *key, const uint8_t *nonce,
+                                    const uint8_t *aad, uint32_t aadlen,
+                                    const uint8_t *in, uint32_t inlen,
+                                    const uint8_t *tag, uint32_t taglen);
 void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
                                  aes_key *key, const uint8_t *nonce,
                                  const uint8_t *aad, uint32_t aadlen,
@@ -758,6 +763,26 @@ int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes
 	uint32_t i;
 	uint8_t diff = 0;
 
+#ifdef WITH_GCM_FUSED
+	/* The same as the encryption side, and simpler: what GHASH absorbs
+	 * here is the ciphertext, which is the input, so the multiplies need
+	 * not wait for anything.  Measured on an Intel Haswell, a 100-byte
+	 * packet was three times the cost of encrypting one before this. */
+	if (ivlen == 12 && length <= CRYPTON_GCM_FUSED_MAX_MESSAGE
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL])
+		return crypton_gcm_fused_decrypt(output, &gcmkey->fused, key,
+		                                 iv, aad, aadlen, input,
+		                                 length, tag, taglen);
+#endif
+#ifdef WITH_ARMV8_CRYPTO
+	if (ivlen == 12
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL])
+		return crypton_aes_armv8_gcm_fused_dec(output, gcmkey->gcm.htable,
+		                                       key, iv, aad, aadlen,
+		                                       input, length, tag, taglen);
+#endif
 	memcpy(gcm.htable, gcmkey->gcm.htable, sizeof(gcm.htable));
 	gcm_message_init(&gcm, iv, ivlen);
 	if (aadlen)
