@@ -488,7 +488,14 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
  * writing them there.  The group below is entered only when the queue is
  * full, so there is nothing to test.
  */
-#define GAT(j) GHASH_ONE(gq[j], gp - (j))
+/*
+ * The block a slot names, read from the output where the group before it
+ * left the ciphertext rather than from a copy kept beside it.  The copy
+ * cost six stores a group for bytes already in memory; picotls's fusion
+ * points its GHASH at the output it has just written for the same reason.
+ */
+#define GAT(j) GHASH_ONE(_mm_shuffle_epi8(                                   \
+        _mm_loadu_si128((const __m128i *) (prev + 16 * (j))), BSWAP), gp - (j))
 
 TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
                                    const aes_key *key, const uint8_t *nonce,
@@ -592,18 +599,12 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
             _mm_storeu_si128((__m128i *) (q + 64), b4);
             _mm_storeu_si128((__m128i *) (q + 80), b5);
 
-            gq[0] = _mm_shuffle_epi8(b0, BSWAP);
-            gq[1] = _mm_shuffle_epi8(b1, BSWAP);
-            gq[2] = _mm_shuffle_epi8(b2, BSWAP);
-            gq[3] = _mm_shuffle_epi8(b3, BSWAP);
-            gq[4] = _mm_shuffle_epi8(b4, BSWAP);
-            gq[5] = _mm_shuffle_epi8(b5, BSWAP);
-            gn = 6;
             done += 96;
         }
         for (; done + 96 <= inlen; done += 96) {
             const uint8_t *p = in + done;
             uint8_t *q = out + done;
+            const uint8_t *prev = out + done - 96;
 
             CTR6(0); CTR6(1); CTR6(2); CTR6(3); CTR6(4); CTR6(5);
             ROUND6(1); GAT(0);
@@ -635,13 +636,6 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
              * queue existed only to hold them until the next group's rounds
              * could hide the multiplies, and that is 192 bytes of store and
              * load per 96 bytes of payload */
-            gq[0] = _mm_shuffle_epi8(b0, BSWAP);
-            gq[1] = _mm_shuffle_epi8(b1, BSWAP);
-            gq[2] = _mm_shuffle_epi8(b2, BSWAP);
-            gq[3] = _mm_shuffle_epi8(b3, BSWAP);
-            gq[4] = _mm_shuffle_epi8(b4, BSWAP);
-            gq[5] = _mm_shuffle_epi8(b5, BSWAP);
-            gn = 6;
         }
 
     } else {
@@ -727,9 +721,9 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
             /* A group leaves exactly six queued, which is what lets the
              * slots below be named at compile time.  Where no group ran
              * there is nothing to place and the plain pass will do. */
-            if (rounds == 10 && gn == 6) {
+            if (rounds == 10 && done >= 96) {
+                const uint8_t *prev = out + done - 96;
                 WIDE6_10(lane_mask ? hprk : rk);
-                gn = 0; gi = 0; gw = 0;
             } else {
                 WIDE6(lane_mask ? hprk : rk);
             }
@@ -744,6 +738,14 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
         }
 no_tail:
         while (gn > 0) GSTEP();
+
+        /* The last group's ciphertext is absorbed by the pass above where
+         * there is one to absorb it.  A message that ends on a group
+         * boundary has no such pass, so it is taken here. */
+        if (rounds == 10 && done >= 96 && ntail == 0) {
+            const uint8_t *prev = out + done - 96;
+            GAT(0); GAT(1); GAT(2); GAT(3); GAT(4); GAT(5);
+        }
 
         /*
          * The tail blocks, from the registers the pass left them in.  They
