@@ -2,6 +2,16 @@
 
 ## 2.1.0
 
+* perf(gcm): read a short block without going through the stack.  Zeroing
+  sixteen bytes, copying the block in and loading them back is three trips to
+  memory with a store the load must wait for, and at packet lengths that was a
+  tenth of the call.  The sixteen bytes are read where they lie and what is
+  above the length masked off, which is safe everywhere except at the end of a
+  page -- and a block near the end of a page whose own bytes stop short of it
+  is read aligned, which cannot leave the page, and shuffled down.  This is
+  how picotls's fusion does it.  On an Intel Haswell a 100-byte packet goes
+  from 0.0625 to 0.058 microseconds, 79 per cent of fusion's speed against 73,
+  and with the header protection mask 83
 * perf(gcm): the tail of a message gets what the groups already had.  The
   six-wide pass that finishes a message was still running its rounds from a
   loop over a count held in the key, so the compiler could not place the
