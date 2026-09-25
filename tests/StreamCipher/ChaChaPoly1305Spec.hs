@@ -2,12 +2,14 @@
 
 module StreamCipher.ChaChaPoly1305Spec where
 
+import qualified Crypto.Cipher.ChaCha.Poly1305 as One
 import qualified Crypto.Cipher.ChaChaPoly1305 as CP
 import Crypto.Cipher.Types
 import Crypto.Error
 import Imports
 import MAC.Poly1305Spec ()
 
+import Data.Bits (xor)
 import qualified Data.ByteArray as B (convert)
 import qualified Data.ByteString as B
 
@@ -129,6 +131,7 @@ spec = do
     it "nonce increment" runNonceInc
     it "RFC8439 A5 enc" rfc8439encrypt
     it "RFC8439 A5 dec" rfc8439decrypt
+    oneShotTests
   where
     runEncrypt =
         let ini =
@@ -202,3 +205,60 @@ spec = do
                     B.convert . CP.incrementNonce $
                         n10
                 ]
+
+-- | Crypto.Cipher.ChaCha.Poly1305 does a whole message in one call where
+-- Crypto.Cipher.ChaChaPoly1305 does it in steps.  It has to answer exactly
+-- what the steps answer, and what RFC 8439 prints.
+oneShotTests :: Spec
+oneShotTests = describe "Crypto.Cipher.ChaCha.Poly1305" $ do
+    it "RFC 8439 2.8.2, twelve-byte nonce" $
+        propertyHoldCase
+            [ eqTest "ciphertext" ciphertext (B.take (B.length ciphertext) sealed)
+            , eqTest "tag" tag (B.drop (B.length ciphertext) sealed)
+            ]
+    it "decrypt undoes encrypt" $
+        One.decrypt ctx nonce12 aad sealed 16 `shouldBe` Just plaintext
+    it "refuses a flipped bit in the ciphertext" $
+        One.decrypt ctx nonce12 aad (flipHead sealed) 16
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "refuses a flipped bit in the tag" $
+        One.decrypt ctx nonce12 aad (flipLast sealed) 16
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "refuses input shorter than the tag" $
+        One.decrypt ctx nonce12 aad (B.replicate 8 0) 16
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "refuses a nonce that is not twelve bytes" $ do
+        One.decrypt ctx (B.replicate 10 0) aad sealed 16
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+        -- eight is the other ChaCha construction, not this AEAD
+        One.decrypt ctx (B.replicate 8 0) aad sealed 16
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "decryptWithTag hands back the tag encrypt made" $
+        case One.decryptWithTag ctx nonce12 aad (B.take (B.length ciphertext) sealed) 16 of
+            CryptoFailed e -> expectationFailure (show e)
+            CryptoPassed (body, t) ->
+                propertyHoldCase
+                    [ eqTest "plaintext" plaintext body
+                    , eqTest "tag" (AuthTag (B.convert tag)) t
+                    ]
+    it "agrees with the step-at-a-time interface over a different message" $
+        let msg = "another message, of a length that is not a multiple of 16" :: B.ByteString
+            ad = "\x01\x02\x03" :: B.ByteString
+            ini = CP.initialize (throwCryptoError $ CP.key key)
+                                (throwCryptoError $ CP.nonce12 nonce12)
+            afterAAD = CP.finalizeAAD (CP.appendAAD ad ini)
+            (out, afterEnc) = CP.encrypt msg afterAAD
+            t = CP.finalize afterEnc
+            one = throwCryptoError (One.encrypt ctx nonce12 ad msg 16) :: B.ByteString
+         in propertyHoldCase
+                [ eqTest "ciphertext" out (B.take (B.length out) one)
+                , eqTest "tag" (B.convert t :: B.ByteString) (B.drop (B.length out) one)
+                ]
+  where
+    ctx = throwCryptoError (One.newContext key)
+    -- the same nonce the step interface builds from constant and iv
+    nonce12 = constant `B.append` iv
+    sealed = throwCryptoError (One.encrypt ctx nonce12 aad plaintext 16) :: B.ByteString
+    flipHead bs = B.cons (B.head bs `xor` 1) (B.tail bs)
+    flipLast bs =
+        B.snoc (B.init bs) (B.last bs `xor` 1)

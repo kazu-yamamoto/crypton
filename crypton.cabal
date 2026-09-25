@@ -149,6 +149,7 @@ library
         Crypto.Cipher.Camellia
         Crypto.Cipher.CAST5
         Crypto.Cipher.ChaCha
+        Crypto.Cipher.ChaCha.Poly1305
         Crypto.Cipher.ChaChaPoly1305
         Crypto.Cipher.DES
         Crypto.Cipher.RC4
@@ -245,6 +246,7 @@ library
         cbits/crypton_blowfish.c
         cbits/crypton_camellia.c
         cbits/crypton_chacha.c
+        cbits/crypton_chachapoly.c
         cbits/crypton_cpu.c
         cbits/crypton_des.c
         cbits/crypton_ecc.c

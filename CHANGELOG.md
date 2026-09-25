@@ -2,6 +2,16 @@
 
 ## 2.1.1
 
+* feat(chachapoly): `Crypto.Cipher.ChaCha.Poly1305`, which does a whole
+  ChaCha20-Poly1305 message in one call, the shape `Crypto.Cipher.AES.GCM`
+  has.  `Crypto.Cipher.ChaChaPoly1305` takes a message in steps, which is
+  right when it arrives in pieces and is eight foreign calls and the
+  allocations between them when it was already whole.  Measured on an Apple
+  M4 through the Haskell interface, a 100-byte message goes 0.97 -> 0.415
+  microseconds and a 1400-byte one 2.89 -> 2.36.  The nonce is the twelve
+  bytes RFC 8439 defines; eight is the other ChaCha construction and is
+  refused rather than quietly encrypted under a scheme nobody asked for
+
 * feat(gcm): `Crypto.Cipher.AES.GCM.decryptWithTag`, which decrypts and hands
   back the tag it computed rather than comparing it.  For a protocol that
   carries the tag apart from the ciphertext, where `decrypt` -- which wants
