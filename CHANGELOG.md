@@ -2,6 +2,22 @@
 
 ## 2.1.0
 
+* perf(gcm): build the counter block without leaving the vector registers,
+  and keep each power of H beside its Karatsuba term.  Both came from reading
+  what picotls's `fusion` does differently.  The counter was being stepped in
+  a general register, byte swapped there and inserted into a vector one, which
+  is a move across register files for every lane and six to a group; held
+  byte reversed in a vector register instead, `_mm_add_epi32` steps the low
+  thirty-two bits and wraps them where GCM wants, and a shuffle puts the bytes
+  back.  The powers were in two arrays 256 bytes apart, so a multiply touched
+  two cache lines for operands it always wants together; they are now
+  adjacent.  On an Intel Haswell a 1200-byte message goes from 0.311 to 0.281
+  microseconds and 1440 bytes from 79 to 90 per cent of fusion's speed.  The
+  multiplies are also now genuinely issued between the AES rounds, which the
+  comment claimed and the generated code did not do: a test before each one
+  ended the basic block the scheduler works inside, and the first group is
+  peeled so that there is nothing to test
+
 * perf(gcm): the same for AArch64, where what costs is the framing rather
   than a missing fast path.  `armv8_impl.c` already encrypts eight blocks at a
   time and folds their GHASH into one reduction; what sat outside it was the
