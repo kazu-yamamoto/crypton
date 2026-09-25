@@ -2,6 +2,17 @@
 
 ## 2.1.0
 
+* perf(gcm): give E(K,Y0) a lane that would otherwise sit idle, and stop
+  copying the last short block through the stack.  Six blocks are in flight
+  whatever the message length, so a message leaving a tail of four blocks or
+  fewer has lanes to spare; the block that masks the tag rides in one of them
+  instead of taking ten rounds nothing overlaps, which at 100 bytes measured
+  9.3 of 78.9 nanoseconds.  And the last short block was stored to the stack
+  and copied back, when the tag that follows it is about to overwrite the
+  bytes above it anyway -- where there are sixteen to spare, one store does.
+  On an Intel Haswell, 100 bytes goes from 60 to 69 per cent of fusion's speed
+  and 200 bytes from 68 to 82
+
 * perf(gcm): build the counter block without leaving the vector registers,
   and keep each power of H beside its Karatsuba term.  Both came from reading
   what picotls's `fusion` does differently.  The counter was being stepped in
