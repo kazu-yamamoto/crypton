@@ -48,6 +48,11 @@ module Crypto.PubKey.ECDSA (
     signDigest,
     verify,
     verifyDigest,
+
+    -- * Deterministic nonces
+    deterministicNonce,
+    signDeterministic,
+    signDigestDeterministic,
 ) where
 
 import Control.Monad
@@ -58,8 +63,10 @@ import Crypto.Error
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import Crypto.Internal.Imports
+import Crypto.Number.Generate (generatePrefix)
 import Crypto.Number.ModArithmetic (inverseFermat)
 import qualified Crypto.PubKey.ECC.P256 as P256
+import Crypto.Random.HmacDRG (initial, update)
 import Crypto.Random.Types
 
 import Data.Bits
@@ -257,6 +264,75 @@ verify
 verify prx hashAlg q sig msg = verifyDigest prx q sig (hashWith hashAlg msg)
 
 -- | Truncate a digest based on curve order size.
+-- | Deterministic nonce generation according to RFC 6979.
+--
+-- The nonce is derived from the private key and the message alone, so a
+-- signature made this way needs no random number generator and cannot be the
+-- one that repeats a nonce -- which, for ECDSA, hands over the private key.
+--
+-- The hash used to seed the generator is given separately from the one the
+-- message was digested with, as RFC 6979 allows.
+--
+-- The last argument is what to do with a candidate nonce.  It may answer
+-- 'Nothing', in which case another candidate is drawn, which is what
+-- 'signDigestDeterministic' does for the r or s that comes out zero:
+--
+-- > deterministicNonce prx SHA256 priv digest (\k -> signDigestWith prx k priv digest)
+deterministicNonce
+    :: (EllipticCurveECDSA curve, HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => proxy curve
+    -> hashDRG
+    -> PrivateKey curve
+    -> Digest hashDigest
+    -> (Scalar curve -> Maybe a)
+    -> a
+deterministicNonce prx alg d digest go = fst $ withDRG state run
+  where
+    state = update seed $ initial alg
+    -- RFC 6979 section 3.2 step d: int2octets(x) || bits2octets(h1).  The
+    -- second is the truncated digest taken modulo the order, which is what
+    -- scalarAdd with zero does, its contract being to reduce there.
+    seed =
+        B.append (encodeScalar prx d) (encodeScalar prx z)
+            :: B.ScrubbedBytes
+    z = scalarAdd prx (tHashDigest prx digest) zeroScalar
+    zeroScalar = throwCryptoError $ scalarFromInteger prx 0
+    run = do
+        k <- generatePrefix (curveOrderBits prx)
+        case scalarFromInteger prx k of
+            CryptoPassed s
+                | scalarIsValid prx s -> maybe run pure (go s)
+            _ -> run
+
+-- | Sign a digest with a nonce derived from the private key and the digest,
+-- as RFC 6979 says, rather than from a random number generator.
+signDigestDeterministic
+    :: (EllipticCurveECDSA curve, HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => proxy curve
+    -> hashDRG
+    -> PrivateKey curve
+    -> Digest hashDigest
+    -> Signature curve
+signDigestDeterministic prx alg d digest =
+    deterministicNonce prx alg d digest $ \k -> signDigestWith prx k d digest
+
+-- | Sign a message with a nonce derived from the private key and the message,
+-- as RFC 6979 says, rather than from a random number generator.
+signDeterministic
+    :: ( EllipticCurveECDSA curve
+       , HashAlgorithm hashDRG
+       , HashAlgorithm hash
+       , ByteArrayAccess msg
+       )
+    => proxy curve
+    -> hashDRG
+    -> PrivateKey curve
+    -> hash
+    -> msg
+    -> Signature curve
+signDeterministic prx alg d hashAlg msg =
+    signDigestDeterministic prx alg d (hashWith hashAlg msg)
+
 tHashDigest
     :: (EllipticCurveECDSA curve, HashAlgorithm hash)
     => proxy curve -> Digest hash -> Scalar curve

@@ -79,8 +79,42 @@ testNormalize name = prop (show name) $ \(ArbitraryBS0_2901 msg) -> do
             ECC.signExtendedDigestWith k key digest >>= \s -> pure $ ECC.sign_s (ECC.signature s) <= n `div` 2
     pure $ propertyHold [eqTest "normalized" (Just True) check]
 
+-- | The deterministic nonce of RFC 6979, against the implementation in
+-- Crypto.PubKey.ECC.ECDSA, which is itself held to the vectors in the RFC by
+-- tests/PubKey/ECDSASpec.hs.  Agreeing with it is agreeing with those.
+propertyDeterministic
+    :: HashAlgorithm hash => hash -> Curve -> ArbitraryBS0_2901 -> Gen Bool
+propertyDeterministic hashAlg (Curve c curve _) (ArbitraryBS0_2901 msg) = do
+    d <- arbitraryScalar curve
+    let prx = Just c -- using Maybe as Proxy
+        privECC = ECC.PrivateKey curve d
+        privECDSA = throwCryptoError $ ECDSA.scalarFromInteger prx d
+        pubECDSA = ECDSA.toPublic prx privECDSA
+        digest = hashWith hashAlg msg
+        kECC = ECC.deterministicNonce hashAlg privECC digest Just
+        kECDSA =
+            ECDSA.deterministicNonce prx hashAlg privECDSA digest Just
+        sigECDSA = ECDSA.signDeterministic prx hashAlg privECDSA hashAlg msg
+        sigWithK = fromJust $ ECDSA.signWith prx kECDSA privECDSA hashAlg msg
+    pure $
+        propertyHold
+            [ eqTest "nonce" kECC (ECDSA.scalarToInteger prx kECDSA)
+            , eqTest "signature matches signWith" sigWithK sigECDSA
+            , eqTest
+                "signature verifies"
+                True
+                (ECDSA.verify prx hashAlg pubECDSA sigECDSA msg)
+            ]
+
 spec :: Spec
 spec = do
+    modifyMaxSuccess (const 5) $
+        describe "RFC 6979 deterministic nonce" $ do
+            prop "SHA1" $ propertyDeterministic SHA1
+            prop "SHA224" $ propertyDeterministic SHA224
+            prop "SHA256" $ propertyDeterministic SHA256
+            prop "SHA384" $ propertyDeterministic SHA384
+            prop "SHA512" $ propertyDeterministic SHA512
     modifyMaxSuccess (const 5) $
         describe "verification" $ do
             prop "SHA1" $ propertyECDSA SHA1
