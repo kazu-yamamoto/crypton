@@ -1,5 +1,16 @@
 # CHANGELOG for crypton
 
+## 2.1.1
+
+* feat(ecdsa): `Crypto.PubKey.ECDSA` gains the deterministic nonce of RFC
+  6979, which `Crypto.PubKey.ECC.ECDSA` already had.  The fast module was the
+  one without it, so moving to it for the speed meant giving up the one
+  protection against the mistake that hands over an ECDSA private key.  Three
+  new names: `deterministicNonce`, and `signDeterministic` and
+  `signDigestDeterministic` over it.  Held to the implementation in
+  `Crypto.PubKey.ECC.ECDSA`, which is itself held to the vectors in the RFC,
+  on P-256, P-384 and P-521 with SHA-1 through SHA-512
+
 ## 2.1.0
 
 * perf(p256): a signed five-bit window for the variable-point scalar
