@@ -83,6 +83,7 @@ newContext k = do
 -- A nonce must not be used twice with the same t'Context'.  Twelve bytes is
 -- the size GCM is defined for and the only one that does not cost a further
 -- pass.
+{-# INLINABLE encrypt #-}
 encrypt
     :: ( ByteArrayAccess nonce
        , ByteArrayAccess aad
@@ -104,6 +105,7 @@ encrypt (Context aes gk) nonce aad input taglen =
 -- the plaintext.
 --
 -- 'Nothing' also comes back when the input is shorter than the tag.
+{-# INLINABLE decrypt #-}
 decrypt
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
     => Context
@@ -142,6 +144,7 @@ newHeaderKey k = HeaderKey <$> initAES k
 -- the sealed message, counting the tag as part of it.
 --
 -- 'False' comes back, and nothing is written, when the sample would not fit.
+{-# INLINABLE encryptWithMask #-}
 encryptWithMask
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArrayAccess ba)
     => Context
