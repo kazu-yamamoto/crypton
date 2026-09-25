@@ -185,6 +185,11 @@ TGT static __m128i clampn(__m128i v, size_t n)
     return _mm_and_si128(v, _mm_cmpgt_epi8(_mm_set1_epi8((char) n), idx));
 }
 
+/*
+ * A short block, zero padded.  The padding is not optional: the additional
+ * data goes to GHASH straight from here, where a whole block would have
+ * zeros above its length and anything else changes the tag.
+ */
 TGT static __m128i loadn(const uint8_t *p, size_t n)
 {
     uint8_t buf[16] = {0};
@@ -347,13 +352,7 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
  * writing them there.  The group below is entered only when the queue is
  * full, so there is nothing to test.
  */
-#ifdef PROBE_NO_QUEUE
-/* absorb a register instead of a queue slot: the arithmetic is the same and
- * the answer is wrong, but it says what the store and the load cost */
-#define GAT(j) GHASH_ONE(b##j, gp - (j))
-#else
 #define GAT(j) GHASH_ONE(gq[j], gp - (j))
-#endif
 
 TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
                                    const aes_key *key, const uint8_t *nonce,
@@ -368,6 +367,8 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
     const int hprounds = hpkey != 0 ? hpkey->nbr : rounds;
     GHASH_DECL;
     __m128i ctrbase, ctr, one32, ek0, tag, b0, b1, b2, b3, b4, b5;
+    const int ntail_pre = (int) ((inlen % 96 + 15) / 16);
+    int lane_ek0;
     __m128i gq[6];
     unsigned gi = 0, gw = 0;
     int gn = 0;
@@ -392,7 +393,16 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
         ctr = _mm_shuffle_epi8(ctrbase, BSWAP);
         one32 = _mm_set_epi32(0, 0, 0, 1);
     }
-    ek0 = aes_one_block(rk, rounds, ctrbase);
+    /*
+     * E(K,Y0), which the tag is masked with.  When the message leaves a tail
+     * that is four blocks or fewer, the pass below has lanes to spare and it
+     * rides in one of them; a chain of its own costs ten rounds that nothing
+     * overlaps, which at 100 bytes measured 9.3 of 78.9 nanoseconds.  This
+     * is what picotls's fusion does with its bits5.
+     */
+    lane_ek0 = ntail_pre > 0 && ntail_pre <= 4;
+    if (!lane_ek0)
+        ek0 = aes_one_block(rk, rounds, ctrbase);
 
     /* The additional data goes in first and takes the highest powers, but it
      * is only queued here: absorbing it takes multiplies, and the multiplies
@@ -588,12 +598,16 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
             t1 = ntail > 1 ? tv[1] : ctrbase;
             t2 = ntail > 2 ? tv[2] : ctrbase;
             t3 = ntail > 3 ? tv[3] : ctrbase;
-            t4 = ntail > 4 ? tv[4] : ctrbase;
+            t4 = lane_ek0 ? ctrbase : (ntail > 4 ? tv[4] : ctrbase);
             t5 = lane_mask
                ? _mm_loadu_si128((const __m128i *) (out + sampleoff))
                : (ntail > 5 ? tv[5] : ctrbase);
             WIDE6(lane_mask ? hprk : rk);
-            tv[0] = t0; tv[1] = t1; tv[2] = t2; tv[3] = t3; tv[4] = t4;
+            tv[0] = t0; tv[1] = t1; tv[2] = t2; tv[3] = t3;
+            if (lane_ek0)
+                ek0 = t4;
+            else
+                tv[4] = t4;
             if (lane_mask)
                 _mm_storeu_si128((__m128i *) mask, t5);
             else if (ntail > 5)
@@ -611,7 +625,14 @@ no_tail:
             if (n == 16) {
                 _mm_storeu_si128((__m128i *) (out + off), c);
             } else {
-                storen(out + off, c, n);
+                /* The tag goes in at out + inlen, so the bytes above the
+                 * last short block are about to be written over anyway:
+                 * where there are sixteen of them to spare, one store does
+                 * what a store to the stack and a copy back did. */
+                if (n + taglen >= 16)
+                    _mm_storeu_si128((__m128i *) (out + off), c);
+                else
+                    storen(out + off, c, n);
                 c = clampn(c, n);
             }
             GHASH_ONE(_mm_shuffle_epi8(c, BSWAP), gp);
