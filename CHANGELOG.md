@@ -2,6 +2,24 @@
 
 ## 2.1.0
 
+* perf(p256): a signed five-bit window for the variable-point scalar
+  multiplication, which is what ECDH and ECDSA signing spend their time in.
+  The scalar is recoded into 52 digits, every one of them odd, so the table
+  holds only the odd multiples P, 3P, ..., 31P and a negative digit costs a
+  negation of y, which is free.  The main loop goes from 252 doublings and 64
+  additions to 255 and 51, and -- because no digit is zero and no partial sum
+  is the infinity -- it drops the masks that stood in for infinity on every
+  iteration.  The table is built so that each pair of neighbouring odd
+  multiples comes out of one doubling and one addition that shares everything
+  but a squaring and a multiplication between X+P and X-P.  Counted exactly,
+  the field multiplications and squarings go 3477 -> 3326.  Measured on an
+  idle Intel Haswell, thirty runs each, ECDH is 158.5 -> 153.3 microseconds,
+  about 4%; on an Apple M4 under desktop load the difference did not come out
+  of the noise.  One scalar, 30, would have reached the last addition with
+  the accumulator equal to the point being added, which these formulas cannot
+  do; the recoder detects that from the scalar and the last iteration doubles
+  instead.  Suggested by Kyle Butt
+
 * perf(gcm): GHASH takes the ciphertext from the output buffer.  A group's
   multiplies are issued between the rounds of the group after it, and the
   blocks were copied into six registers' worth of scratch to wait there --

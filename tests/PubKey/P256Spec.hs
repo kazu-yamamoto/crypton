@@ -191,6 +191,19 @@ spec = do
         prop "point-add-inverse" propertyPointAddInverse
         prop "point-negate" propertyPointNegate
         prop "point-mul" propertyPointMul
+        -- A signed window can reach the last addition with the accumulator
+        -- equal to the very point it is adding, which the formulas cannot
+        -- do: they answer the infinity where the truth is twice that point.
+        -- Which scalars do it depends on the window and on the order mod 64;
+        -- for the five-bit window here it is 30 alone, and the sweep that
+        -- found it covered every scalar below a million and every one within
+        -- a million of the order.  The neighbours are here because they are
+        -- the family it came from.
+        describe "point-mul-small-scalars" $
+            sequence_
+                [ it (show k) (casePointMulSmall k)
+                | k <- [1 .. 70] ++ [2 ^ (32 :: Int), 2 ^ (64 :: Int)]
+                ]
         prop "infinity" $
             let gN = P256.toPoint P256.scalarN
                 g1 = P256.pointBase
@@ -239,6 +252,13 @@ spec = do
                 [ eqTest "p256" pR (P256.pointMul (unP256Scalar s) p)
                 , eqTest "ecc" peR (pointP256ToECC pR)
                 ]
+
+    -- k * (7 * G), against the reference implementation.
+    casePointMulSmall k =
+        let base = P256.toPoint (unP256Scalar (P256Scalar 7))
+            baseE = ECC.pointMul curve 7 curveGen
+            got = P256.pointMul (unP256Scalar (P256Scalar k)) base
+         in ECC.pointMul curve k baseE `propertyEq` pointP256ToECC got
 
     pointInfinity :: P256.Point
     pointInfinity = P256.pointFromIntegers (0, 0)
