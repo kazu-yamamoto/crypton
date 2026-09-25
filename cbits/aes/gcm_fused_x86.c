@@ -45,6 +45,7 @@
 /* a full sixteen-byte reversal: mask bytes 15,14,...,0 */
 static const __m128i BSWAP = {0x08090a0b0c0d0e0fLL, 0x0001020304050607LL};
 
+
 #define TGT __attribute__((target("aes,pclmul,sse4.1")))
 
 /* the two halves of a value added together: the term Karatsuba needs, and it
@@ -482,27 +483,15 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
     size_t done;
     int lane_mask = 0;
 
-    /* Y0 built in a register.  Going through sixteen bytes of stack to
-     * assemble twelve bytes of nonce and a counter puts a store and a load
-     * on the front of a function whose whole fixed cost is a few tens of
-     * clocks.  Three four-byte loads cannot read past the nonce. */
-    {
-        uint32_t n0, n1, n2;
-        memcpy(&n0, nonce, 4);
-        memcpy(&n1, nonce + 4, 4);
-        memcpy(&n2, nonce + 8, 4);
-        ctrbase = _mm_set_epi32((int) __builtin_bswap32(1),
-                                (int) n2, (int) n1, (int) n0);
-        ctr = _mm_shuffle_epi8(ctrbase, BSWAP);
-        one32 = _mm_set_epi32(0, 0, 0, 1);
-    }
     /*
-     * E(K,Y0), which the tag is masked with.  When the message leaves a tail
-     * that is four blocks or fewer, the pass below has lanes to spare and it
-     * rides in one of them; a chain of its own costs ten rounds that nothing
-     * overlaps, which at 100 bytes measured 9.3 of 78.9 nanoseconds.  This
-     * is what picotls's fusion does with its bits5.
+     * Y0: the twelve bytes of nonce and a counter of one.  loadn reads the
+     * nonce where it lies and masks what is above it, so this is one load
+     * rather than three of four bytes each and a set built from them.
      */
+    ctrbase = _mm_insert_epi32(loadn(nonce, 12), (int) __builtin_bswap32(1), 3);
+    ctr = _mm_shuffle_epi8(ctrbase, BSWAP);
+    one32 = _mm_set_epi32(0, 0, 0, 1);
+
     lane_ek0 = ntail_pre > 0 && ntail_pre <= 4;
     if (!lane_ek0)
         ek0 = aes_one_block(rk, rounds, ctrbase);
@@ -763,13 +752,18 @@ no_tail:
     }
 
     {
-        uint8_t lenb[16];
-        uint64_t la = (uint64_t) aadlen * 8, lc = (uint64_t) inlen * 8;
-        int j;
-        for (j = 0; j < 8; j++) lenb[j] = (uint8_t) (la >> (56 - 8 * j));
-        for (j = 0; j < 8; j++) lenb[8 + j] = (uint8_t) (lc >> (56 - 8 * j));
-        GHASH_ONE(_mm_shuffle_epi8(_mm_loadu_si128((const __m128i *) lenb),
-                                       BSWAP), gp);
+        /*
+         * The length block: the additional data's bit count and the
+         * message's, each big endian in a half, and then reversed like
+         * every other block on its way to GHASH.
+         *
+         * Reversed, that block is the two counts as ordinary little endian
+         * words with the message's in the low half -- which is one set, and
+         * no shuffle.  Sixteen byte stores to the stack and a load back is
+         * what it cost before.
+         */
+        GHASH_ONE(_mm_set_epi64x((long long) ((uint64_t) aadlen << 3),
+                                 (long long) ((uint64_t) inlen << 3)), gp);
     }
 
     tag = _mm_shuffle_epi8(gtag, BSWAP);

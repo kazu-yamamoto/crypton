@@ -2,6 +2,19 @@
 
 ## 2.1.0
 
+* perf(gcm): build the length block and the initial counter in registers.
+  The length block -- the two bit counts GHASH ends on -- was assembled by
+  sixteen byte stores to the stack and read back, which measured about 9 of
+  the 58 nanoseconds a 100-byte packet cost.  Reversed the way every block is
+  on its way to GHASH, that block is just the two counts as little endian
+  words with the message's in the low half, so one `_mm_set_epi64x` makes it
+  and no shuffle is needed.  The initial counter likewise: the nonce is read
+  where it lies and masked, rather than in three pieces of four bytes.  On an
+  Intel Haswell a 100-byte packet goes from 0.058 to 0.049 microseconds.  With
+  this every length measured is at 90 per cent of fusion's speed or better --
+  100 bytes 90 and 95 with the header protection mask, 200 bytes 96, 1440
+  bytes 94, 16 KiB 95 -- where the series began at 31 per cent for 100 bytes
+
 * perf(gcm): read a short block without going through the stack.  Zeroing
   sixteen bytes, copying the block in and loading them back is three trips to
   memory with a store the load must wait for, and at packet lengths that was a
