@@ -464,7 +464,7 @@ gcmKeyInit ctx = AESGCMKey $ B.allocAndFreeze sizeGCMKey $ \p ->
 -- | Authenticate and encrypt one message in a single call: the nonce, the
 -- additional data, the plaintext and the tag, with no state crossing back
 -- into Haskell in between.  The result is the ciphertext followed by the tag.
-{-# NOINLINE gcmFullEncrypt #-}
+{-# INLINABLE gcmFullEncrypt #-}
 gcmFullEncrypt
     :: (ByteArrayAccess iv, ByteArrayAccess aad, ByteArrayAccess ba, ByteArray output)
     => AES -> AESGCMKey -> iv -> aad -> ba -> Int -> output
@@ -503,7 +503,7 @@ gcmFullEncrypt ctx (AESGCMKey gk) iv aad input taglen =
 -- there nothing is allocated for either.
 --
 -- @sampleoff@ is where the sixteen bytes of sample begin in the output.
-{-# NOINLINE gcmFullEncryptMask #-}
+{-# INLINABLE gcmFullEncryptMask #-}
 gcmFullEncryptMask
     :: (ByteArrayAccess iv, ByteArrayAccess aad, ByteArrayAccess ba)
     => AES
@@ -547,7 +547,7 @@ gcmFullEncryptMask ctx (AESGCMKey gk) hpctx iv aad input taglen sampleoff outp m
 -- caller: 'Nothing' when it does not match, and every byte of it is looked at
 -- either way.  The ciphertext comes in without its tag, which is given
 -- separately.
-{-# NOINLINE gcmFullDecrypt #-}
+{-# INLINABLE gcmFullDecrypt #-}
 gcmFullDecrypt
     :: ( ByteArrayAccess iv
        , ByteArrayAccess aad

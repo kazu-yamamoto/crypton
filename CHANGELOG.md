@@ -2,6 +2,17 @@
 
 ## 2.1.0
 
+* perf(gcm): let the one-call interface specialise.  `gcmFullEncrypt`,
+  `gcmFullDecrypt` and `gcmFullEncryptMask` take three `ByteArrayAccess`
+  arguments and were marked `NOINLINE`, which is this module's habit and is
+  right for a wrapper that is called once; these are called once a packet.
+  With no specialisation every `withByteArray` and every `length` went through
+  a dictionary, and on an Apple M4 that measured **0.15 of the 0.265
+  microseconds** a 100-byte packet cost through the Haskell interface -- more
+  than the encryption it wrapped.  Marked `INLINABLE` so the caller can
+  specialise them, 100 bytes falls to 0.128, where the same work measured in C
+  is 0.114: the Haskell layer costs 0.014 rather than 0.15
+
 * perf(gcm): build the length block and the initial counter in registers.
   The length block -- the two bit counts GHASH ends on -- was assembled by
   sixteen byte stores to the stack and read back, which measured about 9 of
