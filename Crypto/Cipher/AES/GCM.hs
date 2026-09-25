@@ -22,6 +22,13 @@
 -- > ctx <- throwCryptoError <$> pure (newContext key)
 -- > let packet = encrypt ctx nonce header plaintext 16
 --
+-- This runs on AES-NI and carry-less multiply, or on the ARMv8 cryptographic
+-- extension, and makes no branch and no memory access that depends on the key
+-- or on the data.  Where the processor has neither, AES falls back to a table
+-- driven implementation that is /not/ constant time; see the side channels
+-- section of the README, and 'Crypto.System.CPU.processorOptions' for which is
+-- in use.
+--
 -- The result is the ciphertext with the tag after it, which is the shape a
 -- packet wants.  'decrypt' takes that shape back, compares the tag itself and
 -- answers 'Nothing' when it does not match.

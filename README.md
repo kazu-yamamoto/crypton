@@ -13,6 +13,36 @@ provides a non-consistent low-level API.
 If you have no idea what you're doing, please do not use this directly.
 Instead, rely on higher level protocols or implementations.
 
+Side channels
+-------------
+
+AES is where this matters most, and which implementation runs is decided at
+runtime from what the processor has.
+
+On x86-64 with AES-NI and carry-less multiply, and on AArch64 with the ARMv8
+cryptographic extension, AES and GHASH are instructions rather than tables.
+crypton's AES and AES-GCM then make no branch and no memory access that
+depends on the key or on the data: the secrets stay in vector registers and
+never reach one a branch can test, which the generated code is checked
+against.  Every x86-64 part since about 2010 and every AArch64 part in
+ordinary use has these.
+
+Where neither is present crypton falls back to a table-driven AES, which
+indexes a 256-byte substitution table with data derived from the key and the
+input.  **That is not constant time**, and on a machine where an attacker can
+observe the cache it is open to a timing attack.  The fallback exists so that
+the library builds and runs everywhere; it is not meant for a setting where
+that matters.
+
+`Crypto.System.CPU.processorOptions` says which is in use.  `AESNI` in that
+list means the instruction path, and `PCLMUL` that GHASH has its instruction
+too; without `AESNI` it is the tables.  The list also reports `RDRAND`, which
+is unrelated to this.
+
+    ghci> import Crypto.System.CPU
+    ghci> processorOptions
+    [AESNI,PCLMUL]
+
 Performance
 -----------
 
