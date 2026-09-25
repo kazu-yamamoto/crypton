@@ -168,6 +168,12 @@ int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes
                                  uint8_t *aad, uint32_t aadlen,
                                  uint8_t *input, uint32_t length,
                                  const uint8_t *tag, uint32_t taglen);
+void crypton_aes_gcm_full_decrypt_tag(uint8_t *output, uint8_t *outtag,
+                                      const aes_gcm_key *gcmkey, aes_key *key,
+                                      uint8_t *iv, uint32_t ivlen,
+                                      uint8_t *aad, uint32_t aadlen,
+                                      uint8_t *input, uint32_t length,
+                                      uint32_t taglen);
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length);
 void crypton_aes_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);

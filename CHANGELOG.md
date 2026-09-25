@@ -2,6 +2,12 @@
 
 ## 2.1.1
 
+* feat(gcm): `Crypto.Cipher.AES.GCM.decryptWithTag`, which decrypts and hands
+  back the tag it computed rather than comparing it.  For a protocol that
+  carries the tag apart from the ciphertext, where `decrypt` -- which wants
+  the two together -- does not fit.  It returns an `AuthTag`, whose `Eq` is a
+  constant-time comparison, so the safe way to use it is also the obvious one
+
 * feat(ecdsa): `Crypto.PubKey.ECDSA` gains the deterministic nonce of RFC
   6979, which `Crypto.PubKey.ECC.ECDSA` already had.  The fast module was the
   one without it, so moving to it for the speed meant giving up the one

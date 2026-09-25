@@ -45,6 +45,7 @@ module Crypto.Cipher.AES.Primitive (
     gcmFullEncrypt,
     gcmFullEncryptMask,
     gcmFullDecrypt,
+    gcmFullDecryptTag,
     gcmAeadInit,
 
     -- * Incremental OCB
@@ -582,6 +583,50 @@ gcmFullDecrypt ctx (AESGCMKey gk) iv aad input tag = unsafeDoIO $ do
         | B.length input <= shortMessage = c_aes_gcm_full_decrypt_unsafe
         | otherwise = c_aes_gcm_full_decrypt
 
+-- | Decrypt one message and hand back the tag that was computed over it,
+-- rather than comparing it here.
+--
+-- For a caller that holds the expected tag in a form of its own and will
+-- compare it itself.  Compare the two 'AuthTag's with '==', whose instance
+-- for that type is a constant-time comparison; taking them apart and
+-- comparing the bytes is how this goes wrong.
+--
+-- Where the tag simply arrives after the ciphertext, 'gcmFullDecrypt' is the
+-- one to use: it compares in C and never puts a tag in the caller's hands.
+{-# INLINABLE gcmFullDecryptTag #-}
+gcmFullDecryptTag
+    :: ( ByteArrayAccess iv
+       , ByteArrayAccess aad
+       , ByteArrayAccess ba
+       , ByteArray output
+       )
+    => AES -> AESGCMKey -> iv -> aad -> ba -> Int -> (output, AuthTag)
+gcmFullDecryptTag ctx (AESGCMKey gk) iv aad input taglen = unsafeDoIO $ do
+    (tagbs, out) <- B.allocRet (B.length input) $ \outp ->
+        B.alloc taglen $ \tagp ->
+            B.withByteArray gk $ \gkp ->
+                keyToPtr ctx $ \k ->
+                    B.withByteArray iv $ \ivp ->
+                        B.withByteArray aad $ \aadp ->
+                            B.withByteArray input $ \inp ->
+                                call
+                                    outp
+                                    tagp
+                                    (castPtr gkp)
+                                    k
+                                    ivp
+                                    (fromIntegral $ B.length iv)
+                                    aadp
+                                    (fromIntegral $ B.length aad)
+                                    inp
+                                    (fromIntegral $ B.length input)
+                                    (fromIntegral taglen)
+    return (out, AuthTag $ B.convert (tagbs :: B.Bytes))
+  where
+    call
+        | B.length input <= shortMessage = c_aes_gcm_full_decrypt_tag_unsafe
+        | otherwise = c_aes_gcm_full_decrypt_tag
+
 -- | append data which is only going to be authenticated to the GCM context.
 --
 -- needs to happen after initialization and before appending encryption/decryption data.
@@ -869,6 +914,36 @@ foreign import ccall "crypton_aes.h crypton_aes_gcm_full_decrypt"
         -> Ptr Word8
         -> CUInt
         -> IO CInt
+
+foreign import ccall "crypton_aes.h crypton_aes_gcm_full_decrypt_tag"
+    c_aes_gcm_full_decrypt_tag
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> IO ()
+
+foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_decrypt_tag"
+    c_aes_gcm_full_decrypt_tag_unsafe
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr AESGCM
+        -> Ptr AES
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> Ptr Word8
+        -> CUInt
+        -> CUInt
+        -> IO ()
 
 foreign import ccall unsafe "crypton_aes.h crypton_aes_gcm_full_encrypt"
     c_aes_gcm_full_encrypt_unsafe

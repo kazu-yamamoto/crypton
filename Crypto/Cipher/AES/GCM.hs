@@ -40,6 +40,7 @@ module Crypto.Cipher.AES.GCM (
     newContext,
     encrypt,
     decrypt,
+    decryptWithTag,
 
     -- * Header protection
     HeaderKey,
@@ -51,11 +52,13 @@ import Crypto.Cipher.AES.Primitive (
     AES,
     AESGCMKey,
     gcmFullDecrypt,
+    gcmFullDecryptTag,
     gcmFullEncrypt,
     gcmFullEncryptMask,
     gcmKeyInit,
     initAES,
  )
+import Crypto.Cipher.Types (AuthTag)
 import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
@@ -119,6 +122,30 @@ decrypt (Context aes gk) nonce aad input taglen
     | otherwise = gcmFullDecrypt aes gk nonce aad body tag
   where
     (body, tag) = B.splitAt (B.length input - taglen) input
+
+-- | Decrypt one message, the tag kept apart, and hand back the tag this end
+-- computed.
+--
+-- For a caller whose protocol hands it the tag separately from the
+-- ciphertext, so that 'decrypt' -- which wants the two together and compares
+-- them itself -- does not fit.  Compare the two tags with '=='; the 'Eq'
+-- instance of 'AuthTag' is a constant-time comparison, and taking them apart
+-- to compare the bytes is how this goes wrong.
+--
+-- Nothing here says whether the message is authentic.  Until the comparison
+-- is made and has come out equal, what this returns is not plaintext, it is
+-- what the ciphertext turns into, and a caller must not act on it.
+{-# INLINABLE decryptWithTag #-}
+decryptWithTag
+    :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
+    => Context
+    -> nonce
+    -> aad
+    -> ba
+    -> Int
+    -> (ba, AuthTag)
+decryptWithTag (Context aes gk) nonce aad input taglen =
+    gcmFullDecryptTag aes gk nonce aad input taglen
 
 ----------------------------------------------------------------
 

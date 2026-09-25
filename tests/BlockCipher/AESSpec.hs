@@ -237,6 +237,19 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
         run "AES-128" KATGCM.vectors_aes128_enc
         run "AES-192" KATGCM.vectors_aes192_enc
         run "AES-256" KATGCM.vectors_aes256_enc
+    describe "decryptWithTag hands back the tag encrypt made" $ do
+        runTag "AES-128" KATGCM.vectors_aes128_enc
+        runTag "AES-192" KATGCM.vectors_aes192_enc
+        runTag "AES-256" KATGCM.vectors_aes256_enc
+    it "decryptWithTag gives a different tag for a tampered ciphertext" $
+        let ctx = ctx16
+            sealed = GCM.encrypt ctx iv16 B.empty message 16 :: B.ByteString
+            body = B.take (B.length sealed - 16) sealed
+            tag = AuthTag (BA.convert (B.drop (B.length sealed - 16) sealed))
+            (_, tag') =
+                GCM.decryptWithTag ctx iv16 B.empty (flipFirst body) 16
+                    :: (B.ByteString, AuthTag)
+         in tag' `shouldSatisfy` (/= tag)
     describe "refuses a message that was interfered with" $ do
         it "a flipped bit in the tag" $ tamper (\(c, t) -> (c, flipFirst t))
         it "a flipped bit in the ciphertext" $ tamper (\(c, t) -> (flipFirst c, t))
@@ -260,6 +273,19 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
             , let sealed = GCM.encrypt ctx iv aad input taglen :: B.ByteString
             , sealed /= out `B.append` tag
                 || GCM.decrypt ctx iv aad sealed taglen /= Just input
+            ]
+                `shouldBe` []
+    -- The tag decryptWithTag computes has to be the one encrypt appended, and
+    -- the body it returns the one decrypt returns, over the same vectors.
+    runTag name vs =
+        it name $
+            [ (key, iv)
+            | (key, iv, aad, input, out, taglen, tag) <- vs
+            , let ctx = throwCryptoError (GCM.newContext key)
+            , let (body, tag') =
+                    GCM.decryptWithTag ctx iv aad out taglen
+                        :: (B.ByteString, AuthTag)
+            , body /= input || tag' /= AuthTag (BA.convert tag)
             ]
                 `shouldBe` []
     ctx16 = throwCryptoError (GCM.newContext (B.replicate 16 0x2b))
