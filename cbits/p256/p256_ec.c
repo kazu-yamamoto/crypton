@@ -321,39 +321,6 @@ static void select_affine_point(felem out_x, felem out_y, const limb* table,
   }
 }
 
-/* select_jacobian_point sets {out_x,out_y,out_z} to the index'th entry of
- * table. On entry: index < 16, table[0] must be zero. */
-static void select_jacobian_point(felem out_x, felem out_y, felem out_z,
-                                  const limb* table, limb index) {
-  limb i, j;
-
-  memset(out_x, 0, sizeof(felem));
-  memset(out_y, 0, sizeof(felem));
-  memset(out_z, 0, sizeof(felem));
-
-  /* The implicit value at index 0 is all zero. We don't need to perform that
-   * iteration of the loop because we already set out_* to zero. */
-  table += 3 * NLIMBS;
-
-  // Hit all entries to obscure cache profiling.
-  for (i = 1; i < 16; i++) {
-    limb mask = i ^ index;
-    mask |= mask >> 2;
-    mask |= mask >> 1;
-    mask &= 1;
-    mask--;
-    for (j = 0; j < NLIMBS; j++, table++) {
-      out_x[j] |= *table & mask;
-    }
-    for (j = 0; j < NLIMBS; j++, table++) {
-      out_y[j] |= *table & mask;
-    }
-    for (j = 0; j < NLIMBS; j++, table++) {
-      out_z[j] |= *table & mask;
-    }
-  }
-}
-
 /* scalar_base_mult sets {nx,ny,nz} = scalar*G where scalar is a little-endian
  * number. Note that the value of scalar must be less than the order of the
  * group. */
@@ -424,61 +391,340 @@ static void point_to_affine(felem x_out, felem y_out, const felem nx,
   felem_mul(y_out, ny, z_inv);
 }
 
-/* scalar_base_mult sets {nx,ny,nz} = scalar*{x,y}. */
-static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
-                        const felem y, const crypton_p256_int* scalar) {
-  int i;
-  felem px, py, pz, tx, ty, tz;
-  felem precomp[16][3];
-  limb n_is_infinity_mask, index, p_is_noninfinite_mask, mask;
+/* point_add_mixed_pm sets {xp,yp,zp} = {x1,y1,z1} + {x2,y2} and
+ * {xm,ym,zm} = {x1,y1,z1} - {x2,y2}, where {x2,y2} is affine.
+ *
+ * Negating the second point changes the sign of s2 and so of r, and nothing
+ * else: z1z1, tmp, u2, z1z1z1, h, i, j, v, the output z and the product y1*j
+ * are common to the two.  What the second point costs over the first is one
+ * squaring (r*r) and one multiplication (by r), rather than another eleven.
+ *
+ * The same restrictions as point_add_mixed: this does not handle P+P,
+ * infinity+P nor P+infinity. */
+static void point_add_mixed_pm(felem xp, felem yp, felem zp,
+                               felem xm, felem ym, felem zm,
+                               const felem x1, const felem y1, const felem z1,
+                               const felem x2, const felem y2) {
+  felem z1z1, z1z1z1, s2, u2, h, i, j, r, rr, v, y1j, tmp;
 
-  /* We precompute 0,1,2,... times {x,y}. */
-  memset(precomp, 0, sizeof(felem) * 3);
-  memcpy(&precomp[1][0], x, sizeof(felem));
-  memcpy(&precomp[1][1], y, sizeof(felem));
-  memcpy(&precomp[1][2], kOne, sizeof(felem));
+  felem_square(z1z1, z1);
+  felem_sum(tmp, z1, z1);
 
-  for (i = 2; i < 16; i += 2) {
-    point_double(precomp[i][0], precomp[i][1], precomp[i][2],
-                 precomp[i / 2][0], precomp[i / 2][1], precomp[i / 2][2]);
+  felem_mul(u2, x2, z1z1);
+  felem_mul(z1z1z1, z1, z1z1);
+  felem_mul(s2, y2, z1z1z1);
+  felem_diff(h, u2, x1);
+  felem_sum(i, h, h);
+  felem_square(i, i);
+  felem_mul(j, h, i);
+  felem_mul(v, x1, i);
+  felem_mul(y1j, y1, j);
 
-    point_add_mixed(precomp[i + 1][0], precomp[i + 1][1], precomp[i + 1][2],
-                    precomp[i][0], precomp[i][1], precomp[i][2], x, y);
+  /* The two points share their z. */
+  felem_mul(zp, tmp, h);
+  felem_assign(zm, zp);
+
+  /* X + P */
+  felem_diff(r, s2, y1);
+  felem_sum(r, r, r);
+  felem_square(rr, r);
+  felem_diff(xp, rr, j);
+  felem_diff(xp, xp, v);
+  felem_diff(xp, xp, v);
+  felem_diff(tmp, v, xp);
+  felem_mul(yp, tmp, r);
+  felem_diff(yp, yp, y1j);
+  felem_diff(yp, yp, y1j);
+
+  /* X - P.  Negating the point negates s2, so r becomes -q where
+   * q = 2*(s2 + y1).  The square is the same either way, and the sign is
+   * carried into y by taking (xm - v) where the other took (v - xp):
+   *   xm = q^2 - j - 2v
+   *   ym = (v - xm)*(-q) - 2*y1*j = (xm - v)*q - 2*y1*j
+   * so no field negation is needed. */
+  felem_sum(r, s2, y1);
+  felem_sum(r, r, r);
+  felem_square(rr, r);
+  felem_diff(xm, rr, j);
+  felem_diff(xm, xm, v);
+  felem_diff(xm, xm, v);
+  felem_diff(tmp, xm, v);
+  felem_mul(ym, tmp, r);
+  felem_diff(ym, ym, y1j);
+  felem_diff(ym, ym, y1j);
+}
+
+/* select_jacobian_odd sets {out_x,out_y,out_z} to the index'th of the 16
+ * entries of table, for index < 16.  There is no implicit infinity at index
+ * zero, as the unsigned window this replaces had: every entry is a real
+ * point, which is what lets the signed representation below do without the
+ * infinity masks. */
+static void select_jacobian_odd(felem out_x, felem out_y, felem out_z,
+                                const limb* table, limb index) {
+  limb i, j;
+
+  memset(out_x, 0, sizeof(felem));
+  memset(out_y, 0, sizeof(felem));
+  memset(out_z, 0, sizeof(felem));
+
+  for (i = 0; i < 16; i++) {
+    limb mask = i ^ index;
+    mask |= mask >> 2;
+    mask |= mask >> 1;
+    mask &= 1;
+    mask--;
+    for (j = 0; j < NLIMBS; j++, table++) {
+      out_x[j] |= *table & mask;
+    }
+    for (j = 0; j < NLIMBS; j++, table++) {
+      out_y[j] |= *table & mask;
+    }
+    for (j = 0; j < NLIMBS; j++, table++) {
+      out_z[j] |= *table & mask;
+    }
+  }
+}
+
+/* The scalar, recoded: 52 signed odd digits, each in {+-1,+-3,...,+-31}, so
+ * that scalar = sum d_i * 32^i.  A digit is one byte: the low four bits are
+ * the table index (|d|-1)/2, and bit four is set when d is negative.  One
+ * byte rather than a byte and a word because this is the private key in
+ * another form and has to be wiped afterwards. */
+#define SABS_DIGITS 52
+#define SABS_INDEX(b) ((limb)((b) & 15))
+#define SABS_NEGMASK(b) ((limb)0 - (limb)((b) >> 4))
+typedef struct {
+  u8 digit[SABS_DIGITS];
+} sabs_scalar;
+
+/* words_are_zero returns 1 when |v| is zero and 0 otherwise, without a
+ * branch. */
+static u32 words_are_zero(u32 v) {
+  v |= v >> 16;
+  v |= v >> 8;
+  v |= v >> 4;
+  v |= v >> 2;
+  v |= v >> 1;
+  return (v & 1) ^ 1;
+}
+
+/* sabs_recode writes the signed representation of |scalar| into |out|.
+ *
+ * The recoding is the regular one of Joye and Tunstall: take the low six bits,
+ * subtract 32, and carry the difference upwards.  It needs an odd input, which
+ * is arranged by adding the group order to an even scalar -- that changes the
+ * scalar but not the point it selects, the order being the order.  A zero
+ * scalar is replaced by one and the caller is told, since zero times a point
+ * is the infinity this code deliberately cannot represent.
+ *
+ * *dbl_mask is set to all ones when the last addition of the main loop would
+ * be an addition of a point to itself, which the formulas there cannot do.
+ * That happens exactly when the recoded scalar k' is congruent to twice its
+ * lowest digit: the accumulator entering that step is (k' - d0)*P and what it
+ * adds is d0*P, so they coincide when k' - d0 = d0.  With k' below 2^257 and
+ * |2*d0| at most 62, k' - 2*d0 is then either zero or the order itself, which
+ * is what is tested for below.  No earlier step can do this: entering step i
+ * the accumulator is 32*m*P with |32*m| below the order, and the digit is at
+ * most 31 in absolute value, so the two can only coincide as integers, which
+ * they cannot -- m is odd and so is never zero.
+ *
+ * Constant time in the scalar: every branch below is on a loop counter. */
+static limb sabs_recode(sabs_scalar* out, limb* dbl_mask,
+                        const crypton_p256_int* scalar) {
+  u32 k[9], n[9], ksaved[9];
+  u32 nonzero;
+  limb is_zero_mask;
+  int i, b;
+
+  for (i = 0; i < 9; i++) {
+    k[i] = 0;
+    n[i] = 0;
+  }
+  /* A word at a time.  Bit at a time would be 512 calls into another
+   * translation unit, which the compiler cannot inline away. */
+  for (b = 0; b < 256; b += 32) {
+    k[b >> 5] = (u32)(P256_DIGIT(scalar, b / P256_BITSPERDIGIT)
+                      >> (b % P256_BITSPERDIGIT));
+    n[b >> 5] = (u32)(P256_DIGIT(&crypton_SECP256r1_n, b / P256_BITSPERDIGIT)
+                      >> (b % P256_BITSPERDIGIT));
   }
 
-  memset(nx, 0, sizeof(felem));
-  memset(ny, 0, sizeof(felem));
-  memset(nz, 0, sizeof(felem));
-  n_is_infinity_mask = -1;
+  /* Replace a zero scalar by one, and report it. */
+  nonzero = 0;
+  for (i = 0; i < 9; i++) {
+    nonzero |= k[i];
+  }
+  {
+    u32 z = words_are_zero(nonzero);
+    k[0] |= z;
+    is_zero_mask = (limb)0 - (limb)z;
+  }
 
-  /* We add in a window of four bits each iteration and do this 64 times. */
-  for (i = 0; i < 256; i += 4) {
-    if (i) {
-      point_double(nx, ny, nz, nx, ny, nz);
-      point_double(nx, ny, nz, nx, ny, nz);
-      point_double(nx, ny, nz, nx, ny, nz);
-      point_double(nx, ny, nz, nx, ny, nz);
+  /* An even scalar becomes odd by adding the order.  The sum is below 2^257,
+   * which is why nine words and fifty-two digits are enough. */
+  {
+    u32 addmask = (u32)0 - (u32)((k[0] & 1) ^ 1);
+    u64 carry = 0;
+    for (i = 0; i < 9; i++) {
+      u64 t = (u64)k[i] + (u64)(n[i] & addmask) + carry;
+      k[i] = (u32)t;
+      carry = t >> 32;
+    }
+  }
+
+  for (i = 0; i < 9; i++) {
+    ksaved[i] = k[i];
+  }
+
+  for (i = 0; i < SABS_DIGITS - 1; i++) {
+    u32 r6 = k[0] & 63;            /* odd, so never 32 */
+    u32 hi = (r6 >> 5) & 1;        /* 1 when the digit is positive */
+    u32 wabs = ((r6 - 32) & (0u - hi)) | ((32 - r6) & (hi - 1));
+    u32 mlo = 32u - r6;            /* two's complement of the digit's negation */
+    u32 ext = 0u - hi;             /* its sign extension */
+    u64 carry = 0;
+    int w;
+
+    out->digit[i] = (u8)(((wabs - 1) >> 1) | ((hi ^ 1) << 4));
+
+    if (i == 0) {
+      /* k' - 2*d0, against zero and against the order. */
+      u32 two_w = (u32)(2u * r6) - 64u;   /* 2*d0, two's complement */
+      u32 two_w_ext = 0u - (hi ^ 1);      /* its sign extension */
+      u32 zero_acc = 0, order_acc = 0;
+      u64 borrow = 0;
+      int w2;
+      for (w2 = 0; w2 < 9; w2++) {
+        u32 sub = (w2 == 0) ? two_w : two_w_ext;
+        u64 d = (u64)ksaved[w2] - ((u64)sub + borrow);
+        u32 dw = (u32)d;
+        borrow = (d >> 32) & 1;
+        zero_acc |= dw;
+        order_acc |= dw ^ n[w2];
+      }
+      zero_acc |= (u32)borrow;      /* a negative difference is neither */
+      order_acc |= (u32)borrow;
+      *dbl_mask = (limb)0 - (limb)(words_are_zero(zero_acc)
+                                   | words_are_zero(order_acc));
     }
 
-    index = (crypton_p256_get_bit(scalar, 255 - i - 0) << 3) |
-            (crypton_p256_get_bit(scalar, 255 - i - 1) << 2) |
-            (crypton_p256_get_bit(scalar, 255 - i - 2) << 1) |
-            crypton_p256_get_bit(scalar, 255 - i - 3);
+    /* k -= digit, i.e. k += -digit, sign extended over the nine words. */
+    for (w = 0; w < 9; w++) {
+      u64 t = (u64)k[w] + (u64)(w == 0 ? mlo : ext) + carry;
+      k[w] = (u32)t;
+      carry = t >> 32;
+    }
+    /* k >>= 5 */
+    for (w = 0; w < 8; w++) {
+      k[w] = (k[w] >> 5) | (k[w + 1] << 27);
+    }
+    k[8] >>= 5;
+  }
 
-    /* See the comments in scalar_base_mult about handling infinities. */
-    select_jacobian_point(px, py, pz, precomp[0][0], index);
-    point_add(tx, ty, tz, nx, ny, nz, px, py, pz);
-    copy_conditional(nx, px, n_is_infinity_mask);
-    copy_conditional(ny, py, n_is_infinity_mask);
-    copy_conditional(nz, pz, n_is_infinity_mask);
+  /* What is left is odd, positive and at most five: the scalar is below
+   * 2^257 and fifty-one digits have taken 255 bits off it, each leaving a
+   * remainder below one. */
+  out->digit[SABS_DIGITS - 1] = (u8)((k[0] - 1) >> 1);
 
-    p_is_noninfinite_mask = NON_ZERO_TO_ALL_ONES(index);
-    mask = p_is_noninfinite_mask & ~n_is_infinity_mask;
+  return is_zero_mask;
+}
 
-    copy_conditional(nx, tx, mask);
-    copy_conditional(ny, ty, mask);
-    copy_conditional(nz, tz, mask);
-    n_is_infinity_mask &= ~p_is_noninfinite_mask;
+/* scalar_mult sets {nx,ny,nz} = scalar*{x,y}.
+ *
+ * A five-bit signed window.  The scalar is recoded into 52 digits, every one
+ * of them odd and none of them zero, so the table holds only the odd
+ * multiples P, 3P, ..., 31P and a negative digit is served by negating y,
+ * which is free.  Against the four-bit unsigned window this replaces, the
+ * main loop trades 252 doublings and 64 additions for 255 and 51, and --
+ * because no digit is zero and no partial sum is the infinity -- it drops the
+ * masks that stood in for infinity on every iteration.
+ *
+ * The table is built so that each pair of neighbouring odd multiples comes
+ * out of one doubling and one shared addition:
+ *
+ *   2P = 2*P                3P  = 2P + P
+ *   6P = 2*(3P)             5P  = 6P - P,  7P  = 6P + P
+ *   10P = 2*(5P)            9P  = 10P - P, 11P = 10P + P
+ *   ...
+ *   30P = 2*(15P)           29P = 30P - P, 31P = 30P + P
+ *
+ * which is eight doublings, one mixed addition and seven shared pairs. */
+static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
+                        const felem y, const crypton_p256_int* scalar) {
+  /* odd[k] is (2k+1)*P, for k in 0..15. */
+  felem odd[16][3];
+  felem dx, dy, dz, px, py, pz, negy, ddx, ddy, ddz;
+  sabs_scalar rec;
+  limb is_zero_mask, dbl_mask;
+  int i, k;
+
+  is_zero_mask = sabs_recode(&rec, &dbl_mask, scalar);
+
+  felem_assign(odd[0][0], x);
+  felem_assign(odd[0][1], y);
+  memcpy(odd[0][2], kOne, sizeof(felem));
+
+  /* 3P = 2P + P */
+  point_double(dx, dy, dz, x, y, kOne);
+  point_add_mixed(odd[1][0], odd[1][1], odd[1][2], dx, dy, dz, x, y);
+
+  /* (4k+2)P from (2k+1)P, then (4k+1)P and (4k+3)P from it. */
+  for (k = 1; k < 8; k++) {
+    point_double(dx, dy, dz, odd[k][0], odd[k][1], odd[k][2]);
+    point_add_mixed_pm(odd[2 * k + 1][0], odd[2 * k + 1][1], odd[2 * k + 1][2],
+                       odd[2 * k][0], odd[2 * k][1], odd[2 * k][2],
+                       dx, dy, dz, x, y);
+  }
+
+  /* The top digit initialises the accumulator; it is always positive. */
+  select_jacobian_odd(nx, ny, nz, odd[0][0],
+                      SABS_INDEX(rec.digit[SABS_DIGITS - 1]));
+
+  for (i = SABS_DIGITS - 2; i >= 0; i--) {
+    point_double(nx, ny, nz, nx, ny, nz);
+    point_double(nx, ny, nz, nx, ny, nz);
+    point_double(nx, ny, nz, nx, ny, nz);
+    point_double(nx, ny, nz, nx, ny, nz);
+    point_double(nx, ny, nz, nx, ny, nz);
+
+    select_jacobian_odd(px, py, pz, odd[0][0], SABS_INDEX(rec.digit[i]));
+    felem_diff(negy, kZero, py);
+    copy_conditional(py, negy, SABS_NEGMASK(rec.digit[i]));
+
+    /* point_add finishes with z before it touches x, and with each of x
+     * and y before the next, so the accumulator can be its own output. */
+    point_add(nx, ny, nz, nx, ny, nz, px, py, pz);
+
+    /* On the last step alone the accumulator can be the very point being
+     * added, and these formulas answer the infinity where the truth is twice
+     * that point.  Doubling it is the answer there; the recoder said whether
+     * this is that case.  One doubling on one of fifty-one iterations. */
+    if (i == 0) {
+      point_double(ddx, ddy, ddz, px, py, pz);
+      copy_conditional(nx, ddx, dbl_mask);
+      copy_conditional(ny, ddy, dbl_mask);
+      copy_conditional(nz, ddz, dbl_mask);
+    }
+  }
+
+  /* Zero was replaced by one on the way in; put the infinity back.  All
+   * three coordinates, not just z: crypton_p256_points_mul_vartime reads the
+   * comment above it as saying the whole point is zero. */
+  for (i = 0; i < NLIMBS; i++) {
+    nx[i] &= ~is_zero_mask;
+    ny[i] &= ~is_zero_mask;
+    nz[i] &= ~is_zero_mask;
+  }
+
+  /* The recoded scalar is the private key in another representation, so it
+   * does not stay on the stack.  Written through a volatile pointer, since a
+   * plain memset here is dead and may be dropped. */
+  {
+    volatile unsigned char* p = (volatile unsigned char*)&rec;
+    unsigned b;
+    for (b = 0; b < sizeof(rec); b++) {
+      p[b] = 0;
+    }
   }
 }
 
