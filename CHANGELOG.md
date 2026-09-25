@@ -2,6 +2,25 @@
 
 ## 2.1.0
 
+* perf(gcm): the same for AArch64, where what costs is the framing rather
+  than a missing fast path.  `armv8_impl.c` already encrypts eight blocks at a
+  time and folds their GHASH into one reduction; what sat outside it was the
+  additional data, the tag and the counter, each reached through the branch
+  table so that the running state went back to memory between them and a
+  one-block header paid a reduction of its own.  Measured on an Apple M4, that
+  framing was 0.07 of the 0.112 microseconds a 100-byte packet cost -- more
+  than the encryption of the packet itself.  Taking the whole message in one
+  call, with the tag and the counter in registers from end to end and the
+  additional data and the length block riding in the same batches as the
+  ciphertext: a 100-byte packet 3.0x, 200 bytes 2.6x, 400 bytes 1.6x, 1200
+  bytes 1.30x, 1440 bytes 1.23x, and level from about 6 KB up.  With the QUIC
+  header protection mask, 100 bytes is 3.3x.  Unlike x86-64 there is no length
+  above which something else is faster, because there is no vendored assembly
+  on this side to hand a long message to, so every length goes this way.  Held
+  against the interface it replaces on two key sizes, seven lengths of
+  additional data, fifteen message lengths up to 16 KB, three tag lengths and
+  every sample offset that fits
+
 * perf(gcm): a fused AES-GCM for x86-64, for messages short enough that the
   stitched assembly will not take them.  That assembly refuses anything under
   288 bytes, so until now a QUIC packet paid for the AES key schedule and the

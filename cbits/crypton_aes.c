@@ -61,6 +61,12 @@ void crypton_aes_generic_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key
 
 #ifdef WITH_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size);
+void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
+                                 aes_key *key, const uint8_t *nonce,
+                                 const uint8_t *aad, uint32_t aadlen,
+                                 const uint8_t *in, uint32_t inlen,
+                                 uint32_t taglen, aes_key *hpkey,
+                                 uint32_t sampleoff, uint8_t *mask);
 #define ARMV8_DECLS(sz) \
 	void crypton_aes_armv8_encrypt_block##sz(aes_block *output, aes_key *key, aes_block *input); \
 	void crypton_aes_armv8_decrypt_block##sz(aes_block *output, aes_key *key, aes_block *input); \
@@ -657,6 +663,26 @@ void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm_key *gcmkey, ae
 		return;
 	}
 #endif
+#ifdef WITH_ARMV8_CRYPTO
+	/* The same on AArch64, where the framing is what costs: composing the
+	 * additional data, the encryption and the tag reaches each through the
+	 * branch table, so the running state goes back to memory between them
+	 * and a one-block header pays a reduction of its own.  Measured on an
+	 * Apple M4, a 100-byte packet is 3.0x faster taken in one call.
+	 *
+	 * No length limit, unlike x86: there is no vendored assembly on this
+	 * side for a long message to be handed to instead, and measured
+	 * against the path this replaces it is never slower -- 1.25x at 1440
+	 * bytes, level from about 6 KB up. */
+	if (ivlen == 12
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL]) {
+		crypton_aes_armv8_gcm_fused(output, gcmkey->gcm.htable, key, iv,
+		                            aad, aadlen, input, length, taglen,
+		                            NULL, 0, NULL);
+		return;
+	}
+#endif
 	memcpy(gcm.htable, gcmkey->gcm.htable, sizeof(gcm.htable));
 	gcm_message_init(&gcm, iv, ivlen);
 	if (aadlen)
@@ -690,6 +716,21 @@ void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm_key *gcmke
 		crypton_gcm_fused_encrypt(output, &gcmkey->fused, key, iv,
 		                          aad, aadlen, input, length, taglen,
 		                          hpkey, sampleoff, mask);
+		return;
+	}
+#endif
+#ifdef WITH_ARMV8_CRYPTO
+	/* The same on AArch64, where the framing is what costs: composing the
+	 * additional data, the encryption and the tag reaches each through the
+	 * branch table, so the running state goes back to memory between them
+	 * and a one-block header pays a reduction of its own.  Measured on an
+	 * Apple M4, a 100-byte packet is 3.3x faster taken in one call. */
+	if (ivlen == 12
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL]) {
+		crypton_aes_armv8_gcm_fused(output, gcmkey->gcm.htable, key, iv,
+		                            aad, aadlen, input, length, taglen,
+		                            hpkey, sampleoff, mask);
 		return;
 	}
 #endif

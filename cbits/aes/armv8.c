@@ -396,3 +396,35 @@ static inline uint8x16_t gfmulx_neon(uint8x16_t v)
 #include <aes/armv8_impl.c>
 #undef SIZED
 #undef NBR
+
+/*
+ * The fused entry point, over the three key sizes.  Each was generated with
+ * its round count fixed, which is what lets the eight chains stay in
+ * registers; the choice between them is made once per message here.
+ */
+TARGET_ARMV8_CRYPTO
+void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
+                                 aes_key *key, const uint8_t *nonce,
+                                 const uint8_t *aad, uint32_t aadlen,
+                                 const uint8_t *in, uint32_t inlen,
+                                 uint32_t taglen, aes_key *hpkey,
+                                 uint32_t sampleoff, uint8_t *mask)
+{
+	switch (key->strength) {
+	case 0:
+		crypton_aes_armv8_gcm_fused128(out, ht, key, nonce, aad, aadlen,
+		                               in, inlen, taglen, hpkey,
+		                               sampleoff, mask);
+		break;
+	case 1:
+		crypton_aes_armv8_gcm_fused192(out, ht, key, nonce, aad, aadlen,
+		                               in, inlen, taglen, hpkey,
+		                               sampleoff, mask);
+		break;
+	default:
+		crypton_aes_armv8_gcm_fused256(out, ht, key, nonce, aad, aadlen,
+		                               in, inlen, taglen, hpkey,
+		                               sampleoff, mask);
+		break;
+	}
+}
