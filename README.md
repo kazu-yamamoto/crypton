@@ -52,12 +52,16 @@ the public key operations are one operation each; every figure is the best of
 several runs, and crypton and OpenSSL are run alternately so that neither gets
 the quieter machine.
 
-The columns below read 2.0.0 and are still what 2.1.0 measures.  The only C
-2.1.0 changed is AES-GCM's -- every other file these tables touch is the same
-source in both -- and what it did there was add a path beside the one these
-numbers take rather than alter it.  Measured on the two machines named below,
-the AES-GCM rows come out the same in 2.0.1 and 2.1.0 to within a percent.
-The new path has a table of its own at the end of each section.
+The columns read 2.0.0 and are what 2.1.0 measures on every row but two.  The
+only C 2.1.0 changed is AES-GCM's and P-256's, and of those only P-256 is on
+a path these tables take: measured on the same EPYC 7763, ECDH P-256 goes
+164.3 to 159.5 microseconds and ECDSA P-256 verification 231.1 to 226.2, so
+those two rows are about 3% better than they read here.  ECDSA P-256 signing
+does not move, being the base-point path.  What 2.1.0 did to AES-GCM was add
+a one-call interface beside the one measured here -- key expanded once,
+additional data, payload and tag together -- which is worth 3.6 times at 100
+bytes and nothing at 16 KiB, so it does not show in a 16 KiB throughput
+figure at all.
 
 Bulk encryption and hashing are measured through crypton's C layer, as
 `openssl speed` measures OpenSSL's.  The public key operations are measured
@@ -102,24 +106,6 @@ divides OpenSSL's time by crypton's, and is again better the larger it is:
 | RSA-2048 sign/decrypt | 759.8 | 1311 | 660.1 | 0.50 |
 | RSA-2048 verify/encrypt | 31.62 | 28.59 | 18.63 | 0.65 |
 
-Taking a whole message in one call -- the key expanded once, then the
-additional data, the payload and the tag together -- is what 2.1.0 added, and
-it is what a datagram protocol asks for.  The same EPYC 7763, twenty bytes of
-additional data, a twelve-byte nonce.  Time per message in microseconds,
-**lower is better**; the last column divides 2.0.1's time by 2.1.0's and is
-better the larger it is.
-
-| | crypton 2.0.1 | crypton 2.1.0 | 2.0.1 / 2.1.0 |
-| --- | ---: | ---: | ---: |
-| AES-128-GCM, 100 B | 0.2218 | 0.0611 | 3.63 |
-| AES-128-GCM, 400 B | 0.2712 | 0.1330 | 2.04 |
-| AES-128-GCM, 1440 B | 0.4959 | 0.3760 | 1.32 |
-| AES-128-GCM, 16 KiB | 3.991 | 3.922 | 1.02 |
-| AES-256-GCM, 100 B | 0.2413 | 0.0788 | 3.06 |
-| AES-256-GCM, 400 B | 0.2881 | 0.1699 | 1.70 |
-| AES-256-GCM, 1440 B | 0.5361 | 0.5035 | 1.06 |
-| AES-256-GCM, 16 KiB | 4.302 | 4.242 | 1.01 |
-
 ### AArch64
 
 An Apple M4, which has the AES, PMULL, SHA-1, SHA-2, SHA-512 and SHA-3
@@ -154,39 +140,7 @@ divides OpenSSL's time by crypton's:
 | RSA-2048 sign/decrypt | 451.8 | 605.4 | 325.0 | 0.54 |
 | RSA-2048 verify/encrypt | 18.32 | 15.28 | 8.50 | 0.56 |
 
-The same one call on the same Apple M4, twenty bytes of additional data, a
-twelve-byte nonce.  Time per message in microseconds, **lower is better**;
-the last column again divides 2.0.1's time by 2.1.0's.
-
-| | crypton 2.0.1 | crypton 2.1.0 | 2.0.1 / 2.1.0 |
-| --- | ---: | ---: | ---: |
-| AES-128-GCM, 100 B | 0.2134 | 0.0743 | 2.87 |
-| AES-128-GCM, 400 B | 0.2142 | 0.1226 | 1.75 |
-| AES-128-GCM, 1440 B | 0.4599 | 0.3705 | 1.24 |
-| AES-128-GCM, 16 KiB | 3.750 | 3.823 | 0.98 |
-| AES-256-GCM, 100 B | 0.2361 | 0.0862 | 2.74 |
-| AES-256-GCM, 400 B | 0.2333 | 0.1378 | 1.69 |
-| AES-256-GCM, 1440 B | 0.5091 | 0.4361 | 1.17 |
-| AES-256-GCM, 16 KiB | 4.325 | 4.400 | 0.98 |
-
 ### What the numbers say
-
-The one-call AES-GCM tables are 2.1.0's whole change, and they say what kind
-of change it is.  What it removes is per-message cost -- the key schedule and
-the table of multiples of H, rebuilt for every message before, built once per
-key now, and the additional data, the payload and the tag reached through one
-call rather than four.  That is a fixed amount, so it is most of a 100-byte
-message and almost none of a 16 KiB one: between 2.7 and 3.6 times at 100
-bytes, between 6 and 32 percent at 1440, and at 16 KiB the two ways of asking
-cost the same.  On the
-M4 at 16 KiB the one call is two percent *slower*, which is the size above
-which its own inner loop is behind the one it replaces, and the reason the
-x86-64 side hands anything over 1536 bytes back to the vendored assembly.  A
-protocol whose messages are packets gains all of this; one whose messages are
-16 KiB records gains nothing and should keep the interface it has.  The new
-one is `Crypto.Cipher.AES.GCM`: `newContext` once per key, then `encrypt` or
-`decrypt` per message, and `encryptWithMask` where a header protection mask
-is wanted from the same call.
 
 1.1.5 had no AArch64 code of its own at all, which is why AES-GCM there is
 sixty-nine times what it was.  On x86-64 it had AES-NI and nothing else.  The
