@@ -38,6 +38,9 @@
 #include <aes/generic.h>
 #include <aes/gf.h>
 #include <aes/x86ni.h>
+#ifdef WITH_GCM_FUSED
+#include <aes/gcm_fused_x86.h>
+#endif
 
 void crypton_aes_generic_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
 void crypton_aes_generic_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks);
@@ -535,13 +538,18 @@ static void gcm_ghash_add4(aes_gcm *gcm, const block128 *b)
 /* The part of the state that depends on the key alone: H = encrypt_K(0^128)
  * and the table of its multiples.  It is 256 of the 320 bytes, and a caller
  * that keeps a key can compute it once instead of once per message. */
-void crypton_aes_gcm_key_init(aes_gcm *gcm, aes_key *key)
+void crypton_aes_gcm_key_init(aes_gcm_key *gk, aes_key *key)
 {
 	block128 h;
 
 	block128_zero(&h);
 	crypton_aes_encrypt_block(&h, key, &h);
-	crypton_hinit(gcm->htable, &h);
+	crypton_hinit(gk->gcm.htable, &h);
+#ifdef WITH_GCM_FUSED
+	if (crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL])
+		crypton_gcm_fused_key_init(&gk->fused, key);
+#endif
 }
 
 /* Everything else: what the nonce and the message determine.  Leaves htable
@@ -578,7 +586,11 @@ static void gcm_message_init(aes_gcm *gcm, uint8_t *iv, uint32_t len)
 
 void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 {
-	crypton_aes_gcm_key_init(gcm, key);
+	block128 h;
+
+	block128_zero(&h);
+	crypton_aes_encrypt_block(&h, key, &h);
+	crypton_hinit(gcm->htable, &h);
 	gcm_message_init(gcm, iv, len);
 }
 
@@ -624,7 +636,7 @@ void crypton_aes_gcm_finish(uint8_t *tag, aes_gcm *gcm, aes_key *key)
  * boundary between them and no intermediate state is copied out.  The output
  * buffer takes the ciphertext and then the tag, so it wants length + taglen
  * bytes. */
-void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                   uint8_t *iv, uint32_t ivlen,
                                   uint8_t *aad, uint32_t aadlen,
                                   uint8_t *input, uint32_t length, uint32_t taglen)
@@ -632,7 +644,20 @@ void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_ke
 	aes_gcm gcm;
 	uint8_t tag[16];
 
-	memcpy(gcm.htable, gcmkey->htable, sizeof(gcm.htable));
+#ifdef WITH_GCM_FUSED
+	/* Short messages go the other way: the assembly below will not start
+	 * on anything under 288 bytes, and under about 1.5 KB the fused path
+	 * is ahead of it even where it does. */
+	if (ivlen == 12 && length <= CRYPTON_GCM_FUSED_MAX_MESSAGE
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL]) {
+		crypton_gcm_fused_encrypt(output, &gcmkey->fused, key, iv,
+		                          aad, aadlen, input, length, taglen,
+		                          NULL, 0, NULL);
+		return;
+	}
+#endif
+	memcpy(gcm.htable, gcmkey->gcm.htable, sizeof(gcm.htable));
 	gcm_message_init(&gcm, iv, ivlen);
 	if (aadlen)
 		crypton_aes_gcm_aad(&gcm, aad, aadlen);
@@ -647,7 +672,7 @@ void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_ke
  * can be had before returning, which saves a second crossing for one AES
  * block.  The block itself is about a nanosecond; what it saves is the call.
  * sampleoff is where the sixteen bytes of sample start in the output. */
-void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                        uint8_t *iv, uint32_t ivlen,
                                        uint8_t *aad, uint32_t aadlen,
                                        uint8_t *input, uint32_t length, uint32_t taglen,
@@ -655,6 +680,19 @@ void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm *gcmkey, a
 {
 	block128 sample, m;
 
+#ifdef WITH_GCM_FUSED
+	/* Here the mask rides in a lane of the AES pipeline that the message
+	 * length leaves idle, so it costs very nearly nothing on top of the
+	 * encryption rather than a block of its own. */
+	if (ivlen == 12 && length <= CRYPTON_GCM_FUSED_MAX_MESSAGE
+	    && crypton_aes_cpu_options[CPU_AESNI]
+	    && crypton_aes_cpu_options[CPU_PCLMUL]) {
+		crypton_gcm_fused_encrypt(output, &gcmkey->fused, key, iv,
+		                          aad, aadlen, input, length, taglen,
+		                          hpkey, sampleoff, mask);
+		return;
+	}
+#endif
 	crypton_aes_gcm_full_encrypt(output, gcmkey, key, iv, ivlen, aad, aadlen,
 	                             input, length, taglen);
 	/* copied rather than cast: the sample lands wherever the header put it
@@ -668,7 +706,7 @@ void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm *gcmkey, a
  * caller: returns 1 when it matches and 0 when it does not, comparing every
  * byte either way.  The plaintext is written whatever the answer, so a caller
  * that gets 0 must not use it. */
-int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                  uint8_t *iv, uint32_t ivlen,
                                  uint8_t *aad, uint32_t aadlen,
                                  uint8_t *input, uint32_t length,
@@ -679,7 +717,7 @@ int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key
 	uint32_t i;
 	uint8_t diff = 0;
 
-	memcpy(gcm.htable, gcmkey->htable, sizeof(gcm.htable));
+	memcpy(gcm.htable, gcmkey->gcm.htable, sizeof(gcm.htable));
 	gcm_message_init(&gcm, iv, ivlen);
 	if (aadlen)
 		crypton_aes_gcm_aad(&gcm, aad, aadlen);

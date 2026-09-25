@@ -163,6 +163,14 @@ newtype AESCCM = AESCCM ScrubbedBytes
 sizeGCM :: Int
 sizeGCM = 320
 
+-- | The size of what a key determines, which is the 320 bytes above and the
+-- powers of H the fused path reads: sixteen of them, and sixteen more for
+-- the term the Karatsuba multiplication would otherwise work out every time.
+-- The same on every platform, so that this is one number rather than one per
+-- architecture; the powers are filled only where that path is compiled in.
+sizeGCMKey :: Int
+sizeGCMKey = 832
+
 sizeOCB :: Int
 sizeOCB = 160
 
@@ -450,7 +458,7 @@ newtype AESGCMKey = AESGCMKey ScrubbedBytes
 -- | Build the key part of a GCM state.
 {-# NOINLINE gcmKeyInit #-}
 gcmKeyInit :: AES -> AESGCMKey
-gcmKeyInit ctx = AESGCMKey $ B.allocAndFreeze sizeGCM $ \p ->
+gcmKeyInit ctx = AESGCMKey $ B.allocAndFreeze sizeGCMKey $ \p ->
     keyToPtr ctx $ \k -> c_aes_gcm_key_init (castPtr p) k
 
 -- | Authenticate and encrypt one message in a single call: the nonce, the

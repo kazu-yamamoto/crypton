@@ -2,6 +2,35 @@
 
 ## 2.1.0
 
+* perf(gcm): a fused AES-GCM for x86-64, for messages short enough that the
+  stitched assembly will not take them.  That assembly refuses anything under
+  288 bytes, so until now a QUIC packet paid for the AES key schedule and the
+  GHASH one block at a time, through a branch table that put the 128-bit state
+  back in memory at every step: a 100-byte packet cost 0.153 us of which the
+  encryption was a small part.  This is the design Kazuho Oku sets out for
+  picotls's `fusion` -- keep AES-NI issuing every clock, six blocks in flight,
+  and fit the additional data, the tag and the QUIC header protection mask
+  into the gaps between the rounds -- written in C with intrinsics, for the
+  reason he gives: what is complicated here is the scheduling, and it has to
+  stay readable to stay correct.  On an Intel Haswell a 100-byte packet goes
+  from 0.153 to 0.082 us and a 1200-byte one from 0.373 to 0.317, and the
+  header protection mask becomes **free** wherever it can be taken: 400 bytes
+  is 0.131 with it and 0.131 without, against 0.181 and 0.177, because it
+  rides in a lane of the AES pipeline that the message length leaves idle
+  rather than taking a block of its own.  It can be taken there only when the
+  sample lies in output already written and the two key schedules are the same
+  length, which is what TLS and QUIC do; otherwise it is computed after the
+  tag, where everything it may cover exists.  Above
+  1536 bytes the assembly is faster -- by 12 per cent at 3 KB and 20 at 16 KB
+  -- so longer messages still go there and nothing about TLS-sized records
+  changes.  The powers of H are built once per key, sixteen of them, which
+  adds 512 bytes to what a key holds and no parameter to any interface: a
+  power per block of the message would fold the whole GHASH into one reduction
+  but would make that state grow with the longest message a caller might send.
+  Held against the incremental interface on every combination of three key
+  sizes, seven lengths of additional data, twelve message lengths and three
+  tag lengths
+
 * fix(cpu): stop reading Intel's SDBG bit as AMD's XOP, which crashed SHA-512
   and ChaCha20 on Broadwell and later.  The vendored assembly dispatches on a
   capability word this library fills, and reads bit 11 of its second dword as
