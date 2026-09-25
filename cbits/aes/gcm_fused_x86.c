@@ -843,7 +843,8 @@ TGT int crypton_gcm_fused_decrypt(uint8_t *out, const aes_gcm_fused *fk,
                                   const aes_key *key, const uint8_t *nonce,
                                   const uint8_t *aad, size_t aadlen,
                                   const uint8_t *in, size_t inlen,
-                                  const uint8_t *tag, size_t taglen)
+                                  const uint8_t *tag, size_t taglen,
+                                  uint8_t *outtag)
 {
     const uint8_t *rk = key->data;
     const int rounds = key->nbr;
@@ -979,6 +980,11 @@ TGT int crypton_gcm_fused_decrypt(uint8_t *out, const aes_gcm_fused *fk,
     {
         uint8_t got[16];
         _mm_storeu_si128((__m128i *) got, want);
+        if (outtag) {
+            /* The caller holds the expected tag and will compare it itself. */
+            memcpy(outtag, got, taglen);
+            return 1;
+        }
         for (i = 0; i < taglen; i++)
             diff |= (uint8_t) (got[i] ^ tag[i]);
     }

@@ -664,7 +664,8 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
                                            aes_key *key, const uint8_t *nonce,
                                            const uint8_t *aad, uint32_t aadlen,
                                            const uint8_t *in, uint32_t inlen,
-                                           const uint8_t *tagp, uint32_t taglen)
+                                           const uint8_t *tagp, uint32_t taglen,
+                                           uint8_t *outtag)
 {
 	const uint8_t *rk = FWD(key);
 	uint8x16_t s[WAY];
@@ -733,6 +734,11 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
 	FG_ABSORB(vld1q_u8(lenb));
 
 	vst1q_u8(want, veorq_u8(tag, ek0));
+	if (outtag) {
+		/* The caller holds the expected tag and will compare it itself. */
+		memcpy(outtag, want, taglen);
+		return 1;
+	}
 	for (i = 0; i < taglen; i++)
 		diff |= (uint8_t) (want[i] ^ tagp[i]);
 	return diff == 0;

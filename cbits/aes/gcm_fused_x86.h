@@ -49,6 +49,7 @@ int crypton_gcm_fused_decrypt(uint8_t *out, const aes_gcm_fused *fk,
                               const aes_key *key, const uint8_t *nonce,
                               const uint8_t *aad, size_t aadlen,
                               const uint8_t *in, size_t inlen,
-                              const uint8_t *tag, size_t taglen);
+                              const uint8_t *tag, size_t taglen,
+                              uint8_t *outtag);
 
 #endif
