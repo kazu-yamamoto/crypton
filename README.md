@@ -43,6 +43,32 @@ is unrelated to this.
     ghci> processorOptions
     [AESNI,PCLMUL]
 
+RSA is the other place to know about, and there the choice is the caller's.
+The private key operations in `Crypto.PubKey.RSA.PKCS15`, `.OAEP` and `.PSS`
+take a `Maybe Blinder`, and `Nothing` is no harder to write than the safe
+form:
+
+    decrypt     :: Maybe Blinder -> PrivateKey -> ByteString -> ...
+    decryptSafer :: MonadRandom m => PrivateKey -> ByteString -> m ...
+
+The exponent itself is not what is at risk.  `expSafe` keeps the *value* of an
+exponent out of the work it does, so the private exponent does not leak
+through the exponentiation.  What a blinder covers is the other side: without
+one, the operation runs on the ciphertext the caller was handed, so how long
+it takes depends on a number an attacker may have chosen and can vary.  That
+is what a remote timing attack on RSA needs.  With a blinder the input is
+multiplied by a random value first and the result divided out afterwards, so
+the timing carries nothing an attacker can steer.
+
+`decryptSafer` and `signSafer` generate the blinder themselves and are the
+ones to reach for.  Pass `Nothing` only where the input is not attacker
+controlled and you have decided that it is not.
+
+The RSA rows in the tables below are the unblinded path.  A blinder costs one
+more exponentiation, by the public exponent, which is the cheap direction:
+measured on the M4, signing goes from about 601 to about 620 microseconds,
+three per cent.
+
 Performance
 -----------
 
