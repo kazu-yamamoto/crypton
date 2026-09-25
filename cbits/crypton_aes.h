@@ -55,6 +55,48 @@ typedef struct {
 	uint64_t length_input;
 } aes_gcm;
 
+/*
+ * How many powers of H a key keeps for the fused path in
+ * cbits/aes/gcm_fused_x86.c.  A power for every block of the message would
+ * fold its whole GHASH into one reduction, which is what picotls does, but
+ * then the state grows with the longest message a caller might send and a
+ * server holding many keys pays it for each.  A fixed count costs one
+ * reduction per this many blocks and keeps the state one size.  Sixteen was
+ * measured against 6, 8, 32, 64, 96 and 256: above eight the choice is worth
+ * about two per cent, since only messages short enough to take this path at
+ * all reach a second batch.  Six is worth avoiding -- at 1440 bytes it is
+ * slower than not taking the path.
+ */
+#define CRYPTON_GCM_FUSED_POWERS 16
+
+/*
+ * Beyond this many bytes the stitched assembly in cbits/asm is faster than
+ * the fused path, so longer messages go there instead.  Measured on an Intel
+ * Haswell: even at 1440 bytes, the assembly ahead by 12 per cent at 3 KB and
+ * 20 per cent at 16 KB, and the fused path ahead by 1.9x at 100 bytes and
+ * 1.16x at 1200.  QUIC packets fall below this; TLS records do not.
+ */
+#define CRYPTON_GCM_FUSED_MAX_MESSAGE 1536
+
+/* The powers themselves, each shifted up by one bit, and the halves of each
+ * added together for the Karatsuba term.  Defined on every platform so that
+ * the key state below is one size everywhere; filled only where the fused
+ * path is compiled in. */
+typedef struct {
+	aes_block h[CRYPTON_GCM_FUSED_POWERS];
+	aes_block r[CRYPTON_GCM_FUSED_POWERS];
+} aes_gcm_fused;
+
+/*
+ * Everything a key determines, built once by crypton_aes_gcm_key_init and
+ * read by every message sent under that key: the key half of a GCM state,
+ * and the powers of H the fused path reads.  832 bytes.
+ */
+typedef struct {
+	aes_gcm gcm;
+	aes_gcm_fused fused;
+} aes_gcm_key;
+
 /* size = 4*16+4*4= 80 */
 typedef struct {
 	aes_block xi;
@@ -104,17 +146,17 @@ void crypton_aes_decrypt_xts(aes_block *output, aes_key *key, aes_key *key2, aes
                      uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 
 void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len);
-void crypton_aes_gcm_key_init(aes_gcm *gcm, aes_key *key);
-void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+void crypton_aes_gcm_key_init(aes_gcm_key *gk, aes_key *key);
+void crypton_aes_gcm_full_encrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                   uint8_t *iv, uint32_t ivlen,
                                   uint8_t *aad, uint32_t aadlen,
                                   uint8_t *input, uint32_t length, uint32_t taglen);
-void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+void crypton_aes_gcm_full_encrypt_mask(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                        uint8_t *iv, uint32_t ivlen,
                                        uint8_t *aad, uint32_t aadlen,
                                        uint8_t *input, uint32_t length, uint32_t taglen,
                                        aes_key *hpkey, uint32_t sampleoff, uint8_t *mask);
-int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm *gcmkey, aes_key *key,
+int crypton_aes_gcm_full_decrypt(uint8_t *output, const aes_gcm_key *gcmkey, aes_key *key,
                                  uint8_t *iv, uint32_t ivlen,
                                  uint8_t *aad, uint32_t aadlen,
                                  uint8_t *input, uint32_t length,

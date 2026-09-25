@@ -545,8 +545,10 @@ library
             -- checked in per object format since it comes from a
             -- generator.
             if arch(x86_64)
-                cc-options: -DWITH_X86_GCM_ASM
-                c-sources:  cbits/aes/gcm_x86_asm.c
+                cc-options: -DWITH_X86_GCM_ASM -DWITH_GCM_FUSED
+                c-sources:
+                    cbits/aes/gcm_x86_asm.c
+                    cbits/aes/gcm_fused_x86.c
 
                 if os(osx)
                     asm-sources: cbits/asm/aesni-gcm-x86_64-macosx.S
