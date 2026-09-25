@@ -118,8 +118,8 @@ TGT void crypton_gcm_fused_key_init(aes_gcm_fused *fk, const aes_key *key)
         p = h;
         for (i = 0; i < CRYPTON_GCM_FUSED_POWERS; i++) {
             __m128i t = twist(p);
-            _mm_storeu_si128((__m128i *) &fk->h[i], t);
-            _mm_storeu_si128((__m128i *) &fk->r[i], fold(t));
+            _mm_storeu_si128((__m128i *) &fk->p[i].h, t);
+            _mm_storeu_si128((__m128i *) &fk->p[i].r, fold(t));
             p = mul_twisted(p, ht);
         }
     }
@@ -155,8 +155,8 @@ TGT void crypton_gcm_fused_key_init(aes_gcm_fused *fk, const aes_key *key)
             _b = _mm_xor_si128(_b, gtag);                                    \
             glo = ghi = gmid = _mm_setzero_si128();                          \
         }                                                                    \
-        _h = _mm_loadu_si128((const __m128i *) &fk->h[gblen-gbpos-1]);       \
-        _r = _mm_loadu_si128((const __m128i *) &fk->r[gblen-gbpos-1]);       \
+        _h = _mm_loadu_si128((const __m128i *) &fk->p[gblen-gbpos-1].h);     \
+        _r = _mm_loadu_si128((const __m128i *) &fk->p[gblen-gbpos-1].r);     \
         glo = _mm_xor_si128(glo, _mm_clmulepi64_si128(_b, _h, 0x00));        \
         ghi = _mm_xor_si128(ghi, _mm_clmulepi64_si128(_b, _h, 0x11));        \
         gmid = _mm_xor_si128(gmid,                                           \
@@ -280,11 +280,22 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
  * the rounds alone cost.
  */
 
+/*
+ * The counter block, built without leaving the vector registers.
+ *
+ * GCM counts in the low 32 bits of the block, big endian, and wraps there.
+ * ctr holds the block with its bytes reversed, so those four bytes are the
+ * low lane and _mm_add_epi32 steps them without carrying into the nonce
+ * above -- which is the wrap GCM asks for.  A shuffle puts the bytes back.
+ *
+ * The obvious way -- increment a uint32_t, byte swap it, pinsrd it in --
+ * costs a move from a general register to a vector one for every lane, six
+ * to a group, and those do not come free.
+ */
 #define CTR6(j)                                                              \
     do {                                                                     \
-        ctrlo++;                                                             \
-        b##j = _mm_insert_epi32(ctrbase, (int) __builtin_bswap32(ctrlo), 3); \
-        b##j = _mm_xor_si128(b##j, RK(rk, 0));                               \
+        ctr = _mm_add_epi32(ctr, one32);                                     \
+        b##j = _mm_xor_si128(_mm_shuffle_epi8(ctr, BSWAP), RK(rk, 0));       \
     } while (0)
 
 #define ROUND6(r)                                                            \
@@ -328,10 +339,21 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
     } while (0)
 
 /* the same at a slot the compiler can see, for the unrolled group below */
-#define GAT(j)                                                               \
-    do {                                                                     \
-        if ((j) < gn6) GHASH_ONE(gq[j], gp - (j));                   \
-    } while (0)
+/*
+ * One queued block, at a slot the compiler can see and with nothing to test
+ * before it.  A test here would end the basic block, and the scheduler works
+ * inside one: six tests turn the group into twelve blocks and the multiplies
+ * can no longer be moved up among the rounds, which is the whole point of
+ * writing them there.  The group below is entered only when the queue is
+ * full, so there is nothing to test.
+ */
+#ifdef PROBE_NO_QUEUE
+/* absorb a register instead of a queue slot: the arithmetic is the same and
+ * the answer is wrong, but it says what the store and the load cost */
+#define GAT(j) GHASH_ONE(b##j, gp - (j))
+#else
+#define GAT(j) GHASH_ONE(gq[j], gp - (j))
+#endif
 
 TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
                                    const aes_key *key, const uint8_t *nonce,
@@ -345,16 +367,16 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
     const int rounds = key->nbr;
     const int hprounds = hpkey != 0 ? hpkey->nbr : rounds;
     GHASH_DECL;
-    __m128i ctrbase, ek0, tag, b0, b1, b2, b3, b4, b5;
+    __m128i ctrbase, ctr, one32, ek0, tag, b0, b1, b2, b3, b4, b5;
     __m128i gq[6];
     unsigned gi = 0, gw = 0;
     int gn = 0;
     size_t nblk = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
     const int gtotal = (int) nblk;
     int gp = (int) nblk;
-    size_t i, done;
+    size_t i;
+    size_t done;
     int lane_mask = 0;
-    uint32_t ctrlo = 1;
 
     /* Y0 built in a register.  Going through sixteen bytes of stack to
      * assemble twelve bytes of nonce and a counter puts a store and a load
@@ -367,6 +389,8 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
         memcpy(&n2, nonce + 8, 4);
         ctrbase = _mm_set_epi32((int) __builtin_bswap32(1),
                                 (int) n2, (int) n1, (int) n0);
+        ctr = _mm_shuffle_epi8(ctrbase, BSWAP);
+        one32 = _mm_set_epi32(0, 0, 0, 1);
     }
     ek0 = aes_one_block(rk, rounds, ctrbase);
 
@@ -375,28 +399,22 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
      * belong in the gaps between the AES rounds below rather than in front
      * of them where nothing else is running. */
     /*
-     * The additional data goes in first and takes the highest powers.  Only
-     * the last six blocks of it are queued for the rounds below to absorb;
-     * anything before that is absorbed here, because the queue is six deep
-     * and a header longer than that would otherwise run off the end of it.
-     * In QUIC the header is one block and nothing before it exists.
+     * The additional data goes in first and takes the highest powers.  It is
+     * absorbed here rather than queued: what the queue is for is giving the
+     * rounds below something to interleave with, and a queue that sometimes
+     * holds the header and sometimes does not forces a test before every
+     * multiply -- which is what stopped the interleaving from happening at
+     * all.  See the peeled first group below.
      */
     {
         size_t nfull = aadlen / 16;
         size_t rest = aadlen % 16;
-        size_t nq = nfull + (rest ? 1 : 0);
-        size_t direct = nq > 6 ? nq - 6 : 0;
 
-        for (i = 0; i < direct; i++) {
+        for (i = 0; i < nfull; i++)
             GHASH_ONE(_mm_shuffle_epi8(
-                _mm_loadu_si128((const __m128i *) (aad + i * 16)), BSWAP), gp);
-            gp--;
-        }
-        for (i = direct; i < nfull; i++)
-            GPUSH(_mm_shuffle_epi8(
-                _mm_loadu_si128((const __m128i *) (aad + i * 16)), BSWAP));
+                _mm_loadu_si128((const __m128i *) (aad + i * 16)), BSWAP), 0);
         if (rest)
-            GPUSH(_mm_shuffle_epi8(loadn(aad + nfull * 16, rest), BSWAP));
+            GHASH_ONE(_mm_shuffle_epi8(loadn(aad + nfull * 16, rest), BSWAP), 0);
     }
 
     /* Whole groups of six.  The rounds are written out rather than looped:
@@ -408,24 +426,23 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
      * and PCLMULQDQ do not contend for the same port, so the multiplies are
      * very nearly free.
      */
+    done = 0;
     if (rounds == 10) {
-        for (done = 0; done + 96 <= inlen; done += 96) {
+        if (done + 96 <= inlen) {
             const uint8_t *p = in + done;
             uint8_t *q = out + done;
-            int gn6 = gn;
 
             CTR6(0); CTR6(1); CTR6(2); CTR6(3); CTR6(4); CTR6(5);
-            ROUND6(1); GAT(0);
-            ROUND6(2); GAT(1);
-            ROUND6(3); GAT(2);
-            ROUND6(4); GAT(3);
-            ROUND6(5); GAT(4);
-            ROUND6(6); GAT(5);
+            ROUND6(1);
+            ROUND6(2);
+            ROUND6(3);
+            ROUND6(4);
+            ROUND6(5);
+            ROUND6(6);
             ROUND6(7);
             ROUND6(8);
             ROUND6(9);
             LAST6(10);
-            gp -= gn6 < 6 ? gn6 : 6;
             gn = 0; gi = 0; gw = 0;
 
             b0 = _mm_xor_si128(b0, _mm_loadu_si128((const __m128i *) p));
@@ -448,7 +465,51 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
             gq[4] = _mm_shuffle_epi8(b4, BSWAP);
             gq[5] = _mm_shuffle_epi8(b5, BSWAP);
             gn = 6;
+            done += 96;
         }
+        for (; done + 96 <= inlen; done += 96) {
+            const uint8_t *p = in + done;
+            uint8_t *q = out + done;
+
+            CTR6(0); CTR6(1); CTR6(2); CTR6(3); CTR6(4); CTR6(5);
+            ROUND6(1); GAT(0);
+            ROUND6(2); GAT(1);
+            ROUND6(3); GAT(2);
+            ROUND6(4); GAT(3);
+            ROUND6(5); GAT(4);
+            ROUND6(6); GAT(5);
+            ROUND6(7);
+            ROUND6(8);
+            ROUND6(9);
+            LAST6(10);
+            gp -= 6;
+
+            b0 = _mm_xor_si128(b0, _mm_loadu_si128((const __m128i *) p));
+            b1 = _mm_xor_si128(b1, _mm_loadu_si128((const __m128i *) (p + 16)));
+            b2 = _mm_xor_si128(b2, _mm_loadu_si128((const __m128i *) (p + 32)));
+            b3 = _mm_xor_si128(b3, _mm_loadu_si128((const __m128i *) (p + 48)));
+            b4 = _mm_xor_si128(b4, _mm_loadu_si128((const __m128i *) (p + 64)));
+            b5 = _mm_xor_si128(b5, _mm_loadu_si128((const __m128i *) (p + 80)));
+            _mm_storeu_si128((__m128i *) q, b0);
+            _mm_storeu_si128((__m128i *) (q + 16), b1);
+            _mm_storeu_si128((__m128i *) (q + 32), b2);
+            _mm_storeu_si128((__m128i *) (q + 48), b3);
+            _mm_storeu_si128((__m128i *) (q + 64), b4);
+            _mm_storeu_si128((__m128i *) (q + 80), b5);
+
+            /* straight from the registers the last round left them in: the
+             * queue existed only to hold them until the next group's rounds
+             * could hide the multiplies, and that is 192 bytes of store and
+             * load per 96 bytes of payload */
+            gq[0] = _mm_shuffle_epi8(b0, BSWAP);
+            gq[1] = _mm_shuffle_epi8(b1, BSWAP);
+            gq[2] = _mm_shuffle_epi8(b2, BSWAP);
+            gq[3] = _mm_shuffle_epi8(b3, BSWAP);
+            gq[4] = _mm_shuffle_epi8(b4, BSWAP);
+            gq[5] = _mm_shuffle_epi8(b5, BSWAP);
+            gn = 6;
+        }
+
     } else {
         for (done = 0; done + 96 <= inlen; done += 96) {
                 const uint8_t *p = in + done;
@@ -513,8 +574,8 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
 
         for (i = done; i < inlen; i += 16) {
             toff[ntail] = i;
-            ctrlo++;
-            tv[ntail] = _mm_insert_epi32(ctrbase, (int) __builtin_bswap32(ctrlo), 3);
+            ctr = _mm_add_epi32(ctr, one32);
+            tv[ntail] = _mm_shuffle_epi8(ctr, BSWAP);
             ntail++;
         }
 

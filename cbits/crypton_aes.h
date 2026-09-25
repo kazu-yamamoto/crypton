@@ -78,13 +78,20 @@ typedef struct {
  */
 #define CRYPTON_GCM_FUSED_MAX_MESSAGE 1536
 
-/* The powers themselves, each shifted up by one bit, and the halves of each
- * added together for the Karatsuba term.  Defined on every platform so that
- * the key state below is one size everywhere; filled only where the fused
- * path is compiled in. */
+/*
+ * The powers themselves, each shifted up by one bit, and beside each the
+ * halves of it added together for the Karatsuba term.  The two are kept
+ * adjacent rather than in two arrays: a multiply wants both, and two arrays
+ * put them 256 bytes apart, which is two cache lines where this is one.
+ *
+ * Defined on every platform so that the key state below is one size
+ * everywhere; filled only where the fused path is compiled in.
+ */
 typedef struct {
-	aes_block h[CRYPTON_GCM_FUSED_POWERS];
-	aes_block r[CRYPTON_GCM_FUSED_POWERS];
+	struct {
+		aes_block h;
+		aes_block r;
+	} p[CRYPTON_GCM_FUSED_POWERS];
 } aes_gcm_fused;
 
 /*
