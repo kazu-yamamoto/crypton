@@ -143,7 +143,7 @@ decrypt (Context k) nonce aad input taglen
 -- For a caller whose protocol carries the tag separately from the ciphertext,
 -- so that 'decrypt' -- which wants the two together and compares them itself
 -- -- does not fit.  Compare the two tags with '=='; the 'Eq' instance of
--- 'AuthTag' is a constant-time comparison, and taking them apart to compare
+-- t'AuthTag' is a constant-time comparison, and taking them apart to compare
 -- the bytes is how this goes wrong.
 --
 -- Nothing here says whether the message is authentic.  Until the comparison

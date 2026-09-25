@@ -587,7 +587,7 @@ gcmFullDecrypt ctx (AESGCMKey gk) iv aad input tag = unsafeDoIO $ do
 -- rather than comparing it here.
 --
 -- For a caller that holds the expected tag in a form of its own and will
--- compare it itself.  Compare the two 'AuthTag's with '==', whose instance
+-- compare it itself.  Compare the two t'AuthTag's with '==', whose instance
 -- for that type is a constant-time comparison; taking them apart and
 -- comparing the bytes is how this goes wrong.
 --
