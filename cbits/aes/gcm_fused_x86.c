@@ -186,15 +186,69 @@ TGT static __m128i clampn(__m128i v, size_t n)
 }
 
 /*
- * A short block, zero padded.  The padding is not optional: the additional
- * data goes to GHASH straight from here, where a whole block would have
- * zeros above its length and anything else changes the tag.
+ * A short block, zero padded, without going through the stack.
+ *
+ * The obvious way -- zero sixteen bytes, copy n in, load them back -- is
+ * three trips to memory with a store the load has to wait for, and at these
+ * lengths that is a tenth of the whole call.  Reading the sixteen bytes and
+ * masking off what is above n is two instructions, but it reads past the end
+ * of what the caller gave, so it has to be sure those bytes exist.
+ *
+ * They do unless the block ends a page.  A load of sixteen bytes that starts
+ * at least sixteen from the end of a page stays inside it; and if the n bytes
+ * asked for themselves cross the boundary then the next page is there to be
+ * read as well.  What is left is a block near the end of a page whose own
+ * bytes stop short of it, and that is read aligned -- which cannot leave the
+ * page -- and shuffled down.  This is how picotls's fusion does it.
  */
-TGT static __m128i loadn(const uint8_t *p, size_t n)
+
+/* thirty-two bytes of ones, then thirty-one of zeros: sixteen loaded from
+ * 32 - n give n bytes of ones and the rest zeros */
+static const uint8_t loadn_mask[63] = {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+/* the first sixteen map to byte offsets, the rest to zero */
+static const uint8_t loadn_shuffle[31] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+    0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
+
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define NO_ASAN __attribute__((no_sanitize_address))
+#endif
+#elif defined(__SANITIZE_ADDRESS__)
+#define NO_ASAN __attribute__((no_sanitize_address))
+#endif
+#ifndef NO_ASAN
+#define NO_ASAN
+#endif
+
+TGT NO_ASAN static __m128i loadn_page_end(const uint8_t *p, size_t n)
 {
-    uint8_t buf[16] = {0};
-    memcpy(buf, p, n);
-    return _mm_loadu_si128((const __m128i *) buf);
+    uintptr_t shift = (uintptr_t) p & 15;
+    __m128i pattern = _mm_loadu_si128((const __m128i *) (loadn_shuffle + shift));
+
+    (void) n;
+    return _mm_shuffle_epi8(
+        _mm_load_si128((const __m128i *) ((uintptr_t) p - shift)), pattern);
+}
+
+TGT NO_ASAN static __m128i loadn(const uint8_t *p, size_t n)
+{
+    __m128i mask = _mm_loadu_si128((const __m128i *) (loadn_mask + 32 - n));
+    uintptr_t mod4k = (uintptr_t) p % 4096;
+    __m128i v;
+
+    if (mod4k <= 4096 - 16 || mod4k + n > 4096)
+        v = _mm_loadu_si128((const __m128i *) p);
+    else
+        v = loadn_page_end(p, n);
+    return _mm_and_si128(v, mask);
 }
 
 TGT static void storen(uint8_t *p, __m128i v, size_t n)
