@@ -453,10 +453,9 @@ unpad packed
 
 -- | decrypt message using the private key.
 --
--- When the decryption is not in a context where an attacker could gain
--- information from the timing of the operation, the blinder can be set to None.
---
--- If unsure always set a blinder or use decryptSafer
+-- The blinder is optional and 'Nothing' is accepted, but see t'Blinder' for
+-- what it covers and when leaving it out is a decision rather than a default.
+-- 'decryptSafer' generates one for you.
 --
 -- The message is returned un-padded.
 --
@@ -508,10 +507,9 @@ encrypt pk m = do
 
 -- | sign message using private key, a hash and its ASN1 description
 --
--- When the signature is not in a context where an attacker could gain
--- information from the timing of the operation, the blinder can be set to None.
---
--- If unsure always set a blinder or use signSafer
+-- The blinder is optional and 'Nothing' is accepted, but see t'Blinder' for
+-- what it covers and when leaving it out is a decision rather than a default.
+-- 'signSafer' generates one for you.
 sign
     :: HashAlgorithmASN1 hashAlg
     => Maybe Blinder

@@ -69,6 +69,9 @@ defaultPSSParamsSHA1 = defaultPSSParams SHA1
 -- | Sign using the PSS parameters and the salt explicitely passed as parameters.
 --
 -- the function ignore SaltLength from the PSS Parameters
+--
+-- See t'Blinder' for what the optional blinder covers and when leaving it out
+-- is a decision rather than a default.  'signSafer' generates one for you.
 signDigestWithSalt
     :: HashAlgorithm hash
     => ByteString
@@ -103,6 +106,9 @@ signDigestWithSalt salt blinder params pk digest
 -- | Sign using the PSS parameters and the salt explicitely passed as parameters.
 --
 -- the function ignore SaltLength from the PSS Parameters
+--
+-- See t'Blinder' for what the optional blinder covers and when leaving it out
+-- is a decision rather than a default.  'signSafer' generates one for you.
 signWithSalt
     :: HashAlgorithm hash
     => ByteString
@@ -121,6 +127,9 @@ signWithSalt salt blinder params pk m = signDigestWithSalt salt blinder params p
     mHash = hashWith (pssHash params) m
 
 -- | Sign using the PSS Parameters
+--
+-- See t'Blinder' for what the optional blinder covers and when leaving it out
+-- is a decision rather than a default.  'signSafer' generates one for you.
 sign
     :: (HashAlgorithm hash, MonadRandom m)
     => Maybe Blinder
@@ -137,6 +146,9 @@ sign blinder params pk m = do
     return (signWithSalt salt blinder params pk m)
 
 -- | Sign using the PSS Parameters
+--
+-- See t'Blinder' for what the optional blinder covers and when leaving it out
+-- is a decision rather than a default.  'signSafer' generates one for you.
 signDigest
     :: (HashAlgorithm hash, MonadRandom m)
     => Maybe Blinder

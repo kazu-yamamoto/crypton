@@ -181,10 +181,9 @@ unpad oaep k em
 
 -- | Decrypt a ciphertext using OAEP
 --
--- When the signature is not in a context where an attacker could gain
--- information from the timing of the operation, the blinder can be set to None.
---
--- If unsure always set a blinder or use decryptSafer
+-- The blinder is optional and 'Nothing' is accepted, but see t'Blinder' for
+-- what it covers and when leaving it out is a decision rather than a default.
+-- 'decryptSafer' generates one for you.
 --
 -- Following RFC 8017, the ciphertext is rejected unless it is exactly as long
 -- as the modulus (section 7.1.2, step 1) and its integer representative is
