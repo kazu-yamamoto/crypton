@@ -276,6 +276,55 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
     } while (0)
 
 /*
+ * The same written out for the ten rounds of AES-128, with a slot for one
+ * queued multiply between each of the first six.  The loop above cannot take
+ * them: the round count is a value in the key, so there is no place the
+ * compiler knows is a round apart from the next, and a test before each
+ * multiply would end the basic block the scheduler works inside.  This pass
+ * runs with a group's multiplies still waiting, and on a short message that
+ * is most of what it has to do.
+ */
+#define WROUND6(r, ak)                                                       \
+    do {                                                                     \
+        __m128i k = RK(rk, r);                                               \
+        t0 = _mm_aesenc_si128(t0, k);                                        \
+        t1 = _mm_aesenc_si128(t1, k);                                        \
+        t2 = _mm_aesenc_si128(t2, k);                                        \
+        t3 = _mm_aesenc_si128(t3, k);                                        \
+        t4 = _mm_aesenc_si128(t4, k);                                        \
+        t5 = _mm_aesenc_si128(t5, RK(ak, r));                                \
+    } while (0)
+
+#define WIDE6_10(alt)                                                        \
+    do {                                                                     \
+        const uint8_t *ak = (alt);                                           \
+        t0 = _mm_xor_si128(t0, RK(rk, 0));                                   \
+        t1 = _mm_xor_si128(t1, RK(rk, 0));                                   \
+        t2 = _mm_xor_si128(t2, RK(rk, 0));                                   \
+        t3 = _mm_xor_si128(t3, RK(rk, 0));                                   \
+        t4 = _mm_xor_si128(t4, RK(rk, 0));                                   \
+        t5 = _mm_xor_si128(t5, RK(ak, 0));                                   \
+        WROUND6(1, ak); GAT(0);                                              \
+        WROUND6(2, ak); GAT(1);                                              \
+        WROUND6(3, ak); GAT(2);                                              \
+        WROUND6(4, ak); GAT(3);                                              \
+        WROUND6(5, ak); GAT(4);                                              \
+        WROUND6(6, ak); GAT(5);                                              \
+        WROUND6(7, ak);                                                      \
+        WROUND6(8, ak);                                                      \
+        WROUND6(9, ak);                                                      \
+        {                                                                    \
+            __m128i k = RK(rk, 10);                                          \
+            t0 = _mm_aesenclast_si128(t0, k);                                \
+            t1 = _mm_aesenclast_si128(t1, k);                                \
+            t2 = _mm_aesenclast_si128(t2, k);                                \
+            t3 = _mm_aesenclast_si128(t3, k);                                \
+            t4 = _mm_aesenclast_si128(t4, k);                                \
+            t5 = _mm_aesenclast_si128(t5, RK(ak, 10));                       \
+        }                                                                    \
+    } while (0)
+
+/*
  * v2: six blocks of AES in flight at once, so the ten rounds of one block no
  * longer wait on each other -- AES-NI is pipelined and will take one
  * instruction a clock as long as the instructions in flight are independent.
@@ -558,12 +607,10 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
         }
     }
 
-    /* The tail.  E(K,Y0) is not computed here but at the top, on a chain of
-     * its own: it depends on nothing else, so the processor overlaps it with
-     * the groups without being asked, and folding it into a six-wide pass
-     * only forces that pass to exist.  A pass for the mask alone costs sixty
-     * AES instructions to use one lane, which is why the wide pass below
-     * runs only when there are blocks for it.
+    /* The tail.  The wide pass below runs only when there are blocks for it:
+     * sixty AES instructions to fill one lane is not worth it, so a message
+     * that ends on a group boundary leaves E(K,Y0) the chain it was given
+     * above and takes the mask on one of its own.
      *
      * The spare lane carries the mask only when two things hold.  The sample
      * has to lie entirely in output the groups above have already written:
@@ -602,8 +649,15 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
             t5 = lane_mask
                ? _mm_loadu_si128((const __m128i *) (out + sampleoff))
                : (ntail > 5 ? tv[5] : ctrbase);
-            WIDE6(lane_mask ? hprk : rk);
-            tv[0] = t0; tv[1] = t1; tv[2] = t2; tv[3] = t3;
+            /* A group leaves exactly six queued, which is what lets the
+             * slots below be named at compile time.  Where no group ran
+             * there is nothing to place and the plain pass will do. */
+            if (rounds == 10 && gn == 6) {
+                WIDE6_10(lane_mask ? hprk : rk);
+                gn = 0; gi = 0; gw = 0;
+            } else {
+                WIDE6(lane_mask ? hprk : rk);
+            }
             if (lane_ek0)
                 ek0 = t4;
             else
@@ -616,28 +670,42 @@ TGT void crypton_gcm_fused_encrypt(uint8_t *out, const aes_gcm_fused *fk,
 no_tail:
         while (gn > 0) GSTEP();
 
-        for (j = 0; j < ntail; j++) {
-            size_t off = toff[j];
-            size_t n = inlen - off < 16 ? inlen - off : 16;
-            __m128i c = _mm_xor_si128(tv[j], n == 16
-                ? _mm_loadu_si128((const __m128i *) (in + off))
-                : loadn(in + off, n));
-            if (n == 16) {
-                _mm_storeu_si128((__m128i *) (out + off), c);
-            } else {
-                /* The tag goes in at out + inlen, so the bytes above the
-                 * last short block are about to be written over anyway:
-                 * where there are sixteen of them to spare, one store does
-                 * what a store to the stack and a copy back did. */
-                if (n + taglen >= 16)
-                    _mm_storeu_si128((__m128i *) (out + off), c);
-                else
-                    storen(out + off, c, n);
-                c = clampn(c, n);
-            }
-            GHASH_ONE(_mm_shuffle_epi8(c, BSWAP), gp);
-            gp--;
-        }
+        /*
+         * The tail blocks, from the registers the pass left them in.  They
+         * were going through an array indexed by the loop variable, which
+         * the compiler cannot see through and so keeps in memory: every
+         * block then reloaded its own keystream.  Named one per block and
+         * reached by a test on a count instead, they stay where they are.
+         */
+#define TAILBLK(j, reg)                                                      \
+        do {                                                                 \
+            size_t off = done + 16 * (j);                                    \
+            size_t n = inlen - off < 16 ? inlen - off : 16;                  \
+            __m128i c = _mm_xor_si128(reg, n == 16                           \
+                ? _mm_loadu_si128((const __m128i *) (in + off))              \
+                : loadn(in + off, n));                                       \
+            if (n == 16) {                                                   \
+                _mm_storeu_si128((__m128i *) (out + off), c);                \
+            } else {                                                         \
+                /* the tag goes in directly above, so those bytes are        \
+                 * written over anyway where there are sixteen to spare */   \
+                if (n + taglen >= 16)                                        \
+                    _mm_storeu_si128((__m128i *) (out + off), c);            \
+                else                                                         \
+                    storen(out + off, c, n);                                 \
+                c = clampn(c, n);                                            \
+            }                                                                \
+            GHASH_ONE(_mm_shuffle_epi8(c, BSWAP), gp);                       \
+            gp--;                                                            \
+        } while (0)
+
+        if (ntail > 0) TAILBLK(0, t0);
+        if (ntail > 1) TAILBLK(1, t1);
+        if (ntail > 2) TAILBLK(2, t2);
+        if (ntail > 3) TAILBLK(3, t3);
+        if (ntail > 4) TAILBLK(4, tv[4]);
+        if (ntail > 5) TAILBLK(5, tv[5]);
+#undef TAILBLK
     }
 
     {

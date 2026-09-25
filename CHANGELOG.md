@@ -2,6 +2,17 @@
 
 ## 2.1.0
 
+* perf(gcm): the tail of a message gets what the groups already had.  The
+  six-wide pass that finishes a message was still running its rounds from a
+  loop over a count held in the key, so the compiler could not place the
+  waiting multiplies between them, and the blocks it produced went through an
+  array indexed by a loop variable, which it cannot see through -- each block
+  then reloaded its own keystream from memory.  Written out for the ten rounds
+  of AES-128, with the multiplies at slots named at compile time, and the
+  blocks taken from the registers the pass left them in.  The pass itself
+  falls from about 29 to 6 nanoseconds; on an Intel Haswell 112 bytes is 13
+  per cent faster and 400 bytes goes from 81 to 86 per cent of fusion's speed
+
 * perf(gcm): give E(K,Y0) a lane that would otherwise sit idle, and stop
   copying the last short block through the stack.  Six blocks are in flight
   whatever the message length, so a message leaving a tail of four blocks or
