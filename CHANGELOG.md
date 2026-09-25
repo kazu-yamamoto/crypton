@@ -2,6 +2,14 @@
 
 ## 2.1.1
 
+* docs(rsa): the haddock says what the optional blinder covers -- that the
+  private exponent is not what is at risk, `expSafe` keeping its value out of
+  the work, and that what a blinder covers is the input, which without one is
+  the ciphertext as it arrived and so a number an attacker may have chosen.
+  The eight places taking a `Maybe Blinder` point at t'Blinder' rather than
+  repeating half of it; the four in `Crypto.PubKey.RSA.PSS` said nothing at
+  all before
+
 * feat(chachapoly): `Crypto.Cipher.ChaCha.Poly1305`, which does a whole
   ChaCha20-Poly1305 message in one call, the shape `Crypto.Cipher.AES.GCM`
   has.  `Crypto.Cipher.ChaChaPoly1305` takes a message in steps, which is
