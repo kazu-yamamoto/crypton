@@ -2,6 +2,15 @@
 
 ## 2.1.0
 
+* perf(gcm): GHASH takes the ciphertext from the output buffer.  A group's
+  multiplies are issued between the rounds of the group after it, and the
+  blocks were copied into six registers' worth of scratch to wait there --
+  six stores a group for bytes that had just been written to the output
+  anyway.  The multiplies read the output instead, which is what picotls's
+  fusion does.  On an Intel Haswell this is worth two to three points against
+  fusion between 400 and 1440 bytes, and it removes the queue from the
+  AES-128 path
+
 * perf(gcm): decryption takes the fused path too, on both x86-64 and
   AArch64.  It had been left on the generic framing, so a received packet
   cost what a sent one did before any of this: measured at 100 bytes, three
