@@ -2,6 +2,18 @@
 
 ## 2.1.0
 
+* perf(gcm): decryption takes the fused path too, on both x86-64 and
+  AArch64.  It had been left on the generic framing, so a received packet
+  cost what a sent one did before any of this: measured at 100 bytes, three
+  times what encrypting the same packet cost on either.  It is the simpler of
+  the two -- what GHASH absorbs is the ciphertext, and the ciphertext is the
+  input, so the multiplies need not wait on the AES and nothing is carried
+  between groups.  On an Intel Haswell, 100 bytes goes 0.165 -> 0.050
+  microseconds and 1440 bytes 0.362 -> 0.290; on an Apple M4, 0.230 -> 0.077
+  and 0.396 -> 0.321.  Decrypting is now about what encrypting is rather than
+  three times it.  The tag is still compared a byte at a time over its whole
+  length whichever way the answer goes
+
 * perf(gcm): let the one-call interface specialise.  `gcmFullEncrypt`,
   `gcmFullDecrypt` and `gcmFullEncryptMask` take three `ByteArrayAccess`
   arguments and were marked `NOINLINE`, which is this module's habit and is

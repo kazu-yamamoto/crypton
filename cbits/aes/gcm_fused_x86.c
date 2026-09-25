@@ -330,6 +330,38 @@ TGT static __m128i aes_one_block(const uint8_t *rk, int rounds, __m128i v)
         }                                                                    \
     } while (0)
 
+/* the same with nothing queued to absorb: the decryption side takes its
+ * GHASH straight from the input and has no queue to drain */
+#define WIDE6_NOQ(alt)                                                           \
+    do {                                                                     \
+        const uint8_t *ak = (alt);                                           \
+        int r;                                                               \
+        t0 = _mm_xor_si128(t0, RK(rk, 0));                                   \
+        t1 = _mm_xor_si128(t1, RK(rk, 0));                                   \
+        t2 = _mm_xor_si128(t2, RK(rk, 0));                                   \
+        t3 = _mm_xor_si128(t3, RK(rk, 0));                                   \
+        t4 = _mm_xor_si128(t4, RK(rk, 0));                                   \
+        t5 = _mm_xor_si128(t5, RK(ak, 0));                                       \
+        for (r = 1; r < rounds; r++) {                                   \
+            __m128i k = RK(rk, r);                                           \
+            t0 = _mm_aesenc_si128(t0, k);                                    \
+            t1 = _mm_aesenc_si128(t1, k);                                    \
+            t2 = _mm_aesenc_si128(t2, k);                                    \
+            t3 = _mm_aesenc_si128(t3, k);                                    \
+            t4 = _mm_aesenc_si128(t4, k);                                    \
+            t5 = _mm_aesenc_si128(t5, RK(ak, r));                                \
+        }                                                                    \
+        {                                                                    \
+            __m128i k = RK(rk, rounds);                                  \
+            t0 = _mm_aesenclast_si128(t0, k);                                \
+            t1 = _mm_aesenclast_si128(t1, k);                                \
+            t2 = _mm_aesenclast_si128(t2, k);                                \
+            t3 = _mm_aesenclast_si128(t3, k);                                \
+            t4 = _mm_aesenclast_si128(t4, k);                                \
+            t5 = _mm_aesenclast_si128(t5, RK(ak, rounds));                   \
+        }                                                                    \
+    } while (0)
+
 /*
  * The same written out for the ten rounds of AES-128, with a slot for one
  * queued multiply between each of the first six.  The loop above cannot take
@@ -780,6 +812,175 @@ no_tail:
         _mm_storeu_si128((__m128i *) mask,
                          aes_one_block(hprk, hprounds, _mm_loadu_si128(
                              (const __m128i *) (out + sampleoff))));
+}
+
+
+/*
+ * The same for decryption, which is the simpler of the two.
+ *
+ * What GHASH absorbs here is the ciphertext, and the ciphertext is the
+ * input: it is there before any of the AES has run.  So there is no queue --
+ * the multiplies of a group go between the rounds of that same group rather
+ * than waiting for the one after, and nothing is stored and loaded back to
+ * carry them across.
+ *
+ * The tag is compared here, every byte of it whichever way the answer goes,
+ * and the answer is 1 for a message whose tag matched.
+ */
+
+/* one ciphertext block straight from the input, at a slot named here */
+#define DAT(j) GHASH_ONE(_mm_shuffle_epi8(                                   \
+        _mm_loadu_si128((const __m128i *) (p + 16 * (j))), BSWAP), 0)
+
+/* the next counter block, into a named register */
+#define CTRT(t)                                                              \
+    do { ctr = _mm_add_epi32(ctr, one32);                                    \
+         t = _mm_shuffle_epi8(ctr, BSWAP); } while (0)
+
+TGT int crypton_gcm_fused_decrypt(uint8_t *out, const aes_gcm_fused *fk,
+                                  const aes_key *key, const uint8_t *nonce,
+                                  const uint8_t *aad, size_t aadlen,
+                                  const uint8_t *in, size_t inlen,
+                                  const uint8_t *tag, size_t taglen)
+{
+    const uint8_t *rk = key->data;
+    const int rounds = key->nbr;
+    GHASH_DECL;
+    __m128i ctrbase, ctr, one32, ek0, want, b0, b1, b2, b3, b4, b5;
+    const int ntail_pre = (int) ((inlen % 96 + 15) / 16);
+    int lane_ek0, gp = 0;
+    const int gtotal = (int) ((aadlen + 15) / 16 + (inlen + 15) / 16 + 1);
+    size_t i;
+    size_t done;
+    uint8_t diff = 0;
+
+    ctrbase = _mm_insert_epi32(loadn(nonce, 12), (int) __builtin_bswap32(1), 3);
+    ctr = _mm_shuffle_epi8(ctrbase, BSWAP);
+    one32 = _mm_set_epi32(0, 0, 0, 1);
+
+    lane_ek0 = ntail_pre > 0 && ntail_pre <= 5;
+    if (!lane_ek0)
+        ek0 = aes_one_block(rk, rounds, ctrbase);
+
+    {
+        size_t nfull = aadlen / 16;
+        size_t rest = aadlen % 16;
+
+        for (i = 0; i < nfull; i++)
+            GHASH_ONE(_mm_shuffle_epi8(
+                _mm_loadu_si128((const __m128i *) (aad + i * 16)), BSWAP), 0);
+        if (rest)
+            GHASH_ONE(_mm_shuffle_epi8(loadn(aad + nfull * 16, rest), BSWAP), 0);
+    }
+
+    done = 0;
+    if (rounds == 10) {
+        for (; done + 96 <= inlen; done += 96) {
+            const uint8_t *p = in + done;
+            uint8_t *q = out + done;
+
+            CTR6(0); CTR6(1); CTR6(2); CTR6(3); CTR6(4); CTR6(5);
+            ROUND6(1); DAT(0);
+            ROUND6(2); DAT(1);
+            ROUND6(3); DAT(2);
+            ROUND6(4); DAT(3);
+            ROUND6(5); DAT(4);
+            ROUND6(6); DAT(5);
+            ROUND6(7);
+            ROUND6(8);
+            ROUND6(9);
+            LAST6(10);
+
+            _mm_storeu_si128((__m128i *) q,
+                _mm_xor_si128(b0, _mm_loadu_si128((const __m128i *) p)));
+            _mm_storeu_si128((__m128i *) (q + 16),
+                _mm_xor_si128(b1, _mm_loadu_si128((const __m128i *) (p + 16))));
+            _mm_storeu_si128((__m128i *) (q + 32),
+                _mm_xor_si128(b2, _mm_loadu_si128((const __m128i *) (p + 32))));
+            _mm_storeu_si128((__m128i *) (q + 48),
+                _mm_xor_si128(b3, _mm_loadu_si128((const __m128i *) (p + 48))));
+            _mm_storeu_si128((__m128i *) (q + 64),
+                _mm_xor_si128(b4, _mm_loadu_si128((const __m128i *) (p + 64))));
+            _mm_storeu_si128((__m128i *) (q + 80),
+                _mm_xor_si128(b5, _mm_loadu_si128((const __m128i *) (p + 80))));
+        }
+    } else {
+        for (; done + 96 <= inlen; done += 96) {
+            const uint8_t *p = in + done;
+            uint8_t *q = out + done;
+            int r;
+
+            CTR6(0); CTR6(1); CTR6(2); CTR6(3); CTR6(4); CTR6(5);
+            for (r = 1; r < rounds; r++) {
+                ROUND6(r);
+                if (r <= 6) DAT(r - 1);
+            }
+            LAST6(rounds);
+
+            _mm_storeu_si128((__m128i *) q,
+                _mm_xor_si128(b0, _mm_loadu_si128((const __m128i *) p)));
+            _mm_storeu_si128((__m128i *) (q + 16),
+                _mm_xor_si128(b1, _mm_loadu_si128((const __m128i *) (p + 16))));
+            _mm_storeu_si128((__m128i *) (q + 32),
+                _mm_xor_si128(b2, _mm_loadu_si128((const __m128i *) (p + 32))));
+            _mm_storeu_si128((__m128i *) (q + 48),
+                _mm_xor_si128(b3, _mm_loadu_si128((const __m128i *) (p + 48))));
+            _mm_storeu_si128((__m128i *) (q + 64),
+                _mm_xor_si128(b4, _mm_loadu_si128((const __m128i *) (p + 64))));
+            _mm_storeu_si128((__m128i *) (q + 80),
+                _mm_xor_si128(b5, _mm_loadu_si128((const __m128i *) (p + 80))));
+        }
+    }
+
+    /* the tail, with E(K,Y0) in a lane the length leaves idle */
+    {
+        __m128i t0, t1, t2, t3, t4, t5;
+        int ntail = (int) ((inlen - done + 15) / 16), j;
+
+        /* the counter is where the groups left it */
+        t0 = t1 = t2 = t3 = t4 = t5 = ctrbase;
+        if (ntail > 0) CTRT(t0);
+        if (ntail > 1) CTRT(t1);
+        if (ntail > 2) CTRT(t2);
+        if (ntail > 3) CTRT(t3);
+        if (ntail > 4) CTRT(t4);
+        if (ntail > 5) CTRT(t5);
+
+        if (ntail > 0) {
+            WIDE6_NOQ(rk);
+            if (lane_ek0) ek0 = t5;
+        }
+
+        for (j = 0; j < ntail; j++) {
+            size_t off = done + 16 * (size_t) j;
+            size_t n = inlen - off < 16 ? inlen - off : 16;
+            __m128i c = n == 16 ? _mm_loadu_si128((const __m128i *) (in + off))
+                                : loadn(in + off, n);
+            __m128i ks = j == 0 ? t0 : j == 1 ? t1 : j == 2 ? t2
+                       : j == 3 ? t3 : j == 4 ? t4 : t5;
+
+            GHASH_ONE(_mm_shuffle_epi8(c, BSWAP), 0);
+            {
+                __m128i pl = _mm_xor_si128(ks, c);
+                if (n == 16)
+                    _mm_storeu_si128((__m128i *) (out + off), pl);
+                else
+                    storen(out + off, pl, n);
+            }
+        }
+    }
+
+    GHASH_ONE(_mm_set_epi64x((long long) ((uint64_t) aadlen << 3),
+                             (long long) ((uint64_t) inlen << 3)), gp);
+
+    want = _mm_xor_si128(_mm_shuffle_epi8(gtag, BSWAP), ek0);
+    {
+        uint8_t got[16];
+        _mm_storeu_si128((__m128i *) got, want);
+        for (i = 0; i < taglen; i++)
+            diff |= (uint8_t) (got[i] ^ tag[i]);
+    }
+    return diff == 0;
 }
 
 #endif /* WITH_GCM_FUSED */

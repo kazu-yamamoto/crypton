@@ -428,3 +428,26 @@ void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
 		break;
 	}
 }
+
+TARGET_ARMV8_CRYPTO
+int crypton_aes_armv8_gcm_fused_dec(uint8_t *out, const block128 *ht,
+                                    aes_key *key, const uint8_t *nonce,
+                                    const uint8_t *aad, uint32_t aadlen,
+                                    const uint8_t *in, uint32_t inlen,
+                                    const uint8_t *tag, uint32_t taglen)
+{
+	switch (key->strength) {
+	case 0:
+		return crypton_aes_armv8_gcm_fused_dec128(out, ht, key, nonce,
+		                                          aad, aadlen, in, inlen,
+		                                          tag, taglen);
+	case 1:
+		return crypton_aes_armv8_gcm_fused_dec192(out, ht, key, nonce,
+		                                          aad, aadlen, in, inlen,
+		                                          tag, taglen);
+	default:
+		return crypton_aes_armv8_gcm_fused_dec256(out, ht, key, nonce,
+		                                          aad, aadlen, in, inlen,
+		                                          tag, taglen);
+	}
+}
