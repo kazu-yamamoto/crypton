@@ -335,9 +335,27 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	gcm->length_input += length;
 
+#ifdef WITH_GCM_VAES
+	/*
+	 * The 256-bit instructions first where the processor has them: they
+	 * take two blocks where the ones below take one, and the assembly
+	 * that follows is 128-bit throughout.  Same contract -- whole groups
+	 * off the front, the counter and the tag left behind.
+	 */
+	if (nb_blocks >= GCM_VAES_MIN_BLOCKS
+	    && (crypton_x86_simd_features() & CRYPTON_X86_VAES)) {
+		uint32_t done = crypton_gcm_vaes_bulk_encrypt(output, gcm, key,
+		                                              input,
+		                                              nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
 #if defined(WITH_X86_GCM_ASM) && defined(WITH_PCLMUL)
 	/*
-	 * The stitched assembly first, which takes whole groups of six
+	 * The stitched assembly next, which takes whole groups of six
 	 * blocks off the front of the message and leaves the counter and the
 	 * running tag where the loop below expects to find them.  It wants
 	 * eighteen blocks before it will start, and answers with what it did.
@@ -483,6 +501,19 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	gcm->length_input += length;
 
+#ifdef WITH_GCM_VAES
+	/* as in encryption; the tag is taken over the input here */
+	if (nb_blocks >= GCM_VAES_MIN_BLOCKS
+	    && (crypton_x86_simd_features() & CRYPTON_X86_VAES)) {
+		uint32_t done = crypton_gcm_vaes_bulk_decrypt(output, gcm, key,
+		                                              input,
+		                                              nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
 #if defined(WITH_X86_GCM_ASM) && defined(WITH_PCLMUL)
 	/* the same as encryption, except that decryption has nothing to
 	 * hold back and so will start on six blocks */

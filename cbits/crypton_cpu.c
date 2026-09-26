@@ -228,6 +228,14 @@ uint32_t crypton_x86_simd_features(void)
 			 * so there is nothing to ask the operating system */
 			if ((ebx & (1 << 8)) && (ebx & (1 << 19)))
 				f |= CRYPTON_X86_ADX;
+			/* VAES and VPCLMULQDQ, leaf 7 ECX bits 9 and 10.
+			 * They are wanted together -- one without the other
+			 * leaves half of AES-GCM narrow -- and they need the
+			 * wide registers, so AVX2 has to have answered first,
+			 * which settles the operating system's part. */
+			if ((ecx & (1 << 9)) && (ecx & (1 << 10))
+			    && (f & CRYPTON_X86_AVX2))
+				f |= CRYPTON_X86_VAES;
 		}
 		features = f;
 		resolved = 1;

@@ -37,6 +37,7 @@
 #include <crypton_cpu.h>
 #include <aes/gf.h>
 #include <aes/x86ni.h>
+#include <aes/gcm_vaes_x86.h>
 #include <aes/block128.h>
 #include <aes/gcm_x86_asm.h>
 
@@ -357,11 +358,14 @@ void crypton_aesni_hinit_pclmul(table_4bit htable, const block128 *h)
 	htable[0].q[0] = bitfn_swap64(h->q[1]);
 	htable[0].q[1] = bitfn_swap64(h->q[0]);
 
-	/* Indices 1..7 get H^2 .. H^8, which is what lets a group of blocks
-	 * fold into one reduction: gf_mul4 uses the first four, the GCM loop
-	 * all eight.  The table has sixteen slots. */
+	/* Indices 1..15 get H^2 .. H^16, which is what lets a group of blocks
+	 * fold into one reduction: gf_mul4 uses the first four, the 128-bit
+	 * GCM loop eight, and the 256-bit one all sixteen.  The table has
+	 * sixteen slots and now they are all used.  Filling the upper half
+	 * costs eight multiplies once per key, which is nothing beside a
+	 * message. */
 	p = _mm_loadu_si128((const __m128i *) h);
-	for (i = 1; i < 8; i++) {
+	for (i = 1; i < 16; i++) {
 		p = gfmul_pclmuldq(p, htable);
 		_mm_storeu_si128((__m128i *) &htable[i],
 		                 _mm_shuffle_epi8(p, bswap_mask));
