@@ -83,6 +83,7 @@ extra-source-files:
     cbits/s2n/LICENSE
     cbits/s2n/README.md
     cbits/s2n/arm/*.S
+    cbits/p256/gen_base_table.py
     cbits/s2n/import.sh
     cbits/s2n/include/*.h
     cbits/s2n/x86_att/*.S
@@ -481,6 +482,7 @@ library
         include-dirs: cbits/s2n/include
         c-sources:
             cbits/crypton_ecc_s2n.c
+            cbits/p256/p256_base_table.c
             cbits/p256/p256_s2n.c
 
         if arch(aarch64)
@@ -499,6 +501,8 @@ library
                 cbits/s2n/arm/bignum_tomont_p384.S
                 cbits/s2n/arm/p256_scalarmul.S
                 cbits/s2n/arm/p256_scalarmul_alt.S
+                cbits/s2n/arm/p256_scalarmulbase.S
+                cbits/s2n/arm/p256_scalarmulbase_alt.S
                 cbits/s2n/arm/p384_montjscalarmul.S
                 cbits/s2n/arm/p384_montjscalarmul_alt.S
                 cbits/s2n/arm/p521_jscalarmul.S
@@ -522,6 +526,8 @@ library
                 cbits/s2n/x86_att/bignum_tomont_p384_alt.S
                 cbits/s2n/x86_att/p256_scalarmul.S
                 cbits/s2n/x86_att/p256_scalarmul_alt.S
+                cbits/s2n/x86_att/p256_scalarmulbase.S
+                cbits/s2n/x86_att/p256_scalarmulbase_alt.S
                 cbits/s2n/x86_att/p384_montjscalarmul.S
                 cbits/s2n/x86_att/p384_montjscalarmul_alt.S
                 cbits/s2n/x86_att/p521_jscalarmul.S

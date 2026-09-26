@@ -43,8 +43,11 @@ take() {
 	done
 }
 
-# P-256: variable-point scalar multiplication, affine in and out.
+# P-256: variable-point scalar multiplication, affine in and out, and the
+# fixed-base one, which reads a table of its own that
+# cbits/p256/gen_base_table.py builds.
 take p256 p256_scalarmul
+take p256 p256_scalarmulbase
 
 # P-384 and P-521 have no affine wrapper upstream, so the Montgomery and
 # Jacobian conversions are built here out of these; the glue is in

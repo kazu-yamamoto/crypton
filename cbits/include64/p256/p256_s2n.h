@@ -17,4 +17,9 @@
 void crypton_s2n_p256_scalarmul(uint64_t res[8], const uint64_t scalar[4],
                                 const uint64_t point[8]);
 
+/* res = scalar * G, the same shape out.  The table it reads and the window
+ * width it was built for are in cbits/p256/p256_base_table.c, which
+ * cbits/p256/gen_base_table.py writes. */
+void crypton_s2n_p256_scalarmulbase(uint64_t res[8], const uint64_t scalar[4]);
+
 #endif

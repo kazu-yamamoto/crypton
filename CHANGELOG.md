@@ -2,6 +2,17 @@
 
 ## 2.1.2
 
+* perf(p256): ECDSA signing is 2.4 times faster and verification 2.2, which
+  finishes what the two entries below began.  Signing and key generation go
+  through s2n-bignum's fixed-base routine, which reads a table of multiples
+  of the base point that `cbits/p256/gen_base_table.py` builds and that the
+  test suite checks against crypton's own answer; verification goes through
+  that one and the variable-point one, with the addition of the two left
+  where it was.  Measured through the Haskell API on an Apple M4, signing
+  goes 28.55 to 12.03 microseconds and verification 82.68 to 37.73, which
+  leaves both within a tenth of OpenSSL on that machine where they were at
+  four tenths of it.  The table costs 52 KiB of constant data, against the
+  2.4 KiB of the one it replaces
 * perf(ecc): P-384 and P-521 go through s2n-bignum as well, where the curve
   is exactly one of those two.  Measured through the Haskell API on an Apple
   M4, ECDH P-384 goes 549.5 to 75.4 microseconds and ECDSA P-384
