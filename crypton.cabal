@@ -528,6 +528,17 @@ library
                 cbits/s2n/x86_att/p256_scalarmul_alt.S
                 cbits/s2n/x86_att/p256_scalarmulbase.S
                 cbits/s2n/x86_att/p256_scalarmulbase_alt.S
+
+            -- Modular exponentiation at RSA sizes, x86-64 only: on AArch64
+            -- crypton's C measures faster than these, so nothing is taken
+            -- for it.  All of them want ADX, which the run-time check in
+            -- cbits/crypton_powm.c asks about before using any.
+            asm-sources:
+                cbits/s2n/x86_att/bignum_emontredc_8n.S
+                cbits/s2n/x86_att/bignum_kmul_16_32.S
+                cbits/s2n/x86_att/bignum_kmul_32_64.S
+                cbits/s2n/x86_att/bignum_ksqr_16_32.S
+                cbits/s2n/x86_att/bignum_ksqr_32_64.S
                 cbits/s2n/x86_att/p384_montjscalarmul.S
                 cbits/s2n/x86_att/p384_montjscalarmul_alt.S
                 cbits/s2n/x86_att/p521_jscalarmul.S

@@ -2,6 +2,14 @@
 
 ## 2.1.2
 
+* perf(rsa): the modular exponentiation's Montgomery multiplication and
+  square go through s2n-bignum on x86-64 with ADX, which is twice as fast as
+  the C there because the C cannot form the two carry chains `ADCX` and
+  `ADOX` give: measured on an EPYC 7763 at 1024 bits, 0.4832 to 0.2479
+  microseconds for a multiplication and 0.3984 to 0.1994 for a square.  The
+  window, the table and its masked scan are untouched, and so is every other
+  size and architecture -- on AArch64 the C measures faster than the
+  assembly, so nothing is even vendored for it
 * perf(p256): ECDSA signing is 2.4 times faster and verification 2.2, which
   finishes what the two entries below began.  Signing and key generation go
   through s2n-bignum's fixed-base routine, which reads a table of multiples

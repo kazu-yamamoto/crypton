@@ -30,6 +30,13 @@ cp "$TMP/s2n/LICENSE" "$HERE/LICENSE"
 # the same question on the two architectures -- see README.md.  Where the
 # upstream tree has no separate _alt file the plain one defines both symbols,
 # so "copy it if it is there" gets the right set either way.
+# x86-64 only, for the things AArch64 does not want -- see README.md.
+take_x86() {
+	dir=$1
+	name=$2
+	cp "$TMP/s2n/x86_att/$dir/$name.S" "$HERE/x86_att/$name.S"
+}
+
 take() {
 	curve=$1
 	name=$2
@@ -63,6 +70,15 @@ take p521 p521_jscalarmul
 take p521 bignum_mul_p521
 take p521 bignum_sqr_p521
 take p521 bignum_inv_p521
+
+# Modular exponentiation at RSA sizes.  Only x86-64: on AArch64 crypton's C
+# is the faster of the two, measured, so nothing is taken for it.  The
+# Karatsuba multiplications and the reduction all want ADX.
+take_x86 fastmul bignum_kmul_16_32
+take_x86 fastmul bignum_ksqr_16_32
+take_x86 fastmul bignum_kmul_32_64
+take_x86 fastmul bignum_ksqr_32_64
+take_x86 fastmul bignum_emontredc_8n
 
 git -C "$TMP/s2n" rev-parse HEAD > "$HERE/COMMIT"
 echo "imported $(cat "$HERE/COMMIT")"
