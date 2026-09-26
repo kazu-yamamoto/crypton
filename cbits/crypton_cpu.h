@@ -54,6 +54,12 @@
  * instructions, so unlike the vector ones above they ask nothing of the
  * operating system. */
 #define CRYPTON_X86_ADX    64
+/* The AES and carry-less multiply instructions in their 256-bit form, which
+ * do two blocks where the 128-bit ones do one.  They are VEX-encoded and use
+ * the vector registers AVX2 already needs the operating system to save, so
+ * they ask nothing further of it -- but AVX2 itself is asked about, since
+ * without it there is nowhere to put them. */
+#define CRYPTON_X86_VAES   128
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif

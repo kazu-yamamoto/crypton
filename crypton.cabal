@@ -655,8 +655,17 @@ library
             if arch(x86_64)
                 cc-options: -DWITH_X86_GCM_ASM -DWITH_GCM_FUSED
                 c-sources:
-                    cbits/aes/gcm_x86_asm.c
                     cbits/aes/gcm_fused_x86.c
+                    -- AES-GCM in the 256-bit form of the same two
+                    -- instructions, two blocks to each, which is worth
+                    -- twice the throughput where the processor has them --
+                    -- Zen 3 and Ice Lake onwards.  Nothing to borrow: the
+                    -- wide AES-GCM in OpenSSL and BoringSSL is Apache-2.0,
+                    -- s2n-bignum has no GCM, and the assembly above is
+                    -- 128-bit throughout.  crypton_cpu.c asks the
+                    -- processor before any of it runs.
+                    cbits/aes/gcm_vaes_x86.c
+                    cbits/aes/gcm_x86_asm.c
 
                 if os(osx)
                     asm-sources: cbits/asm/aesni-gcm-x86_64-macosx.S
