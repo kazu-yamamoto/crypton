@@ -765,6 +765,15 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
 /* crypton_p256_base_point_mul sets {out_x,out_y} = nG, where n is < the
  * order of the group. */
 void crypton_p256_base_point_mul(const crypton_p256_int* n, crypton_p256_int* out_x, crypton_p256_int* out_y) {
+#ifdef CRYPTON_S2N_BIGNUM
+  /* The assembly, four times faster, and constant time as this has to be:
+   * it is how a public key is derived from a private one. */
+  uint64_t res[8];
+
+  crypton_s2n_p256_scalarmulbase(res, P256_DIGITS(n));
+  memcpy(P256_DIGITS(out_x), res, P256_NBYTES);
+  memcpy(P256_DIGITS(out_y), res + P256_NDIGITS, P256_NBYTES);
+#else
   felem x, y, z;
 
   scalar_base_mult(x, y, z, n);
@@ -776,7 +785,28 @@ void crypton_p256_base_point_mul(const crypton_p256_int* n, crypton_p256_int* ou
     from_montgomery(out_x, x_affine);
     from_montgomery(out_y, y_affine);
   }
+#endif
 }
+
+#ifdef CRYPTON_S2N_BIGNUM
+/* An affine point from the assembly as the Jacobian triple the addition
+ * below wants, keeping this file's convention that the point at infinity is
+ * all three coordinates zero -- the assembly says it with (0, 0). */
+static void s2n_lift(felem x, felem y, felem z, const uint64_t res[8]) {
+  crypton_p256_int t;
+  uint64_t any = 0;
+  int i;
+
+  for (i = 0; i < 2 * P256_NDIGITS; i++)
+    any |= res[i];
+
+  memcpy(P256_DIGITS(&t), res, P256_NBYTES);
+  to_montgomery(x, &t);
+  memcpy(P256_DIGITS(&t), res + P256_NDIGITS, P256_NBYTES);
+  to_montgomery(y, &t);
+  memcpy(z, any != 0 ? kOne : kZero, sizeof(felem));
+}
+#endif
 
 /* crypton_p256_points_mul_vartime sets {out_x,out_y} = n1*G + n2*{in_x,in_y}, where
  * n1 and n2 are < the order of the group.
@@ -796,10 +826,23 @@ void crypton_p256_points_mul_vartime(
     return;
   }
 
+#ifdef CRYPTON_S2N_BIGNUM
+  {
+    uint64_t r1[8], r2[8], pt[2 * P256_NDIGITS];
+
+    memcpy(pt, P256_DIGITS(in_x), P256_NBYTES);
+    memcpy(pt + P256_NDIGITS, P256_DIGITS(in_y), P256_NBYTES);
+    crypton_s2n_p256_scalarmulbase(r1, P256_DIGITS(n1));
+    crypton_s2n_p256_scalarmul(r2, P256_DIGITS(n2), pt);
+    s2n_lift(x1, y1, z1, r1);
+    s2n_lift(x2, y2, z2, r2);
+  }
+#else
   to_montgomery(px, in_x);
   to_montgomery(py, in_y);
   scalar_base_mult(x1, y1, z1, n1);
   scalar_mult(x2, y2, z2, px, py, n2);
+#endif
 
   if (crypton_p256_is_zero(n2) != 0) {
     /* If n2 == 0, then {x2,y2,z2} is zero and the result is just
