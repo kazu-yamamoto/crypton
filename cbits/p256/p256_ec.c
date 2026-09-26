@@ -43,68 +43,94 @@
  *   a^p = a (mod p)
  *   a^{p-1} = 1 (mod p)
  *   a^{p-2} = a^{-1} (mod p)
- */
+ *
+ * The exponent is built left to right from the shape of p - 2, which for
+ * this prime is
+ *
+ *   ffffffff 00000001 00000000 00000000 00000000 ffffffff ffffffff fffffffd
+ *   \__32 ones__/ \_31 zeros, one 1_/ \______ 96 zeros ______/ \_94 ones, 0, 1_/
+ *
+ * A run of k zeros is k squarings; a run of k ones is k squarings and one
+ * multiplication by a^(2^k - 1), which is why the powers below are kept.  The
+ * whole chain is 255 squarings, which is the least an exponent of 256 bits
+ * can be done in, and 13 multiplications.
+ *
+ * The chain this replaces built the low 94 ones in a second accumulator and
+ * multiplied the two at the end, which cost 32 squarings more than the 255. */
 static void felem_inv(felem out, const felem in) {
-  felem ftmp, ftmp2;
-  /* each e_I will hold |in|^{2^I - 1} */
-  felem e2, e4, e8, e16, e32, e64;
+  felem ftmp, x2, x4, x8, x16, x32;
   unsigned i;
 
-  felem_square(ftmp, in); /* 2^1 */
-  felem_mul(ftmp, in, ftmp); /* 2^2 - 2^0 */
-  felem_assign(e2, ftmp);
-  felem_square(ftmp, ftmp); /* 2^3 - 2^1 */
-  felem_square(ftmp, ftmp); /* 2^4 - 2^2 */
-  felem_mul(ftmp, ftmp, e2); /* 2^4 - 2^0 */
-  felem_assign(e4, ftmp);
-  felem_square(ftmp, ftmp); /* 2^5 - 2^1 */
-  felem_square(ftmp, ftmp); /* 2^6 - 2^2 */
-  felem_square(ftmp, ftmp); /* 2^7 - 2^3 */
-  felem_square(ftmp, ftmp); /* 2^8 - 2^4 */
-  felem_mul(ftmp, ftmp, e4); /* 2^8 - 2^0 */
-  felem_assign(e8, ftmp);
+  /* x{k} holds in^(2^k - 1), a run of k ones. */
+  felem_square(ftmp, in);
+  felem_mul(x2, ftmp, in); /* 2^2 - 1 */
+
+  felem_square(ftmp, x2);
+  felem_square(ftmp, ftmp);
+  felem_mul(x4, ftmp, x2); /* 2^4 - 1 */
+
+  felem_assign(ftmp, x4);
+  for (i = 0; i < 4; i++) {
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(x8, ftmp, x4); /* 2^8 - 1 */
+
+  felem_assign(ftmp, x8);
   for (i = 0; i < 8; i++) {
     felem_square(ftmp, ftmp);
-  } /* 2^16 - 2^8 */
-  felem_mul(ftmp, ftmp, e8); /* 2^16 - 2^0 */
-  felem_assign(e16, ftmp);
+  }
+  felem_mul(x16, ftmp, x8); /* 2^16 - 1 */
+
+  felem_assign(ftmp, x16);
   for (i = 0; i < 16; i++) {
     felem_square(ftmp, ftmp);
-  } /* 2^32 - 2^16 */
-  felem_mul(ftmp, ftmp, e16); /* 2^32 - 2^0 */
-  felem_assign(e32, ftmp);
+  }
+  felem_mul(x32, ftmp, x16); /* 2^32 - 1 */
+
+  /* The top 32 ones. */
+  felem_assign(ftmp, x32);
+
+  /* 31 zeros and a one: the 00000001 word. */
   for (i = 0; i < 32; i++) {
     felem_square(ftmp, ftmp);
-  } /* 2^64 - 2^32 */
-  felem_assign(e64, ftmp);
-  felem_mul(ftmp, ftmp, in); /* 2^64 - 2^32 + 2^0 */
-  for (i = 0; i < 192; i++) {
+  }
+  felem_mul(ftmp, ftmp, in);
+
+  /* 96 zeros. */
+  for (i = 0; i < 96; i++) {
     felem_square(ftmp, ftmp);
-  } /* 2^256 - 2^224 + 2^192 */
+  }
 
-  felem_mul(ftmp2, e64, e32); /* 2^64 - 2^0 */
+  /* 94 ones, as 32 + 32 + 16 + 8 + 4 + 2. */
+  for (i = 0; i < 32; i++) {
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(ftmp, ftmp, x32);
+  for (i = 0; i < 32; i++) {
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(ftmp, ftmp, x32);
   for (i = 0; i < 16; i++) {
-    felem_square(ftmp2, ftmp2);
-  } /* 2^80 - 2^16 */
-  felem_mul(ftmp2, ftmp2, e16); /* 2^80 - 2^0 */
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(ftmp, ftmp, x16);
   for (i = 0; i < 8; i++) {
-    felem_square(ftmp2, ftmp2);
-  } /* 2^88 - 2^8 */
-  felem_mul(ftmp2, ftmp2, e8); /* 2^88 - 2^0 */
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(ftmp, ftmp, x8);
   for (i = 0; i < 4; i++) {
-    felem_square(ftmp2, ftmp2);
-  } /* 2^92 - 2^4 */
-  felem_mul(ftmp2, ftmp2, e4); /* 2^92 - 2^0 */
-  felem_square(ftmp2, ftmp2); /* 2^93 - 2^1 */
-  felem_square(ftmp2, ftmp2); /* 2^94 - 2^2 */
-  felem_mul(ftmp2, ftmp2, e2); /* 2^94 - 2^0 */
-  felem_square(ftmp2, ftmp2); /* 2^95 - 2^1 */
-  felem_square(ftmp2, ftmp2); /* 2^96 - 2^2 */
-  felem_mul(ftmp2, ftmp2, in); /* 2^96 - 3 */
+    felem_square(ftmp, ftmp);
+  }
+  felem_mul(ftmp, ftmp, x4);
+  felem_square(ftmp, ftmp);
+  felem_square(ftmp, ftmp);
+  felem_mul(ftmp, ftmp, x2);
 
-  felem_mul(out, ftmp2, ftmp); /* 2^256 - 2^224 + 2^192 + 2^96 - 3 */
+  /* A zero and a one: the d of fffffffd. */
+  felem_square(ftmp, ftmp);
+  felem_square(ftmp, ftmp);
+  felem_mul(out, ftmp, in);
 }
-
 
 /* Group operations:
  *

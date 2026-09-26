@@ -1,5 +1,15 @@
 # CHANGELOG for crypton
 
+## 2.1.2
+
+* perf(p256): the field inversion takes the least squarings an exponent of
+  256 bits can be done in.  It built the low 94 ones of p-2 in a second
+  accumulator and multiplied the two at the end, which cost 287 squarings
+  where 255 will do; the exponent is now built left to right from the shape
+  of p-2 in one pass.  Measured on an Apple M4 the inversion goes 4.224 ->
+  3.765 microseconds, about 11%, which is 0.9% of an ECDH since that is where
+  the inversion sits.  The same 13 multiplications either way
+
 ## 2.1.1
 
 * docs(rsa): the haddock says what the optional blinder covers -- that the
