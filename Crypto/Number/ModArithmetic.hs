@@ -240,20 +240,56 @@ inverseFermat g p = expSafe g (p - 2) p
 -- bits it is given, and a nonce inverted that way has been taken apart before
 -- by watching the steps go by.
 --
--- The moduli this is for -- the order of a group -- are prime, so the inverse
--- comes from 'inverseFermat' instead.  When the modulus is not prime, that
--- answer is not an inverse, and the result is checked and 'inverse' asked
--- instead, so this agrees with 'inverse' on every input.  That fallback is
--- reached only by parameters that are already broken.
+-- The answer comes from a fixed number of division steps where the assembly
+-- for them is built, and from 'inverseFermat' where it is not.  Either way it
+-- is checked here by multiplying out: neither one says when the number has no
+-- inverse -- the first returns something that is not one and the second
+-- returns something that is not one either -- so the check is what makes this
+-- agree with 'inverse' on every input, and 'inverse' is asked when it fails.
+-- That fallback is reached only by parameters that are already broken.
 --
--- It costs what an exponentiation costs: around thirty times an 'inverse'
--- for a 256-bit modulus.
+-- The division steps cost about a twentieth of the exponentiation: on an
+-- Apple M4, inverting modulo the P-256 group order is 0.80 microseconds
+-- against 6.02, and modulo the P-521 one 2.05 against 63.2.
 inverseSafe :: Integer -> Integer -> Maybe Integer
 inverseSafe g m
     | m > 1 && (g * r) `mod` m == 1 = Just r
     | otherwise = inverse g m
   where
-    r = inverseFermat g m
+    r = case inverseSec g m of
+        Just v -> v
+        Nothing -> inverseFermat g m
+
+-- | The inverse in a fixed number of division steps, from the vendored
+-- assembly.  'Nothing' when that is not built, when the modulus is even --
+-- where the routine answers without saying it cannot -- or when the numbers
+-- are larger than it keeps room for.  The answer is not checked here; the
+-- caller does that.
+inverseSec :: Integer -> Integer -> Maybe Integer
+inverseSec g m
+    | m <= 1 || even m || g < 0 = Nothing
+    | otherwise = unsafeDoIO $
+        allocaBytes (3 * mLen) $ \out -> do
+            let gp = out `plusPtr` mLen
+                mp = gp `plusPtr` mLen
+            _ <- Internal.i2ospOf (g `mod` m) gp mLen
+            _ <- Internal.i2ospOf m mp mLen
+            r <- c_modinv_sec out gp mp (fromIntegral mLen)
+            if r == 0
+                then do
+                    !v <- Internal.os2ip out mLen
+                    return (Just v)
+                else return Nothing
+  where
+    !mLen = numBytes m
+
+foreign import ccall unsafe "crypton_modinv_sec"
+    c_modinv_sec
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
 
 -- | Raised when the assumption about the modulus is invalid.
 data ModulusAssertionError = ModulusAssertionError

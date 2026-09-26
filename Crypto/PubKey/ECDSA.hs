@@ -64,7 +64,7 @@ import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Generate (generatePrefix)
-import Crypto.Number.ModArithmetic (inverseFermat)
+import Crypto.Number.ModArithmetic (inverseSafe)
 import qualified Crypto.PubKey.ECC.P256 as P256
 import Crypto.Random.HmacDRG (initial, update)
 import Crypto.Random.Types
@@ -372,15 +372,16 @@ ecScalarIsZero
     => Simple.Scalar curve -> Bool
 ecScalarIsZero (Simple.Scalar a) = a == 0
 
+-- | 'inverseSafe' is the one that takes a fixed number of division steps
+-- where the assembly for them is built, and checks whatever it gets by
+-- multiplying out.  It answers 'Nothing' exactly where the exponentiation
+-- this used to do answered zero.
 ecScalarInv
     :: Simple.Curve c
     => proxy c -> Simple.Scalar c -> Maybe (Simple.Scalar c)
-ecScalarInv prx (Simple.Scalar s)
-    | i == 0 = Nothing
-    | otherwise = Just $ Simple.Scalar i
+ecScalarInv prx (Simple.Scalar s) = Simple.Scalar <$> inverseSafe s n
   where
     n = Simple.curveEccN $ Simple.curveParameters prx
-    i = inverseFermat s n
 
 ecPointX
     :: Simple.Curve c
