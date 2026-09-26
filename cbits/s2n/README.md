@@ -67,17 +67,25 @@ It is twice the C, because the C cannot form the two carry chains `ADCX` and
 | multiplication | 0.4832 us | **0.2479** |
 | square | 0.3984 | **0.1994** |
 
-**Nothing is vendored for AArch64**, where the same measurement puts the C
-about 5% ahead of the assembly.  That leaves crypton's RSA on Apple silicon at
-about half OpenSSL's speed, and the reason is assembly and not the C: BearSSL's
-`i62` -- 62-bit limbs in 64-bit words, so that a multiply-accumulate fits an
-`__int128` with no carry chain at all, and a five-bit window against crypton's
-four, which is as far as portable C is known to go -- was built and measured
-against crypton's C on an M4, alternately and with the order swapped.
-One RSA-2048 CRT private operation, best of five each: **626.4 us for crypton,
-668.0 for BearSSL**.  There is no portable C left to find; closing that gap
-means writing the AArch64 Montgomery multiplication in assembly, or finding one
-under a licence this library can take.
+**Nothing is vendored for AArch64 yet, and that is under review.**  When the
+x86-64 routines went in, the AArch64 ones measured slower than the C and were
+left out.  Re-measured on 2026-09-26 on an M4, alternately and with the order
+swapped, eight pairs each way, the same five routines come out **ahead**: one
+RSA-2048 CRT private operation takes 605.5 us through the C and 579.9 through
+the assembly, best of eight, with the medians 608 and 587.  Both agree on 200
+random cases at 1024 and 2048 bits.  The earlier reading cannot be
+reconstructed; this one is what the machine says today.
+
+Either way the gap to OpenSSL on Apple silicon -- about half its speed -- is
+assembly and not the C, and no portable C closes it.  BearSSL's `i62`, which
+is as far as portable C is known to go -- 62-bit limbs in 64-bit words, so
+that a multiply-accumulate fits an `__int128` with no carry chain at all, and
+a five-bit window against crypton's four -- was built and measured the same
+way on the same machine: 626.4 us against crypton's C at 668.0, a tie.  Two
+other things were tried and are not worth doing: the masked table scan costs
+less than the measurement noise, so vectorising it buys nothing, and
+`bignum_emontredc_8n_cdiff` wants a precomputation this test did not give it
+and was slower besides.
 
 ## What is not here
 
