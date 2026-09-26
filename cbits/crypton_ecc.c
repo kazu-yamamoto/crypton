@@ -25,6 +25,9 @@
 #include <crypton_bignum.h>
 #include <crypton_ecc.h>
 #include <crypton_powm.h>
+#ifdef CRYPTON_S2N_BIGNUM
+#include <crypton_ecc_s2n.h>
+#endif
 
 /* four bits of scalar per window, so a table of sixteen and no leftover
  * bits: a byte holds exactly two windows */
@@ -411,6 +414,20 @@ int crypton_ecc_mul(uint8_t *outx, uint8_t *outy,
 	curve_ctx c;
 	uint32_t n, i, j;
 	int ret = -1;
+
+#ifdef CRYPTON_S2N_BIGNUM
+	/* Two of the curves that reach here have hand-written assembly, six
+	 * to ten times faster than what follows; see cbits/s2n/README.md.
+	 * Anything else, including those two named with a different a or b,
+	 * goes on down. */
+	{
+		int s2n_ret;
+
+		if (crypton_s2n_ecc_mul(&s2n_ret, outx, outy, px, py, k, klen,
+		                        a, b, p, plen))
+			return s2n_ret;
+	}
+#endif
 
 	if (klen == 0 || ctx_init(&c, a, b, p, plen) != 0)
 		return -1;

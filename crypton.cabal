@@ -479,17 +479,53 @@ library
     if (flag(support_s2n_bignum) && (arch(x86_64) || arch(aarch64)) && !os(windows))
         cc-options:   -DCRYPTON_S2N_BIGNUM
         include-dirs: cbits/s2n/include
-        c-sources:    cbits/p256/p256_s2n.c
+        c-sources:
+            cbits/crypton_ecc_s2n.c
+            cbits/p256/p256_s2n.c
 
         if arch(aarch64)
             asm-sources:
+                cbits/s2n/arm/bignum_deamont_p384.S
+                cbits/s2n/arm/bignum_inv_p521.S
+                cbits/s2n/arm/bignum_montinv_p384.S
+                cbits/s2n/arm/bignum_montmul_p384.S
+                cbits/s2n/arm/bignum_montmul_p384_alt.S
+                cbits/s2n/arm/bignum_montsqr_p384.S
+                cbits/s2n/arm/bignum_montsqr_p384_alt.S
+                cbits/s2n/arm/bignum_mul_p521.S
+                cbits/s2n/arm/bignum_mul_p521_alt.S
+                cbits/s2n/arm/bignum_sqr_p521.S
+                cbits/s2n/arm/bignum_sqr_p521_alt.S
+                cbits/s2n/arm/bignum_tomont_p384.S
                 cbits/s2n/arm/p256_scalarmul.S
                 cbits/s2n/arm/p256_scalarmul_alt.S
+                cbits/s2n/arm/p384_montjscalarmul.S
+                cbits/s2n/arm/p384_montjscalarmul_alt.S
+                cbits/s2n/arm/p521_jscalarmul.S
+                cbits/s2n/arm/p521_jscalarmul_alt.S
 
         else
             asm-sources:
+                cbits/s2n/x86_att/bignum_deamont_p384.S
+                cbits/s2n/x86_att/bignum_deamont_p384_alt.S
+                cbits/s2n/x86_att/bignum_inv_p521.S
+                cbits/s2n/x86_att/bignum_montinv_p384.S
+                cbits/s2n/x86_att/bignum_montmul_p384.S
+                cbits/s2n/x86_att/bignum_montmul_p384_alt.S
+                cbits/s2n/x86_att/bignum_montsqr_p384.S
+                cbits/s2n/x86_att/bignum_montsqr_p384_alt.S
+                cbits/s2n/x86_att/bignum_mul_p521.S
+                cbits/s2n/x86_att/bignum_mul_p521_alt.S
+                cbits/s2n/x86_att/bignum_sqr_p521.S
+                cbits/s2n/x86_att/bignum_sqr_p521_alt.S
+                cbits/s2n/x86_att/bignum_tomont_p384.S
+                cbits/s2n/x86_att/bignum_tomont_p384_alt.S
                 cbits/s2n/x86_att/p256_scalarmul.S
                 cbits/s2n/x86_att/p256_scalarmul_alt.S
+                cbits/s2n/x86_att/p384_montjscalarmul.S
+                cbits/s2n/x86_att/p384_montjscalarmul_alt.S
+                cbits/s2n/x86_att/p521_jscalarmul.S
+                cbits/s2n/x86_att/p521_jscalarmul_alt.S
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND
