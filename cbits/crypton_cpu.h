@@ -49,6 +49,11 @@
  * in, and the byte-swapping load it reads the message with */
 #define CRYPTON_X86_AVX    16
 #define CRYPTON_X86_MOVBE  32
+/* MULX, ADCX and ADOX together: the two independent carry chains the
+ * vendored s2n-bignum assembly wants.  They are general-purpose register
+ * instructions, so unlike the vector ones above they ask nothing of the
+ * operating system. */
+#define CRYPTON_X86_ADX    64
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif

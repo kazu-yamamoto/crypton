@@ -211,7 +211,18 @@ spec = do
                     [ eqTest "zero" True (P256.pointIsAtInfinity gN)
                     , eqTest "base" False (P256.pointIsAtInfinity g1)
                     ]
+        -- The variable-point multiplication is what the vendored assembly
+        -- replaces where there is any, so say out loud what the two ends of
+        -- the scalar range do on a point that is not the base one.
+        it "point-mul-order" $
+            P256.pointIsAtInfinity (P256.pointMul P256.scalarN point7)
+                `shouldBe` True
+        it "point-mul-order-minus-one" $
+            P256.pointMul (unP256Scalar (P256Scalar (curveN - 1))) point7
+                `shouldBe` P256.pointNegate point7
   where
+    point7 = P256.toPoint (unP256Scalar (P256Scalar 7))
+
     casePointIsValid pointTuple =
         let s = P256.pointFromIntegers pointTuple in P256.pointIsValid s `shouldBe` True
 

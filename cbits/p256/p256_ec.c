@@ -34,6 +34,14 @@
 
 #include "p256/p256_gf.h"
 
+#ifdef CRYPTON_S2N_BIGNUM
+#include "p256/p256_s2n.h"
+/* the memcpy below is the two representations being the same thing */
+#if P256_BITSPERDIGIT != 64 || P256_NDIGITS != 4
+#error "CRYPTON_S2N_BIGNUM wants the 64-bit crypton_p256_int"
+#endif
+#endif
+
 
 /* Field element operations: */
 
@@ -853,6 +861,19 @@ void crypton_p256e_point_negate(
 void crypton_p256e_point_mul(const crypton_p256_int* n,
     const crypton_p256_int* in_x, const crypton_p256_int* in_y,
     crypton_p256_int* out_x, crypton_p256_int* out_y) {
+#ifdef CRYPTON_S2N_BIGNUM
+  /* The vendored assembly, which answers the same thing two and a half to
+   * three times faster.  Both sides are four little-endian 64-bit words of
+   * an ordinary affine coordinate, so the points cross as they are, and
+   * both give (0, 0) for the point at infinity.  See cbits/s2n/README.md. */
+  uint64_t point[8], res[8];
+
+  memcpy(point, P256_DIGITS(in_x), P256_NBYTES);
+  memcpy(point + P256_NDIGITS, P256_DIGITS(in_y), P256_NBYTES);
+  crypton_s2n_p256_scalarmul(res, P256_DIGITS(n), point);
+  memcpy(P256_DIGITS(out_x), res, P256_NBYTES);
+  memcpy(P256_DIGITS(out_y), res + P256_NDIGITS, P256_NBYTES);
+#else
   felem x, y, z, px, py;
 
   to_montgomery(px, in_x);
@@ -861,4 +882,5 @@ void crypton_p256e_point_mul(const crypton_p256_int* n,
   point_to_affine(px, py, x, y, z);
   from_montgomery(out_x, px);
   from_montgomery(out_y, py);
+#endif
 }

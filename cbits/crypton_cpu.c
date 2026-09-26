@@ -223,6 +223,11 @@ uint32_t crypton_x86_simd_features(void)
 			if ((ebx & (1 << 5)) && (leaf1 & (1 << 27))
 			    && (leaf1 & (1 << 28)) && ((xcr0() & 6) == 6))
 				f |= CRYPTON_X86_AVX2;
+			/* BMI2 for MULX and ADX for ADCX/ADOX.  Both are
+			 * wanted together and neither touches vector state,
+			 * so there is nothing to ask the operating system */
+			if ((ebx & (1 << 8)) && (ebx & (1 << 19)))
+				f |= CRYPTON_X86_ADX;
 		}
 		features = f;
 		resolved = 1;
