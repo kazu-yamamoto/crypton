@@ -2,6 +2,17 @@
 
 ## 2.1.2
 
+* perf(p256): ECDH is 2.7 times faster on x86-64 and AArch64.  The
+  variable-point scalar multiplication now goes through AWS's
+  [s2n-bignum](https://github.com/awslabs/s2n-bignum), vendored in
+  `cbits/s2n`: hand-written assembly, constant-time, and carrying a
+  machine-checked proof in HOL-Light that it computes what it says.  Measured
+  through the Haskell API on an Apple M4, ECDH P-256 goes 57.50 to 21.32
+  microseconds; at the C level it is 2.6x there, 3.2x on an x86-64 with ADX
+  and 2.6x on one without.  Its licence is `Apache-2.0 OR ISC OR MIT-0`,
+  which is what makes this possible at all -- OpenSSL's and BoringSSL's
+  `ecp_nistz256` is Apache-2.0 only.  Every other architecture keeps the C,
+  as does Windows for now, and `-f-support_s2n_bignum` turns it off
 * perf(p256): the field inversion takes the least squarings an exponent of
   256 bits can be done in.  It built the low 94 ones of p-2 in a second
   accumulator and multiplied the two at the end, which cost 287 squarings
