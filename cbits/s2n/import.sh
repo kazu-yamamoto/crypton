@@ -71,6 +71,11 @@ take p521 bignum_mul_p521
 take p521 bignum_sqr_p521
 take p521 bignum_inv_p521
 
+# Inversion modulo an odd number of any size, which is what ECDSA does once
+# per signature and once per verification.  It uses no instruction beyond
+# the base architecture, so there is one of it and no run-time question.
+take generic bignum_modinv
+
 # Modular exponentiation at RSA sizes.  Only x86-64: on AArch64 crypton's C
 # is the faster of the two, measured, so nothing is taken for it.  The
 # Karatsuba multiplications and the reduction all want ADX.

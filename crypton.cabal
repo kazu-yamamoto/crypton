@@ -254,6 +254,7 @@ library
     -- limb counts, which are public.
     cc-options:       -std=gnu99 -O3
     c-sources:
+        cbits/crypton_modinv.c
         cbits/argon2/argon2.c
         cbits/crypton_blake2b.c
         cbits/crypton_blake2bp.c
@@ -488,6 +489,7 @@ library
         if arch(aarch64)
             asm-sources:
                 cbits/s2n/arm/bignum_deamont_p384.S
+                cbits/s2n/arm/bignum_modinv.S
                 cbits/s2n/arm/bignum_inv_p521.S
                 cbits/s2n/arm/bignum_montinv_p384.S
                 cbits/s2n/arm/bignum_montmul_p384.S
@@ -511,6 +513,7 @@ library
         else
             asm-sources:
                 cbits/s2n/x86_att/bignum_deamont_p384.S
+                cbits/s2n/x86_att/bignum_modinv.S
                 cbits/s2n/x86_att/bignum_deamont_p384_alt.S
                 cbits/s2n/x86_att/bignum_inv_p521.S
                 cbits/s2n/x86_att/bignum_montinv_p384.S

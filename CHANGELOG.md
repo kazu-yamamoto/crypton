@@ -2,6 +2,15 @@
 
 ## 2.1.2
 
+* perf(ecdsa): inverting modulo the group order, which ECDSA does once per
+  signature and once per verification, takes a fixed number of division
+  steps instead of a whole exponentiation.  Measured on an Apple M4:
+  P-256 6.02 to 0.80 microseconds, P-384 31.3 to 1.20, P-521 63.2 to 2.05.
+  Through the Haskell API that is ECDSA P-256 signing 11.77 to 7.10, which
+  is faster than OpenSSL on that machine, verification 36.75 to 32.10, and
+  P-384 signing 171.6 to 151.3.  `inverseSafe` carries it, so DSA, ElGamal,
+  RSA's `qinv` and `Crypto.PubKey.ECC.Prim` get it too; it checks its answer
+  by multiplying out, as it always has, and falls back where that fails
 * perf(rsa): the modular exponentiation's Montgomery multiplication and
   square go through s2n-bignum on x86-64 with ADX, which is twice as fast as
   the C there because the C cannot form the two carry chains `ADCX` and
