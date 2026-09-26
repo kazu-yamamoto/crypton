@@ -48,6 +48,37 @@ the same question on the two architectures:
   the fallback for processors without them.  That *is* a feature bit, so the
   choice is made at run time, from `crypton_x86_simd_features()`.
 
+## RSA
+
+`crypton_powm.c`'s modular exponentiation also borrows from here, but only its
+innermost step and only on x86-64: `bignum_kmul_16_32`, `bignum_ksqr_16_32`,
+`bignum_kmul_32_64`, `bignum_ksqr_32_64` and `bignum_emontredc_8n` replace the
+C's Montgomery multiplication and square.  The window, the table and its masked
+scan are crypton's throughout.  Sixteen limbs is 1024 bits and thirty-two is
+2048: the halves a CRT exponentiation works in for RSA-2048 and RSA-4096, and
+the whole thing without CRT.  The reduction wants ADX, so the choice is made at
+run time like the other x86-64 ones.
+
+It is twice the C, because the C cannot form the two carry chains `ADCX` and
+`ADOX` give.  Measured on an EPYC 7763 at 1024 bits:
+
+| | C | s2n-bignum |
+| --- | ---: | ---: |
+| multiplication | 0.4832 us | **0.2479** |
+| square | 0.3984 | **0.1994** |
+
+**Nothing is vendored for AArch64**, where the same measurement puts the C
+about 5% ahead of the assembly.  That leaves crypton's RSA on Apple silicon at
+about half OpenSSL's speed, and the reason is assembly and not the C: BearSSL's
+`i62` -- 62-bit limbs in 64-bit words, so that a multiply-accumulate fits an
+`__int128` with no carry chain at all, and a five-bit window against crypton's
+four, which is as far as portable C is known to go -- was built and measured
+against crypton's C on an M4, alternately and with the order swapped.
+One RSA-2048 CRT private operation, best of five each: **626.4 us for crypton,
+668.0 for BearSSL**.  There is no portable C left to find; closing that gap
+means writing the AArch64 Montgomery multiplication in assembly, or finding one
+under a licence this library can take.
+
 ## What is not here
 
 s2n-bignum has only x86-64 and AArch64, so crypton's C stays and is what
