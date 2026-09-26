@@ -196,7 +196,8 @@ static inline __m128i ghash16(__m128i tag, const table_4bit htable,
  * round key reached through an index the compiler cannot fold.
  */
 VAES_TARGET
-static inline void rounds16(__m256i *v, const uint8_t *k, int nbr)
+static inline __attribute__((always_inline)) void
+rounds16(__m256i *v, const uint8_t *k, const int nbr)
 {
 	const __m128i *k_ = (const __m128i *) k;
 
@@ -233,9 +234,18 @@ static inline __m128i counters16(__m256i *v, __m128i iv, __m128i one,
 	return iv;
 }
 
+/*
+ * The round count is a value in the key, and a test on it inside the group
+ * loop is a branch the 128-bit path does not have: that one compiles a
+ * separate function for each key length through the SIZED macro.  This does
+ * the same thing by being inlined into three callers with the count a
+ * constant in each, which folds the tests away.  Without it AES-256 lost
+ * what AES-128 gained.
+ */
 VAES_TARGET
-static uint32_t bulk(uint8_t *output, aes_gcm *gcm, const aes_key *key,
-                     const uint8_t *input, uint32_t length, int decrypt)
+static inline __attribute__((always_inline)) uint32_t
+bulk_n(uint8_t *output, aes_gcm *gcm, const aes_key *key,
+       const uint8_t *input, uint32_t length, int decrypt, const int nbr)
 {
 	const __m128i bswap = _mm_setr_epi8(7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8);
 	const __m128i one = _mm_set_epi32(0, 1, 0, 0);
@@ -254,7 +264,7 @@ static uint32_t bulk(uint8_t *output, aes_gcm *gcm, const aes_key *key,
 
 	for (g = 0; g < groups; g++, input += 256, output += 256, done += 256) {
 		iv = counters16(v, iv, one, bswap);
-		rounds16(v, key->data, key->nbr);
+		rounds16(v, key->data, nbr);
 
 		/*
 		 * The ciphertext is what the tag is taken over, and after
@@ -280,6 +290,22 @@ static uint32_t bulk(uint8_t *output, aes_gcm *gcm, const aes_key *key,
 	_mm_storeu_si128((__m128i *) &gcm->civ, _mm_shuffle_epi8(iv, bswap));
 	_mm_storeu_si128((__m128i *) &gcm->tag, tag);
 	return done;
+}
+
+VAES_TARGET
+static uint32_t bulk(uint8_t *output, aes_gcm *gcm, const aes_key *key,
+                     const uint8_t *input, uint32_t length, int decrypt)
+{
+	switch (key->nbr) {
+	case 10:
+		return bulk_n(output, gcm, key, input, length, decrypt, 10);
+	case 12:
+		return bulk_n(output, gcm, key, input, length, decrypt, 12);
+	case 14:
+		return bulk_n(output, gcm, key, input, length, decrypt, 14);
+	default:
+		return 0; /* not a key length AES has */
+	}
 }
 
 uint32_t crypton_gcm_vaes_bulk_encrypt(uint8_t *output, aes_gcm *gcm,
