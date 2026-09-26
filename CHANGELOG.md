@@ -2,6 +2,14 @@
 
 ## 2.1.2
 
+* perf(ecc): P-384 and P-521 go through s2n-bignum as well, where the curve
+  is exactly one of those two.  Measured through the Haskell API on an Apple
+  M4, ECDH P-384 goes 549.5 to 75.4 microseconds and ECDSA P-384
+  verification 772.4 to 295.8; at the C level P-384 is 7x and P-521 between
+  9 and 10x, on both architectures.  Signing does not move: there is no
+  fixed-base routine upstream for these two, so it keeps crypton's comb.
+  Every other curve `crypton_ecc_mul` is asked about, including these two
+  named with a different a or b, goes on to the C as before
 * perf(p256): ECDH is 2.7 times faster on x86-64 and AArch64.  The
   variable-point scalar multiplication now goes through AWS's
   [s2n-bignum](https://github.com/awslabs/s2n-bignum), vendored in

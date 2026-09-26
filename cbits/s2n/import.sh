@@ -26,13 +26,40 @@ for h in _internal_s2n_bignum_arm.h _internal_s2n_bignum_x86_att.h; do
 done
 cp "$TMP/s2n/LICENSE" "$HERE/LICENSE"
 
-# P-256 variable-point scalar multiplication, both variants of each: on ARM
-# the _alt form is the fast one on Apple silicon, on x86-64 it is the
-# fallback for processors without ADX.
-for f in p256_scalarmul p256_scalarmul_alt; do
-	cp "$TMP/s2n/arm/p256/$f.S"      "$HERE/arm/$f.S"
-	cp "$TMP/s2n/x86_att/p256/$f.S"  "$HERE/x86_att/$f.S"
-done
+# Both variants of each routine are taken, since which one is faster is not
+# the same question on the two architectures -- see README.md.  Where the
+# upstream tree has no separate _alt file the plain one defines both symbols,
+# so "copy it if it is there" gets the right set either way.
+take() {
+	curve=$1
+	name=$2
+	for arch in arm x86_att; do
+		for v in "" _alt; do
+			src="$TMP/s2n/$arch/$curve/$name$v.S"
+			if [ -f "$src" ]; then
+				cp "$src" "$HERE/$arch/$name$v.S"
+			fi
+		done
+	done
+}
+
+# P-256: variable-point scalar multiplication, affine in and out.
+take p256 p256_scalarmul
+
+# P-384 and P-521 have no affine wrapper upstream, so the Montgomery and
+# Jacobian conversions are built here out of these; the glue is in
+# cbits/crypton_ecc_s2n.c.
+take p384 p384_montjscalarmul
+take p384 bignum_tomont_p384
+take p384 bignum_deamont_p384
+take p384 bignum_montmul_p384
+take p384 bignum_montsqr_p384
+take p384 bignum_montinv_p384
+
+take p521 p521_jscalarmul
+take p521 bignum_mul_p521
+take p521 bignum_sqr_p521
+take p521 bignum_inv_p521
 
 git -C "$TMP/s2n" rev-parse HEAD > "$HERE/COMMIT"
 echo "imported $(cat "$HERE/COMMIT")"
