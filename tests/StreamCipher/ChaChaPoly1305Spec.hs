@@ -227,6 +227,12 @@ oneShotTests = describe "Crypto.Cipher.ChaCha.Poly1305" $ do
     it "refuses input shorter than the tag" $
         One.decrypt ctx nonce12 aad (B.replicate 8 0) 16
             `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "refuses a ciphertext with no authentication tag" $
+        One.decrypt ctx nonce12 aad ciphertext 0
+            `shouldBe` (Nothing :: Maybe B.ByteString)
+    it "does not authenticate an altered ciphertext with a zero-length tag" $
+        One.decrypt ctx nonce12 aad (flipHead ciphertext) 0
+            `shouldBe` (Nothing :: Maybe B.ByteString)
     it "refuses a nonce that is not twelve bytes" $ do
         One.decrypt ctx (B.replicate 10 0) aad sealed 16
             `shouldBe` (Nothing :: Maybe B.ByteString)
