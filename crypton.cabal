@@ -43,6 +43,7 @@ build-type:         Simple
 extra-source-files:
     cbits/*.h
     cbits/aes/*.h
+    cbits/curve25519/*.h
     cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
     cbits/asm/LICENSE.cryptogams
@@ -254,6 +255,7 @@ library
     -- limb counts, which are public.
     cc-options:       -std=gnu99 -O3
     c-sources:
+        cbits/curve25519/x25519.c
         cbits/crypton_modinv.c
         cbits/argon2/argon2.c
         cbits/crypton_blake2b.c
@@ -490,6 +492,10 @@ library
             asm-sources:
                 cbits/s2n/arm/bignum_deamont_p384.S
                 cbits/s2n/arm/bignum_modinv.S
+                cbits/s2n/arm/curve25519_x25519.S
+                cbits/s2n/arm/curve25519_x25519_alt.S
+                cbits/s2n/arm/curve25519_x25519base.S
+                cbits/s2n/arm/curve25519_x25519base_alt.S
                 cbits/s2n/arm/bignum_inv_p521.S
                 cbits/s2n/arm/bignum_montinv_p384.S
                 cbits/s2n/arm/bignum_montmul_p384.S
@@ -514,6 +520,10 @@ library
             asm-sources:
                 cbits/s2n/x86_att/bignum_deamont_p384.S
                 cbits/s2n/x86_att/bignum_modinv.S
+                cbits/s2n/x86_att/curve25519_x25519.S
+                cbits/s2n/x86_att/curve25519_x25519_alt.S
+                cbits/s2n/x86_att/curve25519_x25519base.S
+                cbits/s2n/x86_att/curve25519_x25519base_alt.S
                 cbits/s2n/x86_att/bignum_deamont_p384_alt.S
                 cbits/s2n/x86_att/bignum_inv_p521.S
                 cbits/s2n/x86_att/bignum_montinv_p384.S

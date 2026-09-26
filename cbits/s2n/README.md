@@ -17,7 +17,13 @@ own code in the same process, agreeing with it on every scalar tried:
 | --- | ---: | ---: |
 | Apple M4 | 52.9 us | **20.6** |
 | x86-64 with ADX (EPYC 9V74) | 175.9 | **54.5** |
-| x86-64 without ADX (Haswell) | 156.1 | **59.4** |
+| x86-64, ADX not advertised | 156.1 | **59.4** |
+
+The third row is the `_alt` path, which is what crypton picks where `CPUID`
+does not report ADX.  It was measured on a KVM guest whose `CPUID` says so
+while the host underneath runs ADX instructions anyway, so it says what the
+two implementations cost relative to each other on that path, not what an
+actual pre-Broadwell part would do.
 
 Each routine also carries a machine-checked proof in HOL-Light that it
 computes what it says, and is written in a constant-time style.
