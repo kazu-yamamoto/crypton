@@ -4,13 +4,11 @@
 
 * perf(gcm): AES-GCM uses the 256-bit form of the AES and carry-less
   multiply instructions where the processor has them, which is Zen 3 and Ice
-  Lake onwards.  Measured on an EPYC 7763 over 16 KiB, AES-128-GCM goes 4239
-  to 5411 MB/s and AES-256-GCM 3932 to 4867, which puts both ahead of
-  OpenSSL 3.0.13 on that machine for the first time.  It is not the two
-  times the instructions themselves are worth: the carry-less multiplies
-  turn out to cost more than the rounds on this part and they do not hide
-  behind them, so 1.28 is what the loop gets.  `crypton_cpu.c` asks the
-  processor first and everything else is unchanged
+  Lake onwards.  Measured on an EPYC 7763 over 16 KiB, in the library as
+  cabal builds it, AES-128-GCM goes 4245 to 6042 MB/s and AES-256-GCM 3932
+  to 5463 -- 1.42 and 1.39 times, and ahead of OpenSSL 3.0.13 on that
+  machine, which reaches 4266 and 3946.  `crypton_cpu.c` asks the processor
+  first and everything else is unchanged
 * perf(x25519): X25519 goes through s2n-bignum, and key generation reads a
   table rather than multiplying the base point 9 the general way, which is
   what crypton did for want of anything else.  Measured through the Haskell
