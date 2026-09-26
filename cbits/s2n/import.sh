@@ -71,6 +71,13 @@ take p521 bignum_mul_p521
 take p521 bignum_sqr_p521
 take p521 bignum_inv_p521
 
+# X25519, both the general one and the fixed-base one that a key is
+# generated with.  The word form, which both architectures have, rather than
+# the byte form that only AArch64 has: they measure the same and this way
+# there is one code path.
+take curve25519 curve25519_x25519
+take curve25519 curve25519_x25519base
+
 # Inversion modulo an odd number of any size, which is what ECDSA does once
 # per signature and once per verification.  It uses no instruction beyond
 # the base architecture, so there is one of it and no run-time question.

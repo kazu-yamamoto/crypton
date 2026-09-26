@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
@@ -31,7 +30,6 @@ import Data.Bits
 import Data.Word
 import Foreign.Ptr
 import Foreign.Storable
-import GHC.Ptr
 
 import Crypto.Error
 import Crypto.Internal.ByteArray (
@@ -114,20 +112,19 @@ dh (PublicKey pub) (SecretKey sec) = DhSecret
     $ \result ->
         withByteArray sec $ \psec ->
             withByteArray pub $ \ppub ->
-                ccrypton_curve25519 result psec ppub
+                ccrypton_x25519 result psec ppub
 {-# NOINLINE dh #-}
 
 -- | Create a public key from a secret key
+-- The base point does not go in: where the assembly is built there is a table
+-- for this, and it is four to five times less work than multiplying the point
+-- 9 the general way.
 toPublic :: SecretKey -> PublicKey
 toPublic (SecretKey sec) = PublicKey
     <$> B.allocAndFreeze 32
     $ \result ->
         withByteArray sec $ \psec ->
-            ccrypton_curve25519 result psec basePoint
-  where
-    basePoint =
-        Ptr
-            "\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"#
+            ccrypton_x25519_base result psec
 {-# NOINLINE toPublic #-}
 
 -- | Generate a secret key.
@@ -142,12 +139,20 @@ generateSecretKey = tweakToSecretKey <$> getRandomBytes 32
     modifyByte :: Ptr Word8 -> Int -> (Word8 -> Word8) -> IO ()
     modifyByte p n f = peekByteOff p n >>= pokeByteOff p n . f
 
-foreign import ccall "crypton_curve25519_donna"
-    ccrypton_curve25519
+foreign import ccall "crypton_x25519"
+    ccrypton_x25519
         :: Ptr Word8
         -- ^ public
         -> Ptr Word8
         -- ^ secret
         -> Ptr Word8
         -- ^ basepoint
+        -> IO ()
+
+foreign import ccall "crypton_x25519_base"
+    ccrypton_x25519_base
+        :: Ptr Word8
+        -- ^ public
+        -> Ptr Word8
+        -- ^ secret
         -> IO ()

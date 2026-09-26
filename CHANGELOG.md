@@ -2,6 +2,12 @@
 
 ## 2.1.2
 
+* perf(x25519): X25519 goes through s2n-bignum, and key generation reads a
+  table rather than multiplying the base point 9 the general way, which is
+  what crypton did for want of anything else.  Measured through the Haskell
+  API on an Apple M4, the shared secret goes 19.87 to 13.78 microseconds and
+  a key generation 19.92 to 3.83 -- on x86-64 the C level is 41.19 to 26.96
+  and 41.18 to 8.54.  The RFC 7748 vectors say the answers are the same
 * perf(ecdsa): inverting modulo the group order, which ECDSA does once per
   signature and once per verification, takes a fixed number of division
   steps instead of a whole exponentiation.  Measured on an Apple M4:
@@ -45,7 +51,7 @@
   machine-checked proof in HOL-Light that it computes what it says.  Measured
   through the Haskell API on an Apple M4, ECDH P-256 goes 57.50 to 21.32
   microseconds; at the C level it is 2.6x there, 3.2x on an x86-64 with ADX
-  and 2.6x on one without.  Its licence is `Apache-2.0 OR ISC OR MIT-0`,
+  and 2.6x on the `_alt` path taken where `CPUID` does not report it.  Its licence is `Apache-2.0 OR ISC OR MIT-0`,
   which is what makes this possible at all -- OpenSSL's and BoringSSL's
   `ecp_nistz256` is Apache-2.0 only.  Every other architecture keeps the C,
   as does Windows for now, and `-f-support_s2n_bignum` turns it off
