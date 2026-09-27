@@ -31,7 +31,6 @@ import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Internal.Imports
-import Data.Word (Word8)
 import Foreign.C.Types (CInt (..), CUInt (..))
 import Foreign.Ptr (Ptr, plusPtr)
 
