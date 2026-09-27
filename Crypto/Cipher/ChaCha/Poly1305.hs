@@ -58,7 +58,7 @@ newContext k
 -- which is the shape 'decrypt' expects.
 --
 -- The nonce is the twelve bytes RFC 8439 defines; any other length gives
--- 'CryptoError_IvSizeInvalid'.  The tag is at most 16 bytes.
+-- 'CryptoError_IvSizeInvalid'.  RFC 8439 requires a 16-byte tag.
 {-# INLINABLE encrypt #-}
 encrypt
     :: ( ByteArrayAccess nonce
@@ -189,7 +189,7 @@ validNonce :: ByteArrayAccess nonce => nonce -> Bool
 validNonce n = B.length n == 12
 
 badTag :: Int -> Bool
-badTag t = t < 0 || t > 16
+badTag t = t /= 16
 
 -- | An unsafe call keeps a capability for as long as it runs, so it is only
 -- for a message short enough that the run is short.  Four kibibytes is what

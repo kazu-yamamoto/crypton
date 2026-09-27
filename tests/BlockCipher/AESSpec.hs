@@ -3,6 +3,7 @@
 module BlockCipher.AESSpec (spec) where
 
 import BlockCipher
+import Control.Exception (evaluate)
 import qualified Crypto.Cipher.AES as AES
 import Crypto.Cipher.Types
 import Crypto.Error
@@ -256,6 +257,34 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
     it "refuses input shorter than the tag" $
         (GCM.decrypt ctx16 iv16 B.empty (B.replicate 8 0) 16 :: Maybe B.ByteString)
             `shouldBe` Nothing
+    it "refuses a ciphertext with no authentication tag" $
+        let sealed = GCM.encrypt ctx16 iv16 header message 16 :: B.ByteString
+            body = B.take (B.length sealed - 16) sealed
+         in (GCM.decrypt ctx16 iv16 header body 0 :: Maybe B.ByteString)
+                `shouldBe` Nothing
+    it "does not authenticate an altered ciphertext with a zero-length tag" $
+        let sealed = GCM.encrypt ctx16 iv16 header message 16 :: B.ByteString
+            body = B.take (B.length sealed - 16) sealed
+         in (GCM.decrypt ctx16 iv16 header (flipFirst body) 0 :: Maybe B.ByteString)
+                `shouldBe` Nothing
+    -- Shorter than four bytes the tag authenticates next to nothing, and
+    -- longer than sixteen there is no more tag for GCM to give.
+    describe "refuses a tag length outside 4 to 16 bytes" $
+        forM_ [0, 3, 17 :: Int] $ \taglen -> describe (show taglen) $ do
+            it "encrypt" $
+                evaluate (GCM.encrypt ctx16 iv16 header message taglen :: B.ByteString)
+                    `shouldThrow` (== CryptoError_AuthenticationTagSizeInvalid)
+            it "decrypt" $
+                (GCM.decrypt ctx16 iv16 header plainSealed taglen :: Maybe B.ByteString)
+                    `shouldBe` Nothing
+            it "decryptWithTag" $
+                evaluate
+                    ( GCM.decryptWithTag ctx16 iv16 header message taglen
+                        :: (B.ByteString, AuthTag)
+                    )
+                    `shouldThrow` (== CryptoError_AuthenticationTagSizeInvalid)
+            it "encryptWithMask" $
+                withMaskTag taglen 0 `shouldReturn` Nothing
     describe "header protection" $ do
         it "writes the ciphertext encrypt gives" $
             withMask 4 `shouldReturn` Just (plainSealed, expectedMask 4)
@@ -298,13 +327,14 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
     header = "\x40\x01\x02\x03" :: B.ByteString
     plainSealed = GCM.encrypt ctx16 iv16 header message 16 :: B.ByteString
     -- the buffers the caller owns, as a packet writer would have them
-    withMask off =
-        allocaBytes (B.length message + 16) $ \outp ->
+    withMask = withMaskTag 16
+    withMaskTag taglen off =
+        allocaBytes (B.length message + taglen) $ \outp ->
             allocaBytes 16 $ \maskp -> do
-                ok <- GCM.encryptWithMask ctx16 hpKey iv16 header message 16 off outp maskp
+                ok <- GCM.encryptWithMask ctx16 hpKey iv16 header message taglen off outp maskp
                 if ok
                     then do
-                        sealed <- B.packCStringLen (castPtr outp, B.length message + 16)
+                        sealed <- B.packCStringLen (castPtr outp, B.length message + taglen)
                         mask <- B.packCStringLen (castPtr maskp, 16)
                         return (Just (sealed, mask))
                     else return Nothing

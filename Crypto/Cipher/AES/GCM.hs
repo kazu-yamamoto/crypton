@@ -59,6 +59,7 @@ import Crypto.Cipher.AES.Primitive (
     initAES,
  )
 import Crypto.Cipher.Types (AuthTag)
+import Crypto.Cipher.Types.AEAD (minimumTagLength)
 import Crypto.Error
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
@@ -79,7 +80,8 @@ newContext k = do
 
 -- | Encrypt one message: the nonce, the additional data that is
 -- authenticated but not encrypted, the plaintext, and how many bytes of tag
--- to produce, which GCM allows between 4 and 16.
+-- to produce, which GCM allows between 4 and 16.  Any other length throws
+-- 'CryptoError_AuthenticationTagSizeInvalid', and so does 'decryptWithTag'.
 --
 -- The answer is the ciphertext followed by the tag.
 --
@@ -100,14 +102,17 @@ encrypt
     -> Int
     -> output
 encrypt (Context aes gk) nonce aad input taglen =
-    gcmFullEncrypt aes gk nonce aad input taglen
+    if badTagLength taglen
+        then throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
+        else gcmFullEncrypt aes gk nonce aad input taglen
 
 -- | Decrypt one message, in the shape 'encrypt' produced: the ciphertext with
 -- its tag after it.  The tag is compared here, every byte of it whatever the
 -- answer, and a message whose tag does not match gives 'Nothing' rather than
 -- the plaintext.
 --
--- 'Nothing' also comes back when the input is shorter than the tag.
+-- 'Nothing' also comes back when the input is shorter than the tag, or the
+-- tag length is outside 4 to 16.
 {-# INLINABLE decrypt #-}
 decrypt
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
@@ -118,7 +123,7 @@ decrypt
     -> Int
     -> Maybe ba
 decrypt (Context aes gk) nonce aad input taglen
-    | taglen < 0 || B.length input < taglen = Nothing
+    | badTagLength taglen || B.length input < taglen = Nothing
     | otherwise = gcmFullDecrypt aes gk nonce aad body tag
   where
     (body, tag) = B.splitAt (B.length input - taglen) input
@@ -145,7 +150,9 @@ decryptWithTag
     -> Int
     -> (ba, AuthTag)
 decryptWithTag (Context aes gk) nonce aad input taglen =
-    gcmFullDecryptTag aes gk nonce aad input taglen
+    if badTagLength taglen
+        then throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
+        else gcmFullDecryptTag aes gk nonce aad input taglen
 
 ----------------------------------------------------------------
 
@@ -170,7 +177,8 @@ newHeaderKey k = HeaderKey <$> initAES k
 -- sixteen.  @sampleOffset@ says where the sixteen bytes of sample begin in
 -- the sealed message, counting the tag as part of it.
 --
--- 'False' comes back, and nothing is written, when the sample would not fit.
+-- 'False' comes back, and nothing is written, when the sample would not fit
+-- or the tag length is outside 4 to 16.
 {-# INLINABLE encryptWithMask #-}
 encryptWithMask
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArrayAccess ba)
@@ -189,7 +197,13 @@ encryptWithMask
     -- ^ where the sixteen bytes of mask go
     -> IO Bool
 encryptWithMask (Context aes gk) (HeaderKey hp) nonce aad input taglen off outp maskp
-    | off < 0 || taglen < 0 || off + 16 > B.length input + taglen = return False
+    | off < 0 || badTagLength taglen || off + 16 > B.length input + taglen = return False
     | otherwise = do
         gcmFullEncryptMask aes gk hp nonce aad input taglen off outp maskp
         return True
+
+-- | GCM makes a sixteen-byte tag and a shorter one is a prefix of it.  Below
+-- 'minimumTagLength' it authenticates next to nothing, and past sixteen the
+-- C code would read beyond the tag it computed.
+badTagLength :: Int -> Bool
+badTagLength t = t < minimumTagLength || t > 16
