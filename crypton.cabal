@@ -12,31 +12,11 @@ tested-with:
 
 homepage:           https://github.com/kazu-yamamoto/crypton
 bug-reports:        https://github.com/kazu-yamamoto/crypton/issues
-synopsis:           Cryptography Primitives sink
-description:
-    A repository of cryptographic primitives.
-    .
-    * Symmetric ciphers: AES, DES, 3DES, CAST5, Blowfish, Twofish, Camellia, RC4, Salsa, XSalsa, ChaCha.
-    .
-    * Hash: SHA1, SHA2, SHA3, SHAKE, MD2, MD4, MD5, Keccak, Skein, Ripemd, Tiger, Whirlpool, Blake2
-    .
-    * MAC: HMAC, KMAC, Poly1305
-    .
-    * Asymmetric crypto: DSA, RSA, DH, ECDH, ECDSA, ECC, Curve25519, Curve448, Ed25519, Ed448
-    .
-    * Key Derivation Function: PBKDF2, Scrypt, HKDF, Argon2, BCrypt, BCryptPBKDF
-    .
-    * Cryptographic Random generation: System Entropy, Deterministic Random Generator
-    .
-    * Data related: Anti-Forensic Information Splitter (AFIS)
-    .
-    If anything cryptographic related is missing from here, submit
-    a pull request to have it added. This package strives to be a
-    cryptographic kitchen sink that provides cryptography for everyone.
-    .
-    Evaluate the security related to your requirements before using.
-    .
-    Read "Crypto.Tutorial" for a quick start guide.
+synopsis:           Cryptography Primitives
+wdescription:       `crypton` is a low-level cryptography library.
+                    To achieve high performance, it utilizes C and assembly
+                    language to define FFI bindings, structuring them
+                    in a way that makes them easy to use.
 
 category:           Cryptography
 build-type:         Simple

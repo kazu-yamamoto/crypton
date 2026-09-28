@@ -3,15 +3,13 @@
 crypton
 ==========
 
-Crypton is a fork from cryptonite with the original author's permission.
+`crypton` is a fork from `cryptonite` with the original author's permission.
 
-Crypton is a haskell repository of cryptographic primitives. Each crypto
-algorithm has specificities that are hard to wrap in common APIs and types,
-so instead of trying to provide a common ground for algorithms, this package
-provides a non-consistent low-level API.
 
-If you have no idea what you're doing, please do not use this directly.
-Instead, rely on higher level protocols or implementations.
+`crypton` is a low-level cryptography library. To achieve high
+performance, it utilizes C and assembly language to define FFI
+bindings, structuring them in a way that makes them easy to use.
+
 
 Side channels
 -------------
