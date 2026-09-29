@@ -2,6 +2,19 @@
 
 ## 2.1.3
 
+* perf(rsa): the masked scan of the exponentiation's table goes four limbs
+  at a time on x86-64 with AVX2.  Every entry of the table is read and a
+  mask keeps the one the window asks for, which is what keeps the address
+  stream off the exponent, and at RSA-2048's CRT size that is two kilobytes
+  read per window with 256 windows to an exponentiation -- 11% of the whole
+  where s2n-bignum's multiplication runs, measured by taking the scan out
+  altogether.  With the vector form almost all of it comes back: one
+  RSA-2048 CRT private operation goes 812.4 to 720.8 microseconds against a
+  707.1 floor with no scan at all, and on the same machine without ADX
+  1646.1 to 1599.3.  AArch64 keeps the scalar form, where the same
+  measurement puts the scan at 1% and there is nothing to win.  The
+  processor is asked once per call, and without the AVX2 bit, or built
+  without `use_target_attributes`, the scalar scan is what runs
 * perf(rsa): the modular exponentiation squares into the other of its two
   buffers and swaps them, rather than squaring into one and copying it back.
   That is a copy of the modulus' width saved 1280 times per exponentiation,
