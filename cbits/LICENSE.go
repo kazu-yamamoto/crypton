@@ -3,7 +3,10 @@ cbits/crypton_bignum.h -- four limbs to an iteration, the low halves of the
 products and the high halves accumulated in two chains -- follows
 addMulVVWx in Go's crypto/internal/fips140/bigmod/nat_arm64.s, written out
 in the assembler that file's compiler speaks.  Go is at
-https://github.com/golang/go and carries the licence below.
+https://github.com/golang/go and carries the licence below.  That file's
+own header reads "Copyright 2013 The Go Authors. All rights reserved.  Use
+of this source code is governed by a BSD-style license that can be found in
+the LICENSE file", and the LICENSE file it means is this one.
 
 
 Copyright 2009 The Go Authors.
