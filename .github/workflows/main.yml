@@ -190,6 +190,27 @@ jobs:
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
 
+    # The vendored assembly is x86-64 and AArch64 only, and every other
+    # architecture -- i386, armv7, riscv64, ppc64le, s390x, loongarch64,
+    # sparc64 -- takes the C beside it: crypton's own P-256 comb and window,
+    # the curve arithmetic in cbits/crypton_ecc.c that P-384 and P-521 fall
+    # back to, curve25519-donna and ed25519-donna.  Not one job above runs any
+    # of it, because every machine in the matrix has the assembly and takes
+    # it, so the tests walk past the C without touching it.  Changing the
+    # first bit the comb reads makes this step fail forty-two examples and
+    # leaves every job above passing, which is how far apart the two are.
+    #
+    # A build directory of its own: cabal does not recompile a C source when
+    # only its cc-options change, so sharing dist-newstyle would link the
+    # objects from the build above and measure nothing.  The dependencies come
+    # from the store, which is cached, so this is the library and the tests
+    # and nothing else.
+    - name: The C every other architecture uses
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: >
+        cabal test --builddir=dist-nos2n -f-support_s2n_bignum
+        ${{ env.target-config }} all
+
     # Saved after the build, so the entry holds the build products too, and
     # only from the default branch: a cache written on a branch is visible
     # only to that branch, while one written on the default branch is visible
