@@ -78,6 +78,12 @@ take p521 bignum_inv_p521
 take curve25519 curve25519_x25519
 take curve25519 curve25519_x25519base
 
+# Ed25519's base point multiplication, which signing does twice -- once for
+# the nonce's point and once for the public key it derives from the secret
+# key every time -- and the encoding of the result, which has one form.
+take curve25519 edwards25519_scalarmulbase
+take curve25519 edwards25519_encode
+
 # Inversion modulo an odd number of any size, which is what ECDSA does once
 # per signature and once per verification.  It uses no instruction beyond
 # the base architecture, so there is one of it and no run-time question.
