@@ -262,6 +262,43 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
  *
  * GCM's counter is the low 32 bits only and wraps there, so unlike CTR
  * there is no carry to chase: the top twelve bytes never move.
+ *
+ * What this loop is short of is not overlap but instructions.  A group of
+ * eight blocks compiles to 383 of them on an Apple M4, and only 152 are the
+ * cipher -- eighty AESE and seventy-two AESMC.  The rest is the GHASH and
+ * the counters.  Measured against OpenSSL on the same machine, 16 KiB
+ * messages under AES-128:
+ *
+ *     crypton, this loop with the GHASH taken out     19883 MB/s
+ *     OpenSSL, AES-128-CTR                            17176
+ *     OpenSSL, AES-128-GCM                             9869
+ *     crypton, AES-128-GCM                             8641
+ *
+ * The cipher here is ahead of OpenSSL's; all of the 0.87 is the GHASH.
+ * Four ways of closing it were tried and every one measured worse, so they
+ * are written down here rather than tried again.  Each was checked to give
+ * the same ciphertext and tag as this code for three key sizes and
+ * thirty-five lengths, encrypt and decrypt, before being timed:
+ *
+ *     the GHASH held back a group and spread through the next    -1.3%
+ *       group's AES rounds, so that the two do not queue         to -3.6%
+ *     Karatsuba: three multiplications for the two halves        -1.6%
+ *       instead of four
+ *     the same with every product on a lane the instruction       0.0%
+ *       reaches, which does remove sixteen fmov a group
+ *     the same again with the H powers' halves added together    -3%
+ *       already, in the spare half of htable
+ *
+ * The first fails because there was nothing to gain: a group's AES depends
+ * on nothing in the group before it, so a wide out-of-order core already
+ * runs the two together, and holding a group back only adds copies.  The
+ * rest fail for one reason -- none of them makes the loop shorter.
+ * Karatsuba buys a PMULL for two EOR and an EXT, and the folded table turns
+ * sixteen `dup` into sixteen `ld1r` and sixteen more address adds.  A count
+ * that does come down wants the data laid out differently, which is what
+ * OpenSSL's aes-gcm-armv8_64.pl is; it is Apache-2.0 and in OpenSSL's tree
+ * only, and CRYPTOGAMS, which cbits/asm vendors from, publishes AES and
+ * GHASH separately and nothing that stitches them.
  */
 #define GCM_CTR(i)   s[i] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c + 1 + (i)), base, 3));
 #define GCM_ENC(i)   { const uint8x16_t m_ = vld1q_u8(input + 16 * (i)); \
