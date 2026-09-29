@@ -468,6 +468,8 @@ library
             cbits/crypton_ecc_s2n.c
             cbits/p256/p256_base_table.c
             cbits/p256/p256_s2n.c
+            cbits/p256/p256_verify.c
+            cbits/p256/p256_wnaf_table.c
 
         if arch(aarch64)
             asm-sources:
@@ -491,6 +493,15 @@ library
                 cbits/s2n/arm/bignum_sqr_p521.S
                 cbits/s2n/arm/bignum_sqr_p521_alt.S
                 cbits/s2n/arm/bignum_tomont_p384.S
+                cbits/s2n/arm/bignum_demont_p256.S
+                cbits/s2n/arm/bignum_neg_p256.S
+                cbits/s2n/arm/bignum_tomont_p256.S
+                cbits/s2n/arm/p256_montjadd.S
+                cbits/s2n/arm/p256_montjadd_alt.S
+                cbits/s2n/arm/p256_montjdouble.S
+                cbits/s2n/arm/p256_montjdouble_alt.S
+                cbits/s2n/arm/p256_montjmixadd.S
+                cbits/s2n/arm/p256_montjmixadd_alt.S
                 cbits/s2n/arm/p256_scalarmul.S
                 cbits/s2n/arm/p256_scalarmul_alt.S
                 cbits/s2n/arm/p256_scalarmulbase.S
@@ -524,6 +535,17 @@ library
                 cbits/s2n/x86_att/bignum_sqr_p521_alt.S
                 cbits/s2n/x86_att/bignum_tomont_p384.S
                 cbits/s2n/x86_att/bignum_tomont_p384_alt.S
+                cbits/s2n/x86_att/bignum_demont_p256.S
+                cbits/s2n/x86_att/bignum_demont_p256_alt.S
+                cbits/s2n/x86_att/bignum_neg_p256.S
+                cbits/s2n/x86_att/bignum_tomont_p256.S
+                cbits/s2n/x86_att/bignum_tomont_p256_alt.S
+                cbits/s2n/x86_att/p256_montjadd.S
+                cbits/s2n/x86_att/p256_montjadd_alt.S
+                cbits/s2n/x86_att/p256_montjdouble.S
+                cbits/s2n/x86_att/p256_montjdouble_alt.S
+                cbits/s2n/x86_att/p256_montjmixadd.S
+                cbits/s2n/x86_att/p256_montjmixadd_alt.S
                 cbits/s2n/x86_att/p256_scalarmul.S
                 cbits/s2n/x86_att/p256_scalarmul_alt.S
                 cbits/s2n/x86_att/p256_scalarmulbase.S

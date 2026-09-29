@@ -36,6 +36,7 @@
 
 #ifdef CRYPTON_S2N_BIGNUM
 #include "p256/p256_s2n.h"
+#include "p256/p256_verify.h"
 /* the memcpy below is the two representations being the same thing */
 #if P256_BITSPERDIGIT != 64 || P256_NDIGITS != 4
 #error "CRYPTON_S2N_BIGNUM wants the 64-bit crypton_p256_int"
@@ -827,6 +828,31 @@ void crypton_p256_points_mul_vartime(
   }
 
 #ifdef CRYPTON_S2N_BIGNUM
+  {
+    /* Both scalars at once, in variable time, which is what the two
+     * multiplications below are not: they are constant time, and pay for it,
+     * over values that are all public here.  It gives up on the one case the
+     * assembly's addition does not cover -- adding a point to itself -- and
+     * then the constant-time pair answers instead. */
+    uint64_t jr[3 * P256_NDIGITS];
+
+    if (crypton_p256_verify_mul(jr, P256_DIGITS(n1), P256_DIGITS(n2),
+                                P256_DIGITS(in_x), P256_DIGITS(in_y))) {
+      crypton_p256_int t;
+
+      memcpy(P256_DIGITS(&t), jr, P256_NBYTES);
+      to_montgomery(x1, &t);
+      memcpy(P256_DIGITS(&t), jr + P256_NDIGITS, P256_NBYTES);
+      to_montgomery(y1, &t);
+      memcpy(P256_DIGITS(&t), jr + 2 * P256_NDIGITS, P256_NBYTES);
+      to_montgomery(z1, &t);
+
+      point_to_affine(px, py, x1, y1, z1);
+      from_montgomery(out_x, px);
+      from_montgomery(out_y, py);
+      return;
+    }
+  }
   {
     uint64_t r1[8], r2[8], pt[2 * P256_NDIGITS];
 

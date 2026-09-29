@@ -56,6 +56,16 @@ take() {
 take p256 p256_scalarmul
 take p256 p256_scalarmulbase
 
+# The Jacobian point operations, which ECDSA verification walks itself: it
+# multiplies two scalars at once, in variable time, which is allowed there
+# because everything it touches is public.  See cbits/p256/p256_verify.c.
+take p256 p256_montjadd
+take p256 p256_montjdouble
+take p256 p256_montjmixadd
+take p256 bignum_tomont_p256
+take p256 bignum_demont_p256
+take p256 bignum_neg_p256
+
 # P-384 and P-521 have no affine wrapper upstream, so the Montgomery and
 # Jacobian conversions are built here out of these; the glue is in
 # cbits/crypton_ecc_s2n.c.
