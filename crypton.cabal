@@ -13,7 +13,7 @@ tested-with:
 homepage:           https://github.com/kazu-yamamoto/crypton
 bug-reports:        https://github.com/kazu-yamamoto/crypton/issues
 synopsis:           Cryptography Primitives
-wdescription:       `crypton` is a low-level cryptography library.
+description:        `crypton` is a low-level cryptography library.
                     To achieve high performance, it utilizes C and assembly
                     language to define FFI bindings, structuring them
                     in a way that makes them easy to use.
