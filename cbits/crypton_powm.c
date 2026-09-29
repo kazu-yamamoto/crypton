@@ -240,8 +240,8 @@ int crypton_powm_sec(uint8_t *out,
 
 	if (from_be(m, n, mod, modlen) != 0)
 		goto fail;
-	mont_r2(r2, m, n, t);
 	n0 = mont_n0(m[0]);
+	mont_r2(r2, m, n0, n, t);
 
 	/* table[k] = base^k in Montgomery form, and table[0] = 1 there */
 	memset(table, 0, n * sizeof(limb_t));

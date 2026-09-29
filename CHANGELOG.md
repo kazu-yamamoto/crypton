@@ -18,6 +18,17 @@
   notice.  Three other arrangements were tried and measured worse, and the
   comment above the function says which and why, so that they are not tried
   again
+* perf(rsa): the R^2 that Montgomery arithmetic needs before it can start is
+  built by squaring rather than by doubling a bit at a time.  Write a value
+  as 2^(lgR + d) mod m; a Montgomery squaring divides by R, so it takes that
+  to 2^(lgR + 2d) and doubles d.  The climb from R to R^2 is then the binary
+  expansion of lgR -- ten squarings for a 1024-bit modulus, where there were
+  a thousand and twenty-five doublings.  On an Apple M4 the setup goes 24.74
+  to 2.07 microseconds, and an RSA-2048 signature does it twice, once for
+  each CRT half: the signature goes 512.3 to 466.9 through the Haskell API
+  and the two exponentiations 502.6 to 457.0.  Curves that go through
+  crypton_ecc.c pay the same setup once per context and gain the same.
+  Public-key operations still go through GMP and do not change
 * perf(ecdsa): P-256 verification multiplies both scalars at once, in
   variable time, where it used to do two constant-time multiplications and
   add the results.  Everything a verification touches is public -- the

@@ -287,10 +287,10 @@ static int ctx_init(curve_ctx *c, const uint8_t *a, const uint8_t *b,
 		ctx_free(c);
 		return -1;
 	}
-	mont_r2(c->r2, mp, n, mont_t);
+	c->f.n0 = mont_n0(mp[0]);
+	mont_r2(c->r2, mp, c->f.n0, n, mont_t);
 
 	c->f.n = n;
-	c->f.n0 = mont_n0(mp[0]);
 	c->f.p = mp;
 	c->f.a = ma;
 	c->f.b3 = mb3;
