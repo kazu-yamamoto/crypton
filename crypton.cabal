@@ -24,6 +24,7 @@ extra-source-files:
     cbits/*.h
     cbits/aes/*.h
     cbits/curve25519/*.h
+    cbits/aes/LICENSE.fusion
     cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
     cbits/LICENSE.go
