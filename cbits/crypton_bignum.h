@@ -112,9 +112,46 @@ static inline limb_t mont_n0(limb_t m0)
 	return (limb_t) 0 - inv;
 }
 
-/* t += a * b over n limbs, returning the carry.  This is where nearly all of
- * the time goes, so the limbs are taken eight at a time; what is left over at
- * the end is taken one at a time. */
+/*
+ * t += a * b over n limbs, returning the carry.  This is where nearly all of
+ * the time goes, so the limbs are taken eight at a time; what is left over
+ * at the end is taken one at a time.
+ *
+ * On AArch64 the compiler writes each limb as `mul`, `umulh`, `adds`,
+ * `cset`, `adds`, `adc`: the carry out of one 128-bit addition leaves the
+ * flags for a general register and is added back in the next, because in C
+ * each addition is a statement of its own.  Two of those instructions are
+ * that round trip, and three attempts to take them back all measured worse
+ * on an Apple M4 -- one RSA-2048 CRT private operation, best of many:
+ *
+ *     this loop in inline assembly, the carry kept in the flags   654.7 us
+ *     the same with the loads hoisted out of the chain            644.5
+ *     the multiply interleaved with its reduction (CIOS)          604.1
+ *     what is here                                                586.1
+ *
+ * The first two lose because the flag chain serialises what the spare `cset`
+ * lets overlap: `adds`, `adc`, `adds`, `adc` is four dependent steps per
+ * limb, and a wide out-of-order core would rather have the extra instruction
+ * than the dependency.  The third loses because shifting the accumulator
+ * down a limb each round costs more than the round trip through 2n limbs
+ * that it saves.
+ *
+ * Something is still there to win, and it is not small.  OpenSSL's
+ * armv8-mont.pl does a 16-limb Montgomery multiplication in about 523 cycles
+ * where this file takes 927 -- 0.98 multiply-accumulates per cycle against
+ * 0.55 -- and since a multiply-accumulate is two instructions here and the
+ * machine issues two multiplies a cycle, 1.0 is the ceiling and OpenSSL is
+ * at it.  Reaching it means accumulating a whole row in two chains at once,
+ * which is what that 1500-line generator does and what none of the three
+ * tries above attempts.
+ *
+ * It cannot be borrowed: armv8-mont.pl is in OpenSSL's tree only, under
+ * Apache-2.0, and CRYPTOGAMS -- which crypton does vendor from -- publishes
+ * no Montgomery generator at all.  BearSSL's only ARM assembly is 32-bit
+ * Thumb for Cortex-M0 to M3, with fifteen-bit limbs for cores that have no
+ * fast multiplier, and Botan's AArch64 inline assembly is the
+ * `mul`/`umulh`/`adds`/`adc` primitive the compiler already emits.
+ */
 #define ADDMUL_STEP(k)                                                  \
 	p = (dlimb_t) a[i + (k)] * b + t[i + (k)] + carry;                  \
 	t[i + (k)] = (limb_t) p;                                            \
