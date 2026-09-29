@@ -12,6 +12,31 @@
 #include "ed25519-randombytes.h"
 #include "ed25519-hash.h"
 #include "ed25519-crypton-exts.h"
+#include "ed25519/ed25519_s2n.h"
+
+/*
+	The base point multiplied by a scalar, packed.  s2n-bignum's assembly
+	where it is built -- twice the speed of the table below, and signing
+	does this twice -- and ed25519-donna's own table where it is not.
+*/
+static void
+ed25519_base_pack(ed25519_public_key out, const bignum256modm s) {
+	ge25519 ALIGN(16) p;
+
+#if defined(CRYPTON_S2N_BIGNUM) && defined(__BYTE_ORDER__) \
+    && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	unsigned char e[32];
+
+	contract256_modm(e, s);
+	if (crypton_ed25519_base_mult(out, e)) {
+		memset(e, 0, sizeof e);
+		return;
+	}
+	memset(e, 0, sizeof e);
+#endif
+	ge25519_scalarmult_base_niels(&p, ge25519_niels_base_multiples, s);
+	ge25519_pack(out, &p);
+}
 
 /*
 	Generates a (extsk[0..31]) and aExt (extsk[32..63])
@@ -38,14 +63,12 @@ ed25519_hram(hash_512bits hram, const ed25519_signature RS, const ed25519_public
 void
 ED25519_FN(ed25519_publickey) (const ed25519_secret_key sk, ed25519_public_key pk) {
 	bignum256modm a;
-	ge25519 ALIGN(16) A;
 	hash_512bits extsk;
 
 	/* A = aB */
 	ed25519_extsk(extsk, sk);
 	expand256_modm(a, extsk, 32);
-	ge25519_scalarmult_base_niels(&A, ge25519_niels_base_multiples, a);
-	ge25519_pack(pk, &A);
+	ed25519_base_pack(pk, a);
 }
 
 
@@ -53,7 +76,6 @@ void
 ED25519_FN(ed25519_sign) (const unsigned char *m, size_t mlen, const ed25519_secret_key sk, const ed25519_public_key pk, ed25519_signature RS) {
 	ed25519_hash_context ctx;
 	bignum256modm r, S, a;
-	ge25519 ALIGN(16) R;
 	hash_512bits extsk, hashr, hram;
 
 	ed25519_extsk(extsk, sk);
@@ -66,8 +88,7 @@ ED25519_FN(ed25519_sign) (const unsigned char *m, size_t mlen, const ed25519_sec
 	expand256_modm(r, hashr, 64);
 
 	/* R = rB */
-	ge25519_scalarmult_base_niels(&R, ge25519_niels_base_multiples, r);
-	ge25519_pack(RS, &R);
+	ed25519_base_pack(RS, r);
 
 	/* S = H(R,A,m).. */
 	ed25519_hram(hram, RS, pk, m, mlen);

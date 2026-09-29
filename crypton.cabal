@@ -271,6 +271,7 @@ library
         cbits/crypton_whirlpool.c
         cbits/crypton_xsalsa.c
         cbits/ed25519/ed25519.c
+        cbits/ed25519/ed25519_s2n.c
         cbits/p256/p256.c
         cbits/p256/p256_ec.c
 
@@ -476,6 +477,9 @@ library
                 cbits/s2n/arm/curve25519_x25519_alt.S
                 cbits/s2n/arm/curve25519_x25519base.S
                 cbits/s2n/arm/curve25519_x25519base_alt.S
+                cbits/s2n/arm/edwards25519_encode.S
+                cbits/s2n/arm/edwards25519_scalarmulbase.S
+                cbits/s2n/arm/edwards25519_scalarmulbase_alt.S
                 cbits/s2n/arm/bignum_inv_p521.S
                 cbits/s2n/arm/bignum_montinv_p384.S
                 cbits/s2n/arm/bignum_montmul_p384.S
@@ -504,6 +508,9 @@ library
                 cbits/s2n/x86_att/curve25519_x25519_alt.S
                 cbits/s2n/x86_att/curve25519_x25519base.S
                 cbits/s2n/x86_att/curve25519_x25519base_alt.S
+                cbits/s2n/x86_att/edwards25519_encode.S
+                cbits/s2n/x86_att/edwards25519_scalarmulbase.S
+                cbits/s2n/x86_att/edwards25519_scalarmulbase_alt.S
                 cbits/s2n/x86_att/bignum_deamont_p384_alt.S
                 cbits/s2n/x86_att/bignum_inv_p521.S
                 cbits/s2n/x86_att/bignum_montinv_p384.S

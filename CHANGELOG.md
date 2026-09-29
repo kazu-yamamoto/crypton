@@ -2,6 +2,18 @@
 
 ## 2.1.3
 
+* perf(ed25519): the base point multiplication goes through s2n-bignum,
+  which signing does twice -- once for the nonce's point and once for the
+  public key, which `sign` derives from the secret key every time rather
+  than trusting the one it is handed.  Measured through the Haskell API on
+  an Apple M4, signing goes 11.92 to 7.27 microseconds and `toPublic` 5.97
+  to 3.52; at the C level on an x86-64 without ADX, where the `_alt` form
+  runs, a public key goes 13.25 to 9.93 and a signature with the key in
+  hand 14.74 to 11.34.  Verification is untouched: it multiplies two
+  scalars at once and crypton's variable-time code is ahead of the
+  constant-time assembly there.  ed25519-donna's table stays for every
+  other architecture, and 5000 key and signature pairs agree between the
+  two paths on both architectures
 * perf(rsa): the masked scan of the exponentiation's table goes four limbs
   at a time on x86-64 with AVX2.  Every entry of the table is read and a
   mask keeps the one the window asks for, which is what keeps the address
