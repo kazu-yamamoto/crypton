@@ -2,6 +2,20 @@
 
 ## 2.1.3
 
+* security(aes): `Crypto.Cipher.AES.GCM` refuses a nonce of no bytes, which
+  its four functions used to accept.  SP 800-38D 5.2.1.1 asks for at least
+  one byte, and with none GCM's pre-counter block is zero, so the tag of a
+  message is `GHASH_H(A, C) XOR E(K, 0^128)` -- and `E(K, 0^128)` is the
+  GHASH key `H` itself.  One full tag therefore gives `H` away; `H` belongs
+  to the key rather than to the nonce, so an attacker who has it, and one
+  genuine message under any nonce, can forge a tag that verifies for data of
+  their own under that nonce, twelve-byte ones included.  `encrypt` and
+  `decryptWithTag` now throw `CryptoError_IvSizeInvalid`, `decrypt` gives
+  `Nothing` and `encryptWithMask` gives `False` and writes nothing.  Only the
+  empty nonce is refused; every other length stays allowed.  The general
+  interface has refused it since 2.1.0 and this module did not.  Affects
+  2.1.0, 2.1.1 and 2.1.2.  Reported by arybczak in
+  [#249](https://github.com/kazu-yamamoto/crypton/issues/249)
 * perf(rsa): the multiply-accumulate at the bottom of the modular
   exponentiation takes four limbs to an iteration on AArch64, with the flags
   carrying through two long chains -- one for the low halves of the four
