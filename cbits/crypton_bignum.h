@@ -132,6 +132,7 @@ static inline limb_t mont_n0(limb_t m0)
  *     the multiply interleaved with its reduction (CIOS)         604.1
  *     the C below                                                590.1
  *     what the AArch64 block does, four limbs and two chains     514.9
+ *     the same, with the ragged end of the row written out too   503.4
  *
  * The first two lose because a chain per limb serialises what the spare
  * `cset` lets overlap: `adds`, `adc`, `adds`, `adc` is four dependent steps
@@ -218,11 +219,83 @@ static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 		: [b] "r"(b)
 		: "cc", "memory");
 	}
-	while (left--) {
-		dlimb_t p = (dlimb_t) *a++ * b + *t + carry;
-
-		*t++ = (limb_t) p;
-		carry = (limb_t) (p >> LIMB_BITS);
+	/* What is left of the row: three limbs, two, or one, each the same two
+	 * chains cut short.  This is not a rare case to be handed back to C --
+	 * mont_sqr asks for every length from n-1 down to 1, so three rows in
+	 * four end ragged.  Only 4.7% of the limbs in a 1024-bit exponentiation
+	 * arrive here, but they were the dearer ones, and writing them out is
+	 * worth the last two per cent in the table above.  The three lengths
+	 * are spelled out rather than run as 2+1, because chaining two short
+	 * blocks makes the second wait on the first: that costs two thirds of
+	 * the gain.
+	 */
+	if (left == 3) {
+		__asm__ volatile(
+		"ldp	%[x0], %[x1], [%[a]]\n\t"
+		"ldr	%[x2], [%[a], #16]\n\t"
+		"add	%[a], %[a], #24\n\t"
+		"ldp	%[z0], %[z1], [%[t]]\n\t"
+		"ldr	%[z2], [%[t], #16]\n\t"
+		"adds	%[z0], %[z0], %[c]\n\t"
+		"mul	%[l1], %[x1], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[l1]\n\t"
+		"mul	%[l2], %[x2], %[b]\n\t"
+		"adcs	%[z2], %[z2], %[l2]\n\t"
+		"umulh	%[h2], %[x2], %[b]\n\t"
+		"adc	%[h2], %[h2], xzr\n\t"
+		"mul	%[l0], %[x0], %[b]\n\t"
+		"adds	%[z0], %[z0], %[l0]\n\t"
+		"umulh	%[h0], %[x0], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[h0]\n\t"
+		"umulh	%[h1], %[x1], %[b]\n\t"
+		"stp	%[z0], %[z1], [%[t]], #16\n\t"
+		"adcs	%[z2], %[z2], %[h1]\n\t"
+		"str	%[z2], [%[t]], #8\n\t"
+		"adc	%[c], %[h2], xzr\n\t"
+		: [a] "+r"(a), [t] "+r"(t), [c] "+r"(carry),
+		  [x0] "=&r"(x0), [x1] "=&r"(x1), [x2] "=&r"(x2),
+		  [z0] "=&r"(z0), [z1] "=&r"(z1), [z2] "=&r"(z2),
+		  [l0] "=&r"(l0), [l1] "=&r"(l1), [l2] "=&r"(l2),
+		  [h0] "=&r"(h0), [h1] "=&r"(h1), [h2] "=&r"(h2)
+		: [b] "r"(b)
+		: "cc", "memory");
+	} else if (left == 2) {
+		__asm__ volatile(
+		"ldp	%[x0], %[x1], [%[a]], #16\n\t"
+		"ldp	%[z0], %[z1], [%[t]]\n\t"
+		"adds	%[z0], %[z0], %[c]\n\t"
+		"mul	%[l1], %[x1], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[l1]\n\t"
+		"umulh	%[h1], %[x1], %[b]\n\t"
+		"adc	%[h1], %[h1], xzr\n\t"
+		"mul	%[l0], %[x0], %[b]\n\t"
+		"adds	%[z0], %[z0], %[l0]\n\t"
+		"umulh	%[h0], %[x0], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[h0]\n\t"
+		"stp	%[z0], %[z1], [%[t]], #16\n\t"
+		"adc	%[c], %[h1], xzr\n\t"
+		: [a] "+r"(a), [t] "+r"(t), [c] "+r"(carry),
+		  [x0] "=&r"(x0), [x1] "=&r"(x1), [z0] "=&r"(z0),
+		  [z1] "=&r"(z1), [l0] "=&r"(l0), [l1] "=&r"(l1),
+		  [h0] "=&r"(h0), [h1] "=&r"(h1)
+		: [b] "r"(b)
+		: "cc", "memory");
+	} else if (left == 1) {
+		__asm__ volatile(
+		"ldr	%[x0], [%[a]], #8\n\t"
+		"ldr	%[z0], [%[t]]\n\t"
+		"mul	%[l0], %[x0], %[b]\n\t"
+		"adds	%[z0], %[z0], %[c]\n\t"
+		"umulh	%[h0], %[x0], %[b]\n\t"
+		"adc	%[h0], %[h0], xzr\n\t"
+		"adds	%[z0], %[z0], %[l0]\n\t"
+		"str	%[z0], [%[t]], #8\n\t"
+		"adc	%[c], %[h0], xzr\n\t"
+		: [a] "+r"(a), [t] "+r"(t), [c] "+r"(carry),
+		  [x0] "=&r"(x0), [z0] "=&r"(z0), [l0] "=&r"(l0),
+		  [h0] "=&r"(h0)
+		: [b] "r"(b)
+		: "cc", "memory");
 	}
 	return carry;
 }
