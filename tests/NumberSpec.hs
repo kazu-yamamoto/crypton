@@ -95,6 +95,24 @@ bigPrime, bigComposite :: Integer
 bigPrime = 2 ^ (512 :: Int) - 569
 bigComposite = (2 ^ (256 :: Int) - 189) * (2 ^ (256 :: Int) - 357)
 
+-- | The two sizes at which the exponentiation hands its multiplication to
+-- s2n-bignum's assembly: a modulus of exactly sixteen or thirty-two 64-bit
+-- limbs, which is 1024 or 2048 bits -- the halves a CRT exponentiation works
+-- in for RSA-2048 and RSA-4096, and nothing else.  A property over moduli of
+-- no particular size reaches that path only by accident, and the one below
+-- with "a modulus a key would have" is 1025 bits, one limb too wide.
+modulus1024, modulus2048 :: Integer
+modulus1024 = bit 1023 .|. (bigPrime * bigComposite `mod` bit 1023) .|. 1
+modulus2048 =
+    bit 2047 .|. ((bigPrime * bigComposite) ^ (2 :: Int) `mod` bit 2047) .|. 1
+
+-- | A number of up to this many bytes.  'QAInteger' stops at thirty-two,
+-- which is too narrow for either of these: the base has to be able to fill a
+-- modulus and to overflow it, and the exponent's length is what the window
+-- walks.
+wideOf :: Int -> Gen Integer
+wideOf bytes = BE.os2ip <$> arbitraryBSof 0 bytes
+
 -- the index is threaded through so that repeated calls cannot be shared
 askAgain :: Int -> Integer -> Bool
 askAgain i n = i `seq` primalityTestMillerRabin 1 n
@@ -174,6 +192,16 @@ exponentiationTests = describe "exponentiation" $ do
         \(QAInteger b) (QAInteger e) ->
             let m = 2 * bigPrime * bigComposite + 1 -- odd, and 1025 bits
              in expSafe b (abs e) m === expFast b (abs e) m
+    prop "agrees with the fast one at the two sizes with assembly behind them" $
+        forAll (elements [modulus1024, modulus2048]) $ \m ->
+            forAll (wideOf 300) $ \b ->
+                forAll (wideOf 256) $ \e ->
+                    expSafe b e m === expFast b e m
+    prop "agrees with the fast one whatever the exponent's length" $
+        forAll (choose (0, 129)) $ \bytes ->
+            forAll (wideOf bytes) $ \e ->
+                forAll (wideOf 128) $ \b ->
+                    expSafe b e modulus1024 === expFast b e modulus1024
   where
     safely (b, e, m) = expSafe b e m
     fastly (b, e, m) = expFast b e m
