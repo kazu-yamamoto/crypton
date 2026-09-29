@@ -1,8 +1,20 @@
 cabal-version:      3.0
 name:               crypton
 version:            2.1.2
-license:            BSD-3-Clause
-license-file:       LICENSE
+-- crypton's own code is BSD-3-Clause.  The parts of
+-- cbits/aes/gcm_fused_x86.c that follow picotls's fusion are MIT, and the
+-- vendored s2n-bignum assembly in cbits/s2n is taken under ISC; each has
+-- its licence beside it, and they are listed below.  The CRYPTOGAMS
+-- assembly in cbits/asm is taken under its BSD-3-Clause option, and the
+-- AArch64 multiply-accumulate loop in cbits/crypton_bignum.h follows Go's,
+-- which is BSD-3-Clause too; the first term already covers both.
+license:            BSD-3-Clause AND MIT AND ISC
+license-files:
+    LICENSE
+    cbits/LICENSE.go
+    cbits/aes/LICENSE.fusion
+    cbits/asm/LICENSE.cryptogams
+    cbits/s2n/LICENSE
 copyright:          Vincent Hanquez <vincent@snarc.org>
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
 author:             Vincent Hanquez <vincent@snarc.org>
@@ -24,11 +36,8 @@ extra-source-files:
     cbits/*.h
     cbits/aes/*.h
     cbits/curve25519/*.h
-    cbits/aes/LICENSE.fusion
     cbits/aes/armv8_impl.c
     cbits/aes/x86ni_impl.c
-    cbits/LICENSE.go
-    cbits/asm/LICENSE.cryptogams
     cbits/asm/README.md
     cbits/asm/aesni-gcm-x86_64.pl
     cbits/asm/arm-xlate.pl
@@ -63,7 +72,6 @@ extra-source-files:
     cbits/include32/p256/*.h
     cbits/include64/p256/*.h
     cbits/s2n/COMMIT
-    cbits/s2n/LICENSE
     cbits/s2n/README.md
     cbits/s2n/arm/*.S
     cbits/p256/gen_base_table.py
