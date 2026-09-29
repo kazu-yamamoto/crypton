@@ -2,6 +2,18 @@
 
 ## 2.1.3
 
+* perf(rsa): the multiply-accumulate at the bottom of the modular
+  exponentiation takes four limbs to an iteration on AArch64, with the flags
+  carrying through two long chains -- one for the low halves of the four
+  products, one for the high halves a place up -- where the compiler writes
+  a chain per limb and spends two instructions moving each carry between the
+  flags and a register.  Measured on an Apple M4, an RSA-2048 signature goes
+  593.0 to 515.9 microseconds through the Haskell API and the exponentiation
+  itself 590.1 to 514.9.  The arrangement follows addMulVVWx in Go's
+  crypto/internal/fips140/bigmod, which is BSD-3-Clause as this library is;
+  cbits/LICENSE.go carries its notice.  Three other arrangements were tried
+  and measured worse, and the comment above the function says which and why,
+  so that they are not tried again
 * perf(ecdsa): P-256 verification multiplies both scalars at once, in
   variable time, where it used to do two constant-time multiplications and
   add the results.  Everything a verification touches is public -- the

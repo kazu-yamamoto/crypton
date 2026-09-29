@@ -114,49 +114,119 @@ static inline limb_t mont_n0(limb_t m0)
 
 /*
  * t += a * b over n limbs, returning the carry.  This is where nearly all of
- * the time goes, so the limbs are taken eight at a time; what is left over
- * at the end is taken one at a time.
+ * the time goes.
  *
- * On AArch64 the compiler writes each limb as `mul`, `umulh`, `adds`,
- * `cset`, `adds`, `adc`: the carry out of one 128-bit addition leaves the
- * flags for a general register and is added back in the next, because in C
- * each addition is a statement of its own.  Two of those instructions are
- * that round trip, and three attempts to take them back all measured worse
- * on an Apple M4 -- one RSA-2048 CRT private operation, best of many:
+ * The C below takes the limbs eight at a time; what is left over at the end
+ * is taken one at a time.  On AArch64 the compiler writes each limb as
+ * `mul`, `umulh`, `adds`, `cset`, `adds`, `adc`: the carry out of one
+ * 128-bit addition leaves the flags for a general register and is added back
+ * in the next, because in C each addition is a statement of its own.  Two of
+ * those instructions are that round trip.
  *
- *     this loop in inline assembly, the carry kept in the flags   654.7 us
- *     the same with the loads hoisted out of the chain            644.5
- *     the multiply interleaved with its reduction (CIOS)          604.1
- *     what is here                                                586.1
+ * Three attempts to take them back measured worse than the C, and are
+ * written down here so that they are not tried again -- one RSA-2048 CRT
+ * private operation on an Apple M4, best of many:
  *
- * The first two lose because the flag chain serialises what the spare `cset`
- * lets overlap: `adds`, `adc`, `adds`, `adc` is four dependent steps per
- * limb, and a wide out-of-order core would rather have the extra instruction
- * than the dependency.  The third loses because shifting the accumulator
- * down a limb each round costs more than the round trip through 2n limbs
- * that it saves.
+ *     this loop in inline assembly, a carry chain per limb       654.7 us
+ *     the same with the loads hoisted out of the chain           644.5
+ *     the multiply interleaved with its reduction (CIOS)         604.1
+ *     the C below                                                590.1
+ *     what the AArch64 block does, four limbs and two chains     514.9
  *
- * Something is still there to win, and it is not small.  OpenSSL's
- * armv8-mont.pl does a 16-limb Montgomery multiplication in about 523 cycles
- * where this file takes 927 -- 0.98 multiply-accumulates per cycle against
- * 0.55 -- and since a multiply-accumulate is two instructions here and the
- * machine issues two multiplies a cycle, 1.0 is the ceiling and OpenSSL is
- * at it.  Reaching it means accumulating a whole row in two chains at once,
- * which is what that 1500-line generator does and what none of the three
- * tries above attempts.
+ * The first two lose because a chain per limb serialises what the spare
+ * `cset` lets overlap: `adds`, `adc`, `adds`, `adc` is four dependent steps
+ * per limb, and a wide out-of-order core would rather have the extra
+ * instruction than the dependency.  The third loses because shifting the
+ * accumulator down a limb each round costs more than the round trip through
+ * 2n limbs that it saves.  What works is neither: four limbs to an
+ * iteration with the flags carrying through two long chains, one for the low
+ * halves of the products and one for the high halves a place up.
  *
- * It cannot be borrowed: armv8-mont.pl is in OpenSSL's tree only, under
- * Apache-2.0, and CRYPTOGAMS -- which crypton does vendor from -- publishes
- * no Montgomery generator at all.  BearSSL's only ARM assembly is 32-bit
- * Thumb for Cortex-M0 to M3, with fifteen-bit limbs for cores that have no
- * fast multiplier, and Botan's AArch64 inline assembly is the
- * `mul`/`umulh`/`adds`/`adc` primitive the compiler already emits.
+ * There is more still there.  OpenSSL's armv8-mont.pl runs a 16-limb
+ * Montgomery multiplication at about 0.98 multiply-accumulates per cycle;
+ * this file was at 0.55 and the block below brings it to 0.64, where 1.0 is
+ * the ceiling -- a multiply-accumulate is two instructions and the machine
+ * issues two multiplies a cycle.  That code cannot be borrowed: it is in
+ * OpenSSL's tree only, under Apache-2.0, and CRYPTOGAMS, which this library
+ * does vendor from, publishes no Montgomery generator at all.  BearSSL's
+ * only ARM assembly is 32-bit Thumb for Cortex-M0 to M3, with fifteen-bit
+ * limbs for cores that have no fast multiplier, and Botan's AArch64 inline
+ * assembly is the `mul`/`umulh`/`adds`/`adc` primitive the compiler already
+ * emits.
  */
-#define ADDMUL_STEP(k)                                                  \
-	p = (dlimb_t) a[i + (k)] * b + t[i + (k)] + carry;                  \
-	t[i + (k)] = (limb_t) p;                                            \
-	carry = (limb_t) (p >> LIMB_BITS);
+#if defined(__aarch64__) && LIMB_BITS == 64 \
+    && (defined(__GNUC__) || defined(__clang__))
+/*
+ * Four limbs to an iteration, accumulated in two chains rather than one per
+ * limb: the low halves of the four products, with the carry coming in, are
+ * one run of `adds` and `adcs`, and the high halves shifted up a place are
+ * another.  The flags carry the whole way through each, which is what the C
+ * above cannot say and what it pays for in `cset` and an extra add.
+ *
+ * The arrangement is the one in Go's crypto/internal/fips140/bigmod
+ * (nat_arm64.s, addMulVVWx), which is BSD-3-Clause like this library --
+ * cbits/LICENSE.go carries its notice.  Written out here in the assembler
+ * this file's compiler speaks.
+ */
+static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
+{
+	uint64_t carry = 0;
+	uint64_t x0, x1, x2, x3, z0, z1, z2, z3;
+	uint64_t l0, l1, l2, l3, h0, h1, h2, h3;
+	uint64_t blocks = n / 4, left = n % 4;
 
+	if (blocks) {
+		__asm__ volatile(
+		"1:\n\t"
+		"ldp	%[x0], %[x1], [%[a]], #16\n\t"
+		"ldp	%[x2], %[x3], [%[a]], #16\n\t"
+		"ldp	%[z0], %[z1], [%[t]]\n\t"
+		/* the low halves, one place up from the second chain, with
+		 * the carry that came in */
+		"adds	%[z0], %[z0], %[c]\n\t"
+		"mul	%[l1], %[x1], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[l1]\n\t"
+		"mul	%[l2], %[x2], %[b]\n\t"
+		"ldp	%[z2], %[z3], [%[t], #16]\n\t"
+		"adcs	%[z2], %[z2], %[l2]\n\t"
+		"mul	%[l3], %[x3], %[b]\n\t"
+		"adcs	%[z3], %[z3], %[l3]\n\t"
+		"umulh	%[h3], %[x3], %[b]\n\t"
+		"adc	%[h3], %[h3], xzr\n\t"
+		/* and the high halves, which is where this block's own carry
+		 * ends up */
+		"mul	%[l0], %[x0], %[b]\n\t"
+		"adds	%[z0], %[z0], %[l0]\n\t"
+		"umulh	%[h0], %[x0], %[b]\n\t"
+		"adcs	%[z1], %[z1], %[h0]\n\t"
+		"umulh	%[h1], %[x1], %[b]\n\t"
+		"stp	%[z0], %[z1], [%[t]], #16\n\t"
+		"adcs	%[z2], %[z2], %[h1]\n\t"
+		"umulh	%[h2], %[x2], %[b]\n\t"
+		"adcs	%[z3], %[z3], %[h2]\n\t"
+		"stp	%[z2], %[z3], [%[t]], #16\n\t"
+		"adc	%[c], %[h3], xzr\n\t"
+		"subs	%[k], %[k], #1\n\t"
+		"b.ne	1b\n\t"
+		: [a] "+r"(a), [t] "+r"(t), [c] "+r"(carry), [k] "+r"(blocks),
+		  [x0] "=&r"(x0), [x1] "=&r"(x1), [x2] "=&r"(x2),
+		  [x3] "=&r"(x3), [z0] "=&r"(z0), [z1] "=&r"(z1),
+		  [z2] "=&r"(z2), [z3] "=&r"(z3), [l0] "=&r"(l0),
+		  [l1] "=&r"(l1), [l2] "=&r"(l2), [l3] "=&r"(l3),
+		  [h0] "=&r"(h0), [h1] "=&r"(h1), [h2] "=&r"(h2),
+		  [h3] "=&r"(h3)
+		: [b] "r"(b)
+		: "cc", "memory");
+	}
+	while (left--) {
+		dlimb_t p = (dlimb_t) *a++ * b + *t + carry;
+
+		*t++ = (limb_t) p;
+		carry = (limb_t) (p >> LIMB_BITS);
+	}
+	return carry;
+}
+#else
 static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 {
 	limb_t carry = 0;
@@ -178,6 +248,7 @@ static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 	}
 	return carry;
 }
+#endif
 
 /* r = t * R^-1 mod m, with t of 2n limbs and destroyed on the way */
 static inline void mont_reduce(limb_t *r, limb_t *t, const limb_t *m, limb_t n0,
