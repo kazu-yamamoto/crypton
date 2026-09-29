@@ -227,6 +227,13 @@ static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 	return carry;
 }
 #else
+/* one limb of it, so that the loops below can say how many they take at a
+ * time without saying the rest of it four times over */
+#define ADDMUL_STEP(k)                                                  \
+	p = (dlimb_t) a[i + (k)] * b + t[i + (k)] + carry;                  \
+	t[i + (k)] = (limb_t) p;                                            \
+	carry = (limb_t) (p >> LIMB_BITS);
+
 static inline limb_t addmul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
 {
 	limb_t carry = 0;
