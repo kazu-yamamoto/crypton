@@ -1,5 +1,20 @@
 # CHANGELOG for crypton
 
+## 2.1.3
+
+* perf(rsa): the modular exponentiation squares into the other of its two
+  buffers and swaps them, rather than squaring into one and copying it back.
+  That is a copy of the modulus' width saved 1280 times per exponentiation,
+  and which of the three buffers a pointer names is nobody's secret, so
+  nothing about the timing changes.  Measured by thread CPU time, best of
+  many, on one RSA-2048 CRT private operation: an Apple M4 goes 604.3 to
+  595.9 microseconds and an x86-64 without ADX 1678.0 to 1665.6.  Where
+  s2n-bignum's multiplication runs the difference is below the noise, that
+  multiplication being most of the time there.  Also writes down what a
+  five-bit window is worth, which was measured and is not taken: 3.5% on the
+  M4, 1% the wrong way on an older x86-64, and 7% the wrong way wherever the
+  assembly runs, because a table twice as long is a masked scan twice as long
+
 ## 2.1.2
 
 * perf(gcm): AES-GCM uses the 256-bit form of the AES and carry-less

@@ -125,8 +125,18 @@ static void powm_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
 	mont_sqr(r, a, m, n0, n, t);
 }
 
-/* four bits of exponent per window, so a table of sixteen and no leftover
- * bits: a byte holds exactly two windows */
+/* Four bits of exponent per window, so a table of sixteen and no leftover
+ * bits: a byte holds exactly two windows.
+ *
+ * Five was written and measured, and is not here.  A wider window saves
+ * multiplications -- 205 of them against 256 at 1024 bits, with the same
+ * 1024 squarings -- and pays for it in the masked scan of a table twice as
+ * long, and which way that comes out depends on the machine and on which
+ * multiplication is running: 3.5% better on an Apple M4, about 1% worse on
+ * an older x86-64, and 7% worse anywhere s2n-bignum's multiplication is
+ * used, since that makes the scan the expensive half.  Six measured level
+ * with five on the M4 and seven worse.  What would make a wider window pay
+ * everywhere is a cheaper scan, not a wider window. */
 #define WINDOW_BITS 4
 #define TABLE_SIZE (1 << WINDOW_BITS)
 
@@ -185,9 +195,16 @@ int crypton_powm_sec(uint8_t *out,
 		uint32_t nib = i - 1;
 		limb_t w = (exp[explen - 1 - nib / 2] >> (4 * (nib % 2))) & 0xf;
 
+		/* squaring into the other buffer and swapping the two saves a
+		 * copy of the modulus' width every time; which of the three
+		 * buffers a pointer names is nobody's secret */
 		for (j = 0; j < WINDOW_BITS; j++) {
+			limb_t *swap;
+
 			powm_sqr(sel, acc, m, n0, n, t, scratch, s2n);
-			memcpy(acc, sel, n * sizeof(limb_t));
+			swap = acc;
+			acc = sel;
+			sel = swap;
 		}
 
 		/* every entry is read, and a mask keeps the one wanted */
@@ -200,7 +217,12 @@ int crypton_powm_sec(uint8_t *out,
 				sel[l] |= table[k * n + l] & mask;
 		}
 		powm_mul(prod, acc, sel, m, n0, n, t, scratch, s2n);
-		memcpy(acc, prod, n * sizeof(limb_t));
+		{
+			limb_t *swap = acc;
+
+			acc = prod;
+			prod = swap;
+		}
 	}
 
 	/* out of Montgomery form */
