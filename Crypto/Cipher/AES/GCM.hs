@@ -105,6 +105,8 @@ encrypt
     -> Int
     -> output
 encrypt (Context aes gk) nonce aad input taglen
+    | tooLongForC aad input =
+        throwCryptoError (CryptoFailed CryptoError_ParameterInvalid)
     | badNonce nonce =
         throwCryptoError (CryptoFailed CryptoError_IvSizeInvalid)
     | badTagLength taglen =
@@ -128,6 +130,7 @@ decrypt
     -> Int
     -> Maybe ba
 decrypt (Context aes gk) nonce aad input taglen
+    | tooLongForC aad input = Nothing
     | badNonce nonce || badTagLength taglen || B.length input < taglen = Nothing
     | otherwise = gcmFullDecrypt aes gk nonce aad body tag
   where
@@ -155,6 +158,8 @@ decryptWithTag
     -> Int
     -> (ba, AuthTag)
 decryptWithTag (Context aes gk) nonce aad input taglen
+    | tooLongForC aad input =
+        throwCryptoError (CryptoFailed CryptoError_ParameterInvalid)
     | badNonce nonce =
         throwCryptoError (CryptoFailed CryptoError_IvSizeInvalid)
     | badTagLength taglen =
@@ -204,12 +209,23 @@ encryptWithMask
     -- ^ where the sixteen bytes of mask go
     -> IO Bool
 encryptWithMask (Context aes gk) (HeaderKey hp) nonce aad input taglen off outp maskp
+    | tooLongForC aad input = return False
     | badNonce nonce = return False
     | off < 0 || badTagLength taglen || off + 16 > B.length input + taglen =
         return False
     | otherwise = do
         gcmFullEncryptMask aes gk hp nonce aad input taglen off outp maskp
         return True
+
+-- | The C behind all four takes its lengths as @uint32_t@, so a message or
+-- its additional data from 2^32 bytes up cannot be handed to it: the length
+-- would be truncated and most of the buffer left untouched, with nothing to
+-- say so.  There is no splitting the work here -- the C does the whole
+-- message in one call, tag and all -- so such a message is refused.
+tooLongForC
+    :: (ByteArrayAccess aad, ByteArrayAccess ba) => aad -> ba -> Bool
+tooLongForC aad input =
+    B.overCLength (B.length aad) || B.overCLength (B.length input)
 
 -- | SP 800-38D 5.2.1.1 asks for at least one byte of IV, and this is why.
 --

@@ -271,6 +271,7 @@ encryptCTR
     -- ^ ciphertext output
 encryptCTR ctx iv input
     | len <= 0 = B.empty
+    | B.overCLength len = error tooLongMessage
     | B.length iv /= 16 =
         error $
             "AES error: IV length must be block size (16). Its length is: "
@@ -365,6 +366,20 @@ combineC32 ctx iv input
         c_aes_encrypt_c32 (castPtr o) k v i (fromIntegral len)
     len = B.length input
 
+-- | What the AES modes say when a message cannot be given to the C, whose
+-- lengths are @uint32_t@.  Above that the length is truncated on the way
+-- down and most of the buffer is left as it was found, with nothing to say
+-- so, which is worse than refusing.
+--
+-- Unlike the stream ciphers, these cannot be done in pieces: the C is handed
+-- the IV and does not hand it back, so a second call would start from the
+-- wrong place.  ECB, CBC and XTS count blocks rather than bytes, so their
+-- limit is sixteen times further out than CTR's.
+tooLongMessage :: String
+tooLongMessage =
+    "AES error: message too long for this implementation, whose C takes its "
+        ++ "lengths as uint32_t"
+
 {-# INLINE doECB #-}
 doECB
     :: ByteArray ba
@@ -373,6 +388,7 @@ doECB
     -> ba
     -> ba
 doECB f ctx input
+    | B.overCLength nbBlocks = error tooLongMessage
     | len == 0 = B.empty
     | r /= 0 =
         error $
@@ -396,6 +412,7 @@ doCBC
     -> ba
     -> ba
 doCBC f ctx (IV iv) input
+    | B.overCLength nbBlocks = error tooLongMessage
     | len == 0 = B.empty
     | r /= 0 =
         error $
@@ -419,6 +436,7 @@ doXTS
     -> ba
     -> ba
 doXTS f (key1, key2) iv spoint input
+    | B.overCLength nbBlocks = error tooLongMessage
     | len == 0 = B.empty
     | r /= 0 =
         error $
@@ -637,7 +655,8 @@ gcmAppendAAD gcmSt input = unsafeDoIO doAppend
     doAppend =
         withNewGCMSt gcmSt $ \gcmStPtr ->
             withByteArray input $ \i ->
-                c_aes_gcm_aad gcmStPtr i (fromIntegral $ B.length input)
+                B.inCLengths (B.length input) $ \off n ->
+                    c_aes_gcm_aad gcmStPtr (i `plusPtr` off) (fromIntegral n)
 
 -- | append data to encrypt and append to the GCM context
 --
@@ -651,7 +670,13 @@ gcmAppendEncrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doEnc
     doEnc gcmStPtr aesPtr =
         B.alloc len $ \o ->
             withByteArray input $ \i ->
-                c_aes_gcm_encrypt (castPtr o) gcmStPtr aesPtr i (fromIntegral len)
+                B.inCLengths len $ \off n ->
+                    c_aes_gcm_encrypt
+                        (castPtr o `plusPtr` off)
+                        gcmStPtr
+                        aesPtr
+                        (i `plusPtr` off)
+                        (fromIntegral n)
 
 -- | append data to decrypt and append to the GCM context
 --
@@ -665,7 +690,13 @@ gcmAppendDecrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doDec
     doDec gcmStPtr aesPtr =
         B.alloc len $ \o ->
             withByteArray input $ \i ->
-                c_aes_gcm_decrypt (castPtr o) gcmStPtr aesPtr i (fromIntegral len)
+                B.inCLengths len $ \off n ->
+                    c_aes_gcm_decrypt
+                        (castPtr o `plusPtr` off)
+                        gcmStPtr
+                        aesPtr
+                        (i `plusPtr` off)
+                        (fromIntegral n)
 
 -- | Generate the Tag from GCM context
 {-# NOINLINE gcmFinish #-}
@@ -722,7 +753,9 @@ ocbInitWithTagLength ctx iv taglen
 -- need to happen after initialization and before appending encryption/decryption data.
 {-# NOINLINE ocbAppendAAD #-}
 ocbAppendAAD :: ByteArrayAccess aad => AES -> AESOCB -> aad -> AESOCB
-ocbAppendAAD ctx ocb input = unsafeDoIO (snd `fmap` withOCBKeyAndCopySt ctx ocb doAppend)
+ocbAppendAAD ctx ocb input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO (snd `fmap` withOCBKeyAndCopySt ctx ocb doAppend)
   where
     doAppend ocbStPtr aesPtr =
         withByteArray input $ \i ->
@@ -734,7 +767,9 @@ ocbAppendAAD ctx ocb input = unsafeDoIO (snd `fmap` withOCBKeyAndCopySt ctx ocb 
 -- need to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE ocbAppendEncrypt #-}
 ocbAppendEncrypt :: ByteArray ba => AES -> AESOCB -> ba -> (ba, AESOCB)
-ocbAppendEncrypt ctx ocb input = unsafeDoIO $ withOCBKeyAndCopySt ctx ocb doEnc
+ocbAppendEncrypt ctx ocb input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO $ withOCBKeyAndCopySt ctx ocb doEnc
   where
     len = B.length input
     doEnc ocbStPtr aesPtr =
@@ -748,7 +783,9 @@ ocbAppendEncrypt ctx ocb input = unsafeDoIO $ withOCBKeyAndCopySt ctx ocb doEnc
 -- need to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE ocbAppendDecrypt #-}
 ocbAppendDecrypt :: ByteArray ba => AES -> AESOCB -> ba -> (ba, AESOCB)
-ocbAppendDecrypt ctx ocb input = unsafeDoIO $ withOCBKeyAndCopySt ctx ocb doDec
+ocbAppendDecrypt ctx ocb input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO $ withOCBKeyAndCopySt ctx ocb doDec
   where
     len = B.length input
     doDec ocbStPtr aesPtr =
@@ -808,7 +845,9 @@ ccmInit ctx iv n m l
 -- needs to happen after initialization and before appending encryption/decryption data.
 {-# NOINLINE ccmAppendAAD #-}
 ccmAppendAAD :: ByteArrayAccess aad => AES -> AESCCM -> aad -> AESCCM
-ccmAppendAAD ctx ccm input = unsafeDoIO $ snd <$> withCCMKeyAndCopySt ctx ccm doAppend
+ccmAppendAAD ctx ccm input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO $ snd <$> withCCMKeyAndCopySt ctx ccm doAppend
   where
     doAppend ccmStPtr aesPtr =
         withByteArray input $ \i -> c_aes_ccm_aad ccmStPtr aesPtr i (fromIntegral $ B.length input)
@@ -819,7 +858,9 @@ ccmAppendAAD ctx ccm input = unsafeDoIO $ snd <$> withCCMKeyAndCopySt ctx ccm do
 -- needs to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE ccmEncrypt #-}
 ccmEncrypt :: ByteArray ba => AES -> AESCCM -> ba -> (ba, AESCCM)
-ccmEncrypt ctx ccm input = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
+ccmEncrypt ctx ccm input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
   where
     len = B.length input
     cbcmacAndIv ccmStPtr aesPtr =
@@ -833,7 +874,9 @@ ccmEncrypt ctx ccm input = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
 -- needs to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE ccmDecrypt #-}
 ccmDecrypt :: ByteArray ba => AES -> AESCCM -> ba -> (ba, AESCCM)
-ccmDecrypt ctx ccm input = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
+ccmDecrypt ctx ccm input
+    | B.overCLength (B.length input) = error tooLongMessage
+    | otherwise = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
   where
     len = B.length input
     cbcmacAndIv ccmStPtr aesPtr =

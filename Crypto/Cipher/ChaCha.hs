@@ -183,10 +183,19 @@ combine prevSt@(State prevStMem) src
     | B.null src = (B.empty, prevSt)
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
-            B.alloc (B.length src) $ \dstPtr ->
+            B.alloc n $ \dstPtr ->
                 B.withByteArray src $ \srcPtr ->
-                    ccrypton_chacha_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
+                    -- in pieces the C's uint32_t length can hold; it carries
+                    -- the state in ctx, so it can simply be called again
+                    B.inCLengths n $ \off len ->
+                        ccrypton_chacha_combine
+                            (dstPtr `plusPtr` off)
+                            ctx
+                            (srcPtr `plusPtr` off)
+                            (fromIntegral len)
         return (out, State st)
+  where
+    n = B.length src
 
 -- | Generate a number of bytes from the ChaCha output directly
 generate
@@ -201,7 +210,11 @@ generate prevSt@(State prevStMem) len
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc len $ \dstPtr ->
-                ccrypton_chacha_generate dstPtr ctx (fromIntegral len)
+                B.inCLengths len $ \off n ->
+                    ccrypton_chacha_generate
+                        (dstPtr `plusPtr` off)
+                        ctx
+                        (fromIntegral n)
         return (out, State st)
 
 -- | similar to 'generate' but assume certains values

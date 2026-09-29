@@ -98,7 +98,14 @@ combine (State prevSt) clearText = unsafeDoIO $
     B.allocRet len $ \outptr ->
         B.withByteArray clearText $ \clearPtr -> do
             st <- B.copy prevSt $ \stPtr ->
-                c_rc4_combine (castPtr stPtr) clearPtr (fromIntegral len) outptr
+                -- in pieces the C's uint32_t length can hold; the state it
+                -- keeps means it can simply be called again
+                B.inCLengths len $ \off n ->
+                    c_rc4_combine
+                        (castPtr stPtr)
+                        (clearPtr `plusPtr` off)
+                        (fromIntegral n)
+                        (outptr `plusPtr` off)
             return $! State st
   where
     -- return $! (State st, B.PS outfptr 0 len)

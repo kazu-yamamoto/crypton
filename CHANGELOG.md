@@ -2,6 +2,28 @@
 
 ## 2.1.3
 
+* security(cipher): a message of 2^32 bytes or more no longer has its length
+  truncated on the way to the C, which takes its lengths as `uint32_t`.  It
+  used to be: `Crypto.Cipher.ChaCha.combine` given 2^32 + 64 bytes enciphered
+  64 of them and returned the rest as it found the buffer -- 4 GiB of zeros
+  where the ciphertext should have been, with nothing returned to say so.
+  `Crypto.Hash` has cut its work into 2 GiB pieces for this reason since
+  before crypton; nothing else did.
+
+  Where the C carries its state in a context and can simply be called again,
+  the work is now cut up the same way and a long message is enciphered:
+  `Crypto.Cipher.ChaCha`, `Crypto.Cipher.Salsa`, `Crypto.Cipher.XSalsa`,
+  `Crypto.Cipher.RC4`, `Crypto.MAC.Poly1305`, and AES-GCM's incremental
+  interface -- which is what `Crypto.Cipher.ChaChaPoly1305` and
+  `Crypto.MAC.KMAC` reach it through.
+
+  Where it cannot -- the one-call AEADs, which do the whole message in one
+  call, and the AES modes, which are handed the IV and do not hand it back --
+  the message is refused: `CryptoError_ParameterInvalid` from
+  `Crypto.Cipher.AES.GCM` and `Crypto.Cipher.ChaCha.Poly1305`, and an error
+  from AES ECB, CBC, CTR, XTS, OCB and CCM.  ECB, CBC and XTS count blocks
+  rather than bytes, so their limit is sixteen times further out.
+  `Crypto.Cipher.AESGCMSIV` already refused, and still does
 * perf(p256): the comb that multiplies the base point takes five bits of the
   scalar at a time from each of two blocks rather than four, over the signed
   all-bits-set representation, so the table stays the same size while the
