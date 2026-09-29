@@ -87,7 +87,10 @@ newContext k = do
 --
 -- A nonce must not be used twice with the same t'Context'.  Twelve bytes is
 -- the size GCM is defined for and the only one that does not cost a further
--- pass.
+-- pass.  A nonce of no bytes is refused: it would hand out the key GCM
+-- authenticates with, so 'encrypt' and 'decryptWithTag' throw
+-- 'CryptoError_IvSizeInvalid' for it, 'decrypt' gives 'Nothing' and
+-- 'encryptWithMask' gives 'False'.
 {-# INLINABLE encrypt #-}
 encrypt
     :: ( ByteArrayAccess nonce
@@ -101,18 +104,20 @@ encrypt
     -> ba
     -> Int
     -> output
-encrypt (Context aes gk) nonce aad input taglen =
-    if badTagLength taglen
-        then throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
-        else gcmFullEncrypt aes gk nonce aad input taglen
+encrypt (Context aes gk) nonce aad input taglen
+    | badNonce nonce =
+        throwCryptoError (CryptoFailed CryptoError_IvSizeInvalid)
+    | badTagLength taglen =
+        throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
+    | otherwise = gcmFullEncrypt aes gk nonce aad input taglen
 
 -- | Decrypt one message, in the shape 'encrypt' produced: the ciphertext with
 -- its tag after it.  The tag is compared here, every byte of it whatever the
 -- answer, and a message whose tag does not match gives 'Nothing' rather than
 -- the plaintext.
 --
--- 'Nothing' also comes back when the input is shorter than the tag, or the
--- tag length is outside 4 to 16.
+-- 'Nothing' also comes back when the nonce has no bytes, the input is
+-- shorter than the tag, or the tag length is outside 4 to 16.
 {-# INLINABLE decrypt #-}
 decrypt
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
@@ -123,7 +128,7 @@ decrypt
     -> Int
     -> Maybe ba
 decrypt (Context aes gk) nonce aad input taglen
-    | badTagLength taglen || B.length input < taglen = Nothing
+    | badNonce nonce || badTagLength taglen || B.length input < taglen = Nothing
     | otherwise = gcmFullDecrypt aes gk nonce aad body tag
   where
     (body, tag) = B.splitAt (B.length input - taglen) input
@@ -149,10 +154,12 @@ decryptWithTag
     -> ba
     -> Int
     -> (ba, AuthTag)
-decryptWithTag (Context aes gk) nonce aad input taglen =
-    if badTagLength taglen
-        then throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
-        else gcmFullDecryptTag aes gk nonce aad input taglen
+decryptWithTag (Context aes gk) nonce aad input taglen
+    | badNonce nonce =
+        throwCryptoError (CryptoFailed CryptoError_IvSizeInvalid)
+    | badTagLength taglen =
+        throwCryptoError (CryptoFailed CryptoError_AuthenticationTagSizeInvalid)
+    | otherwise = gcmFullDecryptTag aes gk nonce aad input taglen
 
 ----------------------------------------------------------------
 
@@ -177,8 +184,8 @@ newHeaderKey k = HeaderKey <$> initAES k
 -- sixteen.  @sampleOffset@ says where the sixteen bytes of sample begin in
 -- the sealed message, counting the tag as part of it.
 --
--- 'False' comes back, and nothing is written, when the sample would not fit
--- or the tag length is outside 4 to 16.
+-- 'False' comes back, and nothing is written, when the nonce has no bytes,
+-- the sample would not fit, or the tag length is outside 4 to 16.
 {-# INLINABLE encryptWithMask #-}
 encryptWithMask
     :: (ByteArrayAccess nonce, ByteArrayAccess aad, ByteArrayAccess ba)
@@ -197,10 +204,34 @@ encryptWithMask
     -- ^ where the sixteen bytes of mask go
     -> IO Bool
 encryptWithMask (Context aes gk) (HeaderKey hp) nonce aad input taglen off outp maskp
-    | off < 0 || badTagLength taglen || off + 16 > B.length input + taglen = return False
+    | badNonce nonce = return False
+    | off < 0 || badTagLength taglen || off + 16 > B.length input + taglen =
+        return False
     | otherwise = do
         gcmFullEncryptMask aes gk hp nonce aad input taglen off outp maskp
         return True
+
+-- | SP 800-38D 5.2.1.1 asks for at least one byte of IV, and this is why.
+--
+-- GCM builds its pre-counter block from a nonce that is not twelve bytes as
+-- @J0 = GHASH_H(IV || 0^s || [0]_64 || [len(IV)]_64)@.  For an empty IV that
+-- input is one block of zeros, so @J0@ is zero, and the tag of a message
+-- becomes @GHASH_H(A, C) XOR E(K, 0^128)@ -- where @E(K, 0^128)@ is the
+-- definition of @H@.  The tag of an empty message under an empty nonce is
+-- therefore @H@ itself, and any other full tag gives @H@ as the root of a
+-- known polynomial.
+--
+-- @H@ belongs to the key, not to the nonce.  An attacker holding it, plus one
+-- genuine message under any nonce, has @E(K, J0)@ for that nonce and can make
+-- a tag that verifies for data of their own -- under a correct twelve-byte
+-- nonce, and for every nonce they have seen.  One encryption with an empty
+-- nonce and a full tag ends the authenticity of everything under the key.
+--
+-- 'Crypto.Cipher.AES.Primitive.gcmAeadInit' refuses the empty IV for this
+-- reason, and these four have to as well.  Only the empty one is refused:
+-- SP 800-38D allows every length from one byte up.
+badNonce :: ByteArrayAccess nonce => nonce -> Bool
+badNonce nonce = B.length nonce == 0
 
 -- | GCM makes a sixteen-byte tag and a shorter one is a prefix of it.  Below
 -- 'minimumTagLength' it authenticates next to nothing, and past sixteen the

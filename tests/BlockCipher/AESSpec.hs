@@ -285,6 +285,39 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
                     `shouldThrow` (== CryptoError_AuthenticationTagSizeInvalid)
             it "encryptWithMask" $
                 withMaskTag taglen 0 `shouldReturn` Nothing
+    -- SP 800-38D 5.2.1.1 wants at least one byte of IV.  With none, GCM's
+    -- pre-counter block is zero and the tag of a message is
+    -- GHASH_H(A, C) XOR E(K, 0^128) -- and E(K, 0^128) is the GHASH key H
+    -- itself.  One full tag therefore gives H away, H belongs to the key
+    -- rather than to the nonce, and with it a tag can be forged for any
+    -- message under any nonce the key has been used with, twelve-byte ones
+    -- included.  The general interface has refused the empty IV since
+    -- f98cff3 and these four did not.
+    describe "refuses a nonce of no bytes" $ do
+        it "encrypt" $
+            evaluate (GCM.encrypt ctx16 B.empty header message 16 :: B.ByteString)
+                `shouldThrow` (== CryptoError_IvSizeInvalid)
+        -- a message that really is sealed under the empty nonce, so that this
+        -- says something whether or not `encrypt` refuses one: before the
+        -- check, `decrypt` returned the sixteen bytes of plaintext for it
+        it "decrypt, on a message that is genuine under it" $
+            (GCM.decrypt ctx16 B.empty header emptyNonceSealed 16 :: Maybe B.ByteString)
+                `shouldBe` Nothing
+        it "decryptWithTag" $
+            evaluate
+                ( GCM.decryptWithTag ctx16 B.empty header message 16
+                    :: (B.ByteString, AuthTag)
+                )
+                `shouldThrow` (== CryptoError_IvSizeInvalid)
+        it "encryptWithMask, writing nothing" $
+            withMaskIv B.empty 16 4 `shouldReturn` Nothing
+    -- and only the empty one: SP 800-38D allows every length from one byte up,
+    -- so this must not become a check for twelve
+    it "takes a nonce of one byte" $
+        let iv1 = B.singleton 0x77
+            sealed = GCM.encrypt ctx16 iv1 header message 16 :: B.ByteString
+         in (GCM.decrypt ctx16 iv1 header sealed 16 :: Maybe B.ByteString)
+                `shouldBe` Just message
     describe "header protection" $ do
         it "writes the ciphertext encrypt gives" $
             withMask 4 `shouldReturn` Just (plainSealed, expectedMask 4)
@@ -326,12 +359,18 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
     message = "a packet payload" :: B.ByteString
     header = "\x40\x01\x02\x03" :: B.ByteString
     plainSealed = GCM.encrypt ctx16 iv16 header message 16 :: B.ByteString
+    -- ctx16, no nonce at all, `header` as the additional data and `message`
+    -- as the plaintext, taken from the tree before the check went in
+    emptyNonceSealed =
+        "\x09\x25\xea\x53\x9b\x98\xf1\x0e\x02\x5f\x8a\x70\x8d\xf4\x6d\xb2\xf2\xce\x43\x31\x67\x12\x32\xef\x29\xcc\x69\x52\x12\x98\xd1\xf3"
+            :: B.ByteString
     -- the buffers the caller owns, as a packet writer would have them
     withMask = withMaskTag 16
-    withMaskTag taglen off =
+    withMaskTag = withMaskIv iv16
+    withMaskIv iv taglen off =
         allocaBytes (B.length message + taglen) $ \outp ->
             allocaBytes 16 $ \maskp -> do
-                ok <- GCM.encryptWithMask ctx16 hpKey iv16 header message taglen off outp maskp
+                ok <- GCM.encryptWithMask ctx16 hpKey iv header message taglen off outp maskp
                 if ok
                     then do
                         sealed <- B.packCStringLen (castPtr outp, B.length message + taglen)
