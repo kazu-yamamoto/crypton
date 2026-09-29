@@ -92,19 +92,29 @@ struct asm_gcm {
  * H, and every power of it, is kept shifted up by one bit: GCM numbers the
  * bits of a field element the other way round from the way the carry-less
  * multiply does, and pre-shifting the operand is what saves the correction
- * after each multiply.  The bit that falls off the top is the one that the
- * polynomial reduces.
+ * after each multiply.
+ *
+ * Written from the definition.  The field is GF(2)[x] modulo x^128 + x^127 +
+ * x^126 + x^121 + 1, so multiplying by x is a shift of one place, and the
+ * term that leaves the top comes back as the other four.
  */
 TARGET_PCLMUL
 static __m128i twist(__m128i h)
 {
+	/* x^127 + x^126 + x^121 + 1, the terms x^128 is congruent to */
 	const __m128i poly = _mm_set_epi64x(0xc200000000000000ULL, 1);
-	__m128i carried = _mm_slli_si128(_mm_srli_epi64(h, 63), 8);
-	__m128i top = _mm_shuffle_epi32(h, 0xff);
-	__m128i reduce = _mm_cmpgt_epi32(_mm_setzero_si128(), top);
+	/* the top bit of each half */
+	__m128i tops = _mm_srli_epi64(h, 63);
+	/* doubling a polynomial is a shift by one: each half doubles, and the
+	 * low half's top bit becomes the high half's bottom bit */
+	__m128i doubled = _mm_or_si128(_mm_add_epi64(h, h),
+	                               _mm_slli_si128(tops, 8));
+	/* bit 127 is the one that leaves the field; spread it to a mask by
+	 * subtracting it from zero, and it brings the four terms back */
+	__m128i mask = _mm_sub_epi64(_mm_setzero_si128(),
+	                             _mm_unpackhi_epi64(tops, tops));
 
-	h = _mm_or_si128(_mm_slli_epi64(h, 1), carried);
-	return _mm_xor_si128(h, _mm_and_si128(reduce, poly));
+	return _mm_xor_si128(doubled, _mm_and_si128(mask, poly));
 }
 
 /* the two halves of a value added together, which is the term Karatsuba
