@@ -1,10 +1,18 @@
 /*
- * A fused AES-GCM for x86-64, written to the design Kazuho Oku sets out in
- * "QUICむけにAES-GCM実装を最適化した話": keep AES-NI issuing every clock and
- * fit everything else -- the additional data, the tag, the QUIC header
- * protection mask -- into the gaps it leaves.  Written in C with intrinsics
- * rather than assembly, for the same reason he gives: the scheduling is what
- * is complicated here, and it has to stay readable to stay correct.
+ * A fused AES-GCM for x86-64, following the design Kazuho Oku sets out in
+ * "QUICむけにAES-GCM実装を最適化した話" and implements in picotls's
+ * lib/fusion.c: keep AES-NI issuing every clock and fit everything else --
+ * the additional data, the tag, the QUIC header protection mask -- into the
+ * gaps it leaves.  Written in C with intrinsics rather than assembly, for
+ * the same reason he gives: the scheduling is what is complicated here, and
+ * it has to stay readable to stay correct.
+ *
+ * Parts of this file follow fusion closely enough to say so: `loadn` and the
+ * two tables it reads, `loadn_page_end` and `storen` are its `loadn128`,
+ * `loadn_end_of_page` and `storen128` in another spelling, and the
+ * reduction of a 256-bit product is the sequence fusion takes from Gueron's
+ * "AES-GCM for Efficient Authenticated Encryption".  fusion is under the MIT
+ * license, which is in cbits/aes/LICENSE.fusion beside this file.
  *
  * The powers of H are built once per key, so the additional data, the
  * ciphertext and the length block are absorbed against them in batches that
