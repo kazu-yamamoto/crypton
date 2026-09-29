@@ -38,6 +38,7 @@
 #include <aes/gf.h>
 #include <aes/x86ni.h>
 #include <aes/gcm_vaes_x86.h>
+#include <aes/gcm_vaes512_x86.h>
 #include <aes/block128.h>
 #include <aes/gcm_x86_asm.h>
 

@@ -652,6 +652,12 @@ library
                     -- 128-bit throughout.  crypton_cpu.c asks the
                     -- processor before any of it runs.
                     cbits/aes/gcm_vaes_x86.c
+                    -- and the 512-bit form, four blocks to each, which Ice
+                    -- Lake and Zen 4 onwards have.  Same story about
+                    -- borrowing, and the same run-time question -- with
+                    -- three more bits of XCR0 in it, since these need the
+                    -- operating system to save the AVX-512 state.
+                    cbits/aes/gcm_vaes512_x86.c
                     cbits/aes/gcm_x86_asm.c
 
                 if os(osx)
