@@ -2,6 +2,22 @@
 
 ## 2.1.3
 
+* perf(p256): the comb that multiplies the base point takes five bits of the
+  scalar at a time from each of two blocks rather than four, over the signed
+  all-bits-set representation, so the table stays the same size while the
+  loop goes from 32 steps to 26: 25 doublings and 52 mixed additions against
+  31 and 64, which is 19% fewer field operations.  An ECDSA P-256 signature
+  goes 25.52 to 22.47 microseconds on an Apple M4.  This is the C path, which
+  x86-64 and AArch64 do not take -- they have the vendored assembly -- so it
+  is for i386, armv7, riscv64, ppc64le, s390x and the rest.  The arrangement
+  was suggested by Kyle Butt.
+
+  One scalar below the order makes the last addition of the comb add a point
+  to itself, which the formulas there cannot do; it was found by searching
+  the sign patterns rather than by sampling, and the recoder now reports it
+  and the answer is the doubling.  Every other addition is ruled out, the 48
+  from step two upwards by parity and size and the two of step one by
+  exhausting the 2^20 sign patterns that could reach them
 * security(aes): `Crypto.Cipher.AES.GCM` refuses a nonce of no bytes, which
   its four functions used to accept.  SP 800-38D 5.2.1.1 asks for at least
   one byte, and with none GCM's pre-counter block is zero, so the tag of a

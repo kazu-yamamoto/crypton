@@ -333,7 +333,8 @@ static void copy_conditional(felem out, const felem in, limb mask) {
 }
 
 /* select_affine_point sets {out_x,out_y} to the index'th entry of table.
- * On entry: index < 16, table[0] must be zero. */
+ * On entry: index < 16.  Every entry is a point of its own -- the signed
+ * representation has no zero digit -- so the scan starts at zero. */
 static void select_affine_point(felem out_x, felem out_y, const limb* table,
                                 limb index) {
   limb i, j;
@@ -341,7 +342,7 @@ static void select_affine_point(felem out_x, felem out_y, const limb* table,
   memset(out_x, 0, sizeof(felem));
   memset(out_y, 0, sizeof(felem));
 
-  for (i = 1; i < 16; i++) {
+  for (i = 0; i < 16; i++) {
     limb mask = i ^ index;
     mask |= mask >> 2;
     mask |= mask >> 1;
@@ -356,60 +357,212 @@ static void select_affine_point(felem out_x, felem out_y, const limb* table,
   }
 }
 
+/* words_are_zero returns 1 when |v| is zero and 0 otherwise, without a
+ * branch. */
+static u32 words_are_zero(u32 v) {
+  v |= v >> 16;
+  v |= v >> 8;
+  v |= v >> 4;
+  v |= v >> 2;
+  v |= v >> 1;
+  return (v & 1) ^ 1;
+}
+
+/* The comb: five teeth to a block, the teeth of a block 52 apart and the two
+ * blocks 26 from each other, so 26 steps cover all 260 bits between them.
+ *
+ *   first block    i, 52+i, 104+i, 156+i, 208+i
+ *   second block   26+i, 78+i, 130+i, 182+i, 234+i
+ *
+ * Five teeth would want a table of 32, but the signed representation makes
+ * every digit +-1, so the thirty-two values come in pairs that differ by sign
+ * and sixteen entries serve: kPrecomputed holds the ones whose top tooth is
+ * positive and the other sign is a negated y.  That is the whole of the gain
+ * over the four-tooth unsigned comb this replaces, which took 32 steps for
+ * the same 256 bits: 25 doublings and 52 mixed additions against 31 and 64.
+ */
+#define COMB_TEETH 5
+#define COMB_STEPS 26
+#define COMB_SPAN (2 * COMB_STEPS) /* 52, the distance between a block's teeth */
+#define COMB_WORDS 9               /* 260 bits of signs, with room to add into */
+#define COMB_BIT(t, q) (((t)[(q) >> 5] >> ((q) & 31)) & 1)
+
+/* comb_recode writes into |out| the value whose bits are the signs of the
+ * scalar's all-bits-set representation: digit j is +1 where bit j of |out| is
+ * set and -1 where it is not.
+ *
+ * For an odd k below 2^260 there is exactly one such representation, and it
+ * is (k + 2^260 - 1) / 2 read as bits -- an addition and a shift, and that is
+ * all the recoding is.  An even scalar has the order added to make it odd,
+ * which changes the scalar and not the point it selects.
+ *
+ * *dbl_mask is set to all ones when the last addition of the comb would be a
+ * point added to itself, which point_add_mixed cannot do.  Entering that
+ * addition the accumulator is (k' - B)*G and what it adds is B*G, where B is
+ * the second block's digit at step zero, so the two meet when k' = 2B modulo
+ * the order.  There is one scalar below the order that does this and it is
+ * reachable, so it has to be answered rather than argued away.
+ *
+ * The comparison below is the whole test, for two reasons.  k' - 2B is odd
+ * while the order is odd, so it is never zero; and |2B| is under 2^236 while
+ * k' is under twice the order, so k' - 2B lies in (-2^236, 3n) and the only
+ * multiple of the order it can be is the order itself.
+ *
+ * No earlier step needs this.  The accumulator there has just been doubled
+ * and is even, the first block's digit is odd, and the second block's is a
+ * multiple of 2^26 while the accumulator plus the first digit is odd -- so
+ * both differences are odd and, from step two upwards, small enough that they
+ * cannot reach the order: the accumulator is under 2^255 + 2^235 there and
+ * the digits under 2^209 and 2^235.  Step one is not covered by that bound
+ * and was searched instead: of the 2^20 sign patterns that fix a scalar for
+ * it, none is consistent with the scalar it fixes.
+ *
+ * Constant time in the scalar: every branch below is on a loop counter. */
+static void comb_recode(u32 out[COMB_WORDS], limb* dbl_mask,
+                        const crypton_p256_int* scalar) {
+  u32 k[COMB_WORDS], ord[COMB_WORDS], diff[COMB_WORDS], acc;
+  u64 carry;
+  int i, t;
+
+  for (i = 0; i < COMB_WORDS; i++) {
+    k[i] = 0;
+    ord[i] = 0;
+  }
+  for (i = 0; i < 256; i += 32) {
+    k[i >> 5] = (u32)(P256_DIGIT(scalar, i / P256_BITSPERDIGIT)
+                      >> (i % P256_BITSPERDIGIT));
+    ord[i >> 5] = (u32)(P256_DIGIT(&crypton_SECP256r1_n, i / P256_BITSPERDIGIT)
+                        >> (i % P256_BITSPERDIGIT));
+  }
+
+  /* an even scalar becomes odd by taking on the order */
+  {
+    u32 addmask = (u32)0 - (u32)((k[0] & 1) ^ 1);
+
+    carry = 0;
+    for (i = 0; i < COMB_WORDS; i++) {
+      u64 v = (u64)k[i] + (u64)(ord[i] & addmask) + carry;
+      k[i] = (u32)v;
+      carry = v >> 32;
+    }
+  }
+
+  /* out = (k + 2^260 - 1) >> 1 */
+  carry = 0;
+  for (i = 0; i < COMB_WORDS; i++) {
+    u64 v = (u64)k[i] + (u64)(i < 8 ? 0xffffffffu : 0xfu) + carry;
+    out[i] = (u32)v;
+    carry = v >> 32;
+  }
+  for (i = 0; i < COMB_WORDS - 1; i++) {
+    out[i] = (out[i] >> 1) | (out[i + 1] << 31);
+  }
+  out[COMB_WORDS - 1] >>= 1;
+
+  /* diff = k' - 2B, a tooth at a time */
+  for (i = 0; i < COMB_WORDS; i++) {
+    diff[i] = k[i];
+  }
+  for (t = 0; t < COMB_TEETH; t++) {
+    u32 q = (u32)(COMB_STEPS + 1 + t * COMB_SPAN); /* the bit of 2B */
+    u32 sign = (u32)0 - COMB_BIT(out, q - 1);      /* all ones when the digit is +1 */
+    u32 term[COMB_WORDS];
+
+    for (i = 0; i < COMB_WORDS; i++) {
+      term[i] = (i == (int)(q >> 5)) ? (1u << (q & 31)) : 0;
+    }
+    /* negate it where the digit is positive, since that one is subtracted */
+    carry = (u64)(sign & 1);
+    for (i = 0; i < COMB_WORDS; i++) {
+      u64 v = (u64)(term[i] ^ sign) + carry;
+      term[i] = (u32)v;
+      carry = v >> 32;
+    }
+    carry = 0;
+    for (i = 0; i < COMB_WORDS; i++) {
+      u64 v = (u64)diff[i] + (u64)term[i] + carry;
+      diff[i] = (u32)v;
+      carry = v >> 32;
+    }
+  }
+  acc = 0;
+  for (i = 0; i < COMB_WORDS; i++) {
+    acc |= diff[i] ^ ord[i];
+  }
+  *dbl_mask = (limb)0 - (limb)words_are_zero(acc);
+}
+
 /* scalar_base_mult sets {nx,ny,nz} = scalar*G where scalar is a little-endian
  * number. Note that the value of scalar must be less than the order of the
  * group. */
 static void scalar_base_mult(felem nx, felem ny, felem nz,
                              const crypton_p256_int* scalar) {
-  int i, j;
-  limb n_is_infinity_mask = -1, p_is_noninfinite_mask, mask;
-  u32 table_offset;
+  u32 rec[COMB_WORDS];
+  limb n_is_infinity_mask = -1, dbl_mask, mask;
+  felem px, py, negy, tx, ty, tz, ddx, ddy, ddz;
+  int i, blk, j;
 
-  felem px, py;
-  felem tx, ty, tz;
+  comb_recode(rec, &dbl_mask, scalar);
 
   memset(nx, 0, sizeof(felem));
   memset(ny, 0, sizeof(felem));
   memset(nz, 0, sizeof(felem));
 
-  /* The loop adds bits at positions 0, 64, 128 and 192, followed by
-   * positions 32,96,160 and 224 and does this 32 times. */
-  for (i = 0; i < 32; i++) {
-    if (i) {
+  for (i = COMB_STEPS - 1; i >= 0; i--) {
+    if (i != COMB_STEPS - 1) {
       point_double(nx, ny, nz, nx, ny, nz);
     }
-    table_offset = 0;
-    for (j = 0; j <= 32; j += 32) {
-      char bit0 = crypton_p256_get_bit(scalar, 31 - i + j);
-      char bit1 = crypton_p256_get_bit(scalar, 95 - i + j);
-      char bit2 = crypton_p256_get_bit(scalar, 159 - i + j);
-      char bit3 = crypton_p256_get_bit(scalar, 223 - i + j);
-      limb index = bit0 | (bit1 << 1) | (bit2 << 2) | (bit3 << 3);
 
-      select_affine_point(px, py, kPrecomputed + table_offset, index);
-      table_offset += 30 * NLIMBS;
+    for (blk = 0; blk < 2; blk++) {
+      u32 base = (u32)(blk * COMB_STEPS + i);
+      u32 top = COMB_BIT(rec, base + (COMB_TEETH - 1) * COMB_SPAN);
+      limb index = 0;
 
-      /* Since scalar is less than the order of the group, we know that
-       * {nx,ny,nz} != {px,py,1}, unless both are zero, which we handle
-       * below. */
+      for (j = 0; j < COMB_TEETH - 1; j++) {
+        /* a tooth agreeing with the top one is a set bit of the index */
+        index |= (limb)(COMB_BIT(rec, base + (u32)j * COMB_SPAN) ^ top ^ 1)
+                 << j;
+      }
+
+      select_affine_point(px, py, kPrecomputed + blk * 16 * 2 * NLIMBS, index);
+      felem_diff(negy, kZero, py);
+      copy_conditional(py, negy, (limb)0 - (limb)(top ^ 1));
+
+      /* The one addition that can be a point added to itself; the answer
+       * there is twice the point, and the recoder said whether this is it. */
+      if (i == 0 && blk == 1) {
+        point_double(ddx, ddy, ddz, px, py, kOne);
+      }
+
       point_add_mixed(tx, ty, tz, nx, ny, nz, px, py);
-      /* The result of point_add_mixed is incorrect if {nx,ny,nz} is zero
-       * (a.k.a.  the point at infinity). We handle that situation by
-       * copying the point from the table. */
+
+      /* The accumulator is the infinity until the first of these, and
+       * point_add_mixed cannot start from it; the point itself is the sum. */
       copy_conditional(nx, px, n_is_infinity_mask);
       copy_conditional(ny, py, n_is_infinity_mask);
       copy_conditional(nz, kOne, n_is_infinity_mask);
-
-      /* Equally, the result is also wrong if the point from the table is
-       * zero, which happens when the index is zero. We handle that by
-       * only copying from {tx,ty,tz} to {nx,ny,nz} if index != 0. */
-      p_is_noninfinite_mask = NON_ZERO_TO_ALL_ONES(index);
-      mask = p_is_noninfinite_mask & ~n_is_infinity_mask;
+      mask = ~n_is_infinity_mask;
       copy_conditional(nx, tx, mask);
       copy_conditional(ny, ty, mask);
       copy_conditional(nz, tz, mask);
-      /* If p was not zero, then n is now non-zero. */
-      n_is_infinity_mask &= ~p_is_noninfinite_mask;
+      n_is_infinity_mask = 0;
+
+      if (i == 0 && blk == 1) {
+        copy_conditional(nx, ddx, dbl_mask);
+        copy_conditional(ny, ddy, dbl_mask);
+        copy_conditional(nz, ddz, dbl_mask);
+      }
+    }
+  }
+
+  /* The recoded scalar is the private key in another representation, so it
+   * does not stay on the stack. */
+  {
+    volatile unsigned char* q = (volatile unsigned char*)rec;
+    unsigned b;
+
+    for (b = 0; b < sizeof(rec); b++) {
+      q[b] = 0;
     }
   }
 }
@@ -532,16 +685,6 @@ typedef struct {
   u8 digit[SABS_DIGITS];
 } sabs_scalar;
 
-/* words_are_zero returns 1 when |v| is zero and 0 otherwise, without a
- * branch. */
-static u32 words_are_zero(u32 v) {
-  v |= v >> 16;
-  v |= v >> 8;
-  v |= v >> 4;
-  v |= v >> 2;
-  v |= v >> 1;
-  return (v & 1) ^ 1;
-}
 
 /* sabs_recode writes the signed representation of |scalar| into |out|.
  *
