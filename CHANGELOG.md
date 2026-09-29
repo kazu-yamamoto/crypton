@@ -2,6 +2,20 @@
 
 ## 2.1.3
 
+* perf(gcm): AES-GCM uses the 512-bit form of the AES and carry-less
+  multiply instructions where the processor has them and they are worth
+  having, which is Ice Lake and Zen 5 onwards.  Four blocks to an
+  instruction where the 256-bit form takes two; a group is thirty-two
+  blocks in eight registers and its GHASH is two passes of sixteen, since
+  sixteen is how many powers of H the table holds.  Measured on GitHub's
+  runners over 16 KiB, AES-128-GCM and AES-256-GCM in MB/s: an EPYC 9V45
+  goes 9616 to 14268 and 8422 to 12674, a Xeon 6973P-C 8095 to 9848 and
+  7187 to 8323, a Xeon 8573C 6983 to 8447 and 6166 to 7113.  Zen 4 is left
+  on the 256-bit path -- there the 512-bit instructions are two passes
+  through a 256-bit datapath, and AES-GCM measured slightly slower -- and
+  the run-time check asks for three more bits of XCR0 as well as the
+  instruction bits, since a machine can report these and still fault on
+  them
 * perf(ed25519): the base point multiplication goes through s2n-bignum,
   which signing does twice -- once for the nonce's point and once for the
   public key, which `sign` derives from the secret key every time rather

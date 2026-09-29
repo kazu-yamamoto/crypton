@@ -192,14 +192,25 @@ stays.  Verification does not move either way: its exponent is 65537,
 seventeen bits, and there is no exponentiation to speak of.
 
 *The wide AES instructions.*  `VAES` and `VPCLMULQDQ` do two blocks where
-`AES-NI` and `PCLMULQDQ` do one, and crypton uses them where the processor
-has them, which is Zen 3 and Ice Lake onwards.  There was nothing to borrow:
-the wide AES-GCM in OpenSSL, BoringSSL and AWS-LC is Apache-2.0 and
-s2n-bignum has no GCM, so `cbits/aes/gcm_vaes_x86.c` is crypton's own.
-AVX-512 is a separate thing and is still not used -- on a machine that has
-it, OpenSSL reaches about 12000 MB/s on AES-128-GCM where crypton reaches
-about 6000.  AArch64 has no counterpart to these instructions at all, which
-is where the 0.8 on its AES-GCM rows comes from.
+`AES-NI` and `PCLMULQDQ` do one, and four in their 512-bit form.  crypton uses
+the 256-bit form where the processor has it, which is Zen 3 and Ice Lake
+onwards, and the 512-bit form where that is worth having, which is Ice Lake and
+Zen 5 onwards.  There was nothing to borrow: the wide AES-GCM in OpenSSL,
+BoringSSL and AWS-LC is Apache-2.0 and s2n-bignum has no GCM, so both files are
+crypton's own.
+
+The 512-bit path arrived after 2.1.2, and neither machine in the tables above
+has AVX-512, so it is in neither column.  On the runners that do, measured
+over 16 KiB in MB/s: an EPYC 9V45 (Zen 5) goes from
+9616 to 14268 with it, a Xeon 6973P-C from 8095 to 9848, a Xeon 8573C from 6983
+to 8447.  OpenSSL on those machines is ahead still -- 25760 on the first of
+them -- because it interleaves the GHASH with the AES where crypton does them
+in turn.  Zen 4 keeps the 256-bit path: its 512-bit instructions are two passes
+through a 256-bit datapath, so the wider encoding buys nothing there and costs
+a little.
+
+AArch64 has no counterpart to any of these, which is where the 0.8 on its
+AES-GCM rows comes from.
 
 One row wants a word of its own: crypton's `Ed25519.sign` derives the public
 key from the secret key every time it signs, so that a caller who passes a
