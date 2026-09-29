@@ -92,7 +92,10 @@ initialize k = State $ B.allocAndFreeze sizeCtx $ \ctxPtr ->
 update :: ByteArrayAccess ba => State -> ba -> State
 update (State prevCtx) d = State $ B.copyAndFreeze prevCtx $ \ctxPtr ->
     B.withByteArray d $ \dataPtr ->
-        c_poly1305_update (castPtr ctxPtr) dataPtr (fromIntegral $ B.length d)
+        -- in pieces the C's uint32_t length can hold; the context carries
+        -- across, so it can simply be called again
+        B.inCLengths (B.length d) $ \off n ->
+            c_poly1305_update (castPtr ctxPtr) (dataPtr `plusPtr` off) (fromIntegral n)
 {-# NOINLINE update #-}
 
 -- | updates a context with multiples bytestring
@@ -101,7 +104,9 @@ updates (State prevCtx) d = State $ B.copyAndFreeze prevCtx (loop d)
   where
     loop [] _ = return ()
     loop (x : xs) ctxPtr = do
-        B.withByteArray x $ \dataPtr -> c_poly1305_update ctxPtr dataPtr (fromIntegral $ B.length x)
+        B.withByteArray x $ \dataPtr ->
+            B.inCLengths (B.length x) $ \off n ->
+                c_poly1305_update ctxPtr (dataPtr `plusPtr` off) (fromIntegral n)
         loop xs ctxPtr
 {-# NOINLINE updates #-}
 
@@ -124,5 +129,9 @@ auth k d = Auth $ B.allocAndFreeze 16 $ \dst -> do
         B.withByteArray k $ \keyPtr -> do
             c_poly1305_init (castPtr ctxPtr) keyPtr
             B.withByteArray d $ \dataPtr ->
-                c_poly1305_update (castPtr ctxPtr) dataPtr (fromIntegral $ B.length d)
+                B.inCLengths (B.length d) $ \off n ->
+                    c_poly1305_update
+                        (castPtr ctxPtr)
+                        (dataPtr `plusPtr` off)
+                        (fromIntegral n)
             c_poly1305_finalize dst (castPtr ctxPtr)

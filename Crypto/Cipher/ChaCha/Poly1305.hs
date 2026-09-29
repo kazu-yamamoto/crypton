@@ -72,6 +72,7 @@ encrypt
     -> Int
     -> CryptoFailable output
 encrypt (Context k) nonce aad input taglen
+    | tooLongForC aad input = CryptoFailed CryptoError_ParameterInvalid
     | not (validNonce nonce) = CryptoFailed CryptoError_IvSizeInvalid
     | badTag taglen = CryptoFailed CryptoError_AuthenticationTagSizeInvalid
     | otherwise =
@@ -111,6 +112,7 @@ decrypt
     -> Int
     -> Maybe ba
 decrypt (Context k) nonce aad input taglen
+    | tooLongForC aad input = Nothing
     | not (validNonce nonce) = Nothing
     | badTag taglen || B.length input < taglen = Nothing
     | otherwise = unsafeDoIO $ do
@@ -158,6 +160,7 @@ decryptWithTag
     -> Int
     -> CryptoFailable (ba, AuthTag)
 decryptWithTag (Context k) nonce aad input taglen
+    | tooLongForC aad input = CryptoFailed CryptoError_ParameterInvalid
     | not (validNonce nonce) = CryptoFailed CryptoError_IvSizeInvalid
     | badTag taglen = CryptoFailed CryptoError_AuthenticationTagSizeInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
@@ -179,6 +182,15 @@ decryptWithTag (Context k) nonce aad input taglen
                                     ip
                                     (fromIntegral $ B.length input)
         return (out, AuthTag $ B.convert (tagbs :: B.Bytes))
+
+-- | The C takes its lengths as @uint32_t@, so a message or its additional
+-- data from 2^32 bytes up cannot be handed to it: the length would be
+-- truncated and most of the buffer left untouched, with nothing to say so.
+-- The C does the whole message in one call, so there is no splitting it.
+tooLongForC
+    :: (ByteArrayAccess aad, ByteArrayAccess ba) => aad -> ba -> Bool
+tooLongForC aad input =
+    B.overCLength (B.length aad) || B.overCLength (B.length input)
 
 -- RFC 8439 is the twelve-byte nonce.  ChaCha20 will take eight, but that is
 -- the other construction, with a 64-bit block counter, and it is not what

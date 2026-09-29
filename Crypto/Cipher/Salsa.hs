@@ -70,10 +70,19 @@ combine prevSt@(State prevStMem) src
     | B.null src = (B.empty, prevSt)
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
-            B.alloc (B.length src) $ \dstPtr ->
-                B.withByteArray src $ \srcPtr -> do
-                    ccrypton_salsa_combine dstPtr ctx srcPtr (fromIntegral $ B.length src)
+            B.alloc n $ \dstPtr ->
+                B.withByteArray src $ \srcPtr ->
+                    -- in pieces the C's uint32_t length can hold; it carries
+                    -- the state in ctx, so it can simply be called again
+                    B.inCLengths n $ \off len ->
+                        ccrypton_salsa_combine
+                            (dstPtr `plusPtr` off)
+                            ctx
+                            (srcPtr `plusPtr` off)
+                            (fromIntegral len)
         return (out, State st)
+  where
+    n = B.length src
 
 -- | Generate a number of bytes from the Salsa output directly
 generate
@@ -88,7 +97,11 @@ generate prevSt@(State prevStMem) len
     | otherwise = unsafeDoIO $ do
         (out, st) <- B.copyRet prevStMem $ \ctx ->
             B.alloc len $ \dstPtr ->
-                ccrypton_salsa_generate dstPtr ctx (fromIntegral len)
+                B.inCLengths len $ \off n ->
+                    ccrypton_salsa_generate
+                        (dstPtr `plusPtr` off)
+                        ctx
+                        (fromIntegral n)
         return (out, State st)
 
 foreign import ccall "crypton_salsa_init"
