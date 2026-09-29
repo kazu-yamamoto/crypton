@@ -15,7 +15,10 @@ license-files:
     cbits/aes/LICENSE.fusion
     cbits/asm/LICENSE.cryptogams
     cbits/s2n/LICENSE
-copyright:          Vincent Hanquez <vincent@snarc.org>
+copyright:
+    2006-2022 Vincent Hanquez <vincent@snarc.org> and contributors,
+    2023-2026 Kazu Yamamoto <kazu@iij.ad.jp>
+
 maintainer:         Kazu Yamamoto <kazu@iij.ad.jp>
 author:             Vincent Hanquez <vincent@snarc.org>
 stability:          experimental
