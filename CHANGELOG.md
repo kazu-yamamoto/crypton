@@ -2,6 +2,24 @@
 
 ## 2.1.3
 
+* perf(ecdsa): P-256 verification multiplies both scalars at once, in
+  variable time, where it used to do two constant-time multiplications and
+  add the results.  Everything a verification touches is public -- the
+  message, the signature and the public key -- so the constant-time work
+  there was paid for nothing, and the two multiplications can share their
+  doublings besides.  Both scalars go into non-adjacent form, width 7 for
+  the base point, whose odd multiples are a table in the library, and width
+  5 for the public key, whose eight are built per call; one pass down the
+  digits does a doubling at every step and an addition where a digit is not
+  zero.  Measured through the Haskell API on an Apple M4, a verification
+  goes 30.37 to 25.48 microseconds, and the multiplication itself 29.94 to
+  25.34; on an x86-64, 85.04 to 71.53.  Signing is untouched.  s2n-bignum's
+  point addition is correct except when its two arguments are the same
+  point, which is the side condition its proof carries, so a sum that comes
+  out as the point at infinity from arguments that were not is given up on
+  and the constant-time pair answers instead -- 1203 cases covering that,
+  including 41 that take the fallback, agree with the old answers on both
+  architectures
 * perf(gcm): AES-GCM uses the 512-bit form of the AES and carry-less
   multiply instructions where the processor has them and they are worth
   having, which is Ice Lake and Zen 5 onwards.  Four blocks to an
