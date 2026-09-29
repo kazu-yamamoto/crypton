@@ -18,6 +18,13 @@
   notice.  Three other arrangements were tried and measured worse, and the
   comment above the function says which and why, so that they are not tried
   again
+* perf(rsa): a Montgomery multiplication no longer clears its 2n-limb
+  scratch first.  The first row of the product lands on empty space, so it
+  is written rather than added to, and every row after it reads only limbs
+  an earlier row has already put there.  Worth between a half and one per
+  cent of an RSA-2048 signature on an Apple M4, which is less than it
+  sounds like it should be: the clearing was cheap, and what it cost was
+  mostly the row that had to add to zeros
 * perf(rsa): the R^2 that Montgomery arithmetic needs before it can start is
   built by squaring rather than by doubling a bit at a time.  Write a value
   as 2^(lgR + d) mod m; a Montgomery squaring divides by R, so it takes that

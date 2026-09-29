@@ -353,14 +353,33 @@ static inline void mont_reduce(limb_t *r, limb_t *t, const limb_t *m, limb_t n0,
 	select_n(r, r, t + n, take & 1, n);
 }
 
+/* t = a * b, the low n limbs, returning the limb above them: addmul_1 with
+ * nothing to add to, for the row of a product that lands on empty space. */
+static inline limb_t mul_1(limb_t *t, const limb_t *a, uint32_t n, limb_t b)
+{
+	limb_t carry = 0;
+	uint32_t i;
+
+	for (i = 0; i < n; i++) {
+		dlimb_t p = (dlimb_t) a[i] * b + carry;
+
+		t[i] = (limb_t) p;
+		carry = (limb_t) (p >> LIMB_BITS);
+	}
+	return carry;
+}
+
 /* r = a * b * R^-1 mod m, with t of 2n limbs */
 static inline void mont_mul(limb_t *r, const limb_t *a, const limb_t *b,
                      const limb_t *m, limb_t n0, uint32_t n, limb_t *t)
 {
 	uint32_t i;
 
-	memset(t, 0, 2 * n * sizeof(limb_t));
-	for (i = 0; i < n; i++)
+	/* Nothing has to be cleared first.  The first row lands on empty space
+	 * and writes t[0 .. n], and every row after it reads t[i .. i+n-1],
+	 * whose top limb is the one the row before it wrote. */
+	t[n] = mul_1(t, a, n, b[0]);
+	for (i = 1; i < n; i++)
 		t[n + i] = addmul_1(t + i, a, n, b[i]);
 	mont_reduce(r, t, m, n0, n);
 }
@@ -374,8 +393,14 @@ static inline void mont_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t 
 	limb_t carry = 0;
 	uint32_t i;
 
-	memset(t, 0, 2 * n * sizeof(limb_t));
-	for (i = 0; i + 1 < n; i++)
+	/* The first row lands on empty space here too, on t[1 .. n], and the
+	 * rows between them write t[1 .. 2n-2] before any of it is read.  The
+	 * diagonal below is the only reader of the two ends. */
+	t[0] = 0;
+	t[2 * n - 1] = 0;
+	if (n > 1)
+		t[n] = mul_1(t + 1, a + 1, n - 1, a[0]);
+	for (i = 1; i + 1 < n; i++)
 		t[n + i] = addmul_1(t + i + i + 1, a + i + 1, n - 1 - i, a[i]);
 	shl1(t, 2 * n); /* their sum is under half of what 2n limbs hold */
 	for (i = 0; i < n; i++) {
