@@ -335,12 +335,28 @@ void SIZED(crypton_aesni_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	gcm->length_input += length;
 
+#ifdef WITH_GCM_VAES512
+	/*
+	 * The widest form the processor has, first: four blocks to an
+	 * instruction where the 256-bit one below takes two and the assembly
+	 * after that takes one.  Same contract throughout -- whole groups off
+	 * the front, the counter and the tag left behind.
+	 */
+	if (nb_blocks >= GCM_VAES512_MIN_BLOCKS
+	    && (crypton_x86_simd_features() & CRYPTON_X86_VAES512)) {
+		uint32_t done = crypton_gcm_vaes512_bulk_encrypt(
+			output, gcm, key, input, nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
 #ifdef WITH_GCM_VAES
 	/*
-	 * The 256-bit instructions first where the processor has them: they
-	 * take two blocks where the ones below take one, and the assembly
-	 * that follows is 128-bit throughout.  Same contract -- whole groups
-	 * off the front, the counter and the tag left behind.
+	 * The 256-bit instructions next: they take two blocks where the ones
+	 * below take one, and the assembly that follows is 128-bit
+	 * throughout.
 	 */
 	if (nb_blocks >= GCM_VAES_MIN_BLOCKS
 	    && (crypton_x86_simd_features() & CRYPTON_X86_VAES)) {
@@ -501,6 +517,18 @@ void SIZED(crypton_aesni_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *ke
 
 	gcm->length_input += length;
 
+#ifdef WITH_GCM_VAES512
+	/* as in encryption; the tag is taken over the input here */
+	if (nb_blocks >= GCM_VAES512_MIN_BLOCKS
+	    && (crypton_x86_simd_features() & CRYPTON_X86_VAES512)) {
+		uint32_t done = crypton_gcm_vaes512_bulk_decrypt(
+			output, gcm, key, input, nb_blocks * 16);
+
+		output += done;
+		input += done;
+		nb_blocks -= done / 16;
+	}
+#endif
 #ifdef WITH_GCM_VAES
 	/* as in encryption; the tag is taken over the input here */
 	if (nb_blocks >= GCM_VAES_MIN_BLOCKS

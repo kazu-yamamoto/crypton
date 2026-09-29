@@ -182,13 +182,23 @@ uint32_t crypton_x86_simd_features(void)
 	static uint32_t features = 0;
 
 	if (!resolved) {
-		uint32_t eax, ebx, ecx, edx, leaf1, maxleaf, f = 0;
+		uint32_t eax, ebx, ecx, edx, leaf1, maxleaf, family, f = 0;
+		int amd;
 
 		cpuid(0, &eax, &ebx, &ecx, &edx);
 		maxleaf = eax;
+		/* "AuthenticAMD" arrives as EBX, EDX, ECX in that order */
+		amd = (ebx == 0x68747541 && edx == 0x69746e65
+		       && ecx == 0x444d4163);
 
 		cpuid(1, &eax, &ebx, &ecx, &edx);
 		leaf1 = ecx;
+		/* the family is the base one, and the extended field is
+		 * added to it only when the base reads 0xf, which is how
+		 * every AMD Zen part reports */
+		family = (eax >> 8) & 0xf;
+		if (family == 0xf)
+			family += (eax >> 20) & 0xff;
 		if (leaf1 & (1 << 9))
 			f |= CRYPTON_X86_SSSE3;
 		if (leaf1 & (1 << 1))
@@ -236,6 +246,29 @@ uint32_t crypton_x86_simd_features(void)
 			if ((ecx & (1 << 9)) && (ecx & (1 << 10))
 			    && (f & CRYPTON_X86_AVX2))
 				f |= CRYPTON_X86_VAES;
+			/* The same two instructions in their 512-bit form,
+			 * which wants AVX-512 F, BW and VL as well -- and
+			 * three more bits of XCR0, for the mask registers and
+			 * the two upper halves of the vector state.  A
+			 * machine can report the instructions and still fault
+			 * on them when the operating system has not said it
+			 * saves that state, which is what those bits are. */
+			if ((f & CRYPTON_X86_VAES)
+			    && (ebx & (1 << 16)) && (ebx & (1u << 30))
+			    && (ebx & (1u << 31))
+			    && ((xcr0() & 0xe6) == 0xe6)
+			    /* Not on Zen 4, which is AMD family 19h with
+			     * AVX-512: there the 512-bit instructions are two
+			     * 256-bit passes through a 256-bit datapath, so
+			     * they carry the wider encoding for none of the
+			     * throughput, and AES-GCM measures 0.6 to 3
+			     * per cent slower than the 256-bit path.  Zen 5
+			     * is family 1Ah and does have the wide datapath,
+			     * where the same code is half as fast again;
+			     * Zen 3, the other family 19h part, has no
+			     * AVX-512 at all and never reaches here. */
+			    && !(amd && family == 0x19))
+				f |= CRYPTON_X86_VAES512;
 		}
 		features = f;
 		resolved = 1;
