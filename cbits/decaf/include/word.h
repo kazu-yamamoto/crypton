@@ -68,7 +68,7 @@ extern int posix_memalign(void **, size_t, size_t);
  * Expand bit 0 of the given uint8_t to a mask_t all 1 or all 0
  * The input must be either 0 or 1
  */
-CRYPTON_DECAF_INLINE mask_t bit_to_mask(uint8_t bit) {
+static CRYPTON_DECAF_INLINE mask_t bit_to_mask(uint8_t bit) {
 #ifdef _MSC_VER
 #pragma warning ( push)
 #pragma warning ( disable : 4146)
