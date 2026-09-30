@@ -2,6 +2,72 @@
 
 ## 2.1.3
 
+* fix(number): the arithmetic crypton falls back to when it is built without
+  GMP no longer walks off the end of a buffer.  `fillPtr` writes a number out
+  starting at its last byte and stops at offset zero, so a number of no bytes
+  -- which is what zero is -- started it at minus one, and it never stopped.
+  The same build also had `exponentiation` fail to terminate on a negative
+  exponent, stepping between -1 and -2 until the stack ran out, where
+  `expFast` and `expSafe` both reach it; `numBits` fail to terminate on a
+  negative number; `numBits 0` answer one where GMP answers zero, so that
+  `numBytes 0` claimed a byte that is not there; and a modulus of one answer
+  one rather than zero in two places.  Every corner is now held to what the
+  GMP build answers on the same input, and `-integer-gmp` has a CI job so
+  that it stays that way
+* fix(cabal): `-fsupport_sse` no longer selects the SSE BLAKE2 and Argon2
+  sources on architectures that have no SSE, where they cannot compile, and
+  `-fold_toolchain_inliner` links again -- one of the sixteen inline
+  definitions in `cbits/decaf/include/word.h` had lost its `static`, which
+  `-fgnu89-inline` turns into a duplicate symbol.  Both flags now have a CI
+  job
+* fix(p256): `crypton_p256_shl` and `crypton_p256_shr` no longer shift a
+  digit by its own width, which the standard leaves undefined and which x86
+  and ARM answer differently.  Nothing in the library calls either, which is
+  why the sanitizers had not reported them: they can only report what runs
+* fix(headers): `crypton_skein256.h` and `crypton_skein512.h` declared six
+  functions under a misspelling of the package's own name, so the six the C
+  defines had no prototype at all.  `crypton_chacha.h` and `crypton_salsa.h`
+  each typedef'd a union to the bare name `block`, so no translation unit
+  could include both; they are `crypton_chacha_block` and
+  `crypton_salsa_block` now
+* security(c): seven places that erase key material and then let the memory
+  die -- five that `memset` a buffer and `free` it on the next line, two that
+  clear a recoded scalar in a local going out of scope -- now write through a
+  volatile pointer, which a compiler may not remove.  clang at -O2 was
+  keeping all seven, but that is its choice rather than a guarantee.  RSA-2048
+  signing is unchanged at 1479.3 microseconds against 1480.0 on an Apple M4
+* perf(ed448): the scalar arithmetic on Apple Silicon runs on 64-bit limbs
+  rather than 32-bit ones.  decaf sized its field limbs from the architecture
+  and its scalar limbs from a macro it worked out from the compiler, and the
+  two disagreed wherever `uint_fast32_t` is four bytes, so the same aarch64
+  CPU took 64-bit field limbs and 32-bit scalar limbs on macOS and 64-bit for
+  both on Linux.  Ed448 signing is 5.5% quicker for it, 20.69 to 19.56
+  microseconds on an M4
+* perf(p256): the one addition in each scalar multiplication that can be a
+  point added to itself goes through a complete formula rather than being
+  detected and worked around.  Kyle Butt pointed out that the comb's table is
+  affine, so the same three numbers are the point in projective coordinates
+  and in Jacobian ones, which is what lets a comb built on Jacobian
+  arithmetic step into the formula for one addition.  It costs about a third
+  of a percent, and buys an argument a reader had to follow becoming a
+  comparison a machine can run
+* doc(hash): the Haddock for `Context` says that it is not erased when it
+  is finished with, what survives in it, and why scrubbing every one is not
+  done -- it costs about 70% of a 32-byte hash, where the allocation is most
+  of the work
+* test(c): the C is now checked in CI for things the test suite cannot ask
+  about: whether it is the same on a 32-bit machine and on a big-endian one,
+  whether a private key ever decides a branch or an address, what a secret
+  leaves behind in memory, and whether anything breaks on generated input.
+  Each of the last four carries a probe that is deliberately wrong and has to
+  be reported, because a check that has quietly stopped working otherwise
+  reads as a clean bill of health -- which, four times over the course of
+  this work, is exactly what it did
+
+* doc(cabal): every dependency has an upper bound, which `cabal check` had
+  been asking for, and `bytestring` is no longer listed twice in the same
+  `build-depends`
+
 * fix(c): the table that says which AES implementation to call is filled in
   once, before there is a second thread, rather than on every
   `crypton_aes_initkey`.  Two threads taking a key at the same time were
