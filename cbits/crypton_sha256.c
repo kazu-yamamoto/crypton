@@ -152,15 +152,27 @@ static void sha256_armv8_ctor(void)
 extern void crypton_sha256_asm_block_data_order(uint32_t state[8],
                                                 const void *data, size_t blocks);
 
+#ifdef WITH_ARMV8_SHA256_ASM
+/* The assembly picks its path from crypton_armcap_P, so the answer to the
+ * runtime check has to reach that word rather than the flag above.  It is
+ * set here, before there is a second thread, for the reason the constructor
+ * in cbits/crypton_aes.c gives.
+ *
+ * This ran from sha256_asm_ready below until 2.1.3, guarded by the flag
+ * still being unresolved -- which stopped happening when the constructor
+ * above was added, so the bit was never set and the assembly took its
+ * generic path.  SHA-256 was 5.7 times slower on an Apple M4 for it. */
+__attribute__((constructor))
+static void sha256_armcap_ctor(void)
+{
+	if (crypton_sha256_armv8_available())
+		crypton_armcap_P |= CRYPTON_ARMCAP_SHA256;
+}
+#endif
+
 static void sha256_asm_ready(void)
 {
-#ifdef WITH_ARMV8_SHA256_ASM
-	if (sha256_use_armv8 < 0) {
-		if (crypton_sha256_armv8_available())
-			crypton_armcap_P |= CRYPTON_ARMCAP_SHA256;
-		sha256_use_armv8 = 1;
-	}
-#else
+#ifndef WITH_ARMV8_SHA256_ASM
 	crypton_x86_ia32cap_resolve();
 #endif
 }
