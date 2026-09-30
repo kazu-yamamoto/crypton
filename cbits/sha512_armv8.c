@@ -73,7 +73,7 @@ static const uint64_t K[80] = {
  * to the start; a group of eight steps is one pass over the schedule.
  */
 TARGET_ARMV8_SHA3
-void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint64_t buf[16])
+void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint8_t buf[128])
 {
 	uint64x2_t ab, cd, ef, gh, ab0, cd0, ef0, gh0;
 	uint64x2_t s[8];
@@ -86,7 +86,7 @@ void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint64_t buf[16])
 
 	for (i = 0; i < 8; i++)
 		s[i] = vreinterpretq_u64_u8(vrev64q_u8(
-		    vld1q_u8((const uint8_t *) (buf + 2 * i))));
+		    vld1q_u8(buf + 16 * i)));
 
 /* two rounds; A, B, C, D is a rotation of gh, ef, cd, ab */
 #define RND(A, B, C, D, sv, ki)                                             \

@@ -72,15 +72,15 @@ void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
 	e0 = state[4];
 
 	for (; blocks > 0; blocks--, data += 64) {
-	const uint32_t *buf = (const uint32_t *) data;
+	const uint8_t *buf = data;
 
 	abcd_prev = abcd;
 	e_prev = e0;
 
-	m0 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf))));
-	m1 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 4))));
-	m2 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 8))));
-	m3 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 12))));
+	m0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf)));
+	m1 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 16)));
+	m2 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 32)));
+	m3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 48)));
 
 	wk0 = vaddq_u32(m0, k0);
 	wk1 = vaddq_u32(m1, k0);
@@ -151,7 +151,7 @@ void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
 }
 
 /* the one-block form, for the partial block a message ends with */
-void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16])
+void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint8_t buf[64])
 {
 	crypton_sha1_armv8_do_chunks(state, (const uint8_t *) buf, 1);
 }

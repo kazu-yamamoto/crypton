@@ -102,14 +102,16 @@ extern size_t crypton_keccak_asm_absorb(uint64_t state[25], const void *inp,
 #define sha3_asm_absorb crypton_keccak_asm_absorb
 #endif
 
-static inline void sha3_do_chunk(uint64_t state[25], uint64_t buf[], int bufsz)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static inline void sha3_do_chunk(uint64_t state[25], const uint8_t *buf, int bufsz)
 {
 	int i, j, r;
 	uint64_t tmp, bc[5];
 
 	/* merge buf with state */
 	for (i = 0; i < bufsz; i++)
-		state[i] ^= le64_to_cpu(buf[i]);
+		state[i] ^= load_le64(buf + 8 * i);
 
 #ifdef WITH_ARMV8_SHA3
 	if (sha3_armv8_ok()) {
@@ -180,14 +182,14 @@ void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len
 	to_fill = ctx->bufsz - ctx->bufindex;
 
 	if (ctx->bufindex == ctx->bufsz) {
-		sha3_do_chunk(ctx->state, (uint64_t *) ctx->buf, ctx->bufsz / 8);
+		sha3_do_chunk(ctx->state, ctx->buf, ctx->bufsz / 8);
 		ctx->bufindex = 0;
 	}
 
 	/* process partial buffer if there's enough data to make a block */
 	if (ctx->bufindex && len >= to_fill) {
 		memcpy(ctx->buf + ctx->bufindex, data, to_fill);
-		sha3_do_chunk(ctx->state, (uint64_t *) ctx->buf, ctx->bufsz / 8);
+		sha3_do_chunk(ctx->state, ctx->buf, ctx->bufsz / 8);
 		len -= to_fill;
 		data += to_fill;
 		ctx->bufindex = 0;
@@ -207,18 +209,9 @@ void crypton_sha3_update(struct sha3_ctx *ctx, const uint8_t *data, uint32_t len
 	}
 #endif
 
-	if (need_alignment(data, 8)) {
-		uint64_t tramp[SHA3_BUF_SIZE_MAX/8];
-		ASSERT_ALIGNMENT(tramp, 8);
-		for (; len >= ctx->bufsz; len -= ctx->bufsz, data += ctx->bufsz) {
-			memcpy(tramp, data, ctx->bufsz);
-			sha3_do_chunk(ctx->state, tramp, ctx->bufsz / 8);
-		}
-	} else {
-		/* process as much ctx->bufsz-block */
-		for (; len >= ctx->bufsz; len -= ctx->bufsz, data += ctx->bufsz)
-			sha3_do_chunk(ctx->state, (uint64_t *) data, ctx->bufsz / 8);
-	}
+	/* No trampoline: load_le64 does not ask for a boundary. */
+	for (; len >= ctx->bufsz; len -= ctx->bufsz, data += ctx->bufsz)
+		sha3_do_chunk(ctx->state, data, ctx->bufsz / 8);
 
 
 	/* append data into buf */
@@ -232,7 +225,7 @@ void crypton_sha3_finalize_with_pad_byte(struct sha3_ctx *ctx, uint8_t pad_byte)
 {
 	/* process full buffer if needed */
 	if (ctx->bufindex == ctx->bufsz) {
-		sha3_do_chunk(ctx->state, (uint64_t *) ctx->buf, ctx->bufsz / 8);
+		sha3_do_chunk(ctx->state, ctx->buf, ctx->bufsz / 8);
 		ctx->bufindex = 0;
 	}
 
@@ -242,7 +235,7 @@ void crypton_sha3_finalize_with_pad_byte(struct sha3_ctx *ctx, uint8_t pad_byte)
 	ctx->buf[ctx->bufsz - 1] |= 0x80;
 
 	/* process */
-	sha3_do_chunk(ctx->state, (uint64_t *) ctx->buf, ctx->bufsz / 8);
+	sha3_do_chunk(ctx->state, ctx->buf, ctx->bufsz / 8);
 	ctx->bufindex = 0;
 }
 

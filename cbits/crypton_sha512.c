@@ -91,13 +91,16 @@ static const uint64_t k[] = {
 #define s0(x)       (ror64(x, 1) ^ ror64(x, 8) ^ (x >> 7))
 #define s1(x)       (ror64(x, 19) ^ ror64(x, 61) ^ (x >> 6))
 
-static void sha512_do_chunk_generic(struct sha512_ctx *ctx, uint64_t *buf)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static void sha512_do_chunk_generic(struct sha512_ctx *ctx, const uint8_t *buf)
 {
 	uint64_t a, b, c, d, e, f, g, h, t1, t2;
 	int i;
 	uint64_t w[80];
 
-	cpu_to_be64_array(w, buf, 16);
+	for (i = 0; i < 16; i++)
+		w[i] = load_be64(buf + 8 * i);
 
 	for (i = 16; i < 80; i++)
 		w[i] = s1(w[i - 2]) + w[i - 7] + s0(w[i - 15]) + w[i - 16];
@@ -135,7 +138,7 @@ static void sha512_do_chunk_generic(struct sha512_ctx *ctx, uint64_t *buf)
  * widespread than the SHA-256 ones, so ask before using them.  Two threads
  * racing to answer here both write the same value.
  */
-extern void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint64_t buf[16]);
+extern void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint8_t buf[128]);
 extern int crypton_sha512_armv8_available(void);
 
 static int sha512_use_armv8 = -1;
@@ -154,7 +157,7 @@ extern void crypton_sha512_asm_block_data_order(uint64_t state[8],
                                                 const void *data, size_t blocks);
 #endif
 
-static void sha512_do_chunk(struct sha512_ctx *ctx, uint64_t *buf)
+static void sha512_do_chunk(struct sha512_ctx *ctx, const uint8_t *buf)
 {
 #ifdef SHA512_ASM
 	crypton_x86_ia32cap_resolve();
@@ -192,7 +195,7 @@ void crypton_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t
 	/* process partial buffer if there's enough data to make a block */
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		sha512_do_chunk(ctx, (uint64_t *) ctx->buf);
+		sha512_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
@@ -210,18 +213,9 @@ void crypton_sha512_update(struct sha512_ctx *ctx, const uint8_t *data, uint32_t
 		len -= (uint32_t) blocks * 128;
 	}
 #else
-	if (need_alignment(data, 8)) {
-		uint64_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 8);
-		for (; len >= 128; len -= 128, data += 128) {
-			memcpy(tramp, data, 128);
-			sha512_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 128-block as possible */
-		for (; len >= 128; len -= 128, data += 128)
-			sha512_do_chunk(ctx, (uint64_t *) data);
-	}
+	/* No trampoline: load_be64 does not ask for a boundary. */
+	for (; len >= 128; len -= 128, data += 128)
+		sha512_do_chunk(ctx, data);
 #endif
 
 	/* append data into buf */
@@ -344,7 +338,7 @@ void crypton_sha512t_init(struct sha512_ctx *ctx, uint32_t hashlen)
 		/* re-init the context, otherwise len is changed */
 		memset(ctx, 0, sizeof(*ctx));
 		for (i = 0; i < 8; i++)
-			ctx->h[i] = cpu_to_be64(((uint64_t *) out)[i]);
+			ctx->h[i] = load_be64(out + 8 * i);
 		}
 	}
 }

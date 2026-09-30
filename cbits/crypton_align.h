@@ -3,6 +3,8 @@
 
 #include "crypton_bitfn.h"
 
+#include <string.h>
+
 #if (defined(__i386__))
 # define UNALIGNED_ACCESS_OK
 #elif defined(__x86_64__)
@@ -34,107 +36,119 @@
 #define need_alignment(p,n) IS_ALIGNED(p,n)
 #endif
 
-static inline uint32_t load_le32_aligned(const uint8_t *p)
-{
-	return le32_to_cpu(*((uint32_t *) p));		
-}
+/*
+ * Reading and writing a 32- or 64-bit word at a byte pointer.
+ *
+ * Through memcpy, not a cast to uint32_t * or uint64_t *.  A cast is two
+ * things the standard does not allow -- a read of the value through the
+ * wrong type, and a read at an address that type is not aligned for -- and
+ * this file used to do both wherever UNALIGNED_ACCESS_OK is defined, which
+ * is i386 and x86-64.  UndefinedBehaviorSanitizer reported seventy-eight
+ * lines of it.
+ *
+ * Every compiler crypton is built with turns a memcpy of four or eight bytes
+ * into the one load or store the cast used to be, so this is the same code
+ * with none of the licence.  Where the target cannot do an unaligned load,
+ * the compiler is the one that knows, and it emits what the target needs --
+ * which is what the byte-at-a-time versions this replaces were for.
+ *
+ * The _aligned names stay because nineteen files use them.  They no longer
+ * ask anything of the pointer.
+ */
 
-static inline void store_le32_aligned(uint8_t *dst, const uint32_t v)
-{
-	*((uint32_t *) dst) = cpu_to_le32(v);
-}
-
-static inline void xor_le32_aligned(uint8_t *dst, const uint32_t v)
-{
-	*((uint32_t *) dst) ^= cpu_to_le32(v);
-}
-
-static inline void store_be32_aligned(uint8_t *dst, const uint32_t v)
-{
-	*((uint32_t *) dst) = cpu_to_be32(v);
-}
-
-static inline void xor_be32_aligned(uint8_t *dst, const uint32_t v)
-{
-	*((uint32_t *) dst) ^= cpu_to_be32(v);
-}
-
-static inline void store_le64_aligned(uint8_t *dst, const uint64_t v)
-{
-	*((uint64_t *) dst) = cpu_to_le64(v);
-}
-
-static inline void store_be64_aligned(uint8_t *dst, const uint64_t v)
-{
-	*((uint64_t *) dst) = cpu_to_be64(v);
-}
-
-static inline void xor_be64_aligned(uint8_t *dst, const uint64_t v)
-{
-	*((uint64_t *) dst) ^= cpu_to_be64(v);
-}
-
-#ifdef UNALIGNED_ACCESS_OK
-#define load_le32(a) load_le32_aligned(a)
-#else
 static inline uint32_t load_le32(const uint8_t *p)
 {
-	return ((uint32_t)p[0]) | ((uint32_t)p[1] <<  8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-#endif
+	uint32_t v;
 
-#ifdef UNALIGNED_ACCESS_OK
-#define store_le32(a, b) store_le32_aligned(a, b)
-#define xor_le32(a, b) xor_le32_aligned(a, b)
-#else
+	memcpy(&v, p, sizeof(v));
+	return le32_to_cpu(v);
+}
+
+static inline uint64_t load_le64(const uint8_t *p)
+{
+	uint64_t v;
+
+	memcpy(&v, p, sizeof(v));
+	return le64_to_cpu(v);
+}
+
+static inline uint32_t load_be32(const uint8_t *p)
+{
+	uint32_t v;
+
+	memcpy(&v, p, sizeof(v));
+	return be32_to_cpu(v);
+}
+
+static inline uint64_t load_be64(const uint8_t *p)
+{
+	uint64_t v;
+
+	memcpy(&v, p, sizeof(v));
+	return be64_to_cpu(v);
+}
+
 static inline void store_le32(uint8_t *dst, const uint32_t v)
 {
-	dst[0] = v; dst[1] = v >> 8; dst[2] = v >> 16; dst[3] = v >> 24;
+	uint32_t w = cpu_to_le32(v);
+
+	memcpy(dst, &w, sizeof(w));
 }
+
 static inline void xor_le32(uint8_t *dst, const uint32_t v)
 {
-	dst[0] ^= v; dst[1] ^= v >> 8; dst[2] ^= v >> 16; dst[3] ^= v >> 24;
+	store_le32(dst, le32_to_cpu(load_le32(dst)) ^ v);
 }
-#endif
 
-#ifdef UNALIGNED_ACCESS_OK
-#define store_be32(a, b) store_be32_aligned(a, b)
-#define xor_be32(a, b) xor_be32_aligned(a, b)
-#else
 static inline void store_be32(uint8_t *dst, const uint32_t v)
 {
-	dst[3] = v; dst[2] = v >> 8; dst[1] = v >> 16; dst[0] = v >> 24;
+	uint32_t w = cpu_to_be32(v);
+
+	memcpy(dst, &w, sizeof(w));
 }
+
 static inline void xor_be32(uint8_t *dst, const uint32_t v)
 {
-	dst[3] ^= v; dst[2] ^= v >> 8; dst[1] ^= v >> 16; dst[0] ^= v >> 24;
-}
-#endif
+	uint32_t w;
 
-#ifdef UNALIGNED_ACCESS_OK
-#define store_le64(a, b) store_le64_aligned(a, b)
-#else
+	memcpy(&w, dst, sizeof(w));
+	w ^= cpu_to_be32(v);
+	memcpy(dst, &w, sizeof(w));
+}
+
 static inline void store_le64(uint8_t *dst, const uint64_t v)
 {
-	dst[0] = v      ; dst[1] = v >> 8 ; dst[2] = v >> 16; dst[3] = v >> 24;
-	dst[4] = v >> 32; dst[5] = v >> 40; dst[6] = v >> 48; dst[7] = v >> 56;
-}
-#endif
+	uint64_t w = cpu_to_le64(v);
 
-#ifdef UNALIGNED_ACCESS_OK
-#define store_be64(a, b) store_be64_aligned(a, b)
-#define xor_be64(a, b) xor_be64_aligned(a, b)
-#else
+	memcpy(dst, &w, sizeof(w));
+}
+
 static inline void store_be64(uint8_t *dst, const uint64_t v)
 {
-	dst[7] = v      ; dst[6] = v >> 8 ; dst[5] = v >> 16; dst[4] = v >> 24;
-	dst[3] = v >> 32; dst[2] = v >> 40; dst[1] = v >> 48; dst[0] = v >> 56;
+	uint64_t w = cpu_to_be64(v);
+
+	memcpy(dst, &w, sizeof(w));
 }
+
 static inline void xor_be64(uint8_t *dst, const uint64_t v)
 {
-	dst[7] ^= v      ; dst[6] ^= v >> 8 ; dst[5] ^= v >> 16; dst[4] ^= v >> 24;
-	dst[3] ^= v >> 32; dst[2] ^= v >> 40; dst[1] ^= v >> 48; dst[0] ^= v >> 56;
+	uint64_t w;
+
+	memcpy(&w, dst, sizeof(w));
+	w ^= cpu_to_be64(v);
+	memcpy(dst, &w, sizeof(w));
 }
-#endif
+
+#define load_le32_aligned(p)     load_le32(p)
+#define load_le64_aligned(p)     load_le64(p)
+#define load_be32_aligned(p)     load_be32(p)
+#define load_be64_aligned(p)     load_be64(p)
+#define store_le32_aligned(d, v) store_le32(d, v)
+#define xor_le32_aligned(d, v)   xor_le32(d, v)
+#define store_be32_aligned(d, v) store_be32(d, v)
+#define xor_be32_aligned(d, v)   xor_be32(d, v)
+#define store_le64_aligned(d, v) store_le64(d, v)
+#define store_be64_aligned(d, v) store_be64(d, v)
+#define xor_be64_aligned(d, v)   xor_be64(d, v)
 
 #endif

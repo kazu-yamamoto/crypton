@@ -2,6 +2,16 @@
 
 ## 2.1.3
 
+* fix(c): the C no longer reads a word off a caller's pointer by casting it,
+  which the standard leaves undefined at an address the word type is not
+  aligned for and which UndefinedBehaviorSanitizer reported on seventy-eight
+  lines.  `crypton_align.h`'s accessors go through `memcpy`, the ten hash
+  implementations read their block a word at a time rather than pointing at
+  it as though it were an array of words, and `block128` is packed so that a
+  caller's pointer may be one.  The non-aligned trampolines those hashes kept
+  for the case are gone with it.  Measured on an Apple M4, every hash and
+  AES-GCM is where it was, within a tenth of a per cent.  The sanitizers now
+  run in CI with nothing turned off
 * fix(c): two left shifts the C standard leaves undefined, found by building
   the C with UndefinedBehaviorSanitizer and running the test suite.  One
   shifted a carry into the sign bit of a signed 64-bit digit in

@@ -59,7 +59,7 @@ static const uint32_t K[64] = {
  * order, `buf` the block as it arrived, which SHA-256 reads big-endian.
  */
 TARGET_ARMV8_CRYPTO
-void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint32_t buf[16])
+void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint8_t buf[64])
 {
 	uint32x4_t abcd, efgh, abcd_prev, efgh_prev, abcd_save, tmp;
 	uint32x4_t m0, m1, m2, m3;
@@ -68,10 +68,10 @@ void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint32_t buf[16])
 	abcd_prev = abcd = vld1q_u32(state);
 	efgh_prev = efgh = vld1q_u32(state + 4);
 
-	m0 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf))));
-	m1 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 4))));
-	m2 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 8))));
-	m3 = vreinterpretq_u32_u8(vrev32q_u8(vreinterpretq_u8_u32(vld1q_u32(buf + 12))));
+	m0 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf)));
+	m1 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 16)));
+	m2 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 32)));
+	m3 = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(buf + 48)));
 
 	/* twelve groups of four rounds that also extend the schedule ... */
 	for (i = 0; i < 48; i += 16) {
