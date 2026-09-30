@@ -24,6 +24,9 @@
  */
 
 #include <stdint.h>
+#if defined(__aarch64__) && defined(__GNUC__)
+#pragma GCC target ("+crypto+sha3")
+#endif
 #include <arm_neon.h>
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
