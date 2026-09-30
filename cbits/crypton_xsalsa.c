@@ -41,7 +41,7 @@ void crypton_xsalsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds,
   memset(ctx, 0, sizeof(*ctx));
   ctx->nb_rounds = nb_rounds;
 
-  /* Create initial 512-bit input block:
+  /* Create initial 512-bit input crypton_salsa_block:
        (x0, x5, x10, x15) is the Salsa20 constant
        (x1, x2, x3, x4, x11, x12, x13, x14) is a 256-bit key
        (x6, x7, x8, x9) is the first 128 bits of a 192-bit nonce
@@ -56,7 +56,7 @@ void crypton_xsalsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds,
 void crypton_xsalsa_derive(crypton_salsa_context *ctx,
                               uint32_t ivlen, const uint8_t *iv)
 {
-  /* Finish creating initial 512-bit input block:
+  /* Finish creating initial 512-bit input crypton_salsa_block:
        (x6, x7, x8, x9) is the first 128 bits of a 192-bit nonce
 
      Except iv has been shifted by 64 bits so there are now only 128 bits ahead.
@@ -65,15 +65,15 @@ void crypton_xsalsa_derive(crypton_salsa_context *ctx,
   ctx->st.d[ 9] += load_le32(iv + 4);
 
   /* Compute (z0, z1, . . . , z15) = doubleround ^(r/2) (x0, x1, . . . , x15) */
-  block hSalsa;
-  memset(&hSalsa, 0, sizeof(block));
+  crypton_salsa_block hSalsa;
+  memset(&hSalsa, 0, sizeof(crypton_salsa_block));
   crypton_salsa_core_xor(ctx->nb_rounds, &hSalsa, &ctx->st);
  
-  /* Build a new 512-bit input block (x′0, x′1, . . . , x′15):
+  /* Build a new 512-bit input crypton_salsa_block (x′0, x′1, . . . , x′15):
        (x′0, x′5, x′10, x′15) is the Salsa20 constant
        (x′1,x′2,x′3,x′4,x′11,x′12,x′13,x′14) = (z0,z5,z10,z15,z6,z7,z8,z9)
        (x′6,x′7) is the last 64 bits of the 192-bit nonce
-       (x′8, x′9) is a 64-bit block counter.
+       (x′8, x′9) is a 64-bit crypton_salsa_block counter.
   */
   ctx->st.d[ 1] = hSalsa.d[ 0] - ctx->st.d[ 0];
   ctx->st.d[ 2] = hSalsa.d[ 5] - ctx->st.d[ 5];

@@ -37,10 +37,10 @@ static void blockmix_salsa8(uint32_t *in, uint32_t *out, uint32_t *X, const uint
 	array_copy32(X, &in[(2 * r - 1) * 16], 16);
 
 	for (i = 0; i < 2 * r; i += 2) {
-		crypton_salsa_core_xor(8, (block *) X, (block *) &in[i*16]);
+		crypton_salsa_core_xor(8, (crypton_salsa_block *) X, (crypton_salsa_block *) &in[i*16]);
 		array_copy32(&out[i * 8], X, 16);
 
-		crypton_salsa_core_xor(8, (block *) X, (block *) &in[i*16+16]);
+		crypton_salsa_core_xor(8, (crypton_salsa_block *) X, (crypton_salsa_block *) &in[i*16+16]);
 		array_copy32(&out[i * 8 + r * 16], X, 16);
 	}
 }

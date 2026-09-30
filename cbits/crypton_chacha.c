@@ -51,7 +51,7 @@ void crypton_chacha_simd_combine(int rounds, uint8_t *dst, const uint8_t *src,
                                  const crypton_chacha_state *in);
 void crypton_chacha_simd_generate(int rounds, uint8_t *dst,
                                   const crypton_chacha_state *in);
-/* The counters in a group must not carry into d[13], which the block loop
+/* The counters in a group must not carry into d[13], which the crypton_chacha_block loop
  * below handles and the vector one does not; that is one run in 2^29. */
 #define CHACHA_SIMD_OK(st, n) ((st)->d[12] <= 0xffffffffU - (uint32_t) (n))
 #endif
@@ -89,7 +89,7 @@ static int chacha_asm_state(const crypton_chacha_state *st)
  * How much is worth handing over.  On AArch64 the module's vector path
  * starts at three blocks and below that its scalar path measures level with
  * the C here, so there is nothing to gain; on x86-64 it is ahead from one
- * block, the C there having no vector path until eight.
+ * crypton_chacha_block, the C there having no vector path until eight.
  */
 #ifndef CHACHA_ASM_MIN_BLOCKS
 #ifdef WITH_X86_CHACHA_ASM
@@ -112,7 +112,7 @@ static int chacha_asm_state(const crypton_chacha_state *st)
 static const uint8_t sigma[16] = "expand 32-byte k";
 static const uint8_t tau[16] = "expand 16-byte k";
 
-static void chacha_core(int rounds, block *out, const crypton_chacha_state *in)
+static void chacha_core(int rounds, crypton_chacha_block *out, const crypton_chacha_state *in)
 {
 	uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
 	int i;
@@ -296,7 +296,7 @@ void crypton_xchacha_init(crypton_chacha_context *ctx, uint8_t nb_rounds,
 
 void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uint8_t *src, uint32_t bytes)
 {
-	block out;
+	crypton_chacha_block out;
 	crypton_chacha_state *st;
 	int i;
 
@@ -434,7 +434,7 @@ void crypton_chacha_set_counter32(crypton_chacha_state *st, uint32_t block_count
 void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t bytes)
 {
 	crypton_chacha_state *st;
-	block out;
+	crypton_chacha_block out;
 	int i;
 
 	if (!bytes)
@@ -474,7 +474,7 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 		/* xor new 64-bytes chunks and store the left over if any */
 		for (; bytes >= 64; bytes -= 64, dst += 64) {
 			/* generate new chunk and update state */
-			chacha_core(ctx->nb_rounds, (block *) dst, st);
+			chacha_core(ctx->nb_rounds, (crypton_chacha_block *) dst, st);
 			uint32_t t0 = le32_to_cpu(st->d[12]);
 			st->d[12] = cpu_to_le32(t0 + 1);
 			if (st->d[12] == 0) {
@@ -524,9 +524,9 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 void crypton_chacha_generate_simple_block(uint8_t *dst, crypton_chacha_state *st, uint8_t rounds)
 {
 	if (ALIGNED64(dst)) {
-		chacha_core(rounds, (block *) dst, st);
+		chacha_core(rounds, (crypton_chacha_block *) dst, st);
 	} else {
-		block out;
+		crypton_chacha_block out;
 		int i;
 		chacha_core(rounds, &out, st);
 		for (i = 0; i < 64; ++i) {
@@ -544,7 +544,7 @@ void crypton_chacha_generate_simple_block(uint8_t *dst, crypton_chacha_state *st
 
 void crypton_chacha_random(uint32_t rounds, uint8_t *dst, crypton_chacha_state *st, uint32_t bytes)
 {
-	block out;
+	crypton_chacha_block out;
 
 	if (!bytes)
 		return;
