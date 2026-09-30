@@ -1462,7 +1462,10 @@ static int recode_wnaf (
             uint32_t pos = __builtin_ctz((uint32_t)current), odd = (uint32_t)current >> pos;
             int32_t delta = odd & mask;
             if (odd & 1<<(table_bits+1)) delta -= (1<<(table_bits+1));
-            current -= delta << pos;
+            /* delta is negative half the time and shifting a negative
+             * value left is undefined; current is unsigned, so the shift is
+             * done there and means the same thing. */
+            current -= (uint64_t)delta << pos;
             control[position].power = pos + 16*(w-1);
             control[position].addend = delta;
             position--;
