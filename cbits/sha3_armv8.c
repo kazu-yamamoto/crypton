@@ -39,7 +39,7 @@
  * "+sha3", which the SHA-512 path needed.
  */
 #ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
+#define TARGET_ARMV8_SHA3 __attribute__((target("+crypto+sha3")))
 #else
 #define TARGET_ARMV8_SHA3
 #endif
