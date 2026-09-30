@@ -1,5 +1,44 @@
 # CHANGELOG for crypton
 
+## 2.1.4
+
+2.1.3 could not be built from Hackage at all in the default configuration,
+and is deprecated there.  This release is that fix and three more.
+
+* fix(cabal): the source distribution carries `cbits/p256/p256_verify.h`.
+  No field named it, so it was absent from the 2.1.3 tarball, and
+  `cbits/p256/p256_ec.c` includes it whenever `support_s2n_bignum` is on --
+  which is every x86-64 and aarch64 machine that leaves the flag alone.  The
+  package built perfectly from a git checkout and not at all from Hackage.
+  Reported as #270 by Laurent P. Rene de Cotret on the day 2.1.3 went out,
+  fixed by gev in #271
+* fix(armv8): the C builds with gcc before 13 again.  A function that uses an
+  AArch64 extension says so with `__attribute__((target(...)))`, and the
+  spelling used -- `target("+sha3")` -- is one clang has always taken and gcc
+  learned in 13.  Before that the extension never reaches the function and an
+  `always_inline` intrinsic that needs it cannot be inlined, which stops the
+  build rather than slowing it.  Naming the architecture beside the extension
+  is understood by both compilers at every version, so gcc is given that
+  spelling.  Reported as #273 by gev, against 2.1.1, 2.1.2 and 2.1.3
+* fix(sha256): SHA-256 on AArch64 is no longer five times slower than it was
+  in 2.1.2 -- 644 MB/s against 3396 over 16 KiB on an Apple M4.  The
+  CRYPTOGAMS assembly picks its path from `crypton_armcap_P` rather than from
+  a flag in the C, and the bit was set only while that flag was still
+  unresolved; 2.1.3 added a constructor that resolves it before anything
+  runs, so the bit was never set and the assembly took its generic path on
+  every processor.  SHA-1 was unaffected, its constructor setting the
+  corresponding bit itself, and the SHA-512 assembly is x86 only.  No test
+  could have caught this: the answers were right all along, only slow
+* test(ci): three jobs for the three ways the above went unnoticed.  One
+  builds the source distribution and then builds the library from it
+  somewhere other than the checkout, since nothing had ever built a tarball
+  and listing one is not building it.  One installs gcc-12 and builds the C
+  with it, the runner's own gcc being 13, which is why a report covering
+  three releases never reproduced here.  Both are verified against the bug
+  they exist for: each was red before its fix and green after
+
+# CHANGELOG for crypton
+
 ## 2.1.3
 
 * fix(number): the arithmetic crypton falls back to when it is built without
