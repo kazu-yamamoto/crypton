@@ -211,6 +211,37 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # The arithmetic every build without GMP falls back to.  It is a separate
+    # implementation of the same functions, reached by a flag nothing in CI
+    # used to set, and it had gone its own way: a negative exponent sent the
+    # exponentiation into a recursion that did not terminate, and a number of
+    # bits was counted differently from the way GMP counts it.
+    - name: The arithmetic without GMP
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: >
+        cabal test --builddir=dist-nogmp -f-integer-gmp
+        ${{ env.target-config }} all
+
+    # -fgnu89-inline gives a bare inline in a header an external definition in
+    # every translation unit that reads it, and one such definition had lost
+    # its static.  Any architecture shows it; building is the whole of the
+    # test, since the code itself is covered by every other job.
+    - name: The old toolchain's inliner
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: >
+        cabal build --builddir=dist-gnu89 -fold_toolchain_inliner
+        ${{ env.target-config }} all
+
+    # -fsupport_sse used to pull the SSE BLAKE2 and Argon2 sources in whatever
+    # the architecture was, so it compiled only on x86.  This job is the one
+    # that is not x86, which is the only place the flag can be told apart from
+    # the arch(x86_64) beside it.
+    - name: SSE asked for where there is none
+      if: matrix.os == 'ubuntu-24.04-arm' && matrix.ghc == '9.14'
+      run: >
+        cabal build --builddir=dist-sse -fsupport_sse
+        ${{ env.target-config }} all
+
     # What the C does with the lengths and indices it is handed.  Two left
     # shifts the standard leaves undefined were found this way and nothing
     # else; the value of the step from here on is that it stays that way.
