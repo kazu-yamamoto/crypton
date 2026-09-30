@@ -34,9 +34,9 @@ typedef union {
 	uint64_t q[8];
 	uint32_t d[16];
 	uint8_t  b[64];
-} block;
+} crypton_chacha_block;
 
-typedef block crypton_chacha_state;
+typedef crypton_chacha_block crypton_chacha_state;
 
 typedef struct {
 	crypton_chacha_state st;

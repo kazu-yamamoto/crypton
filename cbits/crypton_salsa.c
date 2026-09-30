@@ -59,7 +59,7 @@ static const uint8_t tau[16] = "expand 16-byte k";
 		QR (x15,x12,x13,x14); \
 	}
 
-static void salsa_core(int rounds, block *out, const crypton_salsa_state *in)
+static void salsa_core(int rounds, crypton_salsa_block *out, const crypton_salsa_state *in)
 {
 	uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
 	int i;
@@ -94,7 +94,7 @@ static void salsa_core(int rounds, block *out, const crypton_salsa_state *in)
 	out->d[15] = cpu_to_le32(x15);
 }
 
-void crypton_salsa_core_xor(int rounds, block *out, block *in)
+void crypton_salsa_core_xor(int rounds, crypton_salsa_block *out, crypton_salsa_block *in)
 {
 	uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
 	int i;
@@ -165,7 +165,7 @@ void crypton_salsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds,
 
 void crypton_salsa_combine(uint8_t *dst, crypton_salsa_context *ctx, const uint8_t *src, uint32_t bytes)
 {
-	block out;
+	crypton_salsa_block out;
 	crypton_salsa_state *st;
 	int i;
 
@@ -225,7 +225,7 @@ void crypton_salsa_combine(uint8_t *dst, crypton_salsa_context *ctx, const uint8
 void crypton_salsa_generate(uint8_t *dst, crypton_salsa_context *ctx, uint32_t bytes)
 {
 	crypton_salsa_state *st;
-	block out;
+	crypton_salsa_block out;
 	int i;
 
 	if (!bytes)
@@ -252,7 +252,7 @@ void crypton_salsa_generate(uint8_t *dst, crypton_salsa_context *ctx, uint32_t b
 		/* xor new 64-bytes chunks and store the left over if any */
 		for (; bytes >= 64; bytes -= 64, dst += 64) {
 			/* generate new chunk and update state */
-			salsa_core(ctx->nb_rounds, (block *) dst, st);
+			salsa_core(ctx->nb_rounds, (crypton_salsa_block *) dst, st);
 			st->d[8] += 1;
 			if (st->d[8] == 0)
 				st->d[9] += 1;

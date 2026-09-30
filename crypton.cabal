@@ -73,6 +73,10 @@ extra-source-files:
     cbits/tests/ct/*.h
     cbits/tests/ct/README
     cbits/tests/ct/run.sh
+    cbits/tests/endian/*.c
+    cbits/tests/endian/README
+    cbits/tests/endian/run.sh
+    cbits/tests/endian/vectors.txt
     cbits/tests/width/*.c
     cbits/tests/width/run.sh
     tests/*.hs

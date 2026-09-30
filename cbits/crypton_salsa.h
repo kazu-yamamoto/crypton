@@ -34,9 +34,9 @@ typedef union {
 	uint64_t q[8];
 	uint32_t d[16];
 	uint8_t  b[64];
-} block;
+} crypton_salsa_block;
 
-typedef block crypton_salsa_state;
+typedef crypton_salsa_block crypton_salsa_state;
 
 typedef struct {
 	crypton_salsa_state st;
@@ -47,7 +47,7 @@ typedef struct {
 } crypton_salsa_context;
 
 /* for scrypt */
-void crypton_salsa_core_xor(int rounds, block *out, block *in);
+void crypton_salsa_core_xor(int rounds, crypton_salsa_block *out, crypton_salsa_block *in);
 
 void crypton_salsa_init_core(crypton_salsa_state *st, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
 void crypton_salsa_init(crypton_salsa_context *ctx, uint8_t nb_rounds, uint32_t keylen, const uint8_t *key, uint32_t ivlen, const uint8_t *iv);
