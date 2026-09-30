@@ -20,32 +20,28 @@ jobs:
 
     strategy:
       fail-fast: false
+      # Two matrices, chosen by where the push landed.
+      #
+      # A push to ci is someone iterating on one of the checks below, and all
+      # of them live on ubuntu 9.12, ubuntu 9.14 or the arm runner at 9.14 --
+      # the sanitizers and valgrind on the first, the 32-bit and big-endian
+      # harnesses on the second, the SSE flag on the third.  Running the other
+      # ten jobs for that proves nothing and takes runner slots this account
+      # needs elsewhere.  main and pull requests get the lot.
+      #
+      # Within the full matrix: GitHub runs at most five macOS jobs at once,
+      # so seven of them held up the whole workflow.  ubuntu-24.04-arm is here
+      # for the C rather than the compiler -- macOS already runs
+      # cbits/aes/armv8.c but reaches it by a branch compiled out on Apple,
+      # and the checks that read the auxiliary vector had no job at all.
+      # Windows is two compilers for the same reason the other two are: the
+      # Haskell it exercises is the same Haskell Linux runs seven times, and
+      # what is particular to it is C that does not change with the compiler.
       matrix:
-        os:  [ 'ubuntu-latest', 'ubuntu-24.04-arm', 'macOS-latest', 'windows-latest' ]
-        ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12', '9.14' ]
-        # GitHub runs at most five macOS jobs at once, so two of the seven sat
-        # waiting for the others to finish and held up the whole workflow --
-        # the last one started eight and a half minutes in.  Keep the oldest
-        # and newest compiler there and let Linux and Windows cover the range.
-        #
-        # ubuntu-24.04-arm is here for the C, not for the compiler.
-        # macOS-latest already runs cbits/aes/armv8.c, but it decides to by a
-        # branch that is compiled out on Apple; the checks that read the
-        # auxiliary vector -- which is how every other AArch64 system answers
-        # the same question for AES, PMULL and SHA-2 -- had no job to run in
-        # at all.  One compiler exercises that as well as seven would, so
-        # keep the newest two for the same reason as macOS.
-        exclude:
-          - { os: macOS-latest, ghc: '9.4'  }
-          - { os: macOS-latest, ghc: '9.6'  }
-          - { os: macOS-latest, ghc: '9.8'  }
-          - { os: macOS-latest, ghc: '9.10' }
-          - { os: macOS-latest, ghc: '9.12' }
-          - { os: ubuntu-24.04-arm, ghc: '9.2'  }
-          - { os: ubuntu-24.04-arm, ghc: '9.4'  }
-          - { os: ubuntu-24.04-arm, ghc: '9.6'  }
-          - { os: ubuntu-24.04-arm, ghc: '9.8'  }
-          - { os: ubuntu-24.04-arm, ghc: '9.10' }
+        include: >-
+          ${{ fromJSON(github.ref == 'refs/heads/ci'
+              && '[{"os":"ubuntu-latest","ghc":"9.12"},{"os":"ubuntu-latest","ghc":"9.14"},{"os":"ubuntu-24.04-arm","ghc":"9.14"}]'
+              || '[{"os":"ubuntu-latest","ghc":"9.2"},{"os":"ubuntu-latest","ghc":"9.4"},{"os":"ubuntu-latest","ghc":"9.6"},{"os":"ubuntu-latest","ghc":"9.8"},{"os":"ubuntu-latest","ghc":"9.10"},{"os":"ubuntu-latest","ghc":"9.12"},{"os":"ubuntu-latest","ghc":"9.14"},{"os":"windows-latest","ghc":"9.2"},{"os":"windows-latest","ghc":"9.14"},{"os":"macOS-latest","ghc":"9.2"},{"os":"macOS-latest","ghc":"9.14"},{"os":"ubuntu-24.04-arm","ghc":"9.12"},{"os":"ubuntu-24.04-arm","ghc":"9.14"}]') }}
 
     env:
       cache-name: cabal-ghc
