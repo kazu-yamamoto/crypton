@@ -24,6 +24,14 @@
  */
 
 #include <stdint.h>
+#if defined(__aarch64__) && defined(__GNUC__)
+  #ifndef __ARM_FEATURE_SHA3
+    #define __ARM_FEATURE_SHA3 1
+  #endif
+  #ifndef __ARM_FEATURE_CRYPTO
+    #define __ARM_FEATURE_CRYPTO 1
+  #endif
+#endif
 #include <arm_neon.h>
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
