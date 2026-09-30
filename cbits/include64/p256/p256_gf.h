@@ -104,6 +104,12 @@ static const felem kOne = {
     2, 0xfc00000000000, 0x7ffffffffffff, 0xfff7fffffffff, 0x7ffff
 };
 static const felem kZero = {0};
+
+/* the curve's b, in Montgomery form, for the complete addition formula */
+static const felem kB = {
+    0x1bec453897bbf, 0x33e210c243627, 0x484bb5ab3c017, 0x41a32d11055fb,
+    0x2e18030ec243a
+};
 static const felem kP = {
     0x7ffffffffffff, 0x1fffffffffff, 0, 0x4000000000, 0x3fffffffc0000
 };
