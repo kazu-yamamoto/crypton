@@ -24,47 +24,7 @@
  */
 
 #include <stdint.h>
-
-#if defined(__aarch64__) && defined(__GNUC__)
-#pragma GCC target ("+crypto+sha3")
-#endif
-
 #include <arm_neon.h>
-
-#if defined(__aarch64__) && defined(__GNUC__)
-#undef vxarq_u64
-static inline uint64x2_t my_vxarq_u64(uint64x2_t a, uint64x2_t b, const int imm) {
-    uint64x2_t res;
-    __asm__ ("xar %0.2d, %1.2d, %2.2d, %3" : "=w"(res) : "w"(a), "w"(b), "i"(imm));
-    return res;
-}
-#define vxarq_u64 my_vxarq_u64
-
-#undef veor3q_u64
-static inline uint64x2_t my_veor3q_u64(uint64x2_t a, uint64x2_t b, uint64x2_t c) {
-    uint64x2_t res;
-    __asm__ ("eor3 %0.16b, %1.16b, %2.16b, %3.16b" : "=w"(res) : "w"(a), "w"(b), "w"(c));
-    return res;
-}
-#define veor3q_u64 my_veor3q_u64
-
-#undef vrax1q_u64
-static inline uint64x2_t my_vrax1q_u64(uint64x2_t a, uint64x2_t b) {
-    uint64x2_t res;
-    __asm__ ("rax1 %0.2d, %1.2d, %2.2d" : "=w"(res) : "w"(a), "w"(b));
-    return res;
-}
-#define vrax1q_u64 my_vrax1q_u64
-
-#undef vbcaxq_u64
-static inline uint64x2_t my_vbcaxq_u64(uint64x2_t a, uint64x2_t b, uint64x2_t c) {
-    uint64x2_t res;
-    __asm__ ("bcax %0.16b, %1.16b, %2.16b, %3.16b" : "=w"(res) : "w"(a), "w"(b), "w"(c));
-    return res;
-}
-#define vbcaxq_u64 my_vbcaxq_u64
-#endif
-
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #elif defined(__linux__)
@@ -79,7 +39,7 @@ static inline uint64x2_t my_vbcaxq_u64(uint64x2_t a, uint64x2_t b, uint64x2_t c)
  * "+sha3", which the SHA-512 path needed.
  */
 #ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_SHA3 __attribute__((target("+crypto+sha3")))
+#define TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
 #else
 #define TARGET_ARMV8_SHA3
 #endif

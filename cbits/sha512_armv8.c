@@ -13,9 +13,6 @@
  */
 
 #include <stdint.h>
-#if defined(__aarch64__) && defined(__GNUC__)
-#pragma GCC target ("+crypto+sha3")
-#endif
 #include <arm_neon.h>
 #if defined(__linux__)
 #include <sys/auxv.h>
@@ -32,7 +29,7 @@
  * SHA-512 instructions live behind "+sha3" in both GCC and clang.
  */
 #ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_SHA3 __attribute__((target("+crypto+sha3")))
+#define TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
 #else
 #define TARGET_ARMV8_SHA3
 #endif
