@@ -21,3 +21,5 @@ f_generic.c:106   assert on the carry in crypton_gf_448_strong_reduce
 # a machine with AES-NI or the ARMv8 instructions runs neither.
 generic.c         the AES tables, in key expansion and in the rounds
 gf.c              the GHASH table
+crypton_aes.c     the same tables, attributed to the code that inlines them
+block128.h        likewise

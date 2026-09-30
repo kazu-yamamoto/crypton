@@ -55,16 +55,15 @@ run_one() {
 	valgrind --error-exitcode=0 --track-origins=yes --num-callers=20 \
 		--log-file="$out/$name.log" "$out/$name" > /dev/null 2>&1 || true
 	n=$(grep -c "^==[0-9]*== \(Conditional jump\|Use of uninitialised\)" "$out/$name.log" || true)
-	# Which places did it name?  A site is "file:line", and the ones listed
-	# in known.txt are understood -- see that file for each.
-	sites=$(sed -n 's/.*: [A-Za-z_0-9]* (\([A-Za-z_0-9.]*:[0-9]*\))$/\1/p' \
-		"$out/$name.log" | sort -u)
+	# Which places did it name?  Only the frame the report is against -- the
+	# "at" line -- is the place; the "by" lines below it are how the code got
+	# there and are not themselves branching on anything.  A site is
+	# "file:line", and the ones listed in known.txt are understood.
+	sites=$(sed -n 's/^==[0-9]*==    at 0x[0-9A-Fa-f]*: [A-Za-z_0-9]* (\([^)]*\))$/\1/p' \
+		"$out/$name.log" | grep -v '^ct_' | sort -u)
 	unknown=
 	for site in $sites; do
 		file=${site%%:*}
-		case $file in
-		ct_*.c) continue ;;                     # the driver itself
-		esac
 		if grep -q "^$site[[:space:]]" cbits/tests/ct/known.txt ||
 		   grep -q "^$file[[:space:]]" cbits/tests/ct/known.txt; then
 			continue
@@ -92,15 +91,14 @@ run_one() {
 			echo "     table-driven code the driver exists to measure"
 			status=1
 		else
-			echo "note aes: $n report(s), from$(echo "$sites" | tr '\n' ' ')"
+			echo "note aes: $n report(s), from $(echo "$sites" | tr '\n' ' ')"
 		fi
 		;;
 	*)
 		if [ "$n" -eq 0 ]; then
 			echo "ok   $name: the secret decided nothing"
 		elif [ -z "$unknown" ]; then
-			echo "ok   $name: $n report(s), all of them known --$(echo "$sites" |
-				grep -v '^ct_' | tr '\n' ' ')"
+			echo "ok   $name: $n report(s), all known -- $(echo "$sites" | tr '\n' ' ')"
 		else
 			echo "REPORT $name: the secret decided a branch or an address"
 			echo "       somewhere not listed in cbits/tests/ct/known.txt:"
