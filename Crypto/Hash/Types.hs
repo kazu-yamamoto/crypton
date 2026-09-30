@@ -103,6 +103,26 @@ hashContextGetAlgorithm = undefined
 -- layout is architecture dependent, may contain uninitialized data fragments,
 -- and change in future versions.  The bytearray should not be used as input to
 -- cryptographic algorithms.
+--
+-- __A context is not erased when it is finished with.__  A hash algorithm
+-- buffers its input a block at a time, and finalizing does not clear what is
+-- left there.  How much survives depends on where the message ended relative
+-- to the block: with SHA-256, a 32-byte message is still in the context in
+-- full afterwards, and a 100-byte one leaves its last 36 bytes.
+-- @hashFinalize@ works on a copy, so the caller's own context keeps what it
+-- had as well.  Nothing clears either of them: this is 'Bytes' rather than
+-- @ScrubbedBytes@, and the C clears nothing.  They go to the garbage
+-- collector as they are, and a core file, a crash dump or a swapped page can
+-- carry them away afterwards.
+--
+-- That is a deliberate trade rather than an oversight, and there is no way
+-- to ask for the other side of it: no operation here clears a context.
+-- Scrubbing them all was measured at about 70% of a 32-byte hash and a third
+-- of an incremental one, because the allocation is most of the work when the
+-- message is short -- and short hashes are the common case, in HMAC, in
+-- HKDF, and anywhere a key or an identifier is hashed.  A 64 KB hash does
+-- not notice it.  Anything that must not be left in memory this way is
+-- better not hashed through this interface at all.
 newtype Context a = Context Bytes
     deriving (ByteArrayAccess, NFData)
 
