@@ -82,7 +82,12 @@ for h in $harnesses; do
 
 	mkdir -p "$out/corpus-$h"
 	cp cbits/tests/fuzz/corpus/* "$out/corpus-$h/" 2>/dev/null || true
-	"$out/fuzz_$h" "$out/corpus-$h" -max_total_time="$secs" -print_final_stats=1 \
+	# -use_value_profile records the operands of comparisons, which is how a
+	# fuzzer gets past a check for particular bytes rather than waiting for
+	# them to come up at random.  The canary is exactly that check, and the
+	# parsers here are full of them.
+	"$out/fuzz_$h" "$out/corpus-$h" -max_total_time="$secs" \
+		-use_value_profile=1 -print_final_stats=1 \
 		> "$out/$h.log" 2>&1 || true
 
 	found=no
@@ -92,7 +97,9 @@ for h in $harnesses; do
 		if [ $found = no ]; then
 			echo "FAIL canary: the harness that reads out of bounds on a"
 			echo "     four-byte marker was not found in ${secs}s, so this"
-			echo "     campaign is not exploring and nothing below counts"
+			echo "     campaign is not exploring and nothing below counts."
+			echo "     What it did do:"
+			tail -12 "$out/$h.log" | sed 's/^/       /'
 			status=1
 		else
 			echo "ok   canary: found, so the campaign explores"
