@@ -267,6 +267,10 @@ spec = do
         numBytes i == byteCount i
     prop "num-bytes-small" $ \() ->
         map numBytes [0, 1, 255, 256, 257, 65535, 65536] == [0, 1, 1, 2, 2, 2, 3]
+    -- the magnitude, which is what GMP counts, and what the fallback used to
+    -- divide by 256 forever looking for a quotient of zero
+    prop "num-bits-negative" $ \(Positive i) ->
+        numBits (negate i) == numBits i
     prop "generate-param" $ \testDRG (Int1_2901 bits) ->
         let r = withTestDRG testDRG $ generateParams bits (Just SetHighest) False
          in r >= 0 && numBits r == bits && testBit r (bits - 1)

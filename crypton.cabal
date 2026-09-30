@@ -98,7 +98,11 @@ flag support_pclmuldq
     manual:      True
 
 flag support_sse
-    description: Use SSE optimized version of (BLAKE2, ARGON2)
+    description:
+        Use SSE optimized version of (BLAKE2, ARGON2) on i386.  x86-64 takes
+        them anyway; every other architecture has no SSE to offer and ignores
+        this flag, rather than failing to compile the sources.
+
     default:     False
     manual:      True
 
@@ -703,7 +707,7 @@ library
             cbits/aes/gf.c
             cbits/crypton_aes.c
 
-    if (arch(x86_64) || flag(support_sse))
+    if (arch(x86_64) || (flag(support_sse) && arch(i386)))
         c-sources:
             cbits/blake2/sse/blake2b.c
             cbits/blake2/sse/blake2bp.c
@@ -721,7 +725,7 @@ library
 
         include-dirs: cbits/blake2/ref
 
-    if (arch(x86_64) || flag(support_sse))
+    if (arch(x86_64) || (flag(support_sse) && arch(i386)))
         cpp-options: -DSUPPORT_SSE
 
         if arch(i386)

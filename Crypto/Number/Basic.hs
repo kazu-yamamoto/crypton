@@ -85,7 +85,12 @@ log2 n = onGmpUnsupported (gmpLog2 n) $ imLog 2 n
 
 -- | Compute the number of bits for an integer
 numBits :: Integer -> Int
-numBits n = gmpSizeInBits n `onGmpUnsupported` (if n == 0 then 1 else computeBits 0 n)
+-- GMP sizes the magnitude and calls zero zero bits, and every caller here --
+-- 'numBytes' above all -- is written against that.  The fallback used to
+-- answer 1 for zero, and to divide a negative number by 256 forever, because
+-- the quotient never reaches zero.
+numBits n =
+    gmpSizeInBits n `onGmpUnsupported` (if n == 0 then 0 else computeBits 0 (abs n))
   where
     computeBits !acc i
         | q == 0 =

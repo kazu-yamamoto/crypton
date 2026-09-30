@@ -53,7 +53,12 @@ i2ospOf m ptr ptrSz
     !padSz = ptrSz - sz
 
 fillPtr :: Ptr Word8 -> Int -> Integer -> IO ()
-fillPtr p sz m = gmpExportInteger m p `onGmpUnsupported` export (sz - 1) m
+fillPtr p sz m
+    -- zero is no bytes wide, and the callers above have already written the
+    -- room out as zeros.  Without this the loop below starts at offset -1,
+    -- never meets the 0 it stops at, and walks backwards out of the buffer.
+    | sz <= 0 = return ()
+    | otherwise = gmpExportInteger m p `onGmpUnsupported` export (sz - 1) m
   where
     export ofs i
         | ofs == 0 = pokeByteOff p ofs (fromIntegral i :: Word8)

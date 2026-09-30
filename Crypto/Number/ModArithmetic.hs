@@ -171,9 +171,19 @@ expFast b e m = gmpPowModInteger b e m `onGmpUnsupported` exponentiation b e m
 
 -- | @exponentiation@ computes modular exponentiation as /b^e mod m/
 -- using repetitive squaring.
+--
+-- The corner cases are held to what GMP answers, since that is what this
+-- computes on every build that has it: a modulus of one is zero whatever
+-- else is asked, and a negative exponent is a request for the inverse of
+-- the base raised to its magnitude, which is zero when no inverse exists.
+-- Read literally, the recursion below walked a negative exponent from -1 to
+-- -2 and back for as long as the stack held.
 exponentiation :: Integer -> Integer -> Integer -> Integer
 exponentiation b e m
-    | b == 1 = b
+    | m == 1 = 0
+    | e < 0 =
+        maybe 0 (\bInv -> exponentiation bInv (negate e) m) (inverse (b `mod` m) m)
+    | b == 1 = 1
     | e == 0 = 1
     | e == 1 = b `mod` m
     | even e =
