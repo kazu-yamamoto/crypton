@@ -26,7 +26,6 @@ import Data.ByteArray.Encoding
 import Data.ByteArray.Mapping
 
 import Data.Bits ((.|.))
-import Data.Int (Int32)
 import qualified Data.Primitive.ByteArray as Prim
 import Data.Word (Word32, Word8)
 import Foreign.Ptr (Ptr, castPtr)
@@ -73,7 +72,7 @@ inCLengths total f = go 0
 -- | The step 'inCLengths' takes: the largest multiple of 64 that a signed
 -- 32-bit integer holds.
 --
--- Under the 'Int32' bound because a 32-bit 'Int' cannot hold more, and a
+-- Under 2^31 because a 32-bit 'Int' cannot hold more, and a
 -- multiple of 64 because some of the C this feeds -- the AEAD modes -- will
 -- take a piece that is not a whole number of blocks only as the last one.
 cChunk :: Int
