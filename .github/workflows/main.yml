@@ -211,6 +211,21 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # The three implementations that only a 32-bit architecture receives: the
+    # P-256 field and its comb table under cbits/include32, the 32-bit donna,
+    # and the 32-bit p448.  Nothing in this matrix is 32-bit, so none of them
+    # was compiled anywhere, let alone run.  Each is asked the same questions
+    # as the 64-bit one it stands in for, and the answers have to match; with
+    # gcc-multilib the 32-bit side is then built again as a real 32-bit
+    # binary, which is the only way to see what the narrower int, size_t and
+    # pointer do to it.
+    - name: The C only a 32-bit architecture gets
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq gcc-multilib
+        cbits/tests/width/run.sh
+
     # The arithmetic every build without GMP falls back to.  It is a separate
     # implementation of the same functions, reached by a flag nothing in CI
     # used to set, and it had gone its own way: a negative exponent sent the
