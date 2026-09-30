@@ -498,6 +498,63 @@ static void point_add_complete_mixed(felem x3, felem y3, felem z3,
   felem_sum(z3, zz, t1);
 }
 
+/* point_add_complete sets {x3,y3,z3} = {x1,y1,z1} + {x2,y2,z2}, both in
+ * projective coordinates.
+ *
+ * Renes-Costello-Batina algorithm 4, for a = -3, and complete for the same
+ * reasons as the mixed one above.  It costs 12 multiplications and two by b,
+ * against point_add's 11 multiplications and 5 squarings.
+ */
+static void point_add_complete(felem x3, felem y3, felem z3, const felem x1,
+                               const felem y1, const felem z1, const felem x2,
+                               const felem y2, const felem z2) {
+  felem t0, t1, t2, t3, t4, xx, yy, zz;
+
+  felem_mul(t0, x1, x2);
+  felem_mul(t1, y1, y2);
+  felem_mul(t2, z1, z2);
+  felem_sum(t3, x1, y1);
+  felem_sum(t4, x2, y2);
+  felem_mul(t3, t3, t4);
+  felem_sum(t4, t0, t1);
+  felem_diff(t3, t3, t4);
+  felem_sum(t4, y1, z1);
+  felem_sum(xx, y2, z2);
+  felem_mul(t4, t4, xx);
+  felem_sum(xx, t1, t2);
+  felem_diff(t4, t4, xx);
+  felem_sum(xx, x1, z1);
+  felem_sum(yy, x2, z2);
+  felem_mul(xx, xx, yy);
+  felem_sum(yy, t0, t2);
+  felem_diff(yy, xx, yy);
+  felem_mul(zz, kB, t2);
+  felem_diff(xx, yy, zz);
+  felem_sum(zz, xx, xx);
+  felem_sum(xx, xx, zz);
+  felem_diff(zz, t1, xx);
+  felem_sum(xx, t1, xx);
+  felem_mul(yy, kB, yy);
+  felem_sum(t1, t2, t2);
+  felem_sum(t2, t1, t2);
+  felem_diff(yy, yy, t2);
+  felem_diff(yy, yy, t0);
+  felem_sum(t1, yy, yy);
+  felem_sum(yy, t1, yy);
+  felem_sum(t1, t0, t0);
+  felem_sum(t0, t1, t0);
+  felem_diff(t0, t0, t2);
+  felem_mul(t1, t4, yy);
+  felem_mul(t2, t0, yy);
+  felem_mul(yy, xx, zz);
+  felem_sum(y3, yy, t2);
+  felem_mul(xx, t3, xx);
+  felem_diff(x3, xx, t1);
+  felem_mul(zz, t4, zz);
+  felem_mul(t1, t3, t0);
+  felem_sum(z3, zz, t1);
+}
+
 /* jacobian_to_projective sets {x2,y2,z2} to the projective form of the
  * Jacobian point {x1,y1,z1}: (X/Z^2, Y/Z^3) is (XZ : Y : Z^3). */
 static void jacobian_to_projective(felem x2, felem y2, felem z2,
@@ -737,21 +794,10 @@ typedef struct {
  * scalar is replaced by one and the caller is told, since zero times a point
  * is the infinity this code deliberately cannot represent.
  *
- * *dbl_mask is set to all ones when the last addition of the main loop would
- * be an addition of a point to itself, which the formulas there cannot do.
- * That happens exactly when the recoded scalar k' is congruent to twice its
- * lowest digit: the accumulator entering that step is (k' - d0)*P and what it
- * adds is d0*P, so they coincide when k' - d0 = d0.  With k' below 2^257 and
- * |2*d0| at most 62, k' - 2*d0 is then either zero or the order itself, which
- * is what is tested for below.  No earlier step can do this: entering step i
- * the accumulator is 32*m*P with |32*m| below the order, and the digit is at
- * most 31 in absolute value, so the two can only coincide as integers, which
- * they cannot -- m is odd and so is never zero.
- *
  * Constant time in the scalar: every branch below is on a loop counter. */
-static limb sabs_recode(sabs_scalar* out, limb* dbl_mask,
+static limb sabs_recode(sabs_scalar* out,
                         const crypton_p256_int* scalar) {
-  u32 k[9], n[9], ksaved[9];
+  u32 k[9], n[9];
   u32 nonzero;
   limb is_zero_mask;
   int i, b;
@@ -792,10 +838,6 @@ static limb sabs_recode(sabs_scalar* out, limb* dbl_mask,
     }
   }
 
-  for (i = 0; i < 9; i++) {
-    ksaved[i] = k[i];
-  }
-
   for (i = 0; i < SABS_DIGITS - 1; i++) {
     u32 r6 = k[0] & 63;            /* odd, so never 32 */
     u32 hi = (r6 >> 5) & 1;        /* 1 when the digit is positive */
@@ -806,27 +848,6 @@ static limb sabs_recode(sabs_scalar* out, limb* dbl_mask,
     int w;
 
     out->digit[i] = (u8)(((wabs - 1) >> 1) | ((hi ^ 1) << 4));
-
-    if (i == 0) {
-      /* k' - 2*d0, against zero and against the order. */
-      u32 two_w = (u32)(2u * r6) - 64u;   /* 2*d0, two's complement */
-      u32 two_w_ext = 0u - (hi ^ 1);      /* its sign extension */
-      u32 zero_acc = 0, order_acc = 0;
-      u64 borrow = 0;
-      int w2;
-      for (w2 = 0; w2 < 9; w2++) {
-        u32 sub = (w2 == 0) ? two_w : two_w_ext;
-        u64 d = (u64)ksaved[w2] - ((u64)sub + borrow);
-        u32 dw = (u32)d;
-        borrow = (d >> 32) & 1;
-        zero_acc |= dw;
-        order_acc |= dw ^ n[w2];
-      }
-      zero_acc |= (u32)borrow;      /* a negative difference is neither */
-      order_acc |= (u32)borrow;
-      *dbl_mask = (limb)0 - (limb)(words_are_zero(zero_acc)
-                                   | words_are_zero(order_acc));
-    }
 
     /* k -= digit, i.e. k += -digit, sign extended over the nine words. */
     for (w = 0; w < 9; w++) {
@@ -873,12 +894,12 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
                         const felem y, const crypton_p256_int* scalar) {
   /* odd[k] is (2k+1)*P, for k in 0..15. */
   felem odd[16][3];
-  felem dx, dy, dz, px, py, pz, negy, ddx, ddy, ddz;
+  felem dx, dy, dz, px, py, pz, negy, ddx, ddy, ddz, qx, qy, qz, cx, cy, cz;
   sabs_scalar rec;
-  limb is_zero_mask, dbl_mask;
+  limb is_zero_mask;
   int i, k;
 
-  is_zero_mask = sabs_recode(&rec, &dbl_mask, scalar);
+  is_zero_mask = sabs_recode(&rec, scalar);
 
   felem_assign(odd[0][0], x);
   felem_assign(odd[0][1], y);
@@ -911,19 +932,26 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
     felem_diff(negy, kZero, py);
     copy_conditional(py, negy, SABS_NEGMASK(rec.digit[i]));
 
-    /* point_add finishes with z before it touches x, and with each of x
-     * and y before the next, so the accumulator can be its own output. */
-    point_add(nx, ny, nz, nx, ny, nz, px, py, pz);
-
     /* On the last step alone the accumulator can be the very point being
-     * added, and these formulas answer the infinity where the truth is twice
-     * that point.  Doubling it is the answer there; the recoder said whether
-     * this is that case.  One doubling on one of fifty-one iterations. */
+     * added -- the accumulator is (k' - d0)*P and it adds d0*P, so the two
+     * meet when k' = 2*d0 modulo the order, which the scalar 30 does with a
+     * digit of 15 -- and point_add answers the infinity where the truth is
+     * twice that point.  That one addition goes through the complete formula
+     * instead, with both points converted to projective coordinates and the
+     * answer converted back.  One of fifty-one iterations pays for it, and
+     * it comes to a field multiplication less than the doubling and the mask
+     * it replaces.
+     *
+     * point_add finishes with z before it touches x, and with each of x and
+     * y before the next, so on every other step the accumulator can be its
+     * own output. */
     if (i == 0) {
-      point_double(ddx, ddy, ddz, px, py, pz);
-      copy_conditional(nx, ddx, dbl_mask);
-      copy_conditional(ny, ddy, dbl_mask);
-      copy_conditional(nz, ddz, dbl_mask);
+      jacobian_to_projective(ddx, ddy, ddz, nx, ny, nz);
+      jacobian_to_projective(qx, qy, qz, px, py, pz);
+      point_add_complete(cx, cy, cz, ddx, ddy, ddz, qx, qy, qz);
+      projective_to_jacobian(nx, ny, nz, cx, cy, cz);
+    } else {
+      point_add(nx, ny, nz, nx, ny, nz, px, py, pz);
     }
   }
 
