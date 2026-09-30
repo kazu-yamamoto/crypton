@@ -34,7 +34,21 @@
 #include <crypton_bitfn.h>
 #include <crypton_align.h>
 
-typedef union {
+/* Packed, so that the union asks nothing of the address it is at.
+ *
+ * Several callers here make one of these out of a pointer of their own -- a
+ * ciphertext, a tag, a nonce -- and without this that cast produces a pointer
+ * the standard says may not exist, and reading q[] out of it is a member
+ * access at an address the type is not aligned for.  crypton_align.h used to
+ * answer that with need_alignment, which is zero on i386 and x86-64: the two
+ * places the access is architecturally fine and the standard still says
+ * nothing about it.  UndefinedBehaviorSanitizer reported it.
+ *
+ * With the alignment declared to be one, the compiler is the one that knows
+ * what the target can do: on i386, x86-64 and AArch64 it emits the same load
+ * and store it emitted before, and where a target cannot read a word off an
+ * odd address it emits what that target needs. */
+typedef union __attribute__((packed)) {
        uint64_t q[2];
        uint32_t d[4];
        uint16_t w[8];

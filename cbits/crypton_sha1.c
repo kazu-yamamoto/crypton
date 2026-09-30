@@ -32,7 +32,7 @@
  * Two threads racing to answer here both write the same value.
  */
 #ifdef WITH_ARMV8_SHA1
-extern void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+extern void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint8_t buf[64]);
 extern void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
                                          uint32_t blocks);
 extern int crypton_sha1_armv8_available(void);
@@ -89,11 +89,13 @@ void crypton_sha1_init(struct sha1_ctx *ctx)
 #define M(i)  (w[i & 0x0f] = rol32(w[i & 0x0f] ^ w[(i - 14) & 0x0f] \
               ^ w[(i - 8) & 0x0f] ^ w[(i - 3) & 0x0f], 1))
 
-static void sha1_do_chunk_generic(struct sha1_ctx *ctx, uint32_t *buf)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static void sha1_do_chunk_generic(struct sha1_ctx *ctx, const uint8_t *buf)
 {
 	uint32_t a, b, c, d, e;
 	uint32_t w[16];
-#define CPY(i)	w[i] = be32_to_cpu(buf[i])
+#define CPY(i)	w[i] = load_be32(buf + 4 * (i))
 	CPY(0); CPY(1); CPY(2); CPY(3); CPY(4); CPY(5); CPY(6); CPY(7);
 	CPY(8); CPY(9); CPY(10); CPY(11); CPY(12); CPY(13); CPY(14); CPY(15);
 #undef CPY
@@ -204,7 +206,7 @@ extern void crypton_sha1_x86_do_chunks(uint32_t state[5], const uint8_t *data,
 static int sha1_use_x86 = -1;
 #endif
 
-static inline void sha1_do_chunk(struct sha1_ctx *ctx, uint32_t *buf)
+static inline void sha1_do_chunk(struct sha1_ctx *ctx, const uint8_t *buf)
 {
 #ifdef WITH_ARMV8_SHA1
 	if (sha1_use_armv8 < 0) {
@@ -247,7 +249,7 @@ void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len
 	/* process partial buffer if there's enough data to make a block */
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		sha1_do_chunk(ctx, (uint32_t *) ctx->buf);
+		sha1_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
@@ -292,18 +294,9 @@ void crypton_sha1_update(struct sha1_ctx *ctx, const uint8_t *data, uint32_t len
 	}
 #endif
 
-	if (need_alignment(data, 4)) {
-		uint32_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 4);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			sha1_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			sha1_do_chunk(ctx, (uint32_t *) data);
-	}
+	/* No trampoline: load_be32 does not ask for a boundary. */
+	for (; len >= 64; len -= 64, data += 64)
+		sha1_do_chunk(ctx, data);
 
 	/* append data into buf */
 	if (len)

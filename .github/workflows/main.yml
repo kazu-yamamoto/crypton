@@ -232,14 +232,6 @@ jobs:
       run: |
         set -o pipefail
         san="-optc-fsanitize=address -optc-fsanitize=undefined"
-        # Every alignment report is crypton_align.h doing what it says: it
-        # defines UNALIGNED_ACCESS_OK on i386 and x86-64 and nowhere else, and
-        # the block and hash helpers then read a 64-bit word straight off a
-        # caller's pointer.  That is undefined by the standard and fine on
-        # those two architectures, which is the whole of why the macro exists.
-        # Seventy-eight lines report it, in three files, and nothing else does
-        # -- so the check is off rather than the step being useless.
-        san="$san -optc-fno-sanitize=alignment"
         san="$san -optl-fsanitize=address -optl-fsanitize=undefined"
         cabal test --builddir=dist-san ${{ env.target-config }} all \
           --ghc-options="$san" 2>&1 | tee san.log

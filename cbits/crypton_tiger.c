@@ -306,7 +306,9 @@ void crypton_tiger_init(struct tiger_ctx *ctx)
 	ctx->h[2] = 0xf096a5b4c3b2e187ULL;
 }
 
-static inline void tiger_do_chunk(struct tiger_ctx *ctx, uint64_t *buf)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static inline void tiger_do_chunk(struct tiger_ctx *ctx, const uint8_t *buf)
 {
 	uint64_t x0, x1, x2, x3, x4, x5, x6, x7;
 	uint64_t a,b,c;
@@ -314,8 +316,8 @@ static inline void tiger_do_chunk(struct tiger_ctx *ctx, uint64_t *buf)
 	b = ctx->h[1];
 	c = ctx->h[2];
 
-	x0 = cpu_to_le64(buf[0]); x1 = cpu_to_le64(buf[1]); x2 = cpu_to_le64(buf[2]); x3 = cpu_to_le64(buf[3]);
-	x4 = cpu_to_le64(buf[4]); x5 = cpu_to_le64(buf[5]); x6 = cpu_to_le64(buf[6]); x7 = cpu_to_le64(buf[7]);
+	x0 = load_le64(buf     ); x1 = load_le64(buf +  8); x2 = load_le64(buf + 16); x3 = load_le64(buf + 24);
+	x4 = load_le64(buf + 32); x5 = load_le64(buf + 40); x6 = load_le64(buf + 48); x7 = load_le64(buf + 56);
 
 #define BYTEOF(c, n) ((uint8_t) (c >> ((n * 8))))
 
@@ -376,24 +378,15 @@ void crypton_tiger_update(struct tiger_ctx *ctx, const uint8_t *data, uint32_t l
 	/* process partial buffer if there's enough data to make a block */
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		tiger_do_chunk(ctx, (uint64_t *) ctx->buf);
+		tiger_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
 	}
 
-	if (need_alignment(data, 8)) {
-		uint64_t tramp[8];
-		ASSERT_ALIGNMENT(tramp, 8);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			tiger_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			tiger_do_chunk(ctx, (uint64_t *) data);
-	}
+	/* No trampoline: load_le64 does not ask for a boundary. */
+	for (; len >= 64; len -= 64, data += 64)
+		tiger_do_chunk(ctx, data);
 
 	/* append data into buf */
 	if (len)

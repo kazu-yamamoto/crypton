@@ -48,15 +48,16 @@ void crypton_md4_init(struct md4_ctx *ctx)
 #define K3 	0x6ED9EBA1
 #define R(a,b,c,d,f,k,s,i) (a = rol32(a + f(b,c,d) + w[i] + k, s))
 
-static void md4_do_chunk(struct md4_ctx *ctx, uint32_t *buf)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static void md4_do_chunk(struct md4_ctx *ctx, const uint8_t *buf)
 {
 	uint32_t a, b, c, d;
-#ifdef ARCH_IS_BIG_ENDIAN
 	uint32_t w[16];
-	cpu_to_le32_array(w, (uint32_t *) buf, 16);
-#else
-	uint32_t *w = buf;
-#endif
+	int wi;
+
+	for (wi = 0; wi < 16; wi++)
+		w[wi] = load_le32(buf + 4 * wi);
 
 	a = ctx->h[0]; b = ctx->h[1]; c = ctx->h[2]; d = ctx->h[3];
 
@@ -125,24 +126,15 @@ void crypton_md4_update(struct md4_ctx *ctx, const uint8_t *data, uint32_t len)
 
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		md4_do_chunk(ctx, (uint32_t *) ctx->buf);
+		md4_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
 	}
 
-	if (need_alignment(data, 4)) {
-		uint32_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 4);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			md4_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			md4_do_chunk(ctx, (uint32_t *) data);
-	}
+	/* No trampoline: load_le32 does not ask for a boundary. */
+	for (; len >= 64; len -= 64, data += 64)
+		md4_do_chunk(ctx, data);
 
 	/* append data into buf */
 	if (len)

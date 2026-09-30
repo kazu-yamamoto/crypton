@@ -45,15 +45,22 @@ void crypton_md5_init(struct md5_ctx *ctx)
 #define f4(x, y, z)	(y ^ (x | ~z))
 #define R(f, a, b, c, d, i, k, s) a += f(b, c, d) + w[i] + k; a = rol32(a, s); a += b
 
-static void md5_do_chunk(struct md5_ctx *ctx, uint32_t *buf)
+/* The sixteen words are read out of the block rather than the block being
+ * pointed at as though it were an array of them.  A caller's pointer cast to
+ * uint32_t * is a pointer the standard says may not exist unless the address
+ * is aligned for it, and reading through it is undefined whether or not the
+ * machine minds; UndefinedBehaviorSanitizer counted sixty-four of these.
+ * load_le32 is a memcpy, which every compiler here turns into the one load
+ * the cast used to be, and it takes the endianness with it -- so the two
+ * arms this replaces are one. */
+static void md5_do_chunk(struct md5_ctx *ctx, const uint8_t *buf)
 {
 	uint32_t a, b, c, d;
-#ifdef ARCH_IS_BIG_ENDIAN
 	uint32_t w[16];
-	cpu_to_le32_array(w, buf, 16);
-#else
-	uint32_t *w = buf;
-#endif
+	int wi;
+
+	for (wi = 0; wi < 16; wi++)
+		w[wi] = load_le32(buf + 4 * wi);
 	a = ctx->h[0]; b = ctx->h[1]; c = ctx->h[2]; d = ctx->h[3];
 
 	R(f1, a, b, c, d, 0, 0xd76aa478, 7);
@@ -138,24 +145,16 @@ void crypton_md5_update(struct md5_ctx *ctx, const uint8_t *data, uint32_t len)
 
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		md5_do_chunk(ctx, (uint32_t *) ctx->buf);
+		md5_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
 	}
 
-	if (need_alignment(data, 4)) {
-		uint32_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 4);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			md5_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			md5_do_chunk(ctx, (uint32_t *) data);
-	}
+	/* No trampoline for a block that is not on a four-byte boundary: the
+	 * words are read with load_le32 now, which does not ask. */
+	for (; len >= 64; len -= 64, data += 64)
+		md5_do_chunk(ctx, data);
 
 	/* append data into buf */
 	if (len)

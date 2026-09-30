@@ -37,7 +37,9 @@ static const uint8_t K512_5[4] = { 13, 50, 10, 17, };
 static const uint8_t K512_6[4] = { 25, 29, 39, 43, };
 static const uint8_t K512_7[4] = {  8, 35, 56, 22, };
 
-static inline void skein512_do_chunk(struct skein512_ctx *ctx, uint64_t *buf, uint32_t len)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static inline void skein512_do_chunk(struct skein512_ctx *ctx, const uint8_t *bufp, uint32_t len)
 {
 	uint64_t x[8];
 	uint64_t ts[3];
@@ -88,14 +90,20 @@ static inline void skein512_do_chunk(struct skein512_ctx *ctx, uint64_t *buf, ui
 	ROUND(6,1,0,7,2,5,4,3,K512_7); \
 	INJECTKEY((i*2) + 2)
 
-	x[0] = le64_to_cpu(buf[0]) + ks[0];
-	x[1] = le64_to_cpu(buf[1]) + ks[1];
-	x[2] = le64_to_cpu(buf[2]) + ks[2];
-	x[3] = le64_to_cpu(buf[3]) + ks[3];
-	x[4] = le64_to_cpu(buf[4]) + ks[4];
-	x[5] = le64_to_cpu(buf[5]) + ks[5] + ts[0];
-	x[6] = le64_to_cpu(buf[6]) + ks[6] + ts[1];
-	x[7] = le64_to_cpu(buf[7]) + ks[7];
+	uint64_t buf[8];
+	int bi;
+
+	for (bi = 0; bi < 8; bi++)
+		buf[bi] = load_le64(bufp + 8 * bi);
+
+	x[0] = buf[0] + ks[0];
+	x[1] = buf[1] + ks[1];
+	x[2] = buf[2] + ks[2];
+	x[3] = buf[3] + ks[3];
+	x[4] = buf[4] + ks[4];
+	x[5] = buf[5] + ks[5] + ts[0];
+	x[6] = buf[6] + ks[6] + ts[1];
+	x[7] = buf[7] + ks[7];
 
 	/* 9 pass of 8 rounds = 72 rounds */
 	PASS(0);
@@ -112,14 +120,14 @@ static inline void skein512_do_chunk(struct skein512_ctx *ctx, uint64_t *buf, ui
 	ctx->t0 = ts[0];
 	ctx->t1 = ts[1];
 
-	ctx->h[0] = x[0] ^ cpu_to_le64(buf[0]);
-        ctx->h[1] = x[1] ^ cpu_to_le64(buf[1]);
-        ctx->h[2] = x[2] ^ cpu_to_le64(buf[2]);
-        ctx->h[3] = x[3] ^ cpu_to_le64(buf[3]);
-        ctx->h[4] = x[4] ^ cpu_to_le64(buf[4]);
-        ctx->h[5] = x[5] ^ cpu_to_le64(buf[5]);
-        ctx->h[6] = x[6] ^ cpu_to_le64(buf[6]);
-        ctx->h[7] = x[7] ^ cpu_to_le64(buf[7]);
+	ctx->h[0] = x[0] ^ buf[0];
+        ctx->h[1] = x[1] ^ buf[1];
+        ctx->h[2] = x[2] ^ buf[2];
+        ctx->h[3] = x[3] ^ buf[3];
+        ctx->h[4] = x[4] ^ buf[4];
+        ctx->h[5] = x[5] ^ buf[5];
+        ctx->h[6] = x[6] ^ buf[6];
+        ctx->h[7] = x[7] ^ buf[7];
 }
 
 void crypton_skein512_init(struct skein512_ctx *ctx, uint32_t hashlen)
@@ -133,7 +141,7 @@ void crypton_skein512_init(struct skein512_ctx *ctx, uint32_t hashlen)
 	buf[0] = cpu_to_le64((SKEIN_VERSION << 32) | SKEIN_IDSTRING);
 	buf[1] = cpu_to_le64(hashlen);
 	buf[2] = 0; /* tree info, not implemented */
-	skein512_do_chunk(ctx, buf, 4*8);
+	skein512_do_chunk(ctx, (const uint8_t *) buf, 4*8);
 
 	SET_TYPE(ctx, FLAG_FIRST | FLAG_TYPE(TYPE_MSG));
 }
@@ -148,7 +156,7 @@ void crypton_skein512_update(struct skein512_ctx *ctx, const uint8_t *data, uint
 	to_fill = 64 - ctx->bufindex;
 
 	if (ctx->bufindex == 64) {
-		skein512_do_chunk(ctx, (uint64_t *) ctx->buf, 64);
+		skein512_do_chunk(ctx, ctx->buf, 64);
 		ctx->bufindex = 0;
 	}
 
@@ -156,24 +164,15 @@ void crypton_skein512_update(struct skein512_ctx *ctx, const uint8_t *data, uint
 	 * and there's without doubt further blocks */
 	if (ctx->bufindex && len > to_fill) {
 		memcpy(ctx->buf + ctx->bufindex, data, to_fill);
-		skein512_do_chunk(ctx, (uint64_t *) ctx->buf, 64);
+		skein512_do_chunk(ctx, ctx->buf, 64);
 		len -= to_fill;
 		data += to_fill;
 		ctx->bufindex = 0;
 	}
 
-	if (need_alignment(data, 8)) {
-		uint64_t tramp[8];
-		ASSERT_ALIGNMENT(tramp, 8);
-		for (; len > 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			skein512_do_chunk(ctx, tramp, 64);
-		}
-	} else {
-		/* process as much 64-block as possible except the last one in case we finalize */
-		for (; len > 64; len -= 64, data += 64)
-			skein512_do_chunk(ctx, (uint64_t *) data, 64);
-	}
+	/* No trampoline: load_le64 does not ask for a boundary. */
+	for (; len > 64; len -= 64, data += 64)
+		skein512_do_chunk(ctx, data, 64);
 
 	/* append data into buf */
 	if (len) {
@@ -192,7 +191,7 @@ void crypton_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8
 	/* if buf is not complete pad with 0 bytes */
 	if (ctx->bufindex < 64)
 		memset(ctx->buf + ctx->bufindex, '\0', 64 - ctx->bufindex);
-	skein512_do_chunk(ctx, (uint64_t *) ctx->buf, ctx->bufindex);
+	skein512_do_chunk(ctx, ctx->buf, ctx->bufindex);
 
 	memset(ctx->buf, '\0', 64);
 
@@ -205,9 +204,9 @@ void crypton_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8
 	/* threefish in counter mode, 0 for 1st 64 bytes, 1 for 2nd 64 bytes, .. */
 	for (i = 0; i*64 < outsize; i++) {
 		uint64_t w[8];
-		*((uint64_t *) ctx->buf) = cpu_to_le64(i);
+		store_le64(ctx->buf, i);
 		SET_TYPE(ctx, FLAG_FIRST | FLAG_FINAL | FLAG_TYPE(TYPE_OUT));
-		skein512_do_chunk(ctx, (uint64_t *) ctx->buf, sizeof(uint64_t));
+		skein512_do_chunk(ctx, ctx->buf, sizeof(uint64_t));
 
 		n = outsize - i * 64;
 		if (n >= 64) n = 64;

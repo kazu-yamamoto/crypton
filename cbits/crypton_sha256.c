@@ -78,13 +78,16 @@ static const uint32_t k[] = {
 #define s0(x)       (ror32(x, 7) ^ ror32(x,18) ^ (x >> 3))
 #define s1(x)       (ror32(x,17) ^ ror32(x,19) ^ (x >> 10))
 
-static void sha256_do_chunk_generic(struct sha256_ctx *ctx, uint32_t buf[])
+/* The sixteen words are read out of the block rather than the block being
+ * pointed at as though it were an array of them; see crypton_md5.c. */
+static void sha256_do_chunk_generic(struct sha256_ctx *ctx, const uint8_t *buf)
 {
 	uint32_t a, b, c, d, e, f, g, h, t1, t2;
 	int i;
 	uint32_t w[64];
 
-	cpu_to_be32_array(w, buf, 16);
+	for (i = 0; i < 16; i++)
+		w[i] = load_be32(buf + 4 * i);
 	for (i = 16; i < 64; i++)
 		w[i] = s1(w[i - 2]) + w[i - 7] + s0(w[i - 15]) + w[i - 16];
 
@@ -120,7 +123,7 @@ static void sha256_do_chunk_generic(struct sha256_ctx *ctx, uint32_t buf[])
  * sha256_armv8.c.  They are optional in ARMv8.0, so ask before using them.
  * Two threads racing to answer here both write the same value.
  */
-extern void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint32_t buf[16]);
+extern void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint8_t buf[64]);
 extern int crypton_sha256_armv8_available(void);
 
 static int sha256_use_armv8 = -1;
@@ -156,7 +159,7 @@ static void sha256_asm_ready(void)
 #endif
 
 
-static void sha256_do_chunk(struct sha256_ctx *ctx, uint32_t buf[])
+static void sha256_do_chunk(struct sha256_ctx *ctx, const uint8_t *buf)
 {
 #ifdef SHA256_ASM
 	sha256_asm_ready();
@@ -192,7 +195,7 @@ void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t
 	/* process partial buffer if there's enough data to make a block */
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		sha256_do_chunk(ctx, (uint32_t *) ctx->buf);
+		sha256_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
@@ -211,18 +214,9 @@ void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t
 		len -= (uint32_t) blocks * 64;
 	}
 #else
-	if (need_alignment(data, 4)) {
-		uint32_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 4);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			sha256_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			sha256_do_chunk(ctx, (uint32_t *) data);
-	}
+	/* No trampoline: load_be32 does not ask for a boundary. */
+	for (; len >= 64; len -= 64, data += 64)
+		sha256_do_chunk(ctx, data);
 #endif
 
 	/* append data into buf */

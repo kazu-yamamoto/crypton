@@ -37,7 +37,9 @@ static const uint8_t K256_5[2] = { 46, 12, };
 static const uint8_t K256_6[2] = { 58, 22, };
 static const uint8_t K256_7[2] = { 32, 32, };
 
-static inline void skein256_do_chunk(struct skein256_ctx *ctx, uint64_t *buf, uint32_t len)
+/* The four words are read out of the block rather than the block being
+ * pointed at as though it were an array of them; see crypton_md5.c. */
+static inline void skein256_do_chunk(struct skein256_ctx *ctx, const uint8_t *bufp, uint32_t len)
 {
 	uint64_t x[4];
 	uint64_t ts[3];
@@ -78,10 +80,17 @@ static inline void skein256_do_chunk(struct skein256_ctx *ctx, uint64_t *buf, ui
 	ROUND(0,3,2,1,K256_7); \
 	INJECTKEY((i*2) + 2)
 
-	x[0] = le64_to_cpu(buf[0]) + ks[0];
-	x[1] = le64_to_cpu(buf[1]) + ks[1] + ts[0];
-	x[2] = le64_to_cpu(buf[2]) + ks[2] + ts[1];
-	x[3] = le64_to_cpu(buf[3]) + ks[3];
+	uint64_t buf[4];
+
+	buf[0] = load_le64(bufp);
+	buf[1] = load_le64(bufp + 8);
+	buf[2] = load_le64(bufp + 16);
+	buf[3] = load_le64(bufp + 24);
+
+	x[0] = buf[0] + ks[0];
+	x[1] = buf[1] + ks[1] + ts[0];
+	x[2] = buf[2] + ks[2] + ts[1];
+	x[3] = buf[3] + ks[3];
 
 	/* 9 pass of 8 rounds = 72 rounds */
 	PASS(0);
@@ -98,10 +107,10 @@ static inline void skein256_do_chunk(struct skein256_ctx *ctx, uint64_t *buf, ui
 	ctx->t0 = ts[0];
 	ctx->t1 = ts[1];
 
-	ctx->h[0] = x[0] ^ cpu_to_le64(buf[0]);
-        ctx->h[1] = x[1] ^ cpu_to_le64(buf[1]);
-        ctx->h[2] = x[2] ^ cpu_to_le64(buf[2]);
-        ctx->h[3] = x[3] ^ cpu_to_le64(buf[3]);
+	ctx->h[0] = x[0] ^ buf[0];
+	ctx->h[1] = x[1] ^ buf[1];
+	ctx->h[2] = x[2] ^ buf[2];
+	ctx->h[3] = x[3] ^ buf[3];
 }
 
 void crypton_skein256_init(struct skein256_ctx *ctx, uint32_t hashlen)
@@ -115,7 +124,7 @@ void crypton_skein256_init(struct skein256_ctx *ctx, uint32_t hashlen)
 	buf[0] = cpu_to_le64((SKEIN_VERSION << 32) | SKEIN_IDSTRING);
 	buf[1] = cpu_to_le64(hashlen);
 	buf[2] = 0; /* tree info, not implemented */
-	skein256_do_chunk(ctx, buf, 4*8);
+	skein256_do_chunk(ctx, (const uint8_t *) buf, 4*8);
 
 	SET_TYPE(ctx, FLAG_FIRST | FLAG_TYPE(TYPE_MSG));
 }
@@ -130,7 +139,7 @@ void crypton_skein256_update(struct skein256_ctx *ctx, const uint8_t *data, uint
 	to_fill = 32 - ctx->bufindex;
 
 	if (ctx->bufindex == 32) {
-		skein256_do_chunk(ctx, (uint64_t *) ctx->buf, 32);
+		skein256_do_chunk(ctx, ctx->buf, 32);
 		ctx->bufindex = 0;
 	}
 
@@ -138,24 +147,17 @@ void crypton_skein256_update(struct skein256_ctx *ctx, const uint8_t *data, uint
 	 * and there's without doubt further blocks */
 	if (ctx->bufindex && len > to_fill) {
 		memcpy(ctx->buf + ctx->bufindex, data, to_fill);
-		skein256_do_chunk(ctx, (uint64_t *) ctx->buf, 32);
+		skein256_do_chunk(ctx, ctx->buf, 32);
 		len -= to_fill;
 		data += to_fill;
 		ctx->bufindex = 0;
 	}
 
-	if (need_alignment(data, 8)) {
-		uint64_t tramp[4];
-		ASSERT_ALIGNMENT(tramp, 8);
-		for (; len > 32; len -= 32, data += 32) {
-			memcpy(tramp, data, 32);
-			skein256_do_chunk(ctx, tramp, 32);
-		}
-	} else {
-		/* process as much 32-block as possible except the last one in case we finalize */
-		for (; len > 32; len -= 32, data += 32)
-			skein256_do_chunk(ctx, (uint64_t *) data, 32);
-	}
+	/* No trampoline for a block that is not on an eight-byte boundary: the
+	 * words are read with load_le64 now, which does not ask.  The last
+	 * block is left for the finalisation. */
+	for (; len > 32; len -= 32, data += 32)
+		skein256_do_chunk(ctx, data, 32);
 
 	/* append data into buf */
 	if (len) {
@@ -174,7 +176,7 @@ void crypton_skein256_finalize(struct skein256_ctx *ctx, uint32_t hashlen, uint8
 	/* if buf is not complete pad with 0 bytes */
 	if (ctx->bufindex < 32)
 		memset(ctx->buf + ctx->bufindex, '\0', 32 - ctx->bufindex);
-	skein256_do_chunk(ctx, (uint64_t *) ctx->buf, ctx->bufindex);
+	skein256_do_chunk(ctx, ctx->buf, ctx->bufindex);
 
 	memset(ctx->buf, '\0', 32);
 
@@ -187,9 +189,9 @@ void crypton_skein256_finalize(struct skein256_ctx *ctx, uint32_t hashlen, uint8
 	/* threefish in counter mode, 0 for 1st 64 bytes, 1 for 2nd 64 bytes, .. */
 	for (i = 0; i*32 < outsize; i++) {
 		uint64_t w[4];
-		*((uint64_t *) ctx->buf) = cpu_to_le64(i);
+		store_le64(ctx->buf, i);
 		SET_TYPE(ctx, FLAG_FIRST | FLAG_FINAL | FLAG_TYPE(TYPE_OUT));
-		skein256_do_chunk(ctx, (uint64_t *) ctx->buf, sizeof(uint64_t));
+		skein256_do_chunk(ctx, ctx->buf, sizeof(uint64_t));
 
 		n = outsize - i * 32;
 		if (n >= 32) n = 32;

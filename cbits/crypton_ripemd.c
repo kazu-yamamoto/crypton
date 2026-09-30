@@ -57,15 +57,16 @@ void crypton_ripemd160_init(struct ripemd160_ctx *ctx)
 #define R(a, b, c, d, e, f, k, i, s)	\
 	a += f(b, c, d) + w[i] + k; a = rol32(a, s) + e; c = rol32(c, 10)
 
-static void ripemd160_do_chunk(struct ripemd160_ctx *ctx, uint32_t *buf)
+/* The words are read out of the block rather than the block being pointed at
+ * as though it were an array of them; see crypton_md5.c. */
+static void ripemd160_do_chunk(struct ripemd160_ctx *ctx, const uint8_t *buf)
 {
 	uint32_t a1, b1, c1, d1, e1, a2, b2, c2, d2, e2;
-#ifdef ARCH_IS_BIG_ENDIAN
 	uint32_t w[16];
-	cpu_to_le32_array(w, buf, 16);
-#else
-	uint32_t *w = buf;
-#endif
+	int wi;
+
+	for (wi = 0; wi < 16; wi++)
+		w[wi] = load_le32(buf + 4 * wi);
 
 	a1 = ctx->h[0]; b1 = ctx->h[1]; c1 = ctx->h[2]; d1 = ctx->h[3]; e1 = ctx->h[4];
 	a2 = ctx->h[0]; b2 = ctx->h[1]; c2 = ctx->h[2]; d2 = ctx->h[3]; e2 = ctx->h[4];
@@ -260,24 +261,15 @@ void crypton_ripemd160_update(struct ripemd160_ctx *ctx, const uint8_t *data, ui
 	ctx->sz += len;
 	if (index && len >= to_fill) {
 		memcpy(ctx->buf + index, data, to_fill);
-		ripemd160_do_chunk(ctx, (uint32_t *) ctx->buf);
+		ripemd160_do_chunk(ctx, ctx->buf);
 		len -= to_fill;
 		data += to_fill;
 		index = 0;
 	}
 
-	if (need_alignment(data, 4)) {
-		uint32_t tramp[16];
-		ASSERT_ALIGNMENT(tramp, 4);
-		for (; len >= 64; len -= 64, data += 64) {
-			memcpy(tramp, data, 64);
-			ripemd160_do_chunk(ctx, tramp);
-		}
-	} else {
-		/* process as much 64-block as possible */
-		for (; len >= 64; len -= 64, data += 64)
-			ripemd160_do_chunk(ctx, (uint32_t *) data);
-	}
+	/* No trampoline: load_le32 does not ask for a boundary. */
+	for (; len >= 64; len -= 64, data += 64)
+		ripemd160_do_chunk(ctx, data);
 
 	/* append data into buf */
 	if (len)
