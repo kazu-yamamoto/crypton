@@ -58,79 +58,82 @@ static const uint64_t rc[24] = {
 	0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL,
 };
 
-#define ROUND(k)                                                             \
-	do {                                                                 \
-	/* theta: the parity of each column, and what it adds */           \
-	c[0] = veor3q_u64(a[0], a[5], a[10]);                              \
-	c[0] = veor3q_u64(c[0], a[15], a[20]);                             \
-	c[1] = veor3q_u64(a[1], a[6], a[11]);                              \
-	c[1] = veor3q_u64(c[1], a[16], a[21]);                             \
-	c[2] = veor3q_u64(a[2], a[7], a[12]);                              \
-	c[2] = veor3q_u64(c[2], a[17], a[22]);                             \
-	c[3] = veor3q_u64(a[3], a[8], a[13]);                              \
-	c[3] = veor3q_u64(c[3], a[18], a[23]);                             \
-	c[4] = veor3q_u64(a[4], a[9], a[14]);                              \
-	c[4] = veor3q_u64(c[4], a[19], a[24]);                             \
-	d[0] = vrax1q_u64(c[4], c[1]);                                     \
-	d[1] = vrax1q_u64(c[0], c[2]);                                     \
-	d[2] = vrax1q_u64(c[1], c[3]);                                     \
-	d[3] = vrax1q_u64(c[2], c[4]);                                     \
-	d[4] = vrax1q_u64(c[3], c[0]);                                     \
-	/* theta's exclusive or, rho's rotation and pi's move, in one */   \
-	b[0 ] = veorq_u64(a[0 ], d[0]);                                    \
-	b[1 ] = vxarq_u64(a[6 ], d[1], 20);                                \
-	b[2 ] = vxarq_u64(a[12], d[2], 21);                                \
-	b[3 ] = vxarq_u64(a[18], d[3], 43);                                \
-	b[4 ] = vxarq_u64(a[24], d[4], 50);                                \
-	b[5 ] = vxarq_u64(a[3 ], d[3], 36);                                \
-	b[6 ] = vxarq_u64(a[9 ], d[4], 44);                                \
-	b[7 ] = vxarq_u64(a[10], d[0], 61);                                \
-	b[8 ] = vxarq_u64(a[16], d[1], 19);                                \
-	b[9 ] = vxarq_u64(a[22], d[2],  3);                                \
-	b[10] = vxarq_u64(a[1 ], d[1], 63);                                \
-	b[11] = vxarq_u64(a[7 ], d[2], 58);                                \
-	b[12] = vxarq_u64(a[13], d[3], 39);                                \
-	b[13] = vxarq_u64(a[19], d[4], 56);                                \
-	b[14] = vxarq_u64(a[20], d[0], 46);                                \
-	b[15] = vxarq_u64(a[4 ], d[4], 37);                                \
-	b[16] = vxarq_u64(a[5 ], d[0], 28);                                \
-	b[17] = vxarq_u64(a[11], d[1], 54);                                \
-	b[18] = vxarq_u64(a[17], d[2], 49);                                \
-	b[19] = vxarq_u64(a[23], d[3],  8);                                \
-	b[20] = vxarq_u64(a[2 ], d[2],  2);                                \
-	b[21] = vxarq_u64(a[8 ], d[3],  9);                                \
-	b[22] = vxarq_u64(a[14], d[4], 25);                                \
-	b[23] = vxarq_u64(a[15], d[0], 23);                                \
-	b[24] = vxarq_u64(a[21], d[1], 62);                                \
-	/* chi, along each row */                                          \
-	a[0 ] = vbcaxq_u64(b[0 ], b[2 ], b[1 ]);                           \
-	a[1 ] = vbcaxq_u64(b[1 ], b[3 ], b[2 ]);                           \
-	a[2 ] = vbcaxq_u64(b[2 ], b[4 ], b[3 ]);                           \
-	a[3 ] = vbcaxq_u64(b[3 ], b[0 ], b[4 ]);                           \
-	a[4 ] = vbcaxq_u64(b[4 ], b[1 ], b[0 ]);                           \
-	a[5 ] = vbcaxq_u64(b[5 ], b[7 ], b[6 ]);                           \
-	a[6 ] = vbcaxq_u64(b[6 ], b[8 ], b[7 ]);                           \
-	a[7 ] = vbcaxq_u64(b[7 ], b[9 ], b[8 ]);                           \
-	a[8 ] = vbcaxq_u64(b[8 ], b[5 ], b[9 ]);                           \
-	a[9 ] = vbcaxq_u64(b[9 ], b[6 ], b[5 ]);                           \
-	a[10] = vbcaxq_u64(b[10], b[12], b[11]);                           \
-	a[11] = vbcaxq_u64(b[11], b[13], b[12]);                           \
-	a[12] = vbcaxq_u64(b[12], b[14], b[13]);                           \
-	a[13] = vbcaxq_u64(b[13], b[10], b[14]);                           \
-	a[14] = vbcaxq_u64(b[14], b[11], b[10]);                           \
-	a[15] = vbcaxq_u64(b[15], b[17], b[16]);                           \
-	a[16] = vbcaxq_u64(b[16], b[18], b[17]);                           \
-	a[17] = vbcaxq_u64(b[17], b[19], b[18]);                           \
-	a[18] = vbcaxq_u64(b[18], b[15], b[19]);                           \
-	a[19] = vbcaxq_u64(b[19], b[16], b[15]);                           \
-	a[20] = vbcaxq_u64(b[20], b[22], b[21]);                           \
-	a[21] = vbcaxq_u64(b[21], b[23], b[22]);                           \
-	a[22] = vbcaxq_u64(b[22], b[24], b[23]);                           \
-	a[23] = vbcaxq_u64(b[23], b[20], b[24]);                           \
-	a[24] = vbcaxq_u64(b[24], b[21], b[20]);                           \
-	/* iota */                                                         \
-		a[0] = veorq_u64(a[0], vld1q_dup_u64(&rc[k]));                \
-	} while (0)
+#if defined(__aarch64__) && defined(__GNUC__)
+__attribute__((always_inline, target("+crypto+sha3")))
+#endif
+static inline void sha3_round(uint64x2_t *a, uint64x2_t *b, uint64x2_t *c, uint64x2_t *d, const uint64_t *rc, int k) {
+    /* theta: the parity of each column, and what it adds */
+	c[0] = veor3q_u64(a[0], a[5], a[10]);
+	c[0] = veor3q_u64(c[0], a[15], a[20]);
+	c[1] = veor3q_u64(a[1], a[6], a[11]);
+	c[1] = veor3q_u64(c[1], a[16], a[21]);
+	c[2] = veor3q_u64(a[2], a[7], a[12]);
+	c[2] = veor3q_u64(c[2], a[17], a[22]);
+	c[3] = veor3q_u64(a[3], a[8], a[13]);
+	c[3] = veor3q_u64(c[3], a[18], a[23]);
+	c[4] = veor3q_u64(a[4], a[9], a[14]);
+	c[4] = veor3q_u64(c[4], a[19], a[24]);
+	d[0] = vrax1q_u64(c[4], c[1]);
+	d[1] = vrax1q_u64(c[0], c[2]);
+	d[2] = vrax1q_u64(c[1], c[3]);
+	d[3] = vrax1q_u64(c[2], c[4]);
+	d[4] = vrax1q_u64(c[3], c[0]);
+	/* theta's exclusive or, rho's rotation and pi's move, in one */
+	b[0 ] = veorq_u64(a[0 ], d[0]);
+	b[1 ] = vxarq_u64(a[6 ], d[1], 20);
+	b[2 ] = vxarq_u64(a[12], d[2], 21);
+	b[3 ] = vxarq_u64(a[18], d[3], 43);
+	b[4 ] = vxarq_u64(a[24], d[4], 50);
+	b[5 ] = vxarq_u64(a[3 ], d[3], 36);
+	b[6 ] = vxarq_u64(a[9 ], d[4], 44);
+	b[7 ] = vxarq_u64(a[10], d[0], 61);
+	b[8 ] = vxarq_u64(a[16], d[1], 19);
+	b[9 ] = vxarq_u64(a[22], d[2],  3);
+	b[10] = vxarq_u64(a[1 ], d[1], 63);
+	b[11] = vxarq_u64(a[7 ], d[2], 58);
+	b[12] = vxarq_u64(a[13], d[3], 39);
+	b[13] = vxarq_u64(a[19], d[4], 56);
+	b[14] = vxarq_u64(a[20], d[0], 46);
+	b[15] = vxarq_u64(a[4 ], d[4], 37);
+	b[16] = vxarq_u64(a[5 ], d[0], 28);
+	b[17] = vxarq_u64(a[11], d[1], 54);
+	b[18] = vxarq_u64(a[17], d[2], 49);
+	b[19] = vxarq_u64(a[23], d[3],  8);
+	b[20] = vxarq_u64(a[2 ], d[2],  2);
+	b[21] = vxarq_u64(a[8 ], d[3],  9);
+	b[22] = vxarq_u64(a[14], d[4], 25);
+	b[23] = vxarq_u64(a[15], d[0], 23);
+	b[24] = vxarq_u64(a[21], d[1], 62);
+	/* chi, along each row */
+	a[0 ] = vbcaxq_u64(b[0 ], b[2 ], b[1 ]);
+	a[1 ] = vbcaxq_u64(b[1 ], b[3 ], b[2 ]);
+	a[2 ] = vbcaxq_u64(b[2 ], b[4 ], b[3 ]);
+	a[3 ] = vbcaxq_u64(b[3 ], b[0 ], b[4 ]);
+	a[4 ] = vbcaxq_u64(b[4 ], b[1 ], b[0 ]);
+	a[5 ] = vbcaxq_u64(b[5 ], b[7 ], b[6 ]);
+	a[6 ] = vbcaxq_u64(b[6 ], b[8 ], b[7 ]);
+	a[7 ] = vbcaxq_u64(b[7 ], b[9 ], b[8 ]);
+	a[8 ] = vbcaxq_u64(b[8 ], b[5 ], b[9 ]);
+	a[9 ] = vbcaxq_u64(b[9 ], b[6 ], b[5 ]);
+	a[10] = vbcaxq_u64(b[10], b[12], b[11]);
+	a[11] = vbcaxq_u64(b[11], b[13], b[12]);
+	a[12] = vbcaxq_u64(b[12], b[14], b[13]);
+	a[13] = vbcaxq_u64(b[13], b[10], b[14]);
+	a[14] = vbcaxq_u64(b[14], b[11], b[10]);
+	a[15] = vbcaxq_u64(b[15], b[17], b[16]);
+	a[16] = vbcaxq_u64(b[16], b[18], b[17]);
+	a[17] = vbcaxq_u64(b[17], b[19], b[18]);
+	a[18] = vbcaxq_u64(b[18], b[15], b[19]);
+	a[19] = vbcaxq_u64(b[19], b[16], b[15]);
+	a[20] = vbcaxq_u64(b[20], b[22], b[21]);
+	a[21] = vbcaxq_u64(b[21], b[23], b[22]);
+	a[22] = vbcaxq_u64(b[22], b[24], b[23]);
+	a[23] = vbcaxq_u64(b[23], b[20], b[24]);
+	a[24] = vbcaxq_u64(b[24], b[21], b[20]);
+	/* iota */
+	a[0] = veorq_u64(a[0], vld1q_dup_u64(&rc[k]));
+}
+
 
 /* the twenty-four rounds over the state, in place */
 TARGET_ARMV8_SHA3
@@ -148,10 +151,10 @@ void crypton_sha3_armv8_permute(uint64_t state[25])
 	 * round an iteration measured 802 MB/s of SHA3-256, two 949 and four
 	 * 991, against 551 for the plain C */
 	for (round = 0; round < 24; round += 4) {
-		ROUND(round);
-		ROUND(round + 1);
-		ROUND(round + 2);
-		ROUND(round + 3);
+		sha3_round(a, b, c, d, rc, round);
+		sha3_round(a, b, c, d, rc, round + 1);
+		sha3_round(a, b, c, d, rc, round + 2);
+		sha3_round(a, b, c, d, rc, round + 3);
 	}
 
 	for (i = 0; i < 25; i++)
