@@ -2,6 +2,17 @@
 
 ## 2.1.3
 
+* fix(c): the table that says which AES implementation to call is filled in
+  once, before there is a second thread, rather than on every
+  `crypton_aes_initkey`.  Two threads taking a key at the same time were
+  writing the whole table at the same time, which ThreadSanitizer reports
+  forty-four times over for eight threads doing nothing else.  The same for
+  the flags that say whether to use the ARMv8 SHA-1, SHA-256 and SHA-512
+  instructions.  Nothing has ever come of it -- the values written are the
+  same ones every time and the table starts out holding valid generic
+  implementations -- but it is a race the standard gives no meaning to.
+  Taking an AES key is 6.7% quicker for not doing the work again: 72.1 to
+  67.3 nanoseconds on an Apple M4
 * fix(c): the C no longer reads a word off a caller's pointer by casting it,
   which the standard leaves undefined at an address the word type is not
   aligned for and which UndefinedBehaviorSanitizer reported on seventy-eight

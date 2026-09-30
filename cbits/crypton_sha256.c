@@ -126,7 +126,15 @@ static void sha256_do_chunk_generic(struct sha256_ctx *ctx, const uint8_t *buf)
 extern void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint8_t buf[64]);
 extern int crypton_sha256_armv8_available(void);
 
+/* Resolved before there is a second thread; see the constructor in
+ * cbits/crypton_aes.c for why.  The test below then only ever reads. */
 static int sha256_use_armv8 = -1;
+
+__attribute__((constructor))
+static void sha256_armv8_ctor(void)
+{
+	sha256_use_armv8 = crypton_sha256_armv8_available();
+}
 #endif
 
 #if (defined(WITH_ARMV8_SHA256_ASM) && defined(WITH_ARMV8_SHA2)) \

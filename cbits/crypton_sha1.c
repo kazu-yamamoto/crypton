@@ -55,7 +55,19 @@ extern void crypton_sha1_asm_block_data_order(uint32_t state[5],
                                               const void *data, size_t blocks);
 #endif
 
+/* Resolved before there is a second thread; see the constructor in
+ * cbits/crypton_aes.c for why.  The test below then only ever reads. */
 static int sha1_use_armv8 = -1;
+
+__attribute__((constructor))
+static void sha1_armv8_ctor(void)
+{
+	sha1_use_armv8 = crypton_sha1_armv8_available();
+#ifdef SHA1_ASM
+	if (sha1_use_armv8)
+		crypton_armcap_P |= CRYPTON_ARMCAP_SHA1;
+#endif
+}
 #endif
 
 #ifdef WITH_X86_SHA_NI
