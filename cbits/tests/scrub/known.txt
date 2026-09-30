@@ -1,0 +1,16 @@
+# Places that keep a secret as it was handed over, which are known and not
+# treated as defects here.  A probe reporting only these passes; anything
+# else fails.
+
+# A hash context buffers the message a block at a time, so hashing a secret
+# leaves it in the context.  Nothing clears it: crypton_sha256_finalize and
+# its siblings compute the digest and return, and the Haskell side holds the
+# context as Bytes rather than ScrubbedBytes, so it is not cleared there
+# either.  hashFinalize copies the context before finalizing it, so there are
+# two such objects per digest rather than one.
+sha256    context
+sha512    context
+
+# crypton_chacha_init copies the key into the state, where it stays for the
+# life of the context.
+chacha20  context
