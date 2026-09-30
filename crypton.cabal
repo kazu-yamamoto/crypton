@@ -80,7 +80,7 @@ extra-source-files:
     cbits/tests/fuzz/*.c
     cbits/tests/fuzz/*.h
     cbits/tests/fuzz/README
-    cbits/tests/fuzz/corpus/*
+    cbits/tests/fuzz/corpus/*.bin
     cbits/tests/fuzz/run.sh
     cbits/tests/scrub/*.c
     cbits/tests/scrub/README
