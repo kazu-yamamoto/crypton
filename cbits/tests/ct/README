@@ -57,3 +57,9 @@ effect, and defining NDEBUG measured no faster on P-256, so whether to keep
 them is a question about what a library should do when an internal invariant
 fails -- abort the process, or carry on -- rather than one about speed.  They
 are listed in known.txt and the job passes with them.
+
+The decision was to keep them: an internal invariant that fails in a
+cryptographic library is better met with an abort than with a wrong answer
+carried onwards.  So this is settled rather than open, and the four entries in
+known.txt are permanent.  What is not permanent is anything else appearing
+beside them.
