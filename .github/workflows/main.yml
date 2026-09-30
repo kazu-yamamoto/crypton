@@ -211,6 +211,21 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # Whether a secret ever decides a branch or an address.  valgrind is
+    # told the private keys are undefined memory, which it already follows
+    # through arithmetic, so it reports exactly the places one of them
+    # reaches a conditional or an index.  The first driver is deliberately
+    # leaky and has to report, or the rest of the run proves nothing.
+    #
+    # See cbits/tests/ct/README for what is marked and for why the AES
+    # driver is expected to report.
+    - name: What the secrets decide
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq valgrind
+        cbits/tests/ct/run.sh
+
     # The three implementations that only a 32-bit architecture receives: the
     # P-256 field and its comb table under cbits/include32, the 32-bit donna,
     # and the 32-bit p448.  Nothing in this matrix is 32-bit, so none of them

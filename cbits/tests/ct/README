@@ -1,0 +1,37 @@
+Does the code that handles a secret run in time independent of it?
+
+memcheck already follows undefined bytes through arithmetic and reports the
+moment one of them decides a branch or an address.  That is the same question,
+so each driver here declares its secret undefined and runs under valgrind:
+every report names a place where a secret reached a branch or an index.  The
+technique is Adam Langley's ctgrind.
+
+ct_canary.c is the calibration.  It branches on a secret and indexes a table
+with one, so it must report; if it does not, the marking is not reaching the
+code and the silence of every other driver in that run means nothing.  Round
+five learned this the hard way with ThreadSanitizer, which saw nothing through
+GHC's runtime including a deliberate race.
+
+What is marked secret in each driver is the thing the caller would call a
+private key, and nothing else.  A modulus, a peer's public key, a nonce and a
+message are public and stay defined; so does each answer, which is declared
+public again before anything looks at it.
+
+  canary   a branch and a table index on a secret -- must report
+  powm     crypton_powm_sec, the exponent being an RSA private key
+  p256     both scalar multiplications and the scalar inversion
+  x25519   the scalar
+  ed25519  the private key, through signing
+  decaf    Ed448 signing and X448, both private scalars
+  chapoly  the ChaCha20 key, the plaintext, and the Poly1305 key
+  aes      the AES key and the plaintext, through ECB and GCM
+
+The aes driver is built against cbits/aes/generic.c and cbits/aes/gf.c on
+purpose, rather than whatever the machine offers.  AES-NI and the ARMv8
+instructions do not look anything up and would report nothing, which would say
+nothing about the table-driven code every other machine runs.  That code is
+variable-time by construction -- a table index is a byte of the state -- and
+so is the table-driven GHASH beside it.  A report from the aes driver is
+therefore expected and is a property of those implementations, not a defect
+found in them; it is here so that the size of it is written down rather than
+assumed.  Everything else is expected to be silent.
