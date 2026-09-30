@@ -33,6 +33,7 @@
 // See http://www.imperialviolet.org/2010/12/04/ecc.html ([1]) for background.
 
 #include "p256/p256_gf.h"
+#include "crypton_bzero.h"
 
 #ifdef CRYPTON_S2N_BIGNUM
 #include "p256/p256_s2n.h"
@@ -656,14 +657,7 @@ static void scalar_base_mult(felem nx, felem ny, felem nz,
 
   /* The recoded scalar is the private key in another representation, so it
    * does not stay on the stack. */
-  {
-    volatile unsigned char* q = (volatile unsigned char*)rec;
-    unsigned b;
-
-    for (b = 0; b < sizeof(rec); b++) {
-      q[b] = 0;
-    }
-  }
+  crypton_bzero(rec, sizeof(rec));
 }
 
 /* point_to_affine converts a Jacobian point to an affine point. If the input
@@ -965,15 +959,8 @@ static void scalar_mult(felem nx, felem ny, felem nz, const felem x,
   }
 
   /* The recoded scalar is the private key in another representation, so it
-   * does not stay on the stack.  Written through a volatile pointer, since a
-   * plain memset here is dead and may be dropped. */
-  {
-    volatile unsigned char* p = (volatile unsigned char*)&rec;
-    unsigned b;
-    for (b = 0; b < sizeof(rec); b++) {
-      p[b] = 0;
-    }
-  }
+   * does not stay on the stack. */
+  crypton_bzero(&rec, sizeof(rec));
 }
 
 /* crypton_p256_base_point_mul sets {out_x,out_y} = nG, where n is < the

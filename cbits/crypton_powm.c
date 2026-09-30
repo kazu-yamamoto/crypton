@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <crypton_bignum.h>
 #include <crypton_powm.h>
+#include <crypton_bzero.h>
 
 /*
  * At RSA sizes on x86-64, the Montgomery multiplication below is the whole
@@ -296,13 +297,15 @@ int crypton_powm_sec(uint8_t *out,
 	to_be(out, modlen, prod, n);
 
 	/* nothing here is the caller's secret, but the exponent's bits passed
-	 * through the accumulators */
-	memset(space, 0, words * sizeof(limb_t));
+	 * through the accumulators.  crypton_bzero rather than memset, since
+	 * this memory is freed on the next line and a store to memory about to
+	 * die is one an optimizer may drop. */
+	crypton_bzero(space, words * sizeof(limb_t));
 	free(space);
 	return 0;
 
 fail:
-	memset(space, 0, words * sizeof(limb_t));
+	crypton_bzero(space, words * sizeof(limb_t));
 	free(space);
 	return 1;
 }
