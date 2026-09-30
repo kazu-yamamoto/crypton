@@ -22,9 +22,9 @@
 #include "crypton_skein512.h"
 #include "crypton_tiger.h"
 #include "crypton_whirlpool.h"
-/* The stream ciphers are not here: crypton_chacha.h and crypton_salsa.h both
- * typedef the name "block", so no translation unit can hold them both.  They
- * want a driver of their own, and a header that does not claim that name. */
+#include "crypton_chacha.h"
+#include "crypton_salsa.h"
+#include "crypton_poly1305.h"
 
 /* The skein headers spell the prefix "cryponite", which nothing defines. */
 void crypton_skein256_init(struct skein256_ctx *ctx, uint32_t hashlen);
@@ -43,8 +43,12 @@ static void answer(const char *name, const uint8_t *out, size_t n) {
     char got[512], want[512], label[128];
     size_t i;
     for (i = 0; i < n && i * 2 + 2 < sizeof got; i++)
-        sprintf(got + i * 2, "%02x", out[i]);
+        snprintf(got + i * 2, 3, "%02x", out[i]);
     got[n * 2] = 0;
+    /* an answer of no bytes still has to be a token, or the reader below
+       takes the next line's name for this line's answer and everything
+       after it is compared against the wrong thing */
+    if (n == 0) strcpy(got, "-");
     if (generating) {
         fprintf(vf, "%s %s\n", name, got);
         return;
@@ -83,7 +87,7 @@ static void fill(void) {
             initcall;                                                       \
             updcall;                                                        \
             fincall;                                                        \
-            sprintf(nmbuf, "%s/%zu", nm, lengths[li]);                      \
+            snprintf(nmbuf, sizeof nmbuf, "%s/%zu", nm, lengths[li]);                      \
             answer(nmbuf, out, outlen);                                     \
         }                                                                   \
     } while (0)
@@ -122,7 +126,7 @@ int main(int argc, char **argv) {
             crypton_sha3_init(ctx, 256);
             crypton_sha3_update(ctx, buf, (uint32_t)lengths[li]);
             crypton_sha3_finalize(ctx, 256, out);
-            sprintf(nmbuf, "sha3-256/%zu", lengths[li]);
+            snprintf(nmbuf, sizeof nmbuf, "sha3-256/%zu", lengths[li]);
             answer(nmbuf, out, sizeof out);
         }
     }
@@ -141,6 +145,43 @@ int main(int argc, char **argv) {
     HASH("whirlpool", struct whirlpool_ctx, crypton_whirlpool_init(&ctx),
          crypton_whirlpool_update(&ctx, buf, (uint32_t)lengths[li]),
          crypton_whirlpool_finalize(&ctx, out), 64);
+
+    /* The stream ciphers and the one-time authenticator.  Each reads its key
+     * and its input a word at a time and writes its output the same way, so
+     * the byte order shows in the answer rather than in a length field. */
+    {
+        size_t li;
+        for (li = 0; li < sizeof lengths / sizeof *lengths; li++) {
+            crypton_chacha_context cctx;
+            crypton_salsa_context sctx;
+            poly1305_ctx pctx;
+            poly1305_key pkey;
+            poly1305_mac mac;
+            uint8_t key[32], iv[8], outbuf[1024];
+            char nmbuf[128];
+            size_t i;
+
+            for (i = 0; i < sizeof key; i++) key[i] = (uint8_t)(i * 11 + 3);
+            for (i = 0; i < sizeof iv; i++) iv[i] = (uint8_t)(i * 5 + 1);
+
+            crypton_chacha_init(&cctx, 20, sizeof key, key, sizeof iv, iv);
+            crypton_chacha_combine(outbuf, &cctx, buf, (uint32_t)lengths[li]);
+            snprintf(nmbuf, sizeof nmbuf, "chacha20/%zu", lengths[li]);
+            answer(nmbuf, outbuf, lengths[li] < 64 ? lengths[li] : 64);
+
+            crypton_salsa_init(&sctx, 20, sizeof key, key, sizeof iv, iv);
+            crypton_salsa_combine(outbuf, &sctx, buf, (uint32_t)lengths[li]);
+            snprintf(nmbuf, sizeof nmbuf, "salsa20/%zu", lengths[li]);
+            answer(nmbuf, outbuf, lengths[li] < 64 ? lengths[li] : 64);
+
+            for (i = 0; i < sizeof pkey; i++) pkey[i] = (uint8_t)(i * 13 + 7);
+            crypton_poly1305_init(&pctx, &pkey);
+            crypton_poly1305_update(&pctx, buf, (uint32_t)lengths[li]);
+            crypton_poly1305_finalize(mac, &pctx);
+            snprintf(nmbuf, sizeof nmbuf, "poly1305/%zu", lengths[li]);
+            answer(nmbuf, mac, sizeof mac);
+        }
+    }
 
     if (!generating && failures == 0)
         printf("ok   %d answers match the little-endian ones\n", checked);

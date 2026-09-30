@@ -211,6 +211,27 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # The same answers on a machine whose bytes go the other way.  s390x and
+    # ppc64 are among the architectures the cabal file builds for and neither
+    # is in this matrix, so the eighteen files that read their input through
+    # the loaders in crypton_align.h -- rewritten in #256 -- had never run
+    # anywhere the byte order differs.  Only the C is taken over: qemu runs a
+    # big-endian container, and what it must agree with is frozen in
+    # cbits/tests/endian/vectors.txt rather than computed twice, since a
+    # little-endian answer cannot be had on the machine doing the comparing.
+    - name: The same answers on a big-endian machine
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: s390x
+
+    - name: Check the big-endian answers
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: |
+        docker run --rm --platform linux/s390x -v "$PWD":/w -w /w s390x/ubuntu:24.04 \
+          sh -c 'apt-get update -qq && apt-get install -y -qq gcc >/dev/null &&
+                 cbits/tests/endian/run.sh'
+
     # Whether a secret ever decides a branch or an address.  valgrind is
     # told the private keys are undefined memory, which it already follows
     # through arithmetic, so it reports exactly the places one of them
