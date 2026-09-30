@@ -211,6 +211,46 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # What the C does with the lengths and indices it is handed.  Two left
+    # shifts the standard leaves undefined were found this way and nothing
+    # else; the value of the step from here on is that it stays that way.
+    #
+    # Only the C is instrumented -- the Haskell is compiled as usual and
+    # linked against the sanitizer runtime, which is what -optl is for.
+    # LeakSanitizer comes on with AddressSanitizer on Linux and would report
+    # the whole of the GHC heap, which never frees, so it is turned off; what
+    # is wanted here is the out-of-bounds half.
+    #
+    # A build directory of its own, because cabal does not recompile a C
+    # source when only its cc-options change.
+    - name: The C under the sanitizers
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      env:
+        ASAN_OPTIONS: detect_leaks=0
+        UBSAN_OPTIONS: print_stacktrace=1
+      shell: bash
+      run: |
+        set -o pipefail
+        san="-optc-fsanitize=address -optc-fsanitize=undefined"
+        # Every alignment report is crypton_align.h doing what it says: it
+        # defines UNALIGNED_ACCESS_OK on i386 and x86-64 and nowhere else, and
+        # the block and hash helpers then read a 64-bit word straight off a
+        # caller's pointer.  That is undefined by the standard and fine on
+        # those two architectures, which is the whole of why the macro exists.
+        # Seventy-eight lines report it, in three files, and nothing else does
+        # -- so the check is off rather than the step being useless.
+        san="$san -optc-fno-sanitize=alignment"
+        san="$san -optl-fsanitize=address -optl-fsanitize=undefined"
+        cabal test --builddir=dist-san ${{ env.target-config }} all \
+          --ghc-options="$san" 2>&1 | tee san.log
+        # A report does not fail the run on its own: UndefinedBehaviorSanitizer
+        # prints and carries on unless told otherwise, and carrying on is what
+        # collects every one of them in a single run rather than the first.
+        if grep -qE "runtime error|AddressSanitizer" san.log; then
+          echo "::error::the sanitizers reported something; see the log above"
+          exit 1
+        fi
+
     # Saved after the build, so the entry holds the build products too, and
     # only from the default branch: a cache written on a branch is visible
     # only to that branch, while one written on the default branch is visible
