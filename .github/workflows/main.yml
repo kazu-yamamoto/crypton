@@ -211,6 +211,18 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # What a secret leaves behind.  Round eight asked whether it can be read
+    # from the time a primitive takes; this asks whether it can be read from
+    # the memory afterwards, which a core file or a swapped page carries away
+    # long after the caller believes it is done.  The first probe keeps the
+    # secret on purpose and has to be found, or the search proved nothing.
+    #
+    # Not under the sanitizers: reading the stack below the current frame is
+    # what this does, and ASan calls that an error.
+    - name: What the secrets leave behind
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      run: cbits/tests/scrub/run.sh
+
     # The same answers on a machine whose bytes go the other way.  s390x and
     # ppc64 are among the architectures the cabal file builds for and neither
     # is in this matrix, so the eighteen files that read their input through

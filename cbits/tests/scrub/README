@@ -1,0 +1,53 @@
+What is left in memory after a secret has been through it.
+
+Round eight asked whether a secret can be read from the time a primitive
+takes.  This asks whether it can be read from the memory afterwards.  The
+stack below a returning function is not erased -- it is simply no longer
+addressed -- and a context handed back to a caller is whatever the primitive
+left in it, so a later core file, crash dump or swapped page can carry a key
+away long after the caller believes it is done with it.
+
+Each probe paints the stack with a filler, runs a primitive on an
+unmistakable secret, copies the painted region away before anything can
+disturb it, and looks for the pattern.  Two things are asked separately:
+
+  scratch   what the primitive left below the caller's frame, in its own
+            working memory
+  context   what it left in the context object the caller still holds, which
+            is on the heap here as it is in crypton
+
+The first probe keeps the secret on purpose and has to be found.  That is not
+ceremony: the first two versions of this file reported that nothing was ever
+left behind, including by that probe, and both times the search was at fault.
+Once because the probed function was inlined into its caller, so its locals
+sat in a live frame rather than an abandoned one; once because the loop that
+copies the region away was turned into a call to memcpy, whose own frame
+landed exactly on the evidence.
+
+What this can say and what it cannot
+------------------------------------
+
+It finds a secret that survives *as it was handed over*.  It cannot find one
+that survives transformed, and the difference matters: Poly1305 reports
+nothing, but its finalize clears nothing either -- the key is clamped into r
+and pad, so it is still there and simply not byte-for-byte what was passed in.
+Read "no verbatim copy" as exactly that and no more.
+
+What it found
+-------------
+
+Nothing survives in any primitive's own scratch.  The RSA exponentiation is
+clean, which is worth saying because crypton_powm_sec memsets its table and
+then frees it, and a compiler is entitled to drop a store to memory that is
+about to die.  clang at -O2 keeps it -- the bzero is still there in the
+assembly, two instructions before the free -- but that is the compiler's
+choice rather than a guarantee, and explicit_bzero exists for this.
+
+Three contexts keep the secret as it was given: SHA-256, SHA-512 and
+ChaCha20.  The hash ones hold the buffered message, the ChaCha one holds the
+key.  Nothing clears any of them, in the C or in the Haskell above it, where
+Context is Bytes rather than ScrubbedBytes -- and hashFinalize copies the
+context before finalizing, so there are two of them per digest.  They are
+listed in known.txt; whether to clear them is a question about what a context
+means after it is finished with, and about the cost of scrubbing every hash,
+rather than something to settle here.
