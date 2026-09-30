@@ -35,3 +35,25 @@ so is the table-driven GHASH beside it.  A report from the aes driver is
 therefore expected and is a property of those implementations, not a defect
 found in them; it is here so that the size of it is written down rather than
 assumed.  Everything else is expected to be silent.
+
+What round eight found
+----------------------
+
+Of the eight drivers, five were silent: the RSA exponentiation, X25519,
+Ed25519, ChaCha20 and Poly1305 never let a private key decide a branch or an
+address.  The AES driver reported from the tables, as it was built to.
+
+The other two reported, and both times from an assert():
+
+  crypton_p256_modmul          assert(top <= 1), assert(top == 0)
+  crypton_gf_448_strong_reduce two asserts on a carry and a borrow
+
+Those conditions hold on every input -- they check an invariant of the
+reduction, not anything about the data -- so the branch goes the same way
+every time and no timing follows from it.  They are reported at all because
+crypton's C is compiled without NDEBUG, so assert() is live in a released
+library.  Twenty-eight assertions ship that way, none of them with a side
+effect, and defining NDEBUG measured no faster on P-256, so whether to keep
+them is a question about what a library should do when an internal invariant
+fails -- abort the process, or carry on -- rather than one about speed.  They
+are listed in known.txt and the job passes with them.
