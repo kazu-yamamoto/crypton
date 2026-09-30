@@ -223,7 +223,11 @@ crypton_p256_digit crypton_p256_shl(const crypton_p256_int* a, int n, crypton_p2
   n %= P256_BITSPERDIGIT;
   for (i = P256_NDIGITS - 1; i > 0; --i) {
     crypton_p256_digit accu = (P256_DIGIT(a, i) << n);
-    accu |= (P256_DIGIT(a, i - 1) >> (P256_BITSPERDIGIT - n));
+    /* n is zero as often as it is anything else, and a digit shifted by its
+     * own width is undefined: x86 takes the count modulo the width and hands
+     * back the whole digit, ARM hands back nothing.  Two shifts that are each
+     * inside the width say the intended nothing on both. */
+    accu |= (P256_DIGIT(a, i - 1) >> (P256_BITSPERDIGIT - 1 - n) >> 1);
     P256_DIGIT(b, i) = accu;
   }
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) << n);
@@ -239,7 +243,8 @@ void crypton_p256_shr(const crypton_p256_int* a, int n, crypton_p256_int* b) {
   n %= P256_BITSPERDIGIT;
   for (i = 0; i < P256_NDIGITS - 1; ++i) {
     crypton_p256_digit accu = (P256_DIGIT(a, i) >> n);
-    accu |= (P256_DIGIT(a, i + 1) << (P256_BITSPERDIGIT - n));
+    /* the same full-width shift as in crypton_p256_shl above */
+    accu |= (P256_DIGIT(a, i + 1) << (P256_BITSPERDIGIT - 1 - n) << 1);
     P256_DIGIT(b, i) = accu;
   }
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) >> n);

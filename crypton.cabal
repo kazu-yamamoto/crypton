@@ -69,6 +69,8 @@ extra-source-files:
     cbits/s2n/import.sh
     cbits/s2n/include/*.h
     cbits/s2n/x86_att/*.S
+    cbits/tests/width/*.c
+    cbits/tests/width/run.sh
     tests/*.hs
 
 extra-doc-files:
@@ -377,6 +379,17 @@ library
 
         include-dirs: cbits/decaf/include/arch_ref64 cbits/decaf/p448/arch_ref64
 
+        -- decaf sizes its field limbs from the arch directory just chosen and
+        -- its scalar limbs from a separate macro that cbits/decaf/include/
+        -- decaf/common.h works out from the compiler, by asking after
+        -- __x86_64__ and the width of uint_fast32_t.  The two answers need
+        -- not agree: on Apple Silicon uint_fast32_t is four bytes, so the
+        -- same aarch64 CPU takes 64-bit field limbs and 32-bit scalar limbs,
+        -- where on Linux it takes 64-bit for both.  Ed448 signing pays 5.5%
+        -- for that (20.69 us against 19.56 on an M4).  The architecture is
+        -- already decided here, so decide this with it.
+        cc-options: -DCRYPTON_DECAF_WORD_BITS=64
+
     else
         c-sources:
             cbits/decaf/ed448goldilocks/decaf_all.c
@@ -388,6 +401,7 @@ library
             cbits/decaf/utils.c
 
         include-dirs: cbits/decaf/include/arch_32 cbits/decaf/p448/arch_32
+        cc-options: -DCRYPTON_DECAF_WORD_BITS=32
 
     if ((((((((arch(x86_64) || arch(aarch64)) || arch(loongarch64)) || arch(ppc64le)) || arch(riscv64)) || arch(s390x)) || arch(alpha)) || arch(ppc64)) || arch(sparc64))
         c-sources: cbits/curve25519/curve25519-donna-c64.c
