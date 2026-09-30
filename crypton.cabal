@@ -69,6 +69,10 @@ extra-source-files:
     cbits/s2n/import.sh
     cbits/s2n/include/*.h
     cbits/s2n/x86_att/*.S
+    cbits/tests/ct/*.c
+    cbits/tests/ct/*.h
+    cbits/tests/ct/README
+    cbits/tests/ct/run.sh
     cbits/tests/width/*.c
     cbits/tests/width/run.sh
     tests/*.hs

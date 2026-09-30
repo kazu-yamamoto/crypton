@@ -1,0 +1,27 @@
+Does this C give the same answers on a big-endian machine?
+
+The cabal file lists s390x and ppc64 among the architectures it builds for.
+Neither is in the CI matrix, and neither had ever compiled this code, let
+alone run it.  Eighteen files read their input through the loaders in
+crypton_align.h -- which were rewritten from word-typed casts to memcpy in
+#256 -- and eight more decide something from the byte order themselves.  That
+is the largest body of untested endianness-sensitive code in the tree, and the
+riskiest part of it is the most recently written.
+
+The two sides cannot be compared in one run the way the 32-bit harness
+compares two builds, because only one endianness exists on the machine doing
+the comparing.  So the answers are frozen instead: vectors.txt is what this
+code gives on a little-endian host, and check mode reads it back and compares.
+Any machine can run check mode, and a big-endian one that disagrees says so
+line by line.
+
+  cbits/tests/endian/run.sh generate   write vectors.txt from this machine
+  cbits/tests/endian/run.sh            check this machine against vectors.txt
+
+Generate mode is for a maintainer on a little-endian machine after adding a
+primitive, and the file it writes is committed.  It is not run in CI, where
+only check mode makes sense.
+
+The first few lines of vectors.txt are published test vectors rather than
+whatever this code happened to produce -- SHA-256 of "abc" and the like --
+so that a mistake on the generating host is caught rather than frozen in.

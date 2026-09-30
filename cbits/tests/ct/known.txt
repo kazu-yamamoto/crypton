@@ -1,0 +1,32 @@
+# Places where a secret reaches a branch that are known, understood and not
+# defects.  A driver reporting only these passes; anything else fails.
+#
+# Every entry is "file:line  what it is".  Keep it short: a long one means
+# something has been accepted that should have been fixed.
+
+# assert() on a value derived from the secret.  The asserted condition holds
+# on every input -- these check an internal invariant of the reduction, not
+# anything about the data -- so the branch goes the same way every time and
+# no timing follows from it.  They are reported because crypton's C is built
+# without NDEBUG, so assert() is live in a released library.  See the round
+# eight notes in cbits/tests/ct/README.
+p256.c:200        assert(top <= 1) in crypton_p256_modmul
+p256.c:204        assert(top == 0) in crypton_p256_modmul
+f_generic.c:94    assert on the borrow in crypton_gf_448_strong_reduce
+f_generic.c:106   assert on the carry in crypton_gf_448_strong_reduce
+
+# The same thing for a different reason.  crypton_gf_invert asserts that what
+# it inverted had an inverse, and the two callers that ask for the assertion
+# are inverting a projective z, which is never zero for a point on the curve.
+# So this one holds because of what the callers pass rather than because of
+# arithmetic, and it too goes the same way on every valid input.
+decaf.c:136       assert(ret) in crypton_gf_invert
+
+# The table-driven AES and the table-driven GHASH index with a byte of the
+# state, which is what makes them fast and what makes them variable-time.
+# That is a property of those implementations rather than a defect in them;
+# a machine with AES-NI or the ARMv8 instructions runs neither.
+generic.c         the AES tables, in key expansion and in the rounds
+gf.c              the GHASH table
+crypton_aes.c     the same tables, attributed to the code that inlines them
+block128.h        likewise
