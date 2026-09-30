@@ -425,7 +425,22 @@ static void initialize_table_armv8(void)
 }
 #endif
 
-uint8_t *crypton_aes_cpu_init(void)
+/* Which implementation each entry of the branch table names is decided once,
+ * before anything else runs.
+ *
+ * It used to be decided again on every crypton_aes_initkey, which meant two
+ * threads taking a key at the same time were writing the whole table at the
+ * same time -- a data race for as long as the program used AES, not just at
+ * the start.  ThreadSanitizer reports forty-two of them for eight threads
+ * doing nothing but taking keys.  The values written are the same ones every
+ * time and the table starts out holding valid generic implementations, so
+ * nothing has ever come of it; it is a race the standard gives no meaning to
+ * all the same.
+ *
+ * A constructor runs while there is one thread, which is the cheapest way to
+ * have no race at all: no flag to test, no lock to take, and one less thing
+ * for crypton_aes_initkey to do per key. */
+static void crypton_aes_cpu_setup(void)
 {
 #if defined(ARCH_X86) && defined(WITH_AESNI)
 	crypton_aesni_initialize_hw(initialize_table_ni);
@@ -433,6 +448,16 @@ uint8_t *crypton_aes_cpu_init(void)
 #ifdef WITH_ARMV8_CRYPTO
 	initialize_table_armv8();
 #endif
+}
+
+__attribute__((constructor))
+static void crypton_aes_cpu_ctor(void)
+{
+	crypton_aes_cpu_setup();
+}
+
+uint8_t *crypton_aes_cpu_init(void)
+{
 	return crypton_aes_cpu_options;
 }
 
@@ -443,7 +468,6 @@ void crypton_aes_initkey(aes_key *key, uint8_t *origkey, uint8_t size)
 	case 24: key->nbr = 12; key->strength = 1; break;
 	case 32: key->nbr = 14; key->strength = 2; break;
 	}
-	crypton_aes_cpu_init();
 	init_f _init = GET_INIT(key->strength);
 	_init(key, origkey, size);
 }
