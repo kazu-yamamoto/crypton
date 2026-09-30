@@ -43,14 +43,19 @@ Of the eight drivers, five were silent: the RSA exponentiation, X25519,
 Ed25519, ChaCha20 and Poly1305 never let a private key decide a branch or an
 address.  The AES driver reported from the tables, as it was built to.
 
-The other two reported, and both times from an assert():
+The other two reported, five places between them, and every one of them an
+assert():
 
   crypton_p256_modmul          assert(top <= 1), assert(top == 0)
   crypton_gf_448_strong_reduce two asserts on a carry and a borrow
+  crypton_gf_invert            assert(ret), that what was inverted had an
+                               inverse
 
-Those conditions hold on every input -- they check an invariant of the
-reduction, not anything about the data -- so the branch goes the same way
-every time and no timing follows from it.  They are reported at all because
+The first four check an invariant of a reduction rather than anything about
+the data, so they hold whatever the input is.  The fifth holds because the two
+callers that ask for it are inverting a projective z, which is never zero for
+a point on the curve.  Either way the branch goes the same way every time and
+no timing follows from it.  They are reported at all because
 crypton's C is compiled without NDEBUG, so assert() is live in a released
 library.  Twenty-eight assertions ship that way, none of them with a side
 effect, and defining NDEBUG measured no faster on P-256, so whether to keep
@@ -60,6 +65,6 @@ are listed in known.txt and the job passes with them.
 
 The decision was to keep them: an internal invariant that fails in a
 cryptographic library is better met with an abort than with a wrong answer
-carried onwards.  So this is settled rather than open, and the four entries in
+carried onwards.  So this is settled rather than open, and the five entries in
 known.txt are permanent.  What is not permanent is anything else appearing
 beside them.

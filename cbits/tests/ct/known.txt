@@ -15,6 +15,13 @@ p256.c:204        assert(top == 0) in crypton_p256_modmul
 f_generic.c:94    assert on the borrow in crypton_gf_448_strong_reduce
 f_generic.c:106   assert on the carry in crypton_gf_448_strong_reduce
 
+# The same thing for a different reason.  crypton_gf_invert asserts that what
+# it inverted had an inverse, and the two callers that ask for the assertion
+# are inverting a projective z, which is never zero for a point on the curve.
+# So this one holds because of what the callers pass rather than because of
+# arithmetic, and it too goes the same way on every valid input.
+decaf.c:136       assert(ret) in crypton_gf_invert
+
 # The table-driven AES and the table-driven GHASH index with a byte of the
 # state, which is what makes them fast and what makes them variable-time.
 # That is a property of those implementations rather than a defect in them;
