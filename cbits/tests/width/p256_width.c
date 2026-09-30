@@ -124,6 +124,13 @@ int main(void) {
         show("sum", &r);
         /* the shifts are defined as n % P256_BITSPERDIGIT, which is 32 on one
            build and 64 on the other, so keep the ask inside both */
+        /* a shift of nothing has to be the number itself.  Held here rather
+           than left to the random amounts below, because zero is the amount
+           that used to shift a digit by its own width. */
+        crypton_p256_shl(&a, 0, &r);
+        printf("shl0=%d ", crypton_p256_cmp(&a, &r) == 0);
+        crypton_p256_shr(&a, 0, &r);
+        printf("shr0=%d\n", crypton_p256_cmp(&a, &r) == 0);
         for (int s = 0; s < 3; s++) {
             int k = (int)(rnd() % 32);
             printf("shl%d=%d\n", k, (int)(crypton_p256_shl(&a, k, &r) & 0xff));
