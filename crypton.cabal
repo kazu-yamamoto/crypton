@@ -362,12 +362,11 @@ library
     ghc-options:      -Wall -fwarn-tabs -optc-O3
     build-depends:
         base >=4.13 && <5,
-        bytestring,
-        primitive >=0.9,
-        deepseq,
-        base16 >=1.0,
-        bytestring,
-        text,
+        bytestring <0.13,
+        primitive >=0.9 && <0.10,
+        deepseq <1.6,
+        base16 >=1.0 && <1.1,
+        text <2.2,
         ram >=0.20.1 && <0.23
 
     if flag(old_toolchain_inliner)
@@ -761,13 +760,13 @@ library
         cpp-options:     -DWINDOWS
         other-modules:   Crypto.Random.Entropy.Windows
         extra-libraries: advapi32
-        build-depends:   Win32
+        build-depends:   Win32 <2.15
 
     else
         other-modules: Crypto.Random.Entropy.Unix
 
     if (impl(ghc >=0) && flag(integer-gmp))
-        build-depends: integer-gmp
+        build-depends: integer-gmp <1.2
 
     if flag(support_deepseq)
         cpp-options:   -DWITH_DEEPSEQ_SUPPORT
