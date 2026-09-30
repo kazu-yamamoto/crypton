@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <crypton_cpu.h>
+#include "crypton_armv8_target.h"
 #include <crypton_bzero.h>
 #include <crypton_f2m.h>
 
@@ -90,7 +91,7 @@ static void poly_mul_generic(limb_t *t, const limb_t *a, const limb_t *b,
 #define PMULL_ATTR
 #define PMULL_ALWAYS 1
 #else
-#define PMULL_ATTR __attribute__((target("+crypto")))
+#define PMULL_ATTR CRYPTON_TARGET_ARMV8_CRYPTO
 #define PMULL_ALWAYS 0
 #endif
 

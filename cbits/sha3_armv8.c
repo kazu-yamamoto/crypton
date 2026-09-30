@@ -38,11 +38,7 @@
  * of that argument.  The flag for a build without attributes already asks for
  * "+sha3", which the SHA-512 path needed.
  */
-#ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
-#else
-#define TARGET_ARMV8_SHA3
-#endif
+#include "crypton_armv8_target.h"
 
 static const uint64_t rc[24] = {
 	0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
@@ -130,7 +126,7 @@ static const uint64_t rc[24] = {
 	} while (0)
 
 /* the twenty-four rounds over the state, in place */
-TARGET_ARMV8_SHA3
+CRYPTON_TARGET_ARMV8_SHA3
 void crypton_sha3_armv8_permute(uint64_t state[25])
 {
 	uint64x2_t a[25], b[25], c[5], d[5];

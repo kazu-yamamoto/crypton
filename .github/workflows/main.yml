@@ -207,6 +207,51 @@ jobs:
         cabal test --builddir=dist-nos2n -f-support_s2n_bignum
         ${{ env.target-config }} all
 
+    # #273: gcc before 13 does not understand target("+sha3") on aarch64 and
+    # silently leaves the extension off, so an always_inline intrinsic that
+    # needs it fails to inline and the build stops.  The runner's own gcc is
+    # 13 and takes it, which is why nothing here ever saw the report.  gcc-12
+    # is installed on purpose, and the library's C is built with it.
+    - name: The compiler that could not build it
+      if: matrix.os == 'ubuntu-24.04-arm' && matrix.ghc == '9.14'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq gcc-12
+        gcc-12 --version | head -1
+        cat > /tmp/probe.c <<'PROBE'
+        #include <arm_neon.h>
+        #include <stdint.h>
+        #include "crypton_armv8_target.h"
+        CRYPTON_TARGET_ARMV8_SHA3
+        static uint64x2_t r1(uint64x2_t a, uint64x2_t b) { return vxarq_u64(a, b, 20); }
+        uint64_t use(uint64_t x) {
+            uint64x2_t a = vdupq_n_u64(x), b = vdupq_n_u64(x + 1);
+            return vgetq_lane_u64(r1(a, b), 0);
+        }
+        PROBE
+        echo "--- the spelling this tree used to write, on gcc-12 ---"
+        gcc-12 -O2 -DWITH_TARGET_ATTRIBUTES -Icbits -c -o /tmp/old.o \
+          -D'CRYPTON_TARGET_ARMV8_SHA3=__attribute__((target("+sha3")))' \
+          -include stdint.h -include arm_neon.h -x c - <<'OLD' \
+          && echo "     unexpectedly accepted" || echo "     rejected, which is #273"
+        __attribute__((target("+sha3")))
+        static uint64x2_t r1(uint64x2_t a, uint64x2_t b) { return vxarq_u64(a, b, 20); }
+        uint64_t use(uint64_t x) {
+            uint64x2_t a = vdupq_n_u64(x), b = vdupq_n_u64(x + 1);
+            return vgetq_lane_u64(r1(a, b), 0);
+        }
+        OLD
+        echo "--- and what it writes now ---"
+        gcc-12 -O2 -DWITH_TARGET_ATTRIBUTES -Icbits -c -o /tmp/new.o /tmp/probe.c \
+          && echo "     accepted"
+        echo "--- the whole library's C, with gcc-12 ---"
+        for f in cbits/sha1_armv8.c cbits/sha256_armv8.c cbits/sha512_armv8.c \
+                 cbits/sha3_armv8.c cbits/crypton_f2m.c; do
+          gcc-12 -O2 -DWITH_TARGET_ATTRIBUTES -Icbits -Icbits/include64 \
+            -c -o /tmp/o.o "$f" || { echo "FAILED $f"; exit 1; }
+        done
+        echo "     all built"
+
     # Does what is published actually build?  A source distribution carries
     # only what the cabal file names, so a header that no field mentions is
     # simply absent from it, and the package fails for everyone downloading
