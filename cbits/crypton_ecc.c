@@ -23,6 +23,7 @@
  */
 #include <stdlib.h>
 #include <crypton_bignum.h>
+#include <crypton_bzero.h>
 #include <crypton_ecc.h>
 #include <crypton_powm.h>
 #ifdef CRYPTON_S2N_BIGNUM
@@ -223,12 +224,15 @@ typedef struct {
 
 static void ctx_free(curve_ctx *c)
 {
+	/* crypton_bzero rather than memset: this memory is freed on the next
+	 * line, and a store to memory about to die is one an optimizer may
+	 * drop.  Both buffers have held scalars. */
 	if (c->space != NULL) {
-		memset(c->space, 0, c->words * sizeof(limb_t));
+		crypton_bzero(c->space, c->words * sizeof(limb_t));
 		free(c->space);
 	}
 	if (c->bytes != NULL) {
-		memset(c->bytes, 0, 2 * c->plen);
+		crypton_bzero(c->bytes, 2 * c->plen);
 		free(c->bytes);
 	}
 	c->space = NULL;

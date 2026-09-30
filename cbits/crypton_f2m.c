@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <crypton_cpu.h>
+#include <crypton_bzero.h>
 #include <crypton_f2m.h>
 
 typedef uint64_t limb_t;
@@ -543,8 +544,10 @@ int crypton_f2m_mul(uint8_t *outx, uint8_t *outy,
 	ret = 0;
 
 done:
+	/* freed on the next line, so a plain memset here is a store the
+	 * optimizer may drop */
 	if (space != NULL) {
-		memset(space, 0, words * sizeof(limb_t));
+		crypton_bzero(space, words * sizeof(limb_t));
 		free(space);
 	}
 	return ret;
