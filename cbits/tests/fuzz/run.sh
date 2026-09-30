@@ -70,9 +70,9 @@ for h in $harnesses; do
 
 	if [ $have_fuzzer = no ]; then
 		"$out/fuzz_$h" cbits/tests/fuzz/corpus 20000 > "$out/$h.log" 2>&1 || true
-		if grep -q "ERROR: " "$out/$h.log"; then
+		if grep -qE "ERROR: |runtime error:" "$out/$h.log"; then
 			echo "FOUND $h: the sanitizers reported on replayed input"
-			grep -m1 "ERROR: " "$out/$h.log" | sed 's/^/    /'
+			grep -m1 -E "ERROR: |runtime error:" "$out/$h.log" | sed 's/^/    /'
 			status=1
 		else
 			echo "ran  $h ($(tail -1 "$out/$h.log"))"
@@ -90,8 +90,15 @@ for h in $harnesses; do
 		-use_value_profile=1 -print_final_stats=1 \
 		> "$out/$h.log" 2>&1 || true
 
+	# What a find looks like.  AddressSanitizer writes "ERROR:", but
+	# UndefinedBehaviorSanitizer writes "runtime error:" and nothing else,
+	# so a detector that waits for "ERROR:" reads a campaign that found the
+	# canary as one that found nothing -- which is what the first three
+	# attempts at this file did.  libFuzzer's own line is the one that
+	# covers every case: it writes the input out whatever reported.
 	found=no
-	grep -q "ERROR: \|deadly signal\|libFuzzer: .*crash" "$out/$h.log" && found=yes
+	grep -qE "Test unit written to|ERROR: |runtime error:|deadly signal" \
+		"$out/$h.log" && found=yes
 
 	if [ "$h" = canary ]; then
 		if [ $found = no ]; then
@@ -109,7 +116,8 @@ for h in $harnesses; do
 
 	if [ $found = yes ]; then
 		echo "FOUND $h: the sanitizers reported"
-		grep -m1 "ERROR: \|deadly signal" "$out/$h.log" | sed 's/^/    /'
+		grep -m1 -E "ERROR: |runtime error:|deadly signal" "$out/$h.log" |
+			sed 's/^/    /'
 		sed -n '/#0 /,/#8 /p' "$out/$h.log" | head -12 | sed 's/^/    /'
 		status=1
 	else
