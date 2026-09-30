@@ -252,6 +252,21 @@ jobs:
         done
         echo "     all built"
 
+    # A primitive that falls off its accelerated path does not get a little
+    # slower, it falls off a cliff, and no test notices because the answers
+    # stay right.  #274 took SHA-256 from 3396 MB/s to 644 on an M4 and
+    # shipped; it was found while measuring a table, not by anything here.
+    #
+    # Absolute throughput cannot be checked -- this runner is not the same
+    # machine twice -- so what is checked is ratios between primitives
+    # measured together.  The job then builds the library again with the AES
+    # acceleration compiled out and requires that line to fail, since a run
+    # where the measurement had stopped working would otherwise look like a
+    # run where everything was fast.
+    - name: A primitive fallen off its fast path
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: cbits/tests/perf/run.sh
+
     # Does what is published actually build?  A source distribution carries
     # only what the cabal file names, so a header that no field mentions is
     # simply absent from it, and the package fails for everyone downloading
