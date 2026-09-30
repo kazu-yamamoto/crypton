@@ -12,10 +12,12 @@
  * Replaying the corpus is not expected to reach it, and run.sh says so.
  */
 #include "tests/fuzz/fuzz.h"
+#include <stdlib.h>
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-	uint8_t buf[16];
+	uint8_t *buf;
+	int r;
 
 	if (size < 5)
 		return 0;
@@ -24,7 +26,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	if (data[2] != 0xbe || data[3] != 0xef)
 		return 0;
 
-	memset(buf, 0, sizeof buf);
-	/* deliberately one past the end */
-	return buf[sizeof buf] == data[4] ? 1 : 0;
+	/* On the heap, not the stack.  A compiler that can see the size of a
+	 * local can also see that reading past it is undefined and remove the
+	 * read, which is what the first attempt at this did: the campaign found
+	 * nothing because by then there was nothing left to find.  It cannot
+	 * reason that way about what malloc returned. */
+	buf = (uint8_t *)malloc(16);
+	if (!buf)
+		return 0;
+	memset(buf, 0, 16);
+	r = buf[16] == data[4] ? 1 : 0;      /* deliberately one past the end */
+	free(buf);
+	return r;
 }

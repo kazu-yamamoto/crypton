@@ -95,7 +95,7 @@ for h in $harnesses; do
 			echo "     campaign is not exploring and nothing below counts"
 			status=1
 		else
-			echo "ok   canary: found, so the campaign is exploring"
+			echo "ok   canary: found, so the campaign explores"
 		fi
 		continue
 	fi
