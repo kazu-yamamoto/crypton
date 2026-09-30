@@ -28,11 +28,7 @@
  * baseline ARMv8-A may not use them; mark the function that does.  The
  * SHA-512 instructions live behind "+sha3" in both GCC and clang.
  */
-#ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
-#else
-#define TARGET_ARMV8_SHA3
-#endif
+#include "crypton_armv8_target.h"
 
 static const uint64_t K[80] = {
 	0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL,
@@ -72,7 +68,7 @@ static const uint64_t K[80] = {
  * two rounds and rotates which pair plays which part, so four steps return
  * to the start; a group of eight steps is one pass over the schedule.
  */
-TARGET_ARMV8_SHA3
+CRYPTON_TARGET_ARMV8_SHA3
 void crypton_sha512_armv8_do_chunk(uint64_t state[8], const uint8_t buf[128])
 {
 	uint64x2_t ab, cd, ef, gh, ab0, cd0, ef0, gh0;

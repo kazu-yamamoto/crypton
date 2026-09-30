@@ -29,11 +29,7 @@
  *
  * "+crypto" rather than "crypto": GCC rejects the latter.
  */
-#ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
-#else
-#define TARGET_ARMV8_CRYPTO
-#endif
+#include "crypton_armv8_target.h"
 
 static const uint32_t K[64] = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -58,7 +54,7 @@ static const uint32_t K[64] = {
  * One 64-byte block.  `state` is the eight words of chaining value in host
  * order, `buf` the block as it arrived, which SHA-256 reads big-endian.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint8_t buf[64])
 {
 	uint32x4_t abcd, efgh, abcd_prev, efgh_prev, abcd_save, tmp;

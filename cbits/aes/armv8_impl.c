@@ -74,7 +74,7 @@
 		}                                                            \
 	} while (0)
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_block)(aes_block *output, aes_key *key, aes_block *input)
 {
 	const uint8_t *rk = FWD(key);
@@ -85,7 +85,7 @@ void SIZED(crypton_aes_armv8_encrypt_block)(aes_block *output, aes_key *key, aes
 	EACH1(STORE_OUT);
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_decrypt_block)(aes_block *output, aes_key *key, aes_block *input)
 {
 	const uint8_t *fwd = FWD(key);
@@ -97,7 +97,7 @@ void SIZED(crypton_aes_armv8_decrypt_block)(aes_block *output, aes_key *key, aes
 	EACH1(STORE_OUT);
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_ecb)(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *rk = FWD(key);
@@ -115,7 +115,7 @@ void SIZED(crypton_aes_armv8_encrypt_ecb)(aes_block *output, aes_key *key, aes_b
 	}
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_decrypt_ecb)(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *fwd = FWD(key);
@@ -136,7 +136,7 @@ void SIZED(crypton_aes_armv8_decrypt_ecb)(aes_block *output, aes_key *key, aes_b
 
 /* CBC encryption chains, so there is nothing to interleave.  It still gains
  * the round keys staying put. */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_cbc)(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *rk = FWD(key);
@@ -158,7 +158,7 @@ void SIZED(crypton_aes_armv8_encrypt_cbc)(aes_block *output, aes_key *key, aes_b
 #define CBC_KEEP(i)  c[(i) + 1] = s[i];
 #define CBC_XOR(i)   vst1q_u8((uint8_t *) (output + (i)), veorq_u8(s[i], c[i]));
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_decrypt_cbc)(aes_block *output, aes_key *key, aes_block *_iv, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *fwd = FWD(key);
@@ -192,7 +192,7 @@ void SIZED(crypton_aes_armv8_decrypt_cbc)(aes_block *output, aes_key *key, aes_b
 #define CTR_XOR(i)  vst1q_u8(output + 16 * (i), \
                              veorq_u8(s[i], vld1q_u8(input + 16 * (i))));
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_block *iv, uint8_t *input, uint32_t len)
 {
 	const uint8_t *rk = FWD(key);
@@ -349,7 +349,7 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
 		vst1q_u8((uint8_t *) &gcm->tag, tag);                         \
 	} while (0)
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
 {
 	GCM_PROLOGUE;
@@ -386,7 +386,7 @@ void SIZED(crypton_aes_armv8_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 	GCM_EPILOGUE;
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
 {
 	GCM_PROLOGUE;
@@ -470,7 +470,7 @@ void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 } while (0);
 #define XTS_TWEAK_ROLL(i) do { t[i] = tn[i]; } while (0);
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_encrypt_xts)(aes_block *output, aes_key *key, aes_key *key2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *rk = FWD(key);
@@ -514,7 +514,7 @@ void SIZED(crypton_aes_armv8_encrypt_xts)(aes_block *output, aes_key *key, aes_k
 	}
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_key *key2, aes_block *dataunit, uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
 	const uint8_t *fwd = FWD(key);
@@ -602,7 +602,7 @@ void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_k
 	({ uint8_t buf_[16]; memset(buf_, 0, 16); memcpy(buf_, (p), (n));     \
 	   vld1q_u8(buf_); })
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
                                         aes_key *key, const uint8_t *nonce,
                                         const uint8_t *aad, uint32_t aadlen,
@@ -696,7 +696,7 @@ void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
  * difference is the end: the tag is compared here rather than written, every
  * byte of it whichever way the answer goes.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
                                            aes_key *key, const uint8_t *nonce,
                                            const uint8_t *aad, uint32_t aadlen,

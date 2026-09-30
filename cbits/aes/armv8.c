@@ -39,11 +39,7 @@
  *
  * "+crypto" rather than "crypto": GCC rejects the latter.
  */
-#ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
-#else
-#define TARGET_ARMV8_CRYPTO
-#endif
+#include "crypton_armv8_target.h"
 
 /* forward round keys: nbr + 1 of them, written by the generic key expansion */
 #define FWD(key)  ((const uint8_t *) (key)->data)
@@ -70,14 +66,14 @@
  * instructions exist to remove -- but a key schedule is the one thing an
  * attacker most wants and it costs little to keep it out of the cache.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static uint32x4_t sub_word(uint32x4_t w)
 {
 	return vreinterpretq_u32_u8(
 	    vaeseq_u8(vreinterpretq_u8_u32(w), vdupq_n_u8(0)));
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static uint32x4_t sub_rot_word(uint32x4_t w)
 {
 	const uint8x16_t s = vreinterpretq_u8_u32(sub_word(w));
@@ -85,7 +81,7 @@ static uint32x4_t sub_rot_word(uint32x4_t w)
 	return vreinterpretq_u32_u8(vextq_u8(s, s, 1));
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 {
 	/* 2^0 .. 2^9 in GF(2^8), which is as far as any key size reaches */
@@ -159,7 +155,7 @@ int crypton_aes_armv8_available(void)
  */
 
 /* reverse all 16 bytes */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t bswap128(uint8x16_t v)
 {
 	return vextq_u8(vrev64q_u8(v), vrev64q_u8(v), 8);
@@ -173,7 +169,7 @@ static inline uint8x16_t bswap128(uint8x16_t v)
 #define SHL32(v, n) vreinterpretq_u8_u32(vshlq_n_u32(vreinterpretq_u32_u8(v), (n)))
 #define SHR32(v, n) vreinterpretq_u8_u32(vshrq_n_u32(vreinterpretq_u32_u8(v), (n)))
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -181,7 +177,7 @@ static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -189,7 +185,7 @@ static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 1)));
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_p64(
@@ -197,7 +193,7 @@ static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
 	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
 {
 	return vreinterpretq_u8_p128(vmull_high_p64(
@@ -211,7 +207,7 @@ static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
  * over XOR: several products can be added together and fixed up just once,
  * which is what gf_mul4 below does.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
                                uint8x16_t *lo, uint8x16_t *hi)
 {
@@ -234,7 +230,7 @@ static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
 
 /* Shift the 256-bit product left by one to undo GCM's bit reflection, then
  * reduce modulo the GCM polynomial.  This is the expensive half. */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
 {
 	uint8x16_t t2, t4, t5, t7, t8, t9;
@@ -273,7 +269,7 @@ static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
 	return bswap128(t6);
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
 {
 	uint8x16_t lo, hi;
@@ -291,7 +287,7 @@ static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
  * into one reduction: gf_mul4 uses the first four, the GCM loop all eight.
  * The table has sixteen slots, so they are free.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 {
 	uint8x16_t p;
@@ -307,7 +303,7 @@ void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 	}
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
 {
 	vst1q_u8((uint8_t *) a,
@@ -320,7 +316,7 @@ void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
  * four products can be summed first and reduced once, which is where the
  * time goes.  Aggregated reduction, from the Intel GCM paper.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks,
                                      const block128 *htable)
 {
@@ -359,7 +355,7 @@ int crypton_aes_armv8_pmull_available(void)
  * the high half, and fold the bit that leaves the top back in as 0x87.  The
  * block is little-endian, so lane 0 is the low half.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 static inline uint8x16_t gfmulx_neon(uint8x16_t v)
 {
 	const uint64x2_t x = vreinterpretq_u64_u8(v);
@@ -402,7 +398,7 @@ static inline uint8x16_t gfmulx_neon(uint8x16_t v)
  * its round count fixed, which is what lets the eight chains stay in
  * registers; the choice between them is made once per message here.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
                                  aes_key *key, const uint8_t *nonce,
                                  const uint8_t *aad, uint32_t aadlen,
@@ -429,7 +425,7 @@ void crypton_aes_armv8_gcm_fused(uint8_t *out, const block128 *ht,
 	}
 }
 
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 int crypton_aes_armv8_gcm_fused_dec(uint8_t *out, const block128 *ht,
                                     aes_key *key, const uint8_t *nonce,
                                     const uint8_t *aad, uint32_t aadlen,

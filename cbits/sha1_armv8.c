@@ -23,11 +23,7 @@
  * baseline ARMv8-A may not use them; see sha256_armv8.c for the whole of that
  * argument.
  */
-#ifdef WITH_TARGET_ATTRIBUTES
-#define TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
-#else
-#define TARGET_ARMV8_CRYPTO
-#endif
+#include "crypton_armv8_target.h"
 
 /*
  * A group of four rounds, and the schedule that goes with it.
@@ -55,7 +51,7 @@
  * One 64-byte block.  `state` is the five words of chaining value in host
  * order, `buf` the block as it arrived, which SHA-1 reads big-endian.
  */
-TARGET_ARMV8_CRYPTO
+CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_sha1_armv8_do_chunks(uint32_t state[5], const uint8_t *data,
                                   uint32_t blocks)
 {
