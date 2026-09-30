@@ -253,8 +253,11 @@ static void crypton_p256_shr1(const crypton_p256_int* a, int highbit, crypton_p2
     accu |= (P256_DIGIT(a, i + 1) << (P256_BITSPERDIGIT - 1));
     P256_DIGIT(b, i) = accu;
   }
+  /* The shift is unsigned: highbit is a carry, zero or one, and one shifted
+   * into the sign bit of the signed digit is an overflow the standard leaves
+   * undefined.  The value put into b is the same either way. */
   P256_DIGIT(b, i) = (P256_DIGIT(a, i) >> 1) |
-      (((crypton_p256_sdigit) highbit) << (P256_BITSPERDIGIT - 1));
+      (((crypton_p256_digit) highbit) << (P256_BITSPERDIGIT - 1));
 }
 
 // Return -1, 0, 1 for a < b, a == b or a > b respectively.

@@ -2,6 +2,13 @@
 
 ## 2.1.3
 
+* fix(c): two left shifts the C standard leaves undefined, found by building
+  the C with UndefinedBehaviorSanitizer and running the test suite.  One
+  shifted a carry into the sign bit of a signed 64-bit digit in
+  `cbits/p256/p256.c`, the other shifted a negative value in
+  `cbits/decaf/ed448goldilocks/decaf.c`.  Neither miscomputes on any compiler
+  crypton is built with, and the values are unchanged; what they were was a
+  licence the standard gives the compiler and no reason to give it
 * security(cipher): a message of 2^32 bytes or more no longer has its length
   truncated on the way to the C, which takes its lengths as `uint32_t`.  It
   used to be: `Crypto.Cipher.ChaCha.combine` given 2^32 + 64 bytes enciphered
