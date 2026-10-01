@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- |
 -- Module      : Crypto.PubKey.RSA.PKCS15
 -- License     : BSD-style
@@ -15,10 +17,13 @@ module Crypto.PubKey.RSA.PKCS15 (
     decryptSafer,
     sign,
     signSafer,
+    signWithHash,
+    signSaferWithHash,
 
     -- * Public key operations
     encrypt,
     verify,
+    verifyWithHash,
 
     -- * Hash ASN1 description
     HashAlgorithmASN1,
@@ -537,6 +542,46 @@ signSafer hashAlg pk m = do
     blinder <- generateBlinder (private_n pk)
     return (sign (Just blinder) hashAlg pk m)
 
+-- | Sign a message, hashing it with the algorithm the proxy names.
+--
+-- 'sign' takes @Maybe hashAlg@ and never looks inside the @Just@: the
+-- algorithm comes from the type and the value is there only to carry it.
+-- That is fine when the caller has a value to hand, and awkward when it has
+-- only a type -- in a function that is itself polymorphic in the algorithm,
+-- there may be no value to pass.  This takes the proxy instead, and always
+-- hashes, so there is no @Nothing@ to mean \"the message is already a
+-- DigestInfo\".
+--
+-- > signWithHash (Proxy :: Proxy SHA256) blinder key message
+signWithHash
+    :: HashAlgorithmASN1 hashAlg
+    => proxy hashAlg
+    -- ^ which hash to use
+    -> Maybe Blinder
+    -- ^ optional blinder
+    -> PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ message to hash and sign
+    -> Either Error ByteString
+signWithHash prx blinder pk m =
+    dp blinder pk `fmap` makeSignatureWithHash prx (private_size pk) m
+
+-- | 'signWithHash' with a blinder generated for the occasion, as 'signSafer'
+-- is to 'sign'.
+signSaferWithHash
+    :: (HashAlgorithmASN1 hashAlg, MonadRandom m)
+    => proxy hashAlg
+    -- ^ which hash to use
+    -> PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ message to hash and sign
+    -> m (Either Error ByteString)
+signSaferWithHash prx pk m = do
+    blinder <- generateBlinder (private_n pk)
+    return (signWithHash prx (Just blinder) pk m)
+
 -- | verify message with the signed message
 --
 -- Following RFC 8017, the signature is rejected unless it is exactly as long
@@ -563,6 +608,29 @@ verify hashAlg pk m sm
             Left _ -> False
             Right s -> s == (ep pk sm)
 
+-- | Verify a signature over a message hashed with the algorithm the proxy
+-- names, the counterpart to 'signWithHash'.  The two checks 'verify'
+-- documents are made here as well.
+--
+-- > verifyWithHash (Proxy :: Proxy SHA256) key message signature
+verifyWithHash
+    :: HashAlgorithmASN1 hashAlg
+    => proxy hashAlg
+    -- ^ which hash to use
+    -> PublicKey
+    -> ByteString
+    -- ^ message
+    -> ByteString
+    -- ^ signature
+    -> Bool
+verifyWithHash prx pk m sm
+    | B.length sm /= public_size pk = False
+    | os2ip sm >= public_n pk = False
+    | otherwise =
+        case makeSignatureWithHash prx (public_size pk) m of
+            Left _ -> False
+            Right s -> s == ep pk sm
+
 -- | make signature digest, used in 'sign' and 'verify'
 makeSignature
     :: HashAlgorithmASN1 hashAlg
@@ -573,3 +641,14 @@ makeSignature
     -> Either Error ByteString
 makeSignature Nothing klen m = padSignature klen m
 makeSignature (Just hashAlg) klen m = padSignature klen (hashDigestASN1 $ hashWith hashAlg m)
+
+-- | the same digest, for the operations that take a proxy rather than a value
+makeSignatureWithHash
+    :: forall proxy hashAlg
+     . HashAlgorithmASN1 hashAlg
+    => proxy hashAlg
+    -> Int
+    -> ByteString
+    -> Either Error ByteString
+makeSignatureWithHash _ klen m =
+    padSignature klen (hashDigestASN1 (hash m :: Digest hashAlg))

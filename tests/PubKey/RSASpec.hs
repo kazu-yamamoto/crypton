@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module PubKey.RSASpec (spec) where
@@ -11,6 +12,7 @@ import Crypto.PubKey.RSA.Prim (ep)
 import qualified Crypto.PubKey.RSA.Prim as Prim
 import qualified Data.ByteString as B
 import Data.Either
+import Data.Proxy (Proxy (..))
 
 import Imports
 
@@ -258,6 +260,91 @@ blinderTests = describe "blinder" $ do
                 withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n (RSA.private_pub key))
          in Prim.dp (Just blinder) key cipher === Prim.dp Nothing key cipher
 
+-- | Every algorithm with a 'RSA.HashAlgorithmASN1' instance, so that a
+-- property quantifies over the lot of them rather than over the two or
+-- three somebody thought of.  Adding an instance and forgetting to add it
+-- here leaves a hole, which is why the count is asserted below.
+data SomeHashASN1
+    = forall hashAlg.
+        (RSA.HashAlgorithmASN1 hashAlg, Show hashAlg) =>
+      SomeHashASN1 hashAlg
+
+instance Show SomeHashASN1 where
+    show (SomeHashASN1 h) = show h
+
+instance Arbitrary SomeHashASN1 where
+    arbitrary = elements allHashASN1
+
+allHashASN1 :: [SomeHashASN1]
+allHashASN1 =
+    [ SomeHashASN1 MD2
+    , SomeHashASN1 MD5
+    , SomeHashASN1 SHA1
+    , SomeHashASN1 SHA224
+    , SomeHashASN1 SHA256
+    , SomeHashASN1 SHA384
+    , SomeHashASN1 SHA512
+    , SomeHashASN1 SHA512t_224
+    , SomeHashASN1 SHA512t_256
+    , SomeHashASN1 SHA3_224
+    , SomeHashASN1 SHA3_256
+    , SomeHashASN1 SHA3_384
+    , SomeHashASN1 SHA3_512
+    , SomeHashASN1 RIPEMD160
+    ]
+
+proxyOf :: a -> Proxy a
+proxyOf _ = Proxy
+
+-- | 'RSA.signWithHash' and 'RSA.verifyWithHash' take the algorithm from a
+-- proxy where 'RSA.sign' and 'RSA.verify' take it from a value they never
+-- look inside.  That makes two routes to one signature, and two routes drift
+-- unless something holds them together.  These properties are that: for
+-- every instance and every message, the two must answer alike -- on a
+-- genuine signature, on a tampered one, and on one of the wrong length.
+withHashTests :: Spec
+withHashTests = describe "operations taking the hash as a proxy" $ do
+    it "covers every HashAlgorithmASN1 instance" $
+        length allHashASN1 `shouldBe` 14
+
+    prop "signs what sign signs" $ \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+        RSA.signWithHash (proxyOf h) Nothing key m
+            === RSA.sign Nothing (Just h) key m
+
+    prop "verifies what verify verifies" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+            case RSA.sign Nothing (Just h) key m of
+                Left err -> counterexample (show err) False
+                Right s ->
+                    let tampered = B.snoc (B.init s) (B.last s + 1)
+                        longer = B.snoc s 0
+                     in conjoin
+                            [ RSA.verifyWithHash (proxyOf h) pub m s
+                                === RSA.verify (Just h) pub m s
+                            , RSA.verifyWithHash (proxyOf h) pub m tampered
+                                === RSA.verify (Just h) pub m tampered
+                            , RSA.verifyWithHash (proxyOf h) pub m longer
+                                === RSA.verify (Just h) pub m longer
+                            ]
+
+    prop "accepts its own signature and rejects a changed one" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+            case RSA.signWithHash (proxyOf h) Nothing key m of
+                Left err -> counterexample (show err) False
+                Right s ->
+                    let tampered = B.snoc (B.init s) (B.last s + 1)
+                     in RSA.verifyWithHash (proxyOf h) pub m s
+                            .&&. not (RSA.verifyWithHash (proxyOf h) pub m tampered)
+
+    prop "blinding leaves the signature where it was" $
+        \testDRG (SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+            withTestDRG testDRG (RSA.signSaferWithHash (proxyOf h) key m)
+                === RSA.signWithHash (proxyOf h) Nothing key m
+  where
+    vector = firstVector vectorsSHA1
+    key = vectorToPrivate vector
+    pub = vectorToPublic vector
+
 -- | The private exponent is the inverse of e modulo (p-1)(q-1), however it
 -- is worked out.  These are primes small enough to be quick and a spread of
 -- exponents: prime ones, which have the arithmetic of e to themselves, a
@@ -292,6 +379,7 @@ spec = do
     keyGenerationTests
     privateExponentTests
     blinderTests
+    withHashTests
     describe "SHA1" $ do
         describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
         describe "verify" $

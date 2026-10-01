@@ -1,5 +1,15 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* feat(rsa): `Crypto.PubKey.RSA.PKCS15` gains `signWithHash`,
+  `signSaferWithHash` and `verifyWithHash`, which take the hash algorithm
+  from a proxy rather than from a `Maybe hashAlg` whose contents are never
+  looked at.  A caller that is itself polymorphic in the algorithm has a
+  type but may have no value to pass; these take the type.  They always
+  hash, so there is no `Nothing` case meaning "the message is already a
+  DigestInfo".  The existing operations are unchanged
+
 ## 2.1.5
 
 crypton 2.1.3 and 2.1.4 cannot be built with GCC 14 or newer; it was
