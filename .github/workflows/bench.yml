@@ -1,0 +1,86 @@
+# One of the README's performance tables, for x86-64.  Not part of CI: it runs
+# only when asked for, because it wants a particular machine and several
+# minutes of it.
+#
+# ubuntu-latest is not one machine.  EPYC 7763, EPYC 9V74, Xeon 8370C and Xeon
+# 6973P-C have all turned up, and they do not agree: the ones with AVX-512
+# differ from the ones without by more than twofold on AES-GCM, because
+# crypton's vendored assembly is generated without it.  The README's x86-64
+# table is the 7763, so that is what this asks for, and it stops in the first
+# minute rather than after the builds if the draw went elsewhere.
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: best of how many
+        default: '5'
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Which machine the draw gave
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        if ! grep -q '7763' /proc/cpuinfo; then
+          echo "::error::not the EPYC 7763 the README's table is measured on; re-run"
+          exit 1
+        fi
+        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' |
+          grep -xE 'aes|pclmulqdq|avx2|adx|sha_ni|vaes|vpclmulqdq' | sort | tr '\n' ' '
+        echo
+
+    - uses: actions/checkout@v5
+
+    - uses: haskell-actions/setup@v2
+      with:
+        ghc-version: '9.12'
+        cabal-version: latest
+
+    # The same OpenSSL the AArch64 table uses, built here because the
+    # distribution's is a 3.
+    - name: OpenSSL 4.0.3
+      run: |
+        cd /tmp
+        curl -sL -o o.tar.gz https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz
+        tar xzf o.tar.gz
+        cd openssl-4.0.3
+        ./Configure no-docs no-tests > /tmp/conf.log 2>&1
+        make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
+        LD_LIBRARY_PATH=$PWD ./apps/openssl version
+
+    # Both columns, each by cabal, so that the C is configured as the package
+    # ships it rather than as a hand-written compile line guesses.
+    - name: The harnesses, for each version
+      run: |
+        set -eu
+        mkdir -p /tmp/bench
+        cabal update
+        for v in 1.1.5 2.1.4; do
+          if [ "$v" = 2.1.4 ]; then tree=$PWD; else
+            (cd /tmp && cabal get crypton-$v); tree=/tmp/crypton-$v
+          fi
+          (cd "$tree" && cabal build lib:crypton --builddir=/tmp/db-$v -v0)
+          a=$(find /tmp/db-$v -name "libHScrypton-$v-inplace.a" | head -1)
+          cc -O3 -I"$tree/cbits" -I"$tree/cbits/include64" \
+            -o /tmp/bench/bulk-$v bench/bulk.c "$a"
+          d=/tmp/pk-$v
+          mkdir -p "$d"
+          cp bench/PK.hs "$d/"
+          sed "s/crypton\$/crypton == $v/" bench/pk.cabal > "$d/pk.cabal"
+          printf 'packages: . %s\n' "$tree" > "$d/cabal.project"
+          (cd "$d" && cabal build -v0)
+          cp "$(cd "$d" && cabal list-bin pkbench)" /tmp/bench/pk-bin-$v
+        done
+        ls /tmp/bench
+
+    # Every figure in one run on this machine, both sides alternated.
+    - name: The table
+      env:
+        BENCH_BIN: /tmp/bench
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        python3 bench/table.py /tmp/openssl-4.0.3/apps/openssl \
+          '${{ github.event.inputs.reps }}'
