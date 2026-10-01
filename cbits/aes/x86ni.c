@@ -209,13 +209,23 @@ static __m128i gfmulx(__m128i v)
 	return v;
 }
 
+/* memcpy rather than a cast, as everything else that moves bytes between a
+ * crypton structure and a word does since block128 was packed.  The cast
+ * this replaces was written in 2014, when block128 was a plain union and
+ * taking a __m128i * to one promised nothing the type did not already
+ * offer.  Packing it dropped its alignment to one, and the promise with it:
+ * gcc has reported the cast ever since, and it is right to -- the attribute
+ * on the local below is what makes the promise true, and nothing obliges
+ * the next edit to keep it.  Sixteen bytes of memcpy between a __m128i and
+ * a sixteen-byte object is one movdqu, or nothing at all when both stay in
+ * registers. */
 TARGET_AESNI
 static __m128i gfmul_generic(__m128i tag, const table_4bit htable)
 {
-	aes_block _t ALIGNMENT(16);
-	_mm_store_si128((__m128i *) &_t, tag);
+	aes_block _t;
+	memcpy(&_t, &tag, sizeof _t);
 	crypton_aes_generic_gf_mul(&_t, htable);
-	tag = _mm_load_si128((__m128i *) &_t);
+	memcpy(&tag, &_t, sizeof tag);
 	return tag;
 }
 
