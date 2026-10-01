@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module PubKey.RSASpec (spec) where
 
@@ -287,11 +288,31 @@ privateExponentTests = describe "private exponent" $ do
         ]
     exponents = [3, 5, 17, 257, 65537, 9, 15, 2]
 
+hashSpecificTests :: Spec
+hashSpecificTests = describe "hash-specific operations" $ do
+    it "signs and verifies with the statically selected SHA-256 algorithm" $ do
+        let vector = firstVector vectorsSHA1
+            privateKey = vectorToPrivate vector
+            publicKey = vectorToPublic vector
+            expected = RSA.sign Nothing (Just SHA256) privateKey (msg vector)
+            actual = RSA.signWithHash @SHA256 Nothing privateKey (msg vector)
+        actual `shouldBe` expected
+        case actual of
+            Left failure -> expectationFailure $ "Expected SHA-256 signing to succeed: " <> show failure
+            Right signature -> do
+                RSA.verifyWithHash @SHA256 publicKey (msg vector) signature `shouldBe` True
+                RSA.verifyWithHash @SHA256 publicKey (msg vector) (B.snoc signature 0) `shouldBe` False
+    it "automatically blinds a type-directed SHA-1 signature" $ do
+        let vector = firstVector vectorsSHA1
+        RSA.signSaferWithHash @SHA1 (vectorToPrivate vector) (msg vector)
+            `shouldReturn` sig vector
+
 spec :: Spec
 spec = do
     keyGenerationTests
     privateExponentTests
     blinderTests
+    hashSpecificTests
     describe "SHA1" $ do
         describe "signature" $ zipWithM_ doSignatureTest [katZero ..] vectorsSHA1
         describe "verify" $
