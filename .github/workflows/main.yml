@@ -294,6 +294,32 @@ jobs:
     # own; what it is for is that a regression in this code stops being
     # something nobody would notice.  The first harness reads out of bounds
     # on a four-byte marker and has to be found, or the run explored nothing.
+    # GCC 14 made -Wincompatible-pointer-types an error by default, and
+    # nothing in this matrix is new enough to notice.  crypton 2.1.3 and
+    # 2.1.4 both failed to build on Fedora 43 for exactly that reason -- a
+    # declaration said `const uint32_t buf[16]` where every caller passes a
+    # `const uint8_t *` -- while ubuntu-latest's gcc 13 made it a warning and
+    # went on.  Reported as #282 after the release, as #273 was, and for the
+    # same shape of reason: the compiler that would have caught it was in no
+    # job here.
+    #
+    # The library's C is built again with gcc-14, through cabal so that the
+    # flags are the ones the package actually sets.
+    - name: The compiler stricter than this one
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq gcc-14
+        gcc-14 --version | head -1
+        cabal build crypton --builddir=dist-gcc14 \
+          --ghc-options="-pgmc gcc-14 -pgma gcc-14 -pgml gcc-14" \
+          2>&1 | tee /tmp/gcc14.log | tail -40
+        if grep -q "error:" /tmp/gcc14.log; then
+          echo "::error::the C does not build with gcc-14"
+          exit 1
+        fi
+        echo "ok   the C builds with a compiler that rejects what gcc 13 warns about"
+
     - name: Bytes nobody chose
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
       run: CC=clang cbits/tests/fuzz/run.sh 30
