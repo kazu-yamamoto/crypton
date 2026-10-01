@@ -143,171 +143,182 @@ int crypton_aes_armv8_available(void)
 /*
  * GHASH using PMULL, the AArch64 counterpart to PCLMULQDQ.
  *
- * This is a transliteration of gfmul_pclmuldq in x86ni.c rather than a fresh
- * formulation: that code is already pinned by the GCM known-answer tests, and
- * every operation it uses has a direct NEON equivalent, so translating it is
- * easier to check than reasoning about a new reduction from scratch.
+ * Not the transliteration of gfmul_pclmuldq in x86ni.c this used to be.  The
+ * x86 formulation keeps H in the order GCM writes it and pays, at the end of
+ * every batch, a reduction that first has to undo GCM's bit reflection: some
+ * twenty-five shifts and XORs, and a batch of eight costs it once.
  *
- *   _mm_shuffle_epi8 with a reversing mask  ->  vrev64q_u8 then vextq_u8
- *   _mm_clmulepi64_si128                    ->  vmull_p64 / vmull_high_p64
- *   _mm_slli_si128 / _mm_srli_si128         ->  vextq_u8 against zero
- *   _mm_slli_epi32 / _mm_srli_epi32         ->  vshlq_n_u32 / vshrq_n_u32
+ * Instead H is twisted once, at key setup, so that the reflection is already
+ * undone and a reversed-polynomial multiply lands in the right place.  Two
+ * things follow.  The reduction becomes two PMULL against 0xC2000..0 and six
+ * EOR, a third of what it was.  And because nothing has to be byte-reversed
+ * back and forth, Karatsuba pays: three PMULL a block rather than four, with
+ * the middle terms accumulated in a third register and tidied up once per
+ * batch.
+ *
+ * crypton tried Karatsuba in the old representation and measured it 1.6 per
+ * cent slower -- the saved PMULL did not cover the extra EOR when the
+ * reduction stayed as expensive as it was.  It is the pair that pays.
+ * Measured over 16 KiB messages, this against the old code:
+ *
+ *                      Apple M4        Neoverse N2
+ *     AES-128-GCM        1.30             1.25
+ *     AES-192-GCM        1.22             1.25
+ *     AES-256-GCM        1.19             1.24
+ *
+ * The scheme is ARM's, from the 'big' AES-GCM kernel of
+ * https://github.com/ARM-software/AArch64cryptolib, which is BSD-3-Clause,
+ * (c) 2018-2019 ARM Limited.  Their kernels under AArch64cryptolib_opt_bigger
+ * are faster again and are NOT under that licence, whatever the repository's
+ * LICENSE.md says; nothing here comes from those files.
+ *
+ * The table holds the twisted powers H^1 .. H^8 at htable[0 .. 7] and the
+ * Karatsuba half of each -- its high 64 bits XOR its low -- in the first
+ * eight bytes of htable[8 .. 15].  The running tag is kept the way GCM
+ * writes it at every boundary, and swapped into the internal form on the way
+ * in and out, which is two instructions.
  */
 
-/* reverse all 16 bytes */
+#define GHASH_MODC ((poly64_t) 0xC200000000000000ul)
+
+/* the internal accumulator form, and back again: its own inverse */
 CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t bswap128(uint8x16_t v)
+static inline uint8x16_t ghash_swap(uint8x16_t t)
 {
-	return vextq_u8(vrev64q_u8(v), vrev64q_u8(v), 8);
+	t = vrev64q_u8(t);
+	return vextq_u8(t, t, 8);
 }
 
-/* shift the whole register left by n bytes, as _mm_slli_si128 does */
-#define SHIFT_LEFT_BYTES(v, n)  vextq_u8(vdupq_n_u8(0), (v), 16 - (n))
-/* and right, as _mm_srli_si128 does */
-#define SHIFT_RIGHT_BYTES(v, n) vextq_u8((v), vdupq_n_u8(0), (n))
-
-#define SHL32(v, n) vreinterpretq_u8_u32(vshlq_n_u32(vreinterpretq_u32_u8(v), (n)))
-#define SHR32(v, n) vreinterpretq_u8_u32(vshrq_n_u32(vreinterpretq_u32_u8(v), (n)))
-
+/* the high and low halves XORed together, which is what Karatsuba wants */
 CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t clmul_ll(uint8x16_t a, uint8x16_t b)
+static inline poly64_t ghash_karat(poly64x2_t v)
 {
-	return vreinterpretq_u8_p128(vmull_p64(
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 0),
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
+	return (poly64_t) veor_u64(vget_high_u64(vreinterpretq_u64_p64(v)),
+	                           vget_low_u64(vreinterpretq_u64_p64(v)));
 }
 
+/* the twisted power H^(i+1) */
+#define GHASH_POW(ht, i)                                                      \
+	vreinterpretq_p64_u8(vld1q_u8((const uint8_t *) &(ht)[i]))
+/* and its Karatsuba half */
+#define GHASH_KARAT(ht, i)                                                    \
+	((poly64_t) vgetq_lane_u64(                                           \
+	    vreinterpretq_u64_u8(vld1q_u8((const uint8_t *) &(ht)[8 + (i)])), 0))
+
+/*
+ * One block's three partial products, XORed into the accumulators.  b is
+ * already in the internal form; hp and hk are the power it is to meet.
+ */
+#define GHASH_MUL(b, hp, hk, H, M, L)                                         \
+	do {                                                                  \
+		poly64x2_t b__ = (b);                                         \
+		poly64x2_t hp__ = (hp);                                       \
+		(H) = veorq_u64((H), vreinterpretq_u64_p128(                  \
+		    vmull_high_p64(b__, hp__)));                              \
+		(L) = veorq_u64((L), vreinterpretq_u64_p128(vmull_p64(        \
+		    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_p64(b__), 0), \
+		    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_p64(hp__), 0)))); \
+		(M) = veorq_u64((M), vreinterpretq_u64_p128(                  \
+		    vmull_p64(ghash_karat(b__), (hk))));                      \
+	} while (0)
+
+/*
+ * Finish the Karatsuba -- the middle accumulator still holds only the
+ * (ah^al)(bh^bl) terms and wants the other two taken out of it -- and reduce
+ * the 256 bits modulo the GCM polynomial.  The result is in internal form.
+ */
 CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t clmul_lh(uint8x16_t a, uint8x16_t b)
+static inline uint64x2_t ghash_reduce(uint64x2_t H, uint64x2_t M, uint64x2_t L)
 {
-	return vreinterpretq_u8_p128(vmull_p64(
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 0),
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 1)));
+	uint64x2_t t;
+
+	M = veorq_u64(M, H);
+	M = veorq_u64(M, L);
+
+	t = vreinterpretq_u64_p128(vmull_p64(
+	    (poly64_t) vgetq_lane_u64(H, 0), GHASH_MODC));
+	H = vreinterpretq_u64_u8(vextq_u8(vreinterpretq_u8_u64(H),
+	                                  vreinterpretq_u8_u64(H), 8));
+	M = veorq_u64(M, t);
+	M = veorq_u64(M, H);
+
+	t = vreinterpretq_u64_p128(vmull_p64(
+	    (poly64_t) vgetq_lane_u64(M, 0), GHASH_MODC));
+	M = vreinterpretq_u64_u8(vextq_u8(vreinterpretq_u8_u64(M),
+	                                  vreinterpretq_u8_u64(M), 8));
+	L = veorq_u64(L, t);
+	return veorq_u64(L, M);
 }
 
+/* a single block against H^1, accumulator in internal form */
 CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t clmul_hl(uint8x16_t a, uint8x16_t b)
+static inline uint64x2_t ghash_one(uint64x2_t acc, uint8x16_t blk,
+                                   const block128 *ht)
 {
-	return vreinterpretq_u8_p128(vmull_p64(
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(a), 1),
-	    (poly64_t) vgetq_lane_u64(vreinterpretq_u64_u8(b), 0)));
-}
+	uint64x2_t H = vdupq_n_u64(0), M = H, L = H;
+	poly64x2_t b;
 
-CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t clmul_hh(uint8x16_t a, uint8x16_t b)
-{
-	return vreinterpretq_u8_p128(vmull_high_p64(
-	    vreinterpretq_p64_u8(a), vreinterpretq_p64_u8(b)));
+	acc = vreinterpretq_u64_u8(vextq_u8(vreinterpretq_u8_u64(acc),
+	                                    vreinterpretq_u8_u64(acc), 8));
+	b = vreinterpretq_p64_u64(veorq_u64(
+	    vreinterpretq_u64_u8(vrev64q_u8(blk)), acc));
+	GHASH_MUL(b, GHASH_POW(ht, 0), GHASH_KARAT(ht, 0), H, M, L);
+	return ghash_reduce(H, M, L);
 }
 
 /*
- * The 256-bit carry-less product of a (normal byte order) and b (already
- * reversed, as it sits in the table), before the reflection fixup and the
- * reduction.  Split out from the reduction because both of those are linear
- * over XOR: several products can be added together and fixed up just once,
- * which is what gf_mul4 below does.
- */
-CRYPTON_TARGET_ARMV8_CRYPTO
-static inline void clmul_pmull(uint8x16_t a, uint8x16_t b,
-                               uint8x16_t *lo, uint8x16_t *hi)
-{
-	uint8x16_t t3, t4, t5, t6;
-
-	a = bswap128(a);
-
-	t3 = clmul_ll(a, b);
-	t4 = clmul_lh(a, b);
-	t5 = clmul_hl(a, b);
-	t6 = clmul_hh(a, b);
-
-	t4 = veorq_u8(t4, t5);
-	t5 = SHIFT_LEFT_BYTES(t4, 8);
-	t4 = SHIFT_RIGHT_BYTES(t4, 8);
-
-	*lo = veorq_u8(t3, t5);
-	*hi = veorq_u8(t6, t4);
-}
-
-/* Shift the 256-bit product left by one to undo GCM's bit reflection, then
- * reduce modulo the GCM polynomial.  This is the expensive half. */
-CRYPTON_TARGET_ARMV8_CRYPTO
-static inline uint8x16_t gfred_pmull(uint8x16_t t3, uint8x16_t t6)
-{
-	uint8x16_t t2, t4, t5, t7, t8, t9;
-
-	t7 = SHR32(t3, 31);
-	t8 = SHR32(t6, 31);
-	t3 = SHL32(t3, 1);
-	t6 = SHL32(t6, 1);
-
-	t9 = SHIFT_RIGHT_BYTES(t7, 12);
-	t8 = SHIFT_LEFT_BYTES(t8, 4);
-	t7 = SHIFT_LEFT_BYTES(t7, 4);
-	t3 = vorrq_u8(t3, t7);
-	t6 = vorrq_u8(t6, t8);
-	t6 = vorrq_u8(t6, t9);
-
-	t7 = SHL32(t3, 31);
-	t8 = SHL32(t3, 30);
-	t9 = SHL32(t3, 25);
-
-	t7 = veorq_u8(t7, t8);
-	t7 = veorq_u8(t7, t9);
-	t8 = SHIFT_RIGHT_BYTES(t7, 4);
-	t7 = SHIFT_LEFT_BYTES(t7, 12);
-	t3 = veorq_u8(t3, t7);
-
-	t2 = SHR32(t3, 1);
-	t4 = SHR32(t3, 2);
-	t5 = SHR32(t3, 7);
-	t2 = veorq_u8(t2, t4);
-	t2 = veorq_u8(t2, t5);
-	t2 = veorq_u8(t2, t8);
-	t3 = veorq_u8(t3, t2);
-	t6 = veorq_u8(t6, t3);
-
-	return bswap128(t6);
-}
-
-CRYPTON_TARGET_ARMV8_CRYPTO
-static uint8x16_t gfmul_pmull(uint8x16_t a, const uint8_t *htable)
-{
-	uint8x16_t lo, hi;
-
-	clmul_pmull(a, vld1q_u8(htable), &lo, &hi);
-	return gfred_pmull(lo, hi);
-}
-
-/*
- * With PMULL there is no 4-bit table to fill: H goes in at index 0, byte
- * reversed, so that gfmul_pmull does not have to swap it every time.  This
- * mirrors crypton_aesni_hinit_pclmul.
+ * Twist H and raise it to the powers a batch needs.
  *
- * Indices 1..7 get H^2 .. H^8, which is what lets a group of blocks fold
- * into one reduction: gf_mul4 uses the first four, the GCM loop all eight.
- * The table has sixteen slots, so they are free.
+ * The twist is a shift left by one with 0xC2000..01 folded back in when a
+ * bit falls off the top -- the same correction the old reduction applied to
+ * every product, done once here instead.  Each further power is one multiply
+ * in the twisted domain; the result comes out of ghash_reduce with its
+ * halves swapped, which a batch undoes on the way in, so a stored power has
+ * to be swapped back.
  */
 CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_hinit_pmull(block128 *htable, const block128 *h)
 {
-	uint8x16_t p;
+	uint8x16_t hk = vrev64q_u8(vld1q_u8((const uint8_t *) h));
+	uint64x2_t shl = vshlq_n_u64(vreinterpretq_u64_u8(hk), 1);
+	uint64x2_t shr = vreinterpretq_u64_s64(
+	    vshrq_n_s64(vreinterpretq_s64_u8(hk), 63));
+	uint8x16_t mask = vextq_u8(vreinterpretq_u8_u64(shr),
+	                           vreinterpretq_u8_u64(shr), 12);
+	uint64x2_t tc = vdupq_n_u64(0);
+	poly64x2_t base, p;
 	int i;
 
-	htable[0].q[0] = bitfn_swap64(h->q[1]);
-	htable[0].q[1] = bitfn_swap64(h->q[0]);
+	tc = vsetq_lane_u64(0xC200000000000001ul, tc, 0);
+	tc = vsetq_lane_u64(1, tc, 1);
+	tc = vandq_u64(vreinterpretq_u64_u8(mask), tc);
+	base = vreinterpretq_p64_u64(veorq_u64(tc, shl));
 
-	p = vld1q_u8((const uint8_t *) h);
-	for (i = 1; i < 8; i++) {
-		p = gfmul_pmull(p, (const uint8_t *) &htable[0]);
-		vst1q_u8((uint8_t *) &htable[i], bswap128(p));
+	p = base;
+	for (i = 0; i < 8; i++) {
+		uint64x2_t H = vdupq_n_u64(0), M = H, L = H, r;
+
+		vst1q_u8((uint8_t *) &htable[i],
+		         vreinterpretq_u8_p64(p));
+		vst1q_u8((uint8_t *) &htable[8 + i],
+		         vreinterpretq_u8_u64(
+		             vdupq_n_u64((uint64_t) ghash_karat(p))));
+
+		GHASH_MUL(p, base, ghash_karat(base), H, M, L);
+		r = ghash_reduce(H, M, L);
+		p = vreinterpretq_p64_u8(vextq_u8(vreinterpretq_u8_u64(r),
+		                                  vreinterpretq_u8_u64(r), 8));
 	}
 }
 
 CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul_pmull(block128 *a, const block128 *htable)
 {
-	vst1q_u8((uint8_t *) a,
-	         gfmul_pmull(vld1q_u8((const uint8_t *) a), (const uint8_t *) htable));
+	uint64x2_t acc = vreinterpretq_u64_u8(
+	    ghash_swap(vld1q_u8((const uint8_t *) a)));
+
+	acc = ghash_one(acc, vdupq_n_u8(0), htable);
+	vst1q_u8((uint8_t *) a, ghash_swap(vreinterpretq_u8_u64(acc)));
 }
 
 /*
@@ -320,22 +331,30 @@ CRYPTON_TARGET_ARMV8_CRYPTO
 void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks,
                                      const block128 *htable)
 {
-	uint8x16_t lo, hi, l, h;
+	uint64x2_t acc = vreinterpretq_u64_u8(
+	    ghash_swap(vld1q_u8((const uint8_t *) a)));
+	uint64x2_t H = vdupq_n_u64(0), M = H, L = H;
+	poly64x2_t b;
 	int i;
 
-	clmul_pmull(veorq_u8(vld1q_u8((const uint8_t *) a),
-	                     vld1q_u8((const uint8_t *) &blocks[0])),
-	            vld1q_u8((const uint8_t *) &htable[3]), &lo, &hi);
+	acc = vreinterpretq_u64_u8(vextq_u8(vreinterpretq_u8_u64(acc),
+	                                    vreinterpretq_u8_u64(acc), 8));
+	b = vreinterpretq_p64_u64(veorq_u64(
+	    vreinterpretq_u64_u8(vrev64q_u8(
+	        vld1q_u8((const uint8_t *) &blocks[0]))), acc));
+	GHASH_MUL(b, GHASH_POW(htable, 3), GHASH_KARAT(htable, 3), H, M, L);
 
 	for (i = 1; i < 4; i++) {
-		clmul_pmull(vld1q_u8((const uint8_t *) &blocks[i]),
-		            vld1q_u8((const uint8_t *) &htable[3 - i]), &l, &h);
-		lo = veorq_u8(lo, l);
-		hi = veorq_u8(hi, h);
+		b = vreinterpretq_p64_u8(vrev64q_u8(
+		    vld1q_u8((const uint8_t *) &blocks[i])));
+		GHASH_MUL(b, GHASH_POW(htable, 3 - i),
+		          GHASH_KARAT(htable, 3 - i), H, M, L);
 	}
 
-	vst1q_u8((uint8_t *) a, gfred_pmull(lo, hi));
+	acc = ghash_reduce(H, M, L);
+	vst1q_u8((uint8_t *) a, ghash_swap(vreinterpretq_u8_u64(acc)));
 }
+
 
 int crypton_aes_armv8_pmull_available(void)
 {

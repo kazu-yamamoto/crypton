@@ -25,8 +25,6 @@
 
 #define EACH1(m) m(0)
 #define EACH8(m) m(0) m(1) m(2) m(3) m(4) m(5) m(6) m(7)
-/* the blocks after the first; GHASH folds block 0 in with the tag */
-#define EACH7(m) m(1) m(2) m(3) m(4) m(5) m(6) m(7)
 
 #define LOAD_IN(i)   s[i] = vld1q_u8((const uint8_t *) (input + (i)));
 #define STORE_OUT(i) vst1q_u8((uint8_t *) (output + (i)), s[i]);
@@ -294,11 +292,15 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
  * runs the two together, and holding a group back only adds copies.  The
  * rest fail for one reason -- none of them makes the loop shorter.
  * Karatsuba buys a PMULL for two EOR and an EXT, and the folded table turns
- * sixteen `dup` into sixteen `ld1r` and sixteen more address adds.  A count
- * that does come down wants the data laid out differently, which is what
- * OpenSSL's aes-gcm-armv8_64.pl is; it is Apache-2.0 and in OpenSSL's tree
- * only, and CRYPTOGAMS, which cbits/asm vendors from, publishes AES and
- * GHASH separately and nothing that stitches them.
+ * sixteen `dup` into sixteen `ld1r` and sixteen more address adds.
+ *
+ * That last sentence used to end by saying a count which does come down
+ * wants the data laid out differently.  It does, and since the GHASH was
+ * rewritten against a twisted H -- see cbits/aes/armv8.c -- it is laid out
+ * differently, so the figures above are what the *previous* GHASH gave.
+ * Karatsuba pays now that the reduction it has to carry is a third of what
+ * it was; the other three are untried in the new representation and the
+ * first of them has no more reason to work than it had.
  */
 #define GCM_CTR(i)   s[i] = vreinterpretq_u8_u32(vsetq_lane_u32(cpu_to_be32(c + 1 + (i)), base, 3));
 #define GCM_ENC(i)   { const uint8x16_t m_ = vld1q_u8(input + 16 * (i)); \
@@ -307,27 +309,33 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
 #define GCM_DEC(i)   { const uint8x16_t m_ = vld1q_u8(input + 16 * (i)); \
                        vst1q_u8(output + 16 * (i), veorq_u8(s[i], m_)); \
                        s[i] = m_; }
-#define GCM_GHASH(i) { uint8x16_t l_, h_; \
-                       clmul_pmull(s[i], vld1q_u8((const uint8_t *) &ht[WAY - 1 - (i)]), \
-                                   &l_, &h_); \
-                       glo = veorq_u8(glo, l_); ghi = veorq_u8(ghi, h_); }
+#define GCM_GHASH(i)                                                          \
+	{                                                                     \
+		poly64x2_t b_ = vreinterpretq_p64_u8(vrev64q_u8(s[i]));       \
+		if ((i) == 0)                                                 \
+			b_ = vreinterpretq_p64_u64(veorq_u64(                 \
+			    vreinterpretq_u64_p64(b_), acc));                 \
+		GHASH_MUL(b_, GHASH_POW(ht, WAY - 1 - (i)),                   \
+		          GHASH_KARAT(ht, WAY - 1 - (i)), gH, gM, gL);        \
+	}
 
 /* the eight blocks now in s[] are the ciphertext; fold them into the tag */
 #define GCM_FOLD()                                                            \
 	do {                                                                  \
-		uint8x16_t glo, ghi;                                          \
-		clmul_pmull(veorq_u8(tag, s[0]),                              \
-		            vld1q_u8((const uint8_t *) &ht[WAY - 1]),         \
-		            &glo, &ghi);                                      \
-		EACH7(GCM_GHASH)                                              \
-		tag = gfred_pmull(glo, ghi);                                  \
+		uint64x2_t gH = vdupq_n_u64(0), gM = gH, gL = gH;             \
+		acc = vreinterpretq_u64_u8(                                   \
+		    vextq_u8(vreinterpretq_u8_u64(acc),                       \
+		             vreinterpretq_u8_u64(acc), 8));                  \
+		EACH8(GCM_GHASH)                                              \
+		acc = ghash_reduce(gH, gM, gL);                               \
 	} while (0)
 
 #define GCM_PROLOGUE                                                          \
 	const uint8_t *rk = FWD(key);                                         \
 	const block128 *ht = gcm->htable;                                     \
 	uint8x16_t s[WAY];                                                    \
-	uint8x16_t tag = vld1q_u8((const uint8_t *) &gcm->tag);               \
+	uint64x2_t acc = vreinterpretq_u64_u8(                                \
+	    ghash_swap(vld1q_u8((const uint8_t *) &gcm->tag)));               \
 	uint32_t c = be32_to_cpu(gcm->civ.d[3]);                              \
 	uint32x4_t base = vreinterpretq_u32_u8(vld1q_u8((const uint8_t *) &gcm->civ))
 
@@ -340,13 +348,14 @@ void SIZED(crypton_aes_armv8_encrypt_ctr)(uint8_t *output, aes_key *key, aes_blo
 		ENC_ROUNDS(EACH1);                                            \
 		s[0] = veorq_u8(s[0], m_);                                    \
 		(store_c);                                                    \
-		tag = gfmul_pmull(veorq_u8(tag, (ghash_of)), (const uint8_t *) ht); \
+		acc = ghash_one(acc, (ghash_of), ht);                         \
 	} while (0)
 
 #define GCM_EPILOGUE                                                          \
 	do {                                                                  \
 		gcm->civ.d[3] = cpu_to_be32(c);                               \
-		vst1q_u8((uint8_t *) &gcm->tag, tag);                         \
+		vst1q_u8((uint8_t *) &gcm->tag,                               \
+		         ghash_swap(vreinterpretq_u8_u64(acc)));              \
 	} while (0)
 
 CRYPTON_TARGET_ARMV8_CRYPTO
@@ -380,8 +389,7 @@ void SIZED(crypton_aes_armv8_gcm_encrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 		block128_zero(&m);
 		for (i = 0; i < length; i++)
 			output[i] = m.b[i] = o.b[i];
-		tag = gfmul_pmull(veorq_u8(tag, vld1q_u8((const uint8_t *) &m)),
-		                  (const uint8_t *) ht);
+		acc = ghash_one(acc, vld1q_u8((const uint8_t *) &m), ht);
 	}
 	GCM_EPILOGUE;
 }
@@ -418,8 +426,7 @@ void SIZED(crypton_aes_armv8_gcm_decrypt)(uint8_t *output, aes_gcm *gcm, aes_key
 		vst1q_u8((uint8_t *) &o, s[0]);
 		for (i = 0; i < length; i++)
 			output[i] = o.b[i];
-		tag = gfmul_pmull(veorq_u8(tag, vld1q_u8((const uint8_t *) &m)),
-		                  (const uint8_t *) ht);
+		acc = ghash_one(acc, vld1q_u8((const uint8_t *) &m), ht);
 	}
 	GCM_EPILOGUE;
 }
@@ -581,20 +588,23 @@ void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_k
 /* start a batch, or continue one; blen is how many blocks this batch holds */
 #define FG_ABSORB(blk)                                                        \
 	do {                                                                  \
-		uint8x16_t b_ = (blk), l_, h_;                                \
+		poly64x2_t b_ = vreinterpretq_p64_u8(vrev64q_u8(blk));        \
 		if (bn == 0) {                                                \
 			uint32_t left_ = gtotal - gidx;                       \
 			blen = left_ < WAY ? left_ : WAY;                     \
-			b_ = veorq_u8(b_, tag);                               \
-			glo = vdupq_n_u8(0);                                  \
-			ghi = vdupq_n_u8(0);                                  \
+			acc = vreinterpretq_u64_u8(                           \
+			    vextq_u8(vreinterpretq_u8_u64(acc),               \
+			             vreinterpretq_u8_u64(acc), 8));          \
+			b_ = vreinterpretq_p64_u64(veorq_u64(                 \
+			    vreinterpretq_u64_p64(b_), acc));                 \
+			gH = vdupq_n_u64(0);                                  \
+			gM = gH;                                              \
+			gL = gH;                                              \
 		}                                                             \
-		clmul_pmull(b_, vld1q_u8((const uint8_t *) &ht[blen - bn - 1]), \
-		            &l_, &h_);                                        \
-		glo = veorq_u8(glo, l_);                                      \
-		ghi = veorq_u8(ghi, h_);                                      \
+		GHASH_MUL(b_, GHASH_POW(ht, blen - bn - 1),                   \
+		          GHASH_KARAT(ht, blen - bn - 1), gH, gM, gL);        \
 		gidx++; bn++;                                                 \
-		if (bn == blen) { tag = gfred_pmull(glo, ghi); bn = 0; }      \
+		if (bn == blen) { acc = ghash_reduce(gH, gM, gL); bn = 0; }   \
 	} while (0)
 
 /* a block that is short, zero padded, as GHASH wants it */
@@ -612,7 +622,8 @@ void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
 {
 	const uint8_t *rk = FWD(key);
 	uint8x16_t s[WAY];
-	uint8x16_t tag = vdupq_n_u8(0), glo = tag, ghi = tag, ek0;
+	uint8x16_t ek0;
+	uint64x2_t acc = vdupq_n_u64(0), gH = acc, gM = acc, gL = acc;
 	uint32x4_t base;
 	uint32_t c = 1, bn = 0, blen = 0, gidx = 0;
 	uint32_t gtotal = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
@@ -677,7 +688,7 @@ void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
 
 	{
 		uint8_t tbuf[16];
-		vst1q_u8(tbuf, veorq_u8(tag, ek0));
+		vst1q_u8(tbuf, veorq_u8(ghash_swap(vreinterpretq_u8_u64(acc)), ek0));
 		memcpy(out + inlen, tbuf, taglen);
 	}
 
@@ -706,7 +717,8 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
 {
 	const uint8_t *rk = FWD(key);
 	uint8x16_t s[WAY];
-	uint8x16_t tag = vdupq_n_u8(0), glo = tag, ghi = tag, ek0;
+	uint8x16_t ek0;
+	uint64x2_t acc = vdupq_n_u64(0), gH = acc, gM = acc, gL = acc;
 	uint32x4_t base;
 	uint32_t c = 1, bn = 0, blen = 0, gidx = 0;
 	uint32_t gtotal = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
@@ -770,7 +782,7 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
 	for (i = 0; i < 8; i++) lenb[8 + i] = (uint8_t) (lc >> (56 - 8 * i));
 	FG_ABSORB(vld1q_u8(lenb));
 
-	vst1q_u8(want, veorq_u8(tag, ek0));
+	vst1q_u8(want, veorq_u8(ghash_swap(vreinterpretq_u8_u64(acc)), ek0));
 	if (outtag) {
 		/* The caller holds the expected tag and will compare it itself. */
 		memcpy(outtag, want, taglen);
@@ -786,7 +798,6 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
 
 #undef WAY
 #undef EACH1
-#undef EACH7
 #undef EACH8
 #undef LOAD_IN
 #undef STORE_OUT
