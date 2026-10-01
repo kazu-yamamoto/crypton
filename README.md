@@ -209,6 +209,15 @@ Zen 5 onwards.  There was nothing to borrow: the wide AES-GCM in OpenSSL,
 BoringSSL and AWS-LC is Apache-2.0 and s2n-bignum has no GCM, so both files are
 crypton's own.
 
+Having the 256-bit one is where the 1.48 in the x86-64 table comes from, and
+it is narrower than it sounds.  The EPYC 7763 is Zen 3: VAES and VPCLMULQDQ,
+no AVX-512.  OpenSSL's x86-64 AES-GCM is `aesni-gcm-x86_64.pl`, which is
+128-bit -- its `vaesenc`s are the VEX encoding of `AESENC` on `xmm`, and
+there is not one `ymm` in the file -- or `aes-gcm-avx512.pl`, which wants
+`AVX512VAES`.  There is no rung between them, so on this processor OpenSSL
+takes a block at a time where crypton takes two.  The same idea as theirs,
+one step further down the feature ladder; not a better one.
+
 The 512-bit path arrived after 2.1.2, so it is in the 2.1.4 column -- but
 neither machine in the tables above has AVX-512, so neither column shows it.
 On the runners that do, measured over 16 KiB in MB/s: an EPYC 9V45 (Zen 5)
