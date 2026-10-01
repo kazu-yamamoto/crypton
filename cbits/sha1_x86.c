@@ -168,7 +168,7 @@ void crypton_sha1_x86_do_chunks(uint32_t state[5], const uint8_t *data,
 }
 
 /* the one-block form, for the partial block a message ends with */
-void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16])
+void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint8_t buf[64])
 {
 	crypton_sha1_x86_do_chunks(state, (const uint8_t *) buf, 1);
 }
