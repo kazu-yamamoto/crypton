@@ -11,7 +11,7 @@ version in VERS.
 import os, re, subprocess, sys
 
 SP = os.environ.get("BENCH_BIN", "/tmp/bench")
-VERS = ["1.1.5", "2.1.4"]
+VERS = ["1.1.5", "2.1.5"]
 
 BULK = [("AES-128-GCM", "aes128gcm", "aes-128-gcm"),
         ("AES-256-GCM", "aes256gcm", "aes-256-gcm"),
@@ -78,22 +78,36 @@ def best(f, higher):
         return None
     return max(vals) if higher else min(vals)
 
+def race(fs, higher):
+    """One repetition runs every column before any column runs twice, so a
+    quiet moment or a warm machine reaches all of them alike.  Taking each
+    column's K samples in a block instead lets one column sit entirely
+    inside a disturbance the others miss."""
+    out = [[] for _ in fs]
+    for _ in range(K):
+        for i, f in enumerate(fs):
+            v = f()
+            if v:
+                out[i].append(v)
+    pick = max if higher else min
+    return [pick(c) if c else None for c in out]
+
 print("Throughput in MB/s, **higher is better**:\n")
 head = " | ".join("crypton " + v for v in VERS)
-print(f"| | {head} | OpenSSL | 2.1.4 / OpenSSL |")
+print(f"| | {head} | OpenSSL | 2.1.5 / OpenSSL |")
 print("| --- | " + "---: | " * (len(VERS) + 1) + "---: |")
 for label, op, oname in BULK:
-    ours_v = [best(lambda b=f"{SP}/bulk-{v}", o=op: ours(b, o), True) for v in VERS]
-    t = best(lambda o=oname: ossl_bulk(o), True)
+    *ours_v, t = race([lambda b=f"{SP}/bulk-{v}", o=op: ours(b, o) for v in VERS]
+                      + [lambda o=oname: ossl_bulk(o)], True)
     cells = " | ".join(f"{x:.0f}" if x else "-" for x in ours_v)
     print(f"| {label} | {cells} | {t:.0f} | {ours_v[-1]/t:.2f} |")
 
 print("\nTime per operation in microseconds, **lower is better**:\n")
-print(f"| | {head} | OpenSSL | OpenSSL / 2.1.4 |")
+print(f"| | {head} | OpenSSL | OpenSSL / 2.1.5 |")
 print("| --- | " + "---: | " * (len(VERS) + 1) + "---: |")
 for label, op, (sub, rx, field) in PK:
-    ours_v = [best(lambda b=f"{SP}/pk-bin-{v}", o=op: ours(b, o), False) for v in VERS]
-    t = best(lambda s=sub, r=rx, f=field: ossl_pk(s, r, f), False)
+    *ours_v, t = race([lambda b=f"{SP}/pk-bin-{v}", o=op: ours(b, o) for v in VERS]
+                      + [lambda s=sub, r=rx, f=field: ossl_pk(s, r, f)], False)
     cells = " | ".join(f"{x:.4g}" if x else "-" for x in ours_v)
     if t and ours_v[-1]:
         print(f"| {label} | {cells} | {t:.4g} | {t/ours_v[-1]:.2f} |")

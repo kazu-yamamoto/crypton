@@ -58,8 +58,8 @@ jobs:
         set -eu
         mkdir -p /tmp/bench
         cabal update
-        for v in 1.1.5 2.1.4; do
-          if [ "$v" = 2.1.4 ]; then tree=$PWD; else
+        for v in 1.1.5 2.1.5; do
+          if [ "$v" = 2.1.5 ]; then tree=$PWD; else
             (cd /tmp && cabal get crypton-$v); tree=/tmp/crypton-$v
           fi
           (cd "$tree" && cabal build lib:crypton --builddir=/tmp/db-$v -v0)
