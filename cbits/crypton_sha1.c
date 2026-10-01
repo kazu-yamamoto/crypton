@@ -211,7 +211,7 @@ static void sha1_do_chunk_generic(struct sha1_ctx *ctx, const uint8_t *buf)
  * They arrived long after the x86-64 baseline, so ask before using them.
  * Two threads racing to answer here both write the same value.
  */
-extern void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint32_t buf[16]);
+extern void crypton_sha1_x86_do_chunk(uint32_t state[5], const uint8_t buf[64]);
 extern void crypton_sha1_x86_do_chunks(uint32_t state[5], const uint8_t *data,
                                        uint32_t blocks);
 
