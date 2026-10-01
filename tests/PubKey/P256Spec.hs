@@ -157,6 +157,21 @@ spec = do
                     [ eqTest "scalarZero" P256.scalarZero inv0
                     , eqTest "scalarN" P256.scalarZero invN
                     ]
+        -- The same two for the variable-time inverse, which is exported and
+        -- which scalarFromBinary will happily hand a zero.  It used not to
+        -- return at all on that: in the binary extended Euclid below it, zero
+        -- stays even and is halved forever, and the loop's only exit is in
+        -- the branch both operands must be odd to reach.  Not even
+        -- System.Timeout gets a program out of that, the hang being inside a
+        -- foreign call.  The properties above step around it with a
+        -- precondition; this one walks into it.
+        prop "inv-zero" $
+            let inv0 = P256.scalarInv P256.scalarZero
+                invN = P256.scalarInv P256.scalarN
+             in propertyHold
+                    [ eqTest "scalarZero" P256.scalarZero inv0
+                    , eqTest "scalarN" P256.scalarZero invN
+                    ]
     describe "point" $ do
         prop "marshalling" $ \rx ry ->
             let p = P256.pointFromIntegers (unP256 rx, unP256 ry)

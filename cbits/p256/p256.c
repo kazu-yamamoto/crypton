@@ -329,6 +329,22 @@ void crypton_p256_modinv_vartime(const crypton_p256_int* MOD,
   crypton_p256_int U = *MOD;
   crypton_p256_int V = *a;
 
+  /* Zero has no inverse, and the loop below never finds that out: V stays
+     even forever, so it is halved forever, and the only break is in the
+     branch both U and V have to be odd to reach.  The other input without an
+     inverse is MOD itself -- 2*MOD does not fit in 256 bits, so there is no
+     third -- and that one already leaves here as zero, which is also what
+     crypton_p256_modinv's constant-time counterpart returns.  Answer the same
+     for zero rather than not answering.
+
+     Reachable: Crypto.PubKey.ECC.P256 exports scalarInv, and scalarFromBinary
+     accepts any 256 bits.  A hang inside a foreign call cannot be interrupted
+     by System.Timeout either. */
+  if (crypton_p256_is_zero(a)) {
+    crypton_p256_clear(b);
+    return;
+  }
+
   for (;;) {
     if (crypton_p256_is_even(&U)) {
       crypton_p256_shr1(&U, 0, &U);

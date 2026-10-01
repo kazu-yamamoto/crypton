@@ -110,7 +110,18 @@ spec = do
                 `shouldBe` refused
             PBKDF2.tryFastPBKDF2_SHA512 (PBKDF2.Parameters 1 (-1)) badPass badSalt
                 `shouldBe` refused
+        -- Zero is not rejected: asking for no key is asking for no work, and
+        -- that is what the slow path has always answered.  The fast ones go
+        -- straight to C, where `assert(out && nout)` took the process down
+        -- on a length the caller chose -- a library built without NDEBUG
+        -- keeps its assertions.  All four agree now.
+        it "derives nothing when asked for nothing" $ do
+            slow none `shouldBe` ""
+            fast1 none `shouldBe` ""
+            fast256 none `shouldBe` ""
+            fast512 none `shouldBe` ""
   where
+    none = PBKDF2.Parameters 1 0
     badPrf = PBKDF2.prfHMAC SHA256
     badPass = "password" :: ByteString
     badSalt = "salt" :: ByteString

@@ -1,5 +1,22 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* fix(pbkdf2): an output length of zero no longer takes the process down.
+  `tryFastPBKDF2_*` passed it through to C, where `assert(out && nout)`
+  aborted -- crypton's C is built without `NDEBUG`, so its assertions are
+  live in a release.  `Crypto.KDF.PBKDF2.tryGenerate` has always answered
+  with an empty result for the same request, and the fast paths now agree
+* fix(p256): `Crypto.PubKey.ECC.P256.scalarInv` returns on a zero scalar
+  rather than looping for ever.  `scalarFromBinary` accepts any 256 bits, so
+  a zero scalar is easy to come by, and the binary extended Euclid behind
+  `scalarInv` has no exit for it: zero stays even and is halved for ever.
+  A hang inside a foreign call is not interruptible, so `System.Timeout` was
+  no help either.  It now answers zero, which is what the function already
+  answered for the other input with no inverse, and what `scalarInvSafe`
+  answers for both.  crypton's own ECDSA was never exposed: it rejects a
+  zero scalar before inverting, and uses `scalarInvSafe`
+
 ## 2.1.5
 
 crypton 2.1.3 and 2.1.4 cannot be built with GCC 14 or newer; it was
