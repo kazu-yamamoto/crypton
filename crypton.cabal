@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               crypton
-version:            2.1.4
+version:            2.1.5
 license:            BSD-3-Clause
 license-file:       LICENSE
 copyright:          Vincent Hanquez <vincent@snarc.org>
@@ -72,6 +72,7 @@ extra-source-files:
     cbits/s2n/x86_att/*.S
     cbits/tests/ct/*.c
     cbits/tests/ct/*.h
+    cbits/tests/ct/known.txt
     cbits/tests/ct/README
     cbits/tests/ct/run.sh
     cbits/tests/endian/*.c

@@ -1,16 +1,38 @@
 # CHANGELOG for crypton
 
-## Unreleased
+## 2.1.5
 
-* perf(armv8): AES-GCM is about a quarter faster on AArch64.  The GHASH no
-  longer keeps H the way GCM writes it; it is twisted once at key setup so
-  that GCM's bit reflection is already undone, which turns a reduction of
-  some twenty-five shifts and XORs into two PMULL and six EOR, and makes
-  Karatsuba worth taking -- three multiplications a block rather than four.
-  Measured over 16 KiB messages against the previous code: 1.30 at AES-128,
-  1.22 at AES-192 and 1.19 at AES-256 on an Apple M4, and 1.25, 1.25 and
-  1.24 on a Neoverse N2.  The scheme is ARM's, from the BSD-3-Clause part of
+crypton 2.1.3 and 2.1.4 cannot be built with GCC 14 or newer; it was
+reported from a Fedora 43 system, which ships GCC 15.  This release is that
+fix, and two things that came with it.
+
+* fix(x86): the C builds with GCC 14 and newer again.
+  `crypton_sha1_x86_do_chunk` was declared taking `const uint32_t buf[16]`
+  while every caller passes a `const uint8_t *`, and GCC 14 made
+  `-Wincompatible-pointer-types` an error by default where GCC 13 only warns.
+  The declaration now says `const uint8_t buf[64]`, which is the block size
+  SHA-1 actually takes and what the two sibling functions already said.
+  Reported as #282 and fixed in #284, both by @tbidne, who bisected it to
+  the commit that introduced the declaration.  CI now builds the C with
+  gcc-14 as well, so the next one of these is caught before release
+* perf(armv8): AES-GCM is about a quarter faster on AArch64, which puts it
+  ahead of OpenSSL 4.0.3 rather than behind it -- 1.15 at AES-128 and 1.06
+  at AES-256 on an Apple M4, from 0.86.  The GHASH no longer keeps H the way
+  GCM writes it; it is twisted once at key setup so that GCM's bit
+  reflection is already undone, which turns a reduction of some twenty-five
+  shifts and XORs into two PMULL and six EOR, and makes Karatsuba worth
+  taking -- three multiplications a block rather than four.  Against the
+  previous code over 16 KiB messages: 1.34 at AES-128 and 1.23 at AES-256 on
+  an M4, and 1.25 across the three key sizes on a Neoverse N2.  The scheme
+  is ARM's, from the BSD-3-Clause part of
   https://github.com/ARM-software/AArch64cryptolib
+* test(armv8): the constant-time harness runs on AArch64, where it never had.
+  It was pinned to one x86-64 job, so the AArch64 AES and GHASH had never
+  been put to it; they are now, and they let no secret decide a branch or an
+  address.  Running it somewhere new also found a fault in the harness
+  itself: it counted the frame `--track-origins` prints to say where a value
+  came from as a place that branched on a secret, which invented a finding
+  rather than hiding one
 
 ## 2.1.4
 
