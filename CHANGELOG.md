@@ -2,18 +2,6 @@
 
 ## Unreleased
 
-* fix(c): the sanitizer build is quiet again.  `crypton_sha256_finalize` and
-  `crypton_sha512_finalize` say that their pointers are never null, which
-  they never were.  gcc's `-Wstringop-overflow` had been reporting them as
-  writing "into a region of size 0" at "address zero" under
-  `-fsanitize=undefined`: UndefinedBehaviorSanitizer inserts a null check
-  before `memcpy`, because glibc declares `memcpy` nonnull, and the check
-  puts a null path in front of the warning pass.  Stating the contract
-  removes the path rather than the warning, and costs nothing -- compiled as
-  the package compiles it, the assembly is identical either way
-
-## Unreleased
-
 * fix(pbkdf2): an output length of zero no longer takes the process down.
   `tryFastPBKDF2_*` passed it through to C, where `assert(out && nout)`
   aborted -- crypton's C is built without `NDEBUG`, so its assertions are
@@ -28,6 +16,23 @@
   answered for the other input with no inverse, and what `scalarInvSafe`
   answers for both.  crypton's own ECDSA was never exposed: it rejects a
   zero scalar before inverting, and uses `scalarInvSafe`
+* fix(c): the sanitizer build is quiet again.  `crypton_sha256_finalize` and
+  `crypton_sha512_finalize` say that their pointers are never null, which
+  they never were.  gcc's `-Wstringop-overflow` had been reporting them as
+  writing "into a region of size 0" at "address zero" under
+  `-fsanitize=undefined`: UndefinedBehaviorSanitizer inserts a null check
+  before `memcpy`, because glibc declares `memcpy` nonnull, and the check
+  puts a null path in front of the warning pass.  Stating the contract
+  removes the path rather than the warning, and costs nothing -- compiled as
+  the package compiles it, the assembly is identical either way
+* fix(pbkdf2): an instantiation whose digest is larger than its block is
+  refused where it is written rather than after it has overflowed.  The
+  macro that builds the three PBKDF2 variants shortens a long key by hashing
+  it into a buffer the size of the block, and asserted afterwards that the
+  result fitted -- afterwards being too late, since the write has already
+  happened.  The check is a compile-time one now.  The three that exist are
+  unaffected: SHA-1, SHA-256 and SHA-512 have digests of 20, 32 and 64 bytes
+  against blocks of 64, 64 and 128
 
 ## 2.1.5
 

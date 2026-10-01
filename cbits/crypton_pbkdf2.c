@@ -46,6 +46,7 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
 
 /* Internal function/type names for hash-specific things. */
 #define HMAC_CTX(_name) HMAC_ ## _name ## _ctx
+#define DIGEST_FITS(_name) pbkdf2_ ## _name ## _digest_fits_in_a_block
 #define HMAC_INIT(_name) HMAC_ ## _name ## _init
 #define HMAC_UPDATE(_name) HMAC_ ## _name ## _update
 #define HMAC_FINAL(_name) HMAC_ ## _name ## _final
@@ -79,6 +80,16 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
  */
 #define DECL_PBKDF2(_name, _blocksz, _hashsz, _ctx,                           \
                     _init, _update, _xform, _final, _xcpy, _xtract, _xxor)    \
+  /* HMAC_INIT below shortens a key longer than the block by hashing it,     \
+   * which writes _hashsz bytes into a buffer of _blocksz.  An instantiation \
+   * whose digest is larger than its block would overflow that buffer, and   \
+   * would do it before any check inside the function could say so -- which  \
+   * is where the check used to be.  Refuse such an instantiation here       \
+   * instead, in front of the person writing it.  The three below are        \
+   * SHA-1, SHA-256 and SHA-512, whose digests are 20, 32 and 64 bytes       \
+   * against blocks of 64, 64 and 128. */                                    \
+  typedef char DIGEST_FITS(_name)[(_hashsz) <= (_blocksz) ? 1 : -1];          \
+                                                                              \
   typedef struct {                                                            \
     _ctx inner;                                                               \
     _ctx outer;                                                               \
@@ -100,9 +111,6 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
       key = k;                                                                \
       nkey = _hashsz;                                                         \
     }                                                                         \
-                                                                              \
-    /* Standard doesn't cover case where blocksz < hashsz. */                 \
-    assert(nkey <= _blocksz);                                                 \
                                                                               \
     /* Right zero-pad short keys. */                                          \
     if (k != key)                                                             \
