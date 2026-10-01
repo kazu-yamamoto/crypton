@@ -1,0 +1,22 @@
+# A primitive that falls off its accelerated path does not get a little
+# slower, it falls off a cliff: #274 took SHA-256 from 3396 MB/s to 644 on an
+# Apple M4, a factor of five, and no test noticed because the answers stayed
+# right.
+#
+# Absolute numbers cannot be checked here.  ubuntu-latest is not one machine
+# -- EPYC 7763, EPYC 9V74, Xeon 8370C and Xeon 6973P-C have all turned up, and
+# the ones with AVX-512 differ from the ones without by more than twofold on
+# AES-GCM.  So each line is a ratio between two primitives measured in the
+# same run on the same machine, with a floor generous enough that only a cliff
+# reaches it.
+#
+#   faster  slower  floor  what it would catch
+#
+# Measured for the floors: an M4 gives 1.00, 0.56, 4.04 and 0.58 for the four
+# below; an EPYC 7763 gives 0.94, 0.46, 2.75 and 0.55.  Every floor is less
+# than half of both, and #274 put the first at 0.19.
+
+sha256    sha1       0.40   SHA-256 off the SHA-2 instructions
+sha512    sha1       0.20   SHA-512 off its assembly
+aes128gcm chachapoly 1.00   AES-GCM off AES-NI or the ARMv8 AES instructions
+sha3-256  sha512     0.25   SHA-3 off the SHA-3 instructions
