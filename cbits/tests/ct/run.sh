@@ -62,11 +62,19 @@ run_one() {
 		--log-file="$out/$name.log" "$out/$name" > /dev/null 2>&1 || true
 	n=$(grep -c "^==[0-9]*== \(Conditional jump\|Use of uninitialised\)" "$out/$name.log" || true)
 	# Which places did it name?  Only the frame the report is against -- the
-	# "at" line -- is the place; the "by" lines below it are how the code got
-	# there and are not themselves branching on anything.  A site is
+	# first "at" line under the complaint -- is the place; the "by" lines
+	# below it are how the code got there and are not themselves branching
+	# on anything.  Nor is the "at" line under "Uninitialised value was
+	# created by", which --track-origins prints to say where the value came
+	# from: that frame is a stack allocation, not a branch, and taking it
+	# for one put a function's opening brace on the list.  A site is
 	# "file:line", and the ones listed in known.txt are understood.
-	sites=$(sed -n 's/^==[0-9]*==    at 0x[0-9A-Fa-f]*: [A-Za-z_0-9]* (\([^)]*\))$/\1/p' \
-		"$out/$name.log" | grep -v '^ct_' | sort -u)
+	sites=$(awk '
+		/^==[0-9]*== (Conditional jump|Use of uninitialised)/ { want = 1; next }
+		want && /^==[0-9]*==    at 0x/ { print; want = 0 }
+	' "$out/$name.log" |
+		sed -n 's/^==[0-9]*==    at 0x[0-9A-Fa-f]*: [A-Za-z_0-9]* (\([^)]*\))$/\1/p' |
+		grep -v '^ct_' | sort -u)
 	unknown=
 	for site in $sites; do
 		file=${site%%:*}
