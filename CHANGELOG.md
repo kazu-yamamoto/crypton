@@ -1,5 +1,17 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* perf(armv8): AES-GCM is about a quarter faster on AArch64.  The GHASH no
+  longer keeps H the way GCM writes it; it is twisted once at key setup so
+  that GCM's bit reflection is already undone, which turns a reduction of
+  some twenty-five shifts and XORs into two PMULL and six EOR, and makes
+  Karatsuba worth taking -- three multiplications a block rather than four.
+  Measured over 16 KiB messages against the previous code: 1.30 at AES-128,
+  1.22 at AES-192 and 1.19 at AES-256 on an Apple M4, and 1.25, 1.25 and
+  1.24 on a Neoverse N2.  The scheme is ARM's, from the BSD-3-Clause part of
+  https://github.com/ARM-software/AArch64cryptolib
+
 ## 2.1.4
 
 2.1.3 could not be built from Hackage at all in the default configuration,
