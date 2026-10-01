@@ -32,6 +32,12 @@ decaf_inc="-DCRYPTON_DECAF_WORD_BITS=64 -I$D/include -I$D/p448
 # table-driven code every other machine runs.
 aes_src="cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c"
 
+# And, on AArch64, the same driver again against the instructions.  That one
+# has to be silent; this one has to report.  Either going the wrong way says
+# the run is not measuring what it claims to.
+armv8_src="$aes_src cbits/aes/armv8.c cbits/crypton_cpu.c"
+armv8_inc="-DWITH_ARMV8_CRYPTO -march=armv8-a+crypto -Icbits/aes"
+
 status=0
 have_valgrind=no
 ct_define=
@@ -94,6 +100,22 @@ run_one() {
 			echo "note aes: $n report(s), from $(echo "$sites" | tr '\n' ' ')"
 		fi
 		;;
+	aes_armv8)
+		# The opposite demand, and known.txt does not apply: the entries in
+		# it are for the tables, and this build is not supposed to reach
+		# them.  Anything at all here is a finding, including a table site,
+		# which would mean the dispatch did not pick the instructions.
+		if [ "$n" -eq 0 ]; then
+			echo "ok   aes_armv8: the instructions decided nothing"
+		else
+			echo "FAIL aes_armv8: $n report(s) from the AArch64 AES or GHASH,"
+			echo "     which look nothing up and should branch on nothing:"
+			for site in $sites; do echo "         $site"; done
+			sed -n '/Conditional jump\|Use of uninitialised/,/^==[0-9]*== $/p' \
+				"$out/$name.log" | head -30 | sed 's/^/    /'
+			status=1
+		fi
+		;;
 	*)
 		if [ "$n" -eq 0 ]; then
 			echo "ok   $name: the secret decided nothing"
@@ -121,6 +143,14 @@ run_one ed25519 "cbits/ed25519/ed25519.c cbits/crypton_sha512.c" "-Icbits/ed2551
 run_one decaf   "$decaf_src" "$decaf_inc"
 run_one chapoly "cbits/crypton_chacha.c cbits/crypton_poly1305.c" ""
 run_one aes     "$aes_src" ""
+
+# Only where the instructions exist.  Elsewhere there is nothing to measure
+# and the build would not even compile.
+case $(uname -m) in
+aarch64 | arm64)
+	run_one aes_armv8 "$armv8_src" "$armv8_inc"
+	;;
+esac
 
 if [ "$have_valgrind" = no ]; then
 	echo "skip no valgrind here, so none of the above was checked"
