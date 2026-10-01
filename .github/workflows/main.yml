@@ -339,8 +339,16 @@ jobs:
     #
     # See cbits/tests/ct/README for what is marked and for why the AES
     # driver is expected to report.
+    #
+    # On both architectures: the drivers are the same C either way, but the
+    # AES one is not -- it is run twice on AArch64, once against the tables
+    # and once against the instructions, and the second must be silent.  That
+    # arm did not exist until crypton's AArch64 AES and GHASH were rewritten
+    # and it became clear this harness had never seen them.
     - name: What the secrets decide
-      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      if: >-
+        (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm')
+        && matrix.ghc == '9.12'
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq valgrind
