@@ -192,7 +192,16 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
                      uint8_t *out, size_t nout)                               \
   {                                                                           \
     assert(iterations);                                                       \
-    assert(out && nout);                                                      \
+    assert(out);                                                              \
+                                                                              \
+    /* Zero bytes of derived key is zero bytes of work.  RFC 8018 asks for a  \
+     * positive dkLen and the loop below would write a block regardless, so   \
+     * this used to be `assert(out && nout)` -- which aborts the process, in  \
+     * a library built without NDEBUG, on a length the caller chose.          \
+     * Crypto.KDF.PBKDF2's own tryGenerate returns an empty result for this,  \
+     * so return and let the two agree. */                                    \
+    if (nout == 0)                                                            \
+      return;                                                                 \
                                                                               \
     /* Starting point for inner loop. */                                      \
     HMAC_CTX(_name) ctx;                                                      \
