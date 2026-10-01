@@ -30,3 +30,25 @@ generic.c         the AES tables, in key expansion and in the rounds
 gf.c              the GHASH table
 crypton_aes.c     the same tables, attributed to the code that inlines them
 block128.h        likewise
+
+# AArch64 only.  gcc keeps a carry in the flags and takes it out with `cset`
+# or `cinc`, where on x86-64 it uses `adc` and the carry never leaves the
+# data path.  memcheck calls `cset` a conditional move and reports it, and
+# it attributes the report to the branch that ends the block rather than to
+# the `cset` itself -- so the site it names is a loop back-edge, not the
+# instruction that touched the secret.
+#
+# Checked by disassembling the address memcheck named, in a -no-pie build so
+# that its addresses and objdump's agree.  At every one of these the branch
+# reads flags from a `cmp` against a loop counter or a pointer bound, both
+# public; the only instructions consuming the secret's flags are `cset` and
+# `cinc`, which do not branch and take the same time either way.  In decaf's
+# lookup the secret only reaches a `dup` and a NEON `and`/`orr`.
+#
+#   400f60  cmp  x3, #0x20          <- public: four digits of 8 bytes
+#   400f64  b.ne 400f3c             <- what memcheck names
+#   404c6c  cmp  x3, x6             <- public: j against n_table
+#   404c70  b.ne 404c30             <- what memcheck names
+p256.c:147        addM's loop; the carry is taken with cset and cinc
+p256.c:149        the same
+constant_time.h:150  decaf's constant-time lookup, over j < n_table
