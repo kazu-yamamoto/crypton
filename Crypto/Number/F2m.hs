@@ -38,7 +38,6 @@ import Data.Bits (
  )
 import Data.List (foldl')
 import Data.Word (Word32)
-import Prelude hiding (foldl')
 
 -- | Binary Polynomial represented by an integer
 type BinaryPolynomial = Integer

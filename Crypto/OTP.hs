@@ -51,7 +51,6 @@ import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.ByteArray.Mapping (fromW64BE)
 import Data.List (foldl')
 import Data.Word
-import Prelude hiding (foldl')
 
 -- | A one-time password which is a sequence of 4 to 9 digits.
 type OTP = Word32

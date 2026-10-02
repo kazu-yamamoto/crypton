@@ -13,7 +13,6 @@ module Crypto.PubKey.Internal (
 
 import Data.Bits (shiftR)
 import Data.List (foldl')
-import Prelude hiding (foldl')
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)

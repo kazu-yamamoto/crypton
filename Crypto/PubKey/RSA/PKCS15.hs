@@ -39,7 +39,6 @@ import Data.Word
 import Crypto.Internal.ByteArray (ByteArray, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Data.List (foldl')
-import Prelude hiding (foldl')
 
 -- | A specialized class for hash algorithm that can product
 -- a ASN1 wrapped description the algorithm plus the content

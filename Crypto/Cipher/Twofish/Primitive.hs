@@ -17,7 +17,6 @@ import Crypto.Internal.Words (Word128 (..))
 import Data.Bits
 import Data.List (foldl')
 import Data.Word
-import Prelude hiding (foldl')
 
 -- Based on the Golang referance implementation
 -- https://github.com/golang/crypto/blob/master/twofish/twofish.go

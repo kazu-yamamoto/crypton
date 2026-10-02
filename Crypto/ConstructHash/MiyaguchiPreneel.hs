@@ -16,7 +16,6 @@ module Crypto.ConstructHash.MiyaguchiPreneel (
 ) where
 
 import Data.List (foldl')
-import Prelude hiding (foldl')
 
 import Crypto.Cipher.Types
 import Crypto.Cipher.Types.Utils (chunk)

@@ -19,7 +19,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.List (foldl')
 import Data.Word (Word32)
-import Prelude hiding (foldl')
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)

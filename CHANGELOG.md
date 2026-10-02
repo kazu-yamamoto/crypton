@@ -1,5 +1,15 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* chore: eight modules stop hiding `foldl'` from `Prelude`.  `Prelude` did
+  not export it before base 4.20, so on GHC 9.2 through 9.8 the clause hid
+  a name that was not there and GHC said so, sixteen times a build; from
+  9.10 it exports the same `foldl'` `Data.List` does, so with the clause
+  gone there is one name from two modules and nothing to choose between
+  them.  No CPP: the line was doing nothing on the compilers that warned,
+  and needs to do nothing on the ones that did not
+
 ## 2.1.7
 
 One fix: RSA-PSS verification was accepting a signature RFC 8017 says to
