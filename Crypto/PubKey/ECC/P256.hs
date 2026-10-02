@@ -413,8 +413,6 @@ foreign import ccall "crypton_p256_modmul"
 foreign import ccall "crypton_p256e_scalar_invert"
     ccrypton_p256e_scalar_invert :: Ptr P256Scalar -> Ptr P256Scalar -> IO ()
 
--- foreign import ccall "crypton_p256_modinv"
---    ccrypton_p256_modinv :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()
 foreign import ccall "crypton_p256_modinv_vartime"
     ccrypton_p256_modinv_vartime
         :: Ptr P256Scalar -> Ptr P256Scalar -> Ptr P256Scalar -> IO ()

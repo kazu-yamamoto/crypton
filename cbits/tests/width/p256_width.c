@@ -7,9 +7,8 @@
 #include <string.h>
 #include "p256/p256.h"
 
-/* The header declares crypton_p256_point_mul and crypton_p256_modinv, and
-   nothing defines them.  What exists is this family, which has no header at
-   all -- the Haskell side declares it through the FFI. */
+/* This family has no header at all -- the Haskell side declares it through
+   the FFI -- so it is declared here. */
 void crypton_p256e_point_mul(const crypton_p256_int *n,
     const crypton_p256_int *in_x, const crypton_p256_int *in_y,
     crypton_p256_int *out_x, crypton_p256_int *out_y);
