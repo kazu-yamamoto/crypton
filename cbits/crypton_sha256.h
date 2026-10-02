@@ -51,6 +51,18 @@ void crypton_sha224_finalize_prefix(struct sha224_ctx *ctx, const uint8_t *data,
 
 void crypton_sha256_init(struct sha256_ctx *ctx);
 void crypton_sha256_update(struct sha256_ctx *ctx, const uint8_t *data, uint32_t len);
+/* The pointers are all required to be non-null, which is said here so that
+ * the compiler knows it too.  Both of these write their digest through a
+ * loop -- store_be32(out + 4 * i, ...) -- where sha1 and md5 write theirs at
+ * constant offsets, and that is the difference that makes gcc's
+ * -Wstringop-overflow reason about out being null: with
+ * -fsanitize=undefined, UndefinedBehaviorSanitizer inserts a null check
+ * before memcpy, because glibc declares memcpy nonnull, and the check puts a
+ * null path in front of the warning pass, which then reports writing into
+ * "a region of size 0" at "address zero".  Saying the pointer is never null
+ * removes the path rather than the warning.  It costs nothing: compiled as
+ * the package compiles it, the assembly is identical with and without. */
+__attribute__((nonnull))
 void crypton_sha256_finalize(struct sha256_ctx *ctx, uint8_t *out);
 void crypton_sha256_finalize_prefix(struct sha256_ctx *ctx, const uint8_t *data, uint32_t len, uint32_t n, uint8_t *out);
 

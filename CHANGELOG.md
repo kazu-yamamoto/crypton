@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+* fix(c): the sanitizer build is quiet again.  `crypton_sha256_finalize` and
+  `crypton_sha512_finalize` say that their pointers are never null, which
+  they never were.  gcc's `-Wstringop-overflow` had been reporting them as
+  writing "into a region of size 0" at "address zero" under
+  `-fsanitize=undefined`: UndefinedBehaviorSanitizer inserts a null check
+  before `memcpy`, because glibc declares `memcpy` nonnull, and the check
+  puts a null path in front of the warning pass.  Stating the contract
+  removes the path rather than the warning, and costs nothing -- compiled as
+  the package compiles it, the assembly is identical either way
+
+## Unreleased
+
 * fix(pbkdf2): an output length of zero no longer takes the process down.
   `tryFastPBKDF2_*` passed it through to C, where `assert(out && nout)`
   aborted -- crypton's C is built without `NDEBUG`, so its assertions are
