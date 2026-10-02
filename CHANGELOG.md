@@ -1,6 +1,9 @@
 # CHANGELOG for crypton
 
-## Unreleased
+## 2.1.6
+
+Two things a caller could walk into, the licence field saying what the tree
+actually holds, and the C building without a warning.
 
 * fix(pbkdf2): an output length of zero no longer takes the process down.
   `tryFastPBKDF2_*` passed it through to C, where `assert(out && nout)`
@@ -16,6 +19,16 @@
   answered for the other input with no inverse, and what `scalarInvSafe`
   answers for both.  crypton's own ECDSA was never exposed: it rejects a
   zero scalar before inverting, and uses `scalarInvSafe`
+* doc(cabal): the `license:` field says what the tree holds --
+  `BSD-3-Clause AND MIT AND ISC` -- and `license-files:` lists the five
+  licence texts, where a tool looking for licences will find them.  The
+  parts of `cbits/aes/gcm_fused_x86.c` that follow picotls's `fusion` now
+  carry its MIT notice beside the file.  **Nothing is required of a user
+  that was not required before**: crypton's own code is BSD-3-Clause as it
+  always was, and the MIT and ISC code was already in the tree -- the field
+  was silent about it.  Raised by Joey Hess in #232, and settled with the
+  help of Kazuho Oku, who divided `fusion` between what derives from
+  OpenSSL and what does not, and rewrote the former upstream
 * fix(c): the sanitizer build is quiet again.  `crypton_sha256_finalize` and
   `crypton_sha512_finalize` say that their pointers are never null, which
   they never were.  gcc's `-Wstringop-overflow` had been reporting them as
