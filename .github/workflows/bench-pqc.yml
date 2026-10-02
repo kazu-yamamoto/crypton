@@ -1,0 +1,122 @@
+# ML-KEM and ML-DSA on x86-64: the two PQ Code Package implementations
+# against OpenSSL, on the machine the README's x86-64 table is measured on.
+# Not part of CI: it runs only when asked for.
+#
+# The same machine caveat as bench.yml applies -- ubuntu-latest is not one
+# machine -- so this asks for the EPYC 7763 and stops in the first minute if
+# the draw went elsewhere.  Here it matters for a second reason: the two
+# packages' x86-64 backends are AVX2, and a runner with AVX-512 would be a
+# different measurement again.
+name: bench-pqc
+
+on:
+  # workflow_dispatch only reaches a workflow that is on the default branch,
+  # and this one is not: it lives on ci while the question it answers is
+  # still open.  A push to ci is the trigger until then.
+  push:
+    branches: [ 'ci' ]
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: how many rounds
+        default: '5'
+      seconds:
+        description: seconds per openssl measurement
+        default: '1'
+
+jobs:
+  bench-pqc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Which machine the draw gave
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        if ! grep -q '7763' /proc/cpuinfo; then
+          echo "::error::not the EPYC 7763 the README's table is measured on; re-run"
+          exit 1
+        fi
+        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' |
+          grep -xE 'avx2|avx512f|bmi2|adx' | sort | tr '\n' ' '
+        echo
+
+    - uses: actions/checkout@v5
+
+    # The same OpenSSL the README's tables use, built here because the
+    # distribution's is a 3.
+    - name: OpenSSL 4.0.3
+      run: |
+        cd /tmp
+        curl -sL -o o.tar.gz https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz
+        tar xzf o.tar.gz
+        cd openssl-4.0.3
+        ./Configure no-docs no-tests > /tmp/conf.log 2>&1
+        make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
+        LD_LIBRARY_PATH=$PWD ./apps/openssl version
+        LD_LIBRARY_PATH=$PWD ./apps/openssl list -signature-algorithms | grep -c ML-DSA
+        LD_LIBRARY_PATH=$PWD ./apps/openssl list -kem-algorithms | grep -c ML-KEM
+
+    - name: The two implementations
+      run: |
+        set -eu
+        cd /tmp
+        git clone -q --depth 1 --branch v2.0.0 https://github.com/pq-code-package/mlkem-native.git
+        git clone -q --depth 1 --branch v2.0.0 https://github.com/pq-code-package/mldsa-native.git
+        mkdir -p /tmp/pqbin
+        # What the two packages' own build systems add for the x86-64
+        # backend; without them the AVX2 sources do not assemble.  The
+        # AArch64 backend needs nothing beyond the baseline, except the
+        # armv8.4 SHA3 Keccak, which is selected by the target the compiler
+        # already has on the machines this runs on.
+        case "$(uname -m)" in
+          x86_64) A="-mavx2 -mbmi2" ;;
+          *)      A="" ;;
+        esac
+        cd /tmp/mlkem-native
+        for L in 512 768 1024; do
+          for v in c native; do
+            N=""
+            F=""
+            [ $v = native ] && N="-DMLK_CONFIG_USE_NATIVE_BACKEND_ARITH -DMLK_CONFIG_USE_NATIVE_BACKEND_FIPS202" && F="$A"
+            cc -O3 -std=c99 -DMLK_CONFIG_PARAMETER_SET=$L \
+               -DNSP=PQCP_MLKEM_NATIVE_MLKEM$L $N $F -I mlkem \
+               -o /tmp/pqbin/kem_${v}_$L \
+               "$GITHUB_WORKSPACE/bench/pq/kembench.c" \
+               mlkem/mlkem_native.c mlkem/mlkem_native_asm.S
+          done
+        done
+        cd /tmp/mldsa-native
+        for L in 44 65 87; do
+          for v in c native; do
+            N=""
+            F=""
+            [ $v = native ] && N="-DMLD_CONFIG_USE_NATIVE_BACKEND_ARITH -DMLD_CONFIG_USE_NATIVE_BACKEND_FIPS202" && F="$A"
+            cc -O3 -std=c99 -DMLD_CONFIG_PARAMETER_SET=$L \
+               -DNSP=PQCP_MLDSA_NATIVE_MLDSA$L $N $F -I mldsa \
+               -o /tmp/pqbin/dsa_${v}_$L \
+               "$GITHUB_WORKSPACE/bench/pq/dsabench.c" \
+               mldsa/mldsa_native.c mldsa/mldsa_native_asm.S
+          done
+        done
+        ls /tmp/pqbin
+
+    # A build that quietly fell back to the portable C would report the
+    # portable C's numbers under the backend's name, so say which is which
+    # before any figure is read, and refuse if they are not distinguishable.
+    - name: Did the backend builds take the assembly
+      run: |
+        set -eu
+        bad=0
+        for b in kem_768 dsa_65; do
+          p=$(nm /tmp/pqbin/${b%%_*}_c_${b##*_} | grep -ciE 'avx2|aarch64|_asm' || true)
+          n=$(nm /tmp/pqbin/${b%%_*}_native_${b##*_} | grep -ciE 'avx2|aarch64|_asm' || true)
+          echo "$b: portable $p, backend $n"
+          [ "$p" -eq 0 ] && [ "$n" -gt 0 ] || bad=1
+        done
+        [ $bad -eq 0 ] || { echo "::error::the two builds are not distinguishable"; exit 1; }
+
+    - name: The tables
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        python3 bench/pq/pqrun.py /tmp/openssl-4.0.3/apps/openssl /tmp/pqbin \
+          "${{ github.event.inputs.reps || '5' }}" \
+          "${{ github.event.inputs.seconds || '1' }}" 
