@@ -15,7 +15,7 @@ module Crypto.ConstructHash.MiyaguchiPreneel (
     MiyaguchiPreneel,
 ) where
 
-import Data.List (foldl')
+import qualified Data.List as L
 
 import Crypto.Cipher.Types
 import Crypto.Cipher.Types.Utils (chunk)
@@ -40,7 +40,7 @@ compute'
     -> MiyaguchiPreneel cipher
     -- ^ output tag
 compute' g =
-    MP . foldl' (step $ g) (B.replicate bsz 0) . chunks . pad (ZERO bsz) . B.convert
+    MP . L.foldl' (step $ g) (B.replicate bsz 0) . chunks . pad (ZERO bsz) . B.convert
   where
     bsz = blockSize (g B.empty {- dummy to get block size -})
     -- 'chunk' slices rather than splitting the message, which copied whatever

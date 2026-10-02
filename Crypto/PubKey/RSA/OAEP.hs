@@ -31,7 +31,7 @@ import Crypto.Random.Types
 import Data.Bits (complement, shiftR, xor, (.&.), (.|.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.List (foldl')
+import qualified Data.List as L
 import Data.Word (Word32)
 
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
@@ -155,7 +155,7 @@ unpad oaep k em
     -- is zero; all of them are looked at either way
     oneIndex =
         fst $
-            foldl'
+            L.foldl'
                 step
                 (fromIntegral (B.length db1) :: Word32, 1 :: Word32)
                 (zip [0 ..] (B.unpack db1))

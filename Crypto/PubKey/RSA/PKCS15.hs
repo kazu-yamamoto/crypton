@@ -38,7 +38,7 @@ import Data.Word
 
 import Crypto.Internal.ByteArray (ByteArray, Bytes)
 import qualified Crypto.Internal.ByteArray as B
-import Data.List (foldl')
+import qualified Data.List as L
 
 -- | A specialized class for hash algorithm that can product
 -- a ASN1 wrapped description the algorithm plus the content
@@ -430,7 +430,7 @@ unpad packed
 
     -- index of the first zero octet in ps0m, counted from the start of packed,
     -- or len when there is none; every octet is looked at either way
-    zeroIndex = fst $ foldl' step (fromIntegral len :: Word32, 1 :: Word32) indexed
+    zeroIndex = fst $ L.foldl' step (fromIntegral len :: Word32, 1 :: Word32) indexed
     indexed = zip [2 ..] (B.unpack ps0m)
     step (idx, unseen) (i, b) = (select found i idx, unseen .&. complement found)
       where

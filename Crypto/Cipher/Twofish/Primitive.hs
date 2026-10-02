@@ -15,7 +15,7 @@ import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.WordArray
 import Crypto.Internal.Words (Word128 (..))
 import Data.Bits
-import Data.List (foldl')
+import qualified Data.List as L
 import Data.Word
 
 -- Based on the Golang referance implementation
@@ -112,7 +112,7 @@ encryptBlock Twofish{s = (s1, s2, s3, s4), k = ks} message = store32ls ts
     b' = b `xor` arrayRead32 ks 1
     c' = c `xor` arrayRead32 ks 2
     d' = d `xor` arrayRead32 ks 3
-    (!a'', !b'', !c'', !d'') = foldl' shuffle (a', b', c', d') [0 .. 7]
+    (!a'', !b'', !c'', !d'') = L.foldl' shuffle (a', b', c', d') [0 .. 7]
     ts =
         ( c'' `xor` arrayRead32 ks 4
         , d'' `xor` arrayRead32 ks 5
@@ -179,7 +179,7 @@ decryptBlock Twofish{s = (s1, s2, s3, s4), k = ks} message = store32ls ixs
     b' = d `xor` arrayRead32 ks 7
     c' = a `xor` arrayRead32 ks 4
     d' = b `xor` arrayRead32 ks 5
-    (!a'', !b'', !c'', !d'') = foldl' unshuffle (a', b', c', d') [8, 7 .. 1]
+    (!a'', !b'', !c'', !d'') = L.foldl' unshuffle (a', b', c', d') [8, 7 .. 1]
     ixs =
         ( a'' `xor` arrayRead32 ks 0
         , b'' `xor` arrayRead32 ks 1
@@ -283,7 +283,7 @@ sWords key = sWord
             ( \wordIndex ->
                 map
                     ( \rsRow ->
-                        foldl'
+                        L.foldl'
                             ( \acc (!rsVal, !colIndex) ->
                                 acc `xor` gfMult rsPolynomial (B.index key $ 8 * wordIndex + colIndex) rsVal
                             )
@@ -442,7 +442,7 @@ genK keyPackage = concatMap makeTuple [0 .. 19]
         b' = rotateL b 8
 
 h :: ByteArray ba => [Word8] -> KeyPackage ba -> Int -> Word32
-h input keyPackage offset = foldl' xorMdsColMult 0 $ zip [y0f, y1f, y2f, y3f] $ enumFrom Zero
+h input keyPackage offset = L.foldl' xorMdsColMult 0 $ zip [y0f, y1f, y2f, y3f] $ enumFrom Zero
   where
     key = rawKeyBytes keyPackage
     [y0, y1, y2, y3] = take 4 input

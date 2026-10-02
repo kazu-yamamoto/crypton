@@ -2,13 +2,11 @@
 
 ## Unreleased
 
-* chore: eight modules stop hiding `foldl'` from `Prelude`.  `Prelude` did
-  not export it before base 4.20, so on GHC 9.2 through 9.8 the clause hid
-  a name that was not there and GHC said so, sixteen times a build; from
-  9.10 it exports the same `foldl'` `Data.List` does, so with the clause
-  gone there is one name from two modules and nothing to choose between
-  them.  No CPP: the line was doing nothing on the compilers that warned,
-  and needs to do nothing on the ones that did not
+* chore: eight modules take `foldl'` through a qualified import instead of
+  hiding the name from `Prelude`.  `Prelude` gained `foldl'` in base 4.20,
+  so the two spellings warn on opposite sides of GHC 9.10 -- hiding a name
+  that is not there before it, and a redundant `Data.List` import after.
+  Qualifying is the one spelling that is right on both, and it needs no CPP
 
 ## 2.1.7
 
