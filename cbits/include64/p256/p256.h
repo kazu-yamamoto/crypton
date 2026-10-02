@@ -83,16 +83,9 @@ void crypton_p256_modmul(
     const crypton_p256_int* b,
     crypton_p256_int* c);
 
-// b := 1 / a % MOD
+// b := 1 / a % MOD, in time that depends on a
 // MOD best be SECP256r1_n
-void crypton_p256_modinv(
-    const crypton_p256_int* MOD,
-    const crypton_p256_int* a,
-    crypton_p256_int* b);
-
-// b := 1 / a % MOD
-// MOD best be SECP256r1_n
-// Faster than crypton_p256_modinv()
+// Answers zero for an a that has no inverse, which is zero and MOD
 void crypton_p256_modinv_vartime(
     const crypton_p256_int* MOD,
     const crypton_p256_int* a,
@@ -130,13 +123,6 @@ int crypton_p256_add_d(const crypton_p256_int* a, crypton_p256_digit b, crypton_
 void crypton_p256_base_point_mul(const crypton_p256_int *n,
                          crypton_p256_int *out_x,
                          crypton_p256_int *out_y);
-
-// {out_x,out_y} := n{in_x,in_y}
-void crypton_p256_point_mul(const crypton_p256_int *n,
-                    const crypton_p256_int *in_x,
-                    const crypton_p256_int *in_y,
-                    crypton_p256_int *out_x,
-                    crypton_p256_int *out_y);
 
 // {out_x,out_y} := n1G + n2{in_x,in_y}
 void crypton_p256_points_mul_vartime(
