@@ -6,7 +6,14 @@
   hiding the name from `Prelude`.  `Prelude` gained `foldl'` in base 4.20,
   so the two spellings warn on opposite sides of GHC 9.10 -- hiding a name
   that is not there before it, and a redundant `Data.List` import after.
-  Qualifying is the one spelling that is right on both, and it needs no CPP
+  Qualifying is the one spelling that is right on both, and it needs no CPP.
+
+* chore: `visibility("hidden")` is asked for only where the object format
+  has it.  PE does not, so the gcc GHC 9.2 ships for Windows parsed the
+  attribute on `crypton_ia32cap_P`, discarded it and warned -- the one
+  warning crypton's own code produced anywhere in the CI matrix.  Nothing is
+  lost by dropping it there: a symbol leaves a PE image only if something
+  exports it, which is what hidden asks for elsewhere.
 
 ## 2.1.7
 
