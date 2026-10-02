@@ -36,9 +36,8 @@ import Data.Bits (
     (.&.),
     (.|.),
  )
-import Data.List (foldl')
+import qualified Data.List as L
 import Data.Word (Word32)
-import Prelude hiding (foldl')
 
 -- | Binary Polynomial represented by an integer
 type BinaryPolynomial = Integer
@@ -89,7 +88,7 @@ modF2m fx i
         | otherwise =
             fold
                 es
-                (foldl' (\acc e -> acc `xor` (hi `shiftL` e)) (n .&. mask) es)
+                (L.foldl' (\acc e -> acc `xor` (hi `shiftL` e)) (n .&. mask) es)
       where
         hi = n `shiftR` lfx
 {-# INLINE modF2m #-}
@@ -211,7 +210,7 @@ spreadTable = array32 256 [spread b | b <- [0 .. 255]]
   where
     spread :: Int -> Word32
     spread b =
-        foldl' (\acc i -> if testBit b i then setBit acc (2 * i) else acc) 0 [0 .. 7]
+        L.foldl' (\acc i -> if testBit b i then setBit acc (2 * i) else acc) 0 [0 .. 7]
 {-# NOINLINE spreadTable #-}
 
 {-# INLINE squareF2m' #-}

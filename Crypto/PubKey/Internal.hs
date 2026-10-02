@@ -12,8 +12,7 @@ module Crypto.PubKey.Internal (
 ) where
 
 import Data.Bits (shiftR)
-import Data.List (foldl')
-import Prelude hiding (foldl')
+import qualified Data.List as L
 
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArrayAccess)
@@ -22,7 +21,7 @@ import Crypto.Number.Serialize
 
 -- | This is a strict version of and
 and' :: [Bool] -> Bool
-and' l = foldl' (&&!) True l
+and' l = L.foldl' (&&!) True l
 
 -- | This is a strict version of &&.
 (&&!) :: Bool -> Bool -> Bool

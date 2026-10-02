@@ -1,5 +1,13 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* chore: eight modules take `foldl'` through a qualified import instead of
+  hiding the name from `Prelude`.  `Prelude` gained `foldl'` in base 4.20,
+  so the two spellings warn on opposite sides of GHC 9.10 -- hiding a name
+  that is not there before it, and a redundant `Data.List` import after.
+  Qualifying is the one spelling that is right on both, and it needs no CPP
+
 ## 2.1.7
 
 One fix: RSA-PSS verification was accepting a signature RFC 8017 says to

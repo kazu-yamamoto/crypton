@@ -49,9 +49,8 @@ import qualified Crypto.Internal.ByteArray as B
 import Crypto.MAC.HMAC
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.ByteArray.Mapping (fromW64BE)
-import Data.List (foldl')
+import qualified Data.List as L
 import Data.Word
-import Prelude hiding (foldl')
 
 -- | A one-time password which is a sequence of 4 to 9 digits.
 type OTP = Word32
@@ -150,7 +149,7 @@ resynchronize h d s k c (p1, extras)
     range = map (hotp h d k) [c .. c + fromIntegral s]
 
     -- the offset of the first match, accumulated without stopping there
-    (matched, offset) = foldl' pick (0, 0) (zip [0 ..] range)
+    (matched, offset) = L.foldl' pick (0, 0) (zip [0 ..] range)
     pick (!m, !off) (i, candidate) = (m .|. hit, off .|. (hit .&. i))
       where
         -- zero once something has matched, so only the first match counts
@@ -162,7 +161,7 @@ resynchronize h d s k c (p1, extras)
     -- the counters continue past the window, and wrap where the old
     -- 'checkExtraOtps' wrapped
     extrasMatched =
-        foldl' step (complement 0) (zip (iterate (+ 1) afterFirst) extras)
+        L.foldl' step (complement 0) (zip (iterate (+ 1) afterFirst) extras)
     step acc (ctr, p) = acc .&. eqMask (hotp h d k ctr) p
 
 -- | All ones when the two values are equal, zero otherwise, without branching
@@ -250,7 +249,7 @@ totpVerify (TP h t0 x d skew) k now otp = matched /= 0
     -- every candidate is compared, and none of the comparisons stops early, so
     -- neither which step matched nor how far a mismatch got is visible in how
     -- long this takes
-    matched = foldl' step 0 (map (hotp h d k) (range window []))
+    matched = L.foldl' step 0 (map (hotp h d k) (range window []))
     step acc candidate = acc .|. eqMask candidate otp
 
 timeToCounter :: Word64 -> Word64 -> Word16 -> Word64
