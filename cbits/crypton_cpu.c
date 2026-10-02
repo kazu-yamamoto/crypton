@@ -32,6 +32,23 @@
 #include <stdint.h>
 
 /*
+ * PE has no way to say "hidden": every symbol in an object is local to the
+ * image unless something exports it, which is what hidden asks for
+ * elsewhere, so nothing is lost by dropping the attribute here.  Saying it
+ * anyway is not harmless -- the gcc that GHC 9.2 ships for Windows parses
+ * the attribute, discards it and warns, and it is the only warning crypton's
+ * own code produces anywhere in the CI matrix.  Measured on mingw gcc 13.2.0
+ * and clang 14.0.6 (the compiler GHC 9.4 and later ship): gcc warns for
+ * "hidden" and is silent for "default", clang is silent for both, which is
+ * why the vendored decaf and argon2 headers ask for "default" unnoticed.
+ */
+#if defined(_WIN32) || defined(__CYGWIN__)
+#define CRYPTON_HIDDEN
+#else
+#define CRYPTON_HIDDEN __attribute__((visibility("hidden")))
+#endif
+
+/*
  * The word the assembly reads; crypton_cpu.h says what is in it.  Hidden,
  * so that the reference to it from the assembly resolves at link time in a
  * shared object as well as a static one.  The SHA-256 bit is set by
@@ -39,7 +56,7 @@
  * instructions.
  */
 #ifdef CRYPTON_ARM_ASM
-__attribute__((visibility("hidden"))) unsigned int crypton_armcap_P =
+CRYPTON_HIDDEN unsigned int crypton_armcap_P =
     CRYPTON_ARMCAP_NEON;
 #endif
 
@@ -101,7 +118,7 @@ static uint64_t xcr0(void)
 }
 
 #ifdef CRYPTON_X86_ASM
-__attribute__((visibility("hidden"))) unsigned int crypton_ia32cap_P[4];
+CRYPTON_HIDDEN unsigned int crypton_ia32cap_P[4];
 
 /*
  * The AVX-512 bits of leaf 7 EBX -- F, DQ, IFMA, PF, ER, CD, BW and VL,
