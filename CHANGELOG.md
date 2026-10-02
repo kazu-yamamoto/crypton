@@ -1,6 +1,12 @@
 # CHANGELOG for crypton
 
-## Unreleased
+## 2.1.7
+
+One fix: RSA-PSS verification was accepting a signature RFC 8017 says to
+refuse.  It is a conformance fault rather than a forgery -- producing such a
+signature takes the private key, since it is the signer who chooses the
+encoding, and a third party holding a valid signature cannot turn it into
+one of these.
 
 * fix(pss): RSA-PSS verification refuses an encoding with a bit set outside
   `emBits`, as RFC 8017 9.1.2 step 6 requires.  Step 9 clears those bits in

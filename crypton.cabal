@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               crypton
-version:            2.1.6
+version:            2.1.7
 -- crypton's own code is BSD-3-Clause.  The parts of
 -- cbits/aes/gcm_fused_x86.c that follow picotls's fusion are MIT, and the
 -- vendored s2n-bignum assembly in cbits/s2n is taken under ISC; each has
