@@ -1,5 +1,17 @@
 # CHANGELOG for crypton
 
+## Unreleased
+
+* fix(pss): RSA-PSS verification refuses an encoding with a bit set outside
+  `emBits`, as RFC 8017 9.1.2 step 6 requires.  Step 9 clears those bits in
+  DB and crypton did that; clearing is not checking, so an encoding the
+  standard calls inconsistent verified as though it were sound -- the bit
+  that made it wrong was thrown away before anything looked at it.  Only the
+  signer can produce such a signature, since it takes the private key to
+  sign a chosen encoding, so this is conformance rather than forgery.  Found
+  with tlsfuzzer, in the `xor 0x80 at 0` case of
+  `test-tls13-certificate-verify.py`, while testing hs-tls
+
 ## 2.1.6
 
 Two things a caller could walk into, the licence field saying what the tree

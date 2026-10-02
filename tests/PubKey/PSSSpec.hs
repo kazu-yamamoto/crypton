@@ -2,9 +2,14 @@
 
 module PubKey.PSSSpec (spec) where
 
+import Crypto.Number.Basic (numBits)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import Crypto.PubKey.RSA
+import Crypto.PubKey.RSA.Prim (dp, ep)
 import qualified Crypto.PubKey.RSA.PSS as PSS
+import qualified Data.ByteString as B
+import qualified Data.Bits as Bits
+import Data.Word (Word8)
 
 import Imports
 
@@ -494,10 +499,61 @@ signatureRangeTests =
             , os2ip sg + modulus < 2 ^ (8 * k)
             ]
 
+-- | RFC 8017 9.1.2 step 6: the leftmost @8*emLen - emBits@ bits of the
+-- leftmost octet of maskedDB have to be zero.  Step 9 clears them in DB,
+-- and clearing is not checking -- an encoding with one of them set used to
+-- verify as though it were sound, because the bit that made it wrong was
+-- thrown away before anything looked at it.
+--
+-- Only the signer can produce such a thing, since it takes the private key
+-- to sign a chosen encoding, so this is conformance rather than forgery.
+-- The vectors are walked for one whose altered encoding stays below the
+-- modulus, as the signature range tests above do, because an encoding at or
+-- past it says nothing.
+step6Tests :: Spec
+step6Tests = describe "an encoding with a bit outside emBits set" $ do
+    it "the honest signature verifies, key 1024" $
+        verifies rsaKey1 (fst (altered rsaKey1 vectorsKey1)) `shouldBe` True
+    it "and the altered one does not, key 1024" $
+        verifies rsaKey1 (snd (altered rsaKey1 vectorsKey1)) `shouldBe` False
+    it "the honest signature verifies, key 1026" $
+        verifies rsaKey3 (fst (altered rsaKey3 vectorsKey3)) `shouldBe` True
+    it "and the altered one does not, key 1026" $
+        verifies rsaKey3 (snd (altered rsaKey3 vectorsKey3)) `shouldBe` False
+    it "key 1025 has no bits outside emBits to set" $
+        forbidden (numBits (public_n (private_pub rsaKey2))) `shouldBe` 0
+  where
+    verifies key (v, sg) =
+        PSS.verify PSS.defaultPSSParamsSHA1 (private_pub key) (message v) sg
+
+    -- the bits of the leftmost octet the standard requires to be zero
+    forbidden bits = Bits.complement mask
+      where
+        mask = if sh > 0 then 0xff `Bits.shiftR` (8 - sh) else 0xff :: Word8
+        sh = (bits - 1) Bits..&. 0x7
+
+    -- the first vector whose encoding, with a forbidden bit set, is still
+    -- below the modulus, paired as (honest, altered)
+    altered key vs = firstVector
+        [ ((v, signature v), (v, dp Nothing key em'))
+        | v <- vs
+        , let pub = private_pub key
+              em = ep pub (signature v)
+              bit = lowestSet (forbidden (numBits (public_n pub)))
+              em' = B.cons (B.head em Bits..|. bit) (B.tail em)
+        , B.head em Bits..&. forbidden (numBits (public_n pub)) == 0
+        , os2ip em' < public_n pub
+        ]
+
+    -- the forbidden bit worth setting is the lowest of them: it is the one
+    -- that adds least, and an encoding at or past the modulus proves nothing
+    lowestSet w = minimum ([2 ^ i | i <- [0 .. 7 :: Int], Bits.testBit w i])
+
 spec :: Spec
 spec =
     describe "RSA-PSS" $ do
         signatureRangeTests
+        step6Tests
         describe "signature internal" $ do
             doSignTest rsaKeyInt katZero vectorInt
         describe "verify internal" $ do

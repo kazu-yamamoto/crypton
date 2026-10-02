@@ -28,7 +28,7 @@ import Crypto.PubKey.RSA (generateBlinder)
 import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
-import Data.Bits (shiftR, xor, (.&.))
+import Data.Bits (complement, shiftR, xor, (.&.))
 import Data.Word
 
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
@@ -233,6 +233,7 @@ verifyDigest params pk digest s
     | B.length s /= k = False
     | os2ip s >= public_n pk = False
     | B.any (/= 0) pre = False
+    | B.any (\x -> x .&. topBits /= 0) (B.take 1 maskedDB) = False
     | B.last em /= pssTrailerField params = False
     | B.any (/= 0) ps0 = False
     | b1 /= B.singleton 1 = False
@@ -246,6 +247,13 @@ verifyDigest params pk digest s
     emLen = if emTruncate pubBits then k - 1 else k
     dbLen = emLen - hashLen - 1
     pubBits = numBits (public_n pk)
+    -- RFC 8017 9.1.2 step 6: the leftmost 8*emLen - emBits bits of the
+    -- leftmost octet of maskedDB have to be zero already.  Step 9 clears
+    -- them in DB, which is what normalizeToKeySize does below, and clearing
+    -- is not checking: without this an encoding with the top bit set -- one
+    -- the standard calls inconsistent -- verifies as though it were sound,
+    -- because the bit that made it wrong is thrown away before it is read.
+    topBits = complement (normalizeMask pubBits)
     -- unmarshall fields
     (pre, em) = B.splitAt (k - emLen) (ep pk s) -- drop 0..1 byte
     maskedDB = B.take dbLen em
@@ -263,7 +271,12 @@ emTruncate bits = ((bits - 1) .&. 0x7) == 0
 
 normalizeToKeySize :: Int -> [Word8] -> [Word8]
 normalizeToKeySize _ [] = [] -- very unlikely
-normalizeToKeySize bits (x : xs) = x .&. mask : xs
+normalizeToKeySize bits (x : xs) = x .&. normalizeMask bits : xs
+
+-- | The bits of the leftmost octet that belong to the encoding: the low
+-- @emBits `mod` 8@ of them, or all eight when that is zero.  Its complement
+-- is the bits RFC 8017 requires to be zero.
+normalizeMask :: Int -> Word8
+normalizeMask bits = if sh > 0 then 0xff `shiftR` (8 - sh) else 0xff
   where
-    mask = if sh > 0 then 0xff `shiftR` (8 - sh) else 0xff
     sh = (bits - 1) .&. 0x7
