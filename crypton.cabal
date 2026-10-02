@@ -15,6 +15,8 @@ license-files:
     cbits/aes/LICENSE.fusion
     cbits/asm/LICENSE.cryptogams
     cbits/s2n/LICENSE
+    cbits/mlkem/LICENSE
+    cbits/mldsa/LICENSE
 copyright:
     2006-2022 Vincent Hanquez <vincent@snarc.org> and contributors,
     2023-2026 Kazu Yamamoto <kazu@iij.ad.jp>
@@ -62,6 +64,60 @@ extra-source-files:
     cbits/blake2/ref/*.h
     cbits/blake2/sse/*.h
     cbits/crypton_hash_prefix.c
+    cbits/mlkem/*.h
+    cbits/mlkem/COMMIT
+    cbits/mlkem/README.md
+    cbits/mlkem/import.sh
+    cbits/mlkem/mlkem_native.c
+    cbits/mlkem/mlkem_native_asm.S
+    cbits/mlkem/src/*.c
+    cbits/mlkem/src/*.h
+    cbits/mlkem/src/*.inc
+    cbits/mlkem/src/fips202/*.c
+    cbits/mlkem/src/fips202/*.h
+    cbits/mlkem/src/fips202/native/*.h
+    cbits/mlkem/src/fips202/native/aarch64/*.h
+    cbits/mlkem/src/fips202/native/aarch64/src/*.S
+    cbits/mlkem/src/fips202/native/aarch64/src/*.h
+    cbits/mlkem/src/fips202/native/x86_64/*.h
+    cbits/mlkem/src/fips202/native/x86_64/src/*.S
+    cbits/mlkem/src/fips202/native/x86_64/src/*.h
+    cbits/mlkem/src/native/*.h
+    cbits/mlkem/src/native/aarch64/*.h
+    cbits/mlkem/src/native/aarch64/src/*.S
+    cbits/mlkem/src/native/aarch64/src/*.c
+    cbits/mlkem/src/native/aarch64/src/*.h
+    cbits/mlkem/src/native/x86_64/*.h
+    cbits/mlkem/src/native/x86_64/src/*.S
+    cbits/mlkem/src/native/x86_64/src/*.c
+    cbits/mlkem/src/native/x86_64/src/*.h
+    cbits/mldsa/*.h
+    cbits/mldsa/COMMIT
+    cbits/mldsa/README.md
+    cbits/mldsa/import.sh
+    cbits/mldsa/mldsa_native.c
+    cbits/mldsa/mldsa_native_asm.S
+    cbits/mldsa/src/*.c
+    cbits/mldsa/src/*.h
+    cbits/mldsa/src/*.inc
+    cbits/mldsa/src/fips202/*.c
+    cbits/mldsa/src/fips202/*.h
+    cbits/mldsa/src/fips202/native/*.h
+    cbits/mldsa/src/fips202/native/aarch64/*.h
+    cbits/mldsa/src/fips202/native/aarch64/src/*.S
+    cbits/mldsa/src/fips202/native/aarch64/src/*.h
+    cbits/mldsa/src/fips202/native/x86_64/*.h
+    cbits/mldsa/src/fips202/native/x86_64/src/*.S
+    cbits/mldsa/src/fips202/native/x86_64/src/*.h
+    cbits/mldsa/src/native/*.h
+    cbits/mldsa/src/native/aarch64/*.h
+    cbits/mldsa/src/native/aarch64/src/*.S
+    cbits/mldsa/src/native/aarch64/src/*.c
+    cbits/mldsa/src/native/aarch64/src/*.h
+    cbits/mldsa/src/native/x86_64/*.h
+    cbits/mldsa/src/native/x86_64/src/*.S
+    cbits/mldsa/src/native/x86_64/src/*.c
+    cbits/mldsa/src/native/x86_64/src/*.h
     cbits/decaf/ed448goldilocks/decaf.c
     cbits/decaf/ed448goldilocks/decaf_tables.c
     cbits/decaf/include/*.h
@@ -617,6 +673,44 @@ library
                 cbits/s2n/x86_att/p384_montjscalarmul_alt.S
                 cbits/s2n/x86_att/p521_jscalarmul.S
                 cbits/s2n/x86_att/p521_jscalarmul_alt.S
+
+    -- The PQ Code Package's mlkem-native and mldsa-native, vendored under
+    -- cbits/mlkem and cbits/mldsa.  Apache-2.0 OR ISC OR MIT, the same
+    -- three-way form as s2n-bignum above, and by the same authors, so
+    -- crypton takes them on the same terms.  The portable C is built
+    -- everywhere; the hand-written backends are added below where the
+    -- architecture has them.
+    --
+    -- Each wrapper includes its amalgamation once per parameter set, which
+    -- is how one build offers all three.  See cbits/mlkem/crypton_mlkem.c.
+    c-sources:
+        cbits/mlkem/crypton_mlkem.c
+        cbits/mldsa/crypton_mldsa.c
+    include-dirs:
+        cbits/mlkem
+        cbits/mldsa
+
+    -- Windows is left out of the backends for the reason s2n-bignum is:
+    -- the x86-64 assembly is written for the SysV ABI -- upstream guards
+    -- its own backend header on that -- and the AArch64 files carry ELF and
+    -- Mach-O directives and nothing for COFF.  Windows gets the portable C,
+    -- which is the same code every other architecture gets.
+    if ((arch(x86_64) || arch(aarch64)) && !os(windows))
+        cc-options:
+            -DCRYPTON_MLKEM_NATIVE_BACKEND -DCRYPTON_MLDSA_NATIVE_BACKEND
+        asm-options:
+            -DCRYPTON_MLKEM_NATIVE_BACKEND -DCRYPTON_MLDSA_NATIVE_BACKEND
+        asm-sources:
+            cbits/mlkem/crypton_mlkem_asm.S
+            cbits/mldsa/crypton_mldsa_asm.S
+
+        -- What the two packages' own build systems pass for the x86-64
+        -- backend; without them the AVX2 sources do not assemble.  AArch64
+        -- needs nothing beyond the baseline for the arithmetic, and takes
+        -- the armv8.4 Keccak from the -march the block below already sets.
+        if arch(x86_64)
+            cc-options:  -mavx2 -mbmi2
+            asm-options: -mavx2 -mbmi2
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
         cpp-options:   -DSUPPORT_RDRAND
