@@ -64,12 +64,13 @@ extra-source-files:
     cbits/blake2/ref/*.h
     cbits/blake2/sse/*.h
     cbits/crypton_hash_prefix.c
+    cbits/mlkem/*.S
+    cbits/mlkem/*.c
     cbits/mlkem/*.h
+    cbits/mlkem/*.md
+    cbits/mlkem/*.sh
     cbits/mlkem/COMMIT
-    cbits/mlkem/README.md
-    cbits/mlkem/import.sh
-    cbits/mlkem/mlkem_native.c
-    cbits/mlkem/mlkem_native_asm.S
+    cbits/mlkem/LICENSE
     cbits/mlkem/src/*.c
     cbits/mlkem/src/*.h
     cbits/mlkem/src/*.inc
@@ -78,25 +79,30 @@ extra-source-files:
     cbits/mlkem/src/fips202/native/*.h
     cbits/mlkem/src/fips202/native/aarch64/*.h
     cbits/mlkem/src/fips202/native/aarch64/src/*.S
+    cbits/mlkem/src/fips202/native/aarch64/src/*.c
     cbits/mlkem/src/fips202/native/aarch64/src/*.h
     cbits/mlkem/src/fips202/native/x86_64/*.h
     cbits/mlkem/src/fips202/native/x86_64/src/*.S
+    cbits/mlkem/src/fips202/native/x86_64/src/*.c
     cbits/mlkem/src/fips202/native/x86_64/src/*.h
     cbits/mlkem/src/native/*.h
     cbits/mlkem/src/native/aarch64/*.h
+    cbits/mlkem/src/native/aarch64/*.md
     cbits/mlkem/src/native/aarch64/src/*.S
     cbits/mlkem/src/native/aarch64/src/*.c
     cbits/mlkem/src/native/aarch64/src/*.h
     cbits/mlkem/src/native/x86_64/*.h
+    cbits/mlkem/src/native/x86_64/*.md
     cbits/mlkem/src/native/x86_64/src/*.S
     cbits/mlkem/src/native/x86_64/src/*.c
     cbits/mlkem/src/native/x86_64/src/*.h
+    cbits/mldsa/*.S
+    cbits/mldsa/*.c
     cbits/mldsa/*.h
+    cbits/mldsa/*.md
+    cbits/mldsa/*.sh
     cbits/mldsa/COMMIT
-    cbits/mldsa/README.md
-    cbits/mldsa/import.sh
-    cbits/mldsa/mldsa_native.c
-    cbits/mldsa/mldsa_native_asm.S
+    cbits/mldsa/LICENSE
     cbits/mldsa/src/*.c
     cbits/mldsa/src/*.h
     cbits/mldsa/src/*.inc
@@ -105,9 +111,11 @@ extra-source-files:
     cbits/mldsa/src/fips202/native/*.h
     cbits/mldsa/src/fips202/native/aarch64/*.h
     cbits/mldsa/src/fips202/native/aarch64/src/*.S
+    cbits/mldsa/src/fips202/native/aarch64/src/*.c
     cbits/mldsa/src/fips202/native/aarch64/src/*.h
     cbits/mldsa/src/fips202/native/x86_64/*.h
     cbits/mldsa/src/fips202/native/x86_64/src/*.S
+    cbits/mldsa/src/fips202/native/x86_64/src/*.c
     cbits/mldsa/src/fips202/native/x86_64/src/*.h
     cbits/mldsa/src/native/*.h
     cbits/mldsa/src/native/aarch64/*.h
