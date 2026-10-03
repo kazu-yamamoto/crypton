@@ -2,1754 +2,474 @@
 
 ## Unreleased
 
-* chore: eight modules take `foldl'` through a qualified import instead of
-  hiding the name from `Prelude`.  `Prelude` gained `foldl'` in base 4.20,
-  so the two spellings warn on opposite sides of GHC 9.10 -- hiding a name
-  that is not there before it, and a redundant `Data.List` import after.
-  Qualifying is the one spelling that is right on both, and it needs no CPP.
-
-* chore: `visibility("hidden")` is asked for only where the object format
-  has it.  PE does not, so the gcc GHC 9.2 ships for Windows parsed the
-  attribute on `crypton_ia32cap_P`, discarded it and warned -- the one
-  warning crypton's own code produced anywhere in the CI matrix.  Nothing is
-  lost by dropping it there: a symbol leaves a PE image only if something
-  exports it, which is what hidden asks for elsewhere.
+* chore: stop hiding foldl' from Prelude
+  [#294](https://github.com/kazu-yamamoto/crypton/pull/294)
+* chore: ask for hidden visibility only where the format has it
+  [#295](https://github.com/kazu-yamamoto/crypton/pull/295)
 
 ## 2.1.7
 
-One fix: RSA-PSS verification was accepting a signature RFC 8017 says to
-refuse.  It is a conformance fault rather than a forgery -- producing such a
-signature takes the private key, since it is the signer who chooses the
-encoding, and a third party holding a valid signature cannot turn it into
-one of these.
+RSA-PSS verification was accepting an encoding RFC 8017 says to refuse.  It
+is a conformance fault rather than a forgery: producing such a signature takes
+the private key, so a third party holding a valid signature cannot turn it
+into one of these.
 
-* fix(pss): RSA-PSS verification refuses an encoding with a bit set outside
-  `emBits`, as RFC 8017 9.1.2 step 6 requires.  Step 9 clears those bits in
-  DB and crypton did that; clearing is not checking, so an encoding the
-  standard calls inconsistent verified as though it were sound -- the bit
-  that made it wrong was thrown away before anything looked at it.  Only the
-  signer can produce such a signature, since it takes the private key to
-  sign a chosen encoding, so this is conformance rather than forgery.  Found
-  with tlsfuzzer, in the `xor 0x80 at 0` case of
-  `test-tls13-certificate-verify.py`, while testing hs-tls
+* chore(p256): drop two declarations nothing defines
+  [#292](https://github.com/kazu-yamamoto/crypton/pull/292)
+* fix(pss): refuse an encoding with a bit set outside emBits
+  [#293](https://github.com/kazu-yamamoto/crypton/pull/293)
 
 ## 2.1.6
 
-Two things a caller could walk into, the licence field saying what the tree
-actually holds, and the C building without a warning.
+The `license:` field now says what the tree holds -- `BSD-3-Clause AND MIT
+AND ISC` -- and `license-files:` lists all five texts.  **Nothing is required
+of a user that was not required before**; the field was simply incomplete.
 
-* fix(pbkdf2): an output length of zero no longer takes the process down.
-  `tryFastPBKDF2_*` passed it through to C, where `assert(out && nout)`
-  aborted -- crypton's C is built without `NDEBUG`, so its assertions are
-  live in a release.  `Crypto.KDF.PBKDF2.tryGenerate` has always answered
-  with an empty result for the same request, and the fast paths now agree
-* fix(p256): `Crypto.PubKey.ECC.P256.scalarInv` returns on a zero scalar
-  rather than looping for ever.  `scalarFromBinary` accepts any 256 bits, so
-  a zero scalar is easy to come by, and the binary extended Euclid behind
-  `scalarInv` has no exit for it: zero stays even and is halved for ever.
-  A hang inside a foreign call is not interruptible, so `System.Timeout` was
-  no help either.  It now answers zero, which is what the function already
-  answered for the other input with no inverse, and what `scalarInvSafe`
-  answers for both.  crypton's own ECDSA was never exposed: it rejects a
-  zero scalar before inverting, and uses `scalarInvSafe`
-* doc(cabal): the `license:` field says what the tree holds --
-  `BSD-3-Clause AND MIT AND ISC` -- and `license-files:` lists the five
-  licence texts, where a tool looking for licences will find them.  The
-  parts of `cbits/aes/gcm_fused_x86.c` that follow picotls's `fusion` now
-  carry its MIT notice beside the file.  **Nothing is required of a user
-  that was not required before**: crypton's own code is BSD-3-Clause as it
-  always was, and the MIT and ISC code was already in the tree -- the field
-  was silent about it.  Raised by Joey Hess in #232, and settled with the
-  help of Kazuho Oku, who divided `fusion` between what derives from
-  OpenSSL and what does not, and rewrote the former upstream
-* fix(c): the sanitizer build is quiet again.  `crypton_sha256_finalize` and
-  `crypton_sha512_finalize` say that their pointers are never null, which
-  they never were.  gcc's `-Wstringop-overflow` had been reporting them as
-  writing "into a region of size 0" at "address zero" under
-  `-fsanitize=undefined`: UndefinedBehaviorSanitizer inserts a null check
-  before `memcpy`, because glibc declares `memcpy` nonnull, and the check
-  puts a null path in front of the warning pass.  Stating the contract
-  removes the path rather than the warning, and costs nothing -- compiled as
-  the package compiles it, the assembly is identical either way
-* fix(pbkdf2): an instantiation whose digest is larger than its block is
-  refused where it is written rather than after it has overflowed.  The
-  macro that builds the three PBKDF2 variants shortens a long key by hashing
-  it into a buffer the size of the block, and asserted afterwards that the
-  result fitted -- afterwards being too late, since the write has already
-  happened.  The check is a compile-time one now.  The three that exist are
-  unaffected: SHA-1, SHA-256 and SHA-512 have digests of 20, 32 and 64 bytes
-  against blocks of 64, 64 and 128
+* Carry the MIT notice for the parts that follow fusion, and say what the tree holds
+  [#267](https://github.com/kazu-yamamoto/crypton/pull/267)
+* fix: two preconditions the Haskell layer did not enforce
+  [#288](https://github.com/kazu-yamamoto/crypton/pull/288)
+* fix(x86): stop casting a packed block to __m128i *
+  [#289](https://github.com/kazu-yamamoto/crypton/pull/289)
+* fix(c): say that the digest pointers are never null
+  [#290](https://github.com/kazu-yamamoto/crypton/pull/290)
+* fix(pbkdf2): refuse a digest larger than its block at compile time
+  [#291](https://github.com/kazu-yamamoto/crypton/pull/291)
 
 ## 2.1.5
 
-crypton 2.1.3 and 2.1.4 cannot be built with GCC 14 or newer; it was
-reported from a Fedora 43 system, which ships GCC 15.  This release is that
-fix, and two things that came with it.
+2.1.3 and 2.1.4 cannot be built with GCC 14 or newer.  This release is
+that fix.
 
-* fix(x86): the C builds with GCC 14 and newer again.
-  `crypton_sha1_x86_do_chunk` was declared taking `const uint32_t buf[16]`
-  while every caller passes a `const uint8_t *`, and GCC 14 made
-  `-Wincompatible-pointer-types` an error by default where GCC 13 only warns.
-  The declaration now says `const uint8_t buf[64]`, which is the block size
-  SHA-1 actually takes and what the two sibling functions already said.
-  Reported as #282 and fixed in #284, both by @tbidne, who bisected it to
-  the commit that introduced the declaration.  CI now builds the C with
-  gcc-14 as well, so the next one of these is caught before release
-* perf(armv8): AES-GCM is about a quarter faster on AArch64, which puts it
-  ahead of OpenSSL 4.0.3 rather than behind it -- 1.15 at AES-128 and 1.06
-  at AES-256 on an Apple M4, from 0.86.  The GHASH no longer keeps H the way
-  GCM writes it; it is twisted once at key setup so that GCM's bit
-  reflection is already undone, which turns a reduction of some twenty-five
-  shifts and XORs into two PMULL and six EOR, and makes Karatsuba worth
-  taking -- three multiplications a block rather than four.  Against the
-  previous code over 16 KiB messages: 1.34 at AES-128 and 1.23 at AES-256 on
-  an M4, and 1.25 across the three key sizes on a Neoverse N2.  The scheme
-  is ARM's, from the BSD-3-Clause part of
-  https://github.com/ARM-software/AArch64cryptolib
-* test(armv8): the constant-time harness runs on AArch64, where it never had.
-  It was pinned to one x86-64 job, so the AArch64 AES and GHASH had never
-  been put to it; they are now, and they let no secret decide a branch or an
-  address.  Running it somewhere new also found a fault in the harness
-  itself: it counted the frame `--track-origins` prints to say where a value
-  came from as a place that branched on a secret, which invented a finding
-  rather than hiding one
+* Watch for a primitive fallen off its fast path
+  [#277](https://github.com/kazu-yamamoto/crypton/pull/277)
+* The performance tables for 2.1.4
+  [#278](https://github.com/kazu-yamamoto/crypton/pull/278)
+* The x86-64 table, on the machine the README names
+  [#279](https://github.com/kazu-yamamoto/crypton/pull/279)
+* perf(armv8): GHASH against a twisted H, a quarter faster
+  [#281](https://github.com/kazu-yamamoto/crypton/pull/281)
+* ct: run the constant-time harness on AArch64, and put its AES to it
+  [#283](https://github.com/kazu-yamamoto/crypton/pull/283)
+* Fix crypton_sha1_x86_do_chunk signature
+  [#284](https://github.com/kazu-yamamoto/crypton/pull/284)
+* ci: build the C with a compiler stricter than this matrix has
+  [#285](https://github.com/kazu-yamamoto/crypton/pull/285)
 
 ## 2.1.4
 
-2.1.3 could not be built from Hackage at all in the default configuration,
-and is deprecated there.  This release is that fix and three more.
+2.1.3 could not be built from Hackage in the default configuration, and is
+deprecated there.  This release is that fix.
 
-* fix(cabal): the source distribution carries `cbits/p256/p256_verify.h`.
-  No field named it, so it was absent from the 2.1.3 tarball, and
-  `cbits/p256/p256_ec.c` includes it whenever `support_s2n_bignum` is on --
-  which is every x86-64 and aarch64 machine that leaves the flag alone.  The
-  package built perfectly from a git checkout and not at all from Hackage.
-  Reported as #270 by Laurent P. Rene de Cotret on the day 2.1.3 went out,
-  fixed by gev in #271
-* fix(armv8): the C builds with gcc before 13 again.  A function that uses an
-  AArch64 extension says so with `__attribute__((target(...)))`, and the
-  spelling used -- `target("+sha3")` -- is one clang has always taken and gcc
-  learned in 13.  Before that the extension never reaches the function and an
-  `always_inline` intrinsic that needs it cannot be inlined, which stops the
-  build rather than slowing it.  Naming the architecture beside the extension
-  is understood by both compilers at every version, so gcc is given that
-  spelling.  Reported as #273 by gev, against 2.1.1, 2.1.2 and 2.1.3
-* fix(sha256): SHA-256 on AArch64 is no longer five times slower than it was
-  in 2.1.2 -- 644 MB/s against 3396 over 16 KiB on an Apple M4.  The
-  CRYPTOGAMS assembly picks its path from `crypton_armcap_P` rather than from
-  a flag in the C, and the bit was set only while that flag was still
-  unresolved; 2.1.3 added a constructor that resolves it before anything
-  runs, so the bit was never set and the assembly took its generic path on
-  every processor.  SHA-1 was unaffected, its constructor setting the
-  corresponding bit itself, and the SHA-512 assembly is x86 only.  No test
-  could have caught this: the answers were right all along, only slow
-* test(ci): three jobs for the three ways the above went unnoticed.  One
-  builds the source distribution and then builds the library from it
-  somewhere other than the checkout, since nothing had ever built a tarball
-  and listing one is not building it.  One installs gcc-12 and builds the C
-  with it, the runner's own gcc being 13, which is why a report covering
-  three releases never reproduced here.  Both are verified against the bug
-  they exist for: each was red before its fix and green after
-
-# CHANGELOG for crypton
+* Add p256 header files to cabal extra-source-files
+  [#271](https://github.com/kazu-yamamoto/crypton/pull/271)
+* Build what is published, not only what is checked out
+  [#272](https://github.com/kazu-yamamoto/crypton/pull/272)
+* SHA-256 on AArch64 is 5.4x slower in 2.1.3 than in 2.1.2
+  [#274](https://github.com/kazu-yamamoto/crypton/pull/274)
+* The target attribute spelling gcc before 13 understands
+  [#276](https://github.com/kazu-yamamoto/crypton/pull/276)
 
 ## 2.1.3
 
-* fix(number): the arithmetic crypton falls back to when it is built without
-  GMP no longer walks off the end of a buffer.  `fillPtr` writes a number out
-  starting at its last byte and stops at offset zero, so a number of no bytes
-  -- which is what zero is -- started it at minus one, and it never stopped.
-  The same build also had `exponentiation` fail to terminate on a negative
-  exponent, stepping between -1 and -2 until the stack ran out, where
-  `expFast` and `expSafe` both reach it; `numBits` fail to terminate on a
-  negative number; `numBits 0` answer one where GMP answers zero, so that
-  `numBytes 0` claimed a byte that is not there; and a modulus of one answer
-  one rather than zero in two places.  Every corner is now held to what the
-  GMP build answers on the same input, and `-integer-gmp` has a CI job so
-  that it stays that way
-* fix(cabal): `-fsupport_sse` no longer selects the SSE BLAKE2 and Argon2
-  sources on architectures that have no SSE, where they cannot compile, and
-  `-fold_toolchain_inliner` links again -- one of the sixteen inline
-  definitions in `cbits/decaf/include/word.h` had lost its `static`, which
-  `-fgnu89-inline` turns into a duplicate symbol.  Both flags now have a CI
-  job
-* fix(p256): `crypton_p256_shl` and `crypton_p256_shr` no longer shift a
-  digit by its own width, which the standard leaves undefined and which x86
-  and ARM answer differently.  Nothing in the library calls either, which is
-  why the sanitizers had not reported them: they can only report what runs
-* fix(headers): `crypton_skein256.h` and `crypton_skein512.h` declared six
-  functions under a misspelling of the package's own name, so the six the C
-  defines had no prototype at all.  `crypton_chacha.h` and `crypton_salsa.h`
-  each typedef'd a union to the bare name `block`, so no translation unit
-  could include both; they are `crypton_chacha_block` and
-  `crypton_salsa_block` now
-* security(c): seven places that erase key material and then let the memory
-  die -- five that `memset` a buffer and `free` it on the next line, two that
-  clear a recoded scalar in a local going out of scope -- now write through a
-  volatile pointer, which a compiler may not remove.  clang at -O2 was
-  keeping all seven, but that is its choice rather than a guarantee.  RSA-2048
-  signing is unchanged at 1479.3 microseconds against 1480.0 on an Apple M4
-* perf(ed448): the scalar arithmetic on Apple Silicon runs on 64-bit limbs
-  rather than 32-bit ones.  decaf sized its field limbs from the architecture
-  and its scalar limbs from a macro it worked out from the compiler, and the
-  two disagreed wherever `uint_fast32_t` is four bytes, so the same aarch64
-  CPU took 64-bit field limbs and 32-bit scalar limbs on macOS and 64-bit for
-  both on Linux.  Ed448 signing is 5.5% quicker for it, 20.69 to 19.56
-  microseconds on an M4
-* perf(p256): the one addition in each scalar multiplication that can be a
-  point added to itself goes through a complete formula rather than being
-  detected and worked around.  Kyle Butt pointed out that the comb's table is
-  affine, so the same three numbers are the point in projective coordinates
-  and in Jacobian ones, which is what lets a comb built on Jacobian
-  arithmetic step into the formula for one addition.  It costs about a third
-  of a percent, and buys an argument a reader had to follow becoming a
-  comparison a machine can run
-* doc(hash): the Haddock for `Context` says that it is not erased when it
-  is finished with, what survives in it, and why scrubbing every one is not
-  done -- it costs about 70% of a 32-byte hash, where the allocation is most
-  of the work
-* test(c): the C is now checked in CI for things the test suite cannot ask
-  about: whether it is the same on a 32-bit machine and on a big-endian one,
-  whether a private key ever decides a branch or an address, what a secret
-  leaves behind in memory, and whether anything breaks on generated input.
-  Each of the last four carries a probe that is deliberately wrong and has to
-  be reported, because a check that has quietly stopped working otherwise
-  reads as a clean bill of health -- which, four times over the course of
-  this work, is exactly what it did
-
-* doc(cabal): every dependency has an upper bound, which `cabal check` had
-  been asking for, and `bytestring` is no longer listed twice in the same
-  `build-depends`
-
-* fix(c): the table that says which AES implementation to call is filled in
-  once, before there is a second thread, rather than on every
-  `crypton_aes_initkey`.  Two threads taking a key at the same time were
-  writing the whole table at the same time, which ThreadSanitizer reports
-  forty-four times over for eight threads doing nothing else.  The same for
-  the flags that say whether to use the ARMv8 SHA-1, SHA-256 and SHA-512
-  instructions.  Nothing has ever come of it -- the values written are the
-  same ones every time and the table starts out holding valid generic
-  implementations -- but it is a race the standard gives no meaning to.
-  Taking an AES key is 6.7% quicker for not doing the work again: 72.1 to
-  67.3 nanoseconds on an Apple M4
-* fix(c): the C no longer reads a word off a caller's pointer by casting it,
-  which the standard leaves undefined at an address the word type is not
-  aligned for and which UndefinedBehaviorSanitizer reported on seventy-eight
-  lines.  `crypton_align.h`'s accessors go through `memcpy`, the ten hash
-  implementations read their block a word at a time rather than pointing at
-  it as though it were an array of words, and `block128` is packed so that a
-  caller's pointer may be one.  The non-aligned trampolines those hashes kept
-  for the case are gone with it.  Measured on an Apple M4, every hash and
-  AES-GCM is where it was, within a tenth of a per cent.  The sanitizers now
-  run in CI with nothing turned off
-* fix(c): two left shifts the C standard leaves undefined, found by building
-  the C with UndefinedBehaviorSanitizer and running the test suite.  One
-  shifted a carry into the sign bit of a signed 64-bit digit in
-  `cbits/p256/p256.c`, the other shifted a negative value in
-  `cbits/decaf/ed448goldilocks/decaf.c`.  Neither miscomputes on any compiler
-  crypton is built with, and the values are unchanged; what they were was a
-  licence the standard gives the compiler and no reason to give it
-* security(cipher): a message of 2^32 bytes or more no longer has its length
-  truncated on the way to the C, which takes its lengths as `uint32_t`.  It
-  used to be: `Crypto.Cipher.ChaCha.combine` given 2^32 + 64 bytes enciphered
-  64 of them and returned the rest as it found the buffer -- 4 GiB of zeros
-  where the ciphertext should have been, with nothing returned to say so.
-  `Crypto.Hash` has cut its work into 2 GiB pieces for this reason since
-  before crypton; nothing else did.
-
-  Where the C carries its state in a context and can simply be called again,
-  the work is now cut up the same way and a long message is enciphered:
-  `Crypto.Cipher.ChaCha`, `Crypto.Cipher.Salsa`, `Crypto.Cipher.XSalsa`,
-  `Crypto.Cipher.RC4`, `Crypto.MAC.Poly1305`, and AES-GCM's incremental
-  interface -- which is what `Crypto.Cipher.ChaChaPoly1305` and
-  `Crypto.MAC.KMAC` reach it through.
-
-  Where it cannot -- the one-call AEADs, which do the whole message in one
-  call, and the AES modes, which are handed the IV and do not hand it back --
-  the message is refused: `CryptoError_ParameterInvalid` from
-  `Crypto.Cipher.AES.GCM` and `Crypto.Cipher.ChaCha.Poly1305`, and an error
-  from AES ECB, CBC, CTR, XTS, OCB and CCM.  ECB, CBC and XTS count blocks
-  rather than bytes, so their limit is sixteen times further out.
-  `Crypto.Cipher.AESGCMSIV` already refused, and still does
-* perf(p256): the comb that multiplies the base point takes five bits of the
-  scalar at a time from each of two blocks rather than four, over the signed
-  all-bits-set representation, so the table stays the same size while the
-  loop goes from 32 steps to 26: 25 doublings and 52 mixed additions against
-  31 and 64, which is 19% fewer field operations.  An ECDSA P-256 signature
-  goes 25.52 to 22.47 microseconds on an Apple M4.  This is the C path, which
-  x86-64 and AArch64 do not take -- they have the vendored assembly -- so it
-  is for i386, armv7, riscv64, ppc64le, s390x and the rest.  The arrangement
-  was suggested by Kyle Butt.
-
-  One scalar below the order makes the last addition of the comb add a point
-  to itself, which the formulas there cannot do; it was found by searching
-  the sign patterns rather than by sampling, and the recoder now reports it
-  and the answer is the doubling.  Every other addition is ruled out, the 48
-  from step two upwards by parity and size and the two of step one by
-  exhausting the 2^20 sign patterns that could reach them
-* security(aes): `Crypto.Cipher.AES.GCM` refuses a nonce of no bytes, which
-  its four functions used to accept.  SP 800-38D 5.2.1.1 asks for at least
-  one byte, and with none GCM's pre-counter block is zero, so the tag of a
-  message is `GHASH_H(A, C) XOR E(K, 0^128)` -- and `E(K, 0^128)` is the
-  GHASH key `H` itself.  One full tag therefore gives `H` away; `H` belongs
-  to the key rather than to the nonce, so an attacker who has it, and one
-  genuine message under any nonce, can forge a tag that verifies for data of
-  their own under that nonce, twelve-byte ones included.  `encrypt` and
-  `decryptWithTag` now throw `CryptoError_IvSizeInvalid`, `decrypt` gives
-  `Nothing` and `encryptWithMask` gives `False` and writes nothing.  Only the
-  empty nonce is refused; every other length stays allowed.  The general
-  interface has refused it since 2.1.0 and this module did not.  Affects
-  2.1.0, 2.1.1 and 2.1.2.  Reported by arybczak in
-  [#249](https://github.com/kazu-yamamoto/crypton/issues/249)
-* perf(rsa): the multiply-accumulate at the bottom of the modular
-  exponentiation takes four limbs to an iteration on AArch64, with the flags
-  carrying through two long chains -- one for the low halves of the four
-  products, one for the high halves a place up -- where the compiler writes
-  a chain per limb and spends two instructions moving each carry between the
-  flags and a register.  Measured on an Apple M4, an RSA-2048 signature goes
-  593.0 to 515.9 microseconds through the Haskell API and the exponentiation
-  itself 590.1 to 514.9.  The ragged end of a row -- three limbs, two or
-  one -- is written out the same way rather than handed back to C, which
-  matters because mont_sqr asks for every length from n-1 down to 1: that is
-  a further two per cent of the exponentiation, 514.2 to 504.9.  The
-  arrangement follows addMulVVWx in Go's crypto/internal/fips140/bigmod,
-  which is BSD-3-Clause as this library is; cbits/LICENSE.go carries its
-  notice.  Three other arrangements were tried and measured worse, and the
-  comment above the function says which and why, so that they are not tried
-  again
-* perf(rsa): a Montgomery multiplication no longer clears its 2n-limb
-  scratch first.  The first row of the product lands on empty space, so it
-  is written rather than added to, and every row after it reads only limbs
-  an earlier row has already put there.  Worth between a half and one per
-  cent of an RSA-2048 signature on an Apple M4, which is less than it
-  sounds like it should be: the clearing was cheap, and what it cost was
-  mostly the row that had to add to zeros
-* perf(rsa): the R^2 that Montgomery arithmetic needs before it can start is
-  built by squaring rather than by doubling a bit at a time.  Write a value
-  as 2^(lgR + d) mod m; a Montgomery squaring divides by R, so it takes that
-  to 2^(lgR + 2d) and doubles d.  The climb from R to R^2 is then the binary
-  expansion of lgR -- ten squarings for a 1024-bit modulus, where there were
-  a thousand and twenty-five doublings.  On an Apple M4 the setup goes 24.74
-  to 2.07 microseconds, and an RSA-2048 signature does it twice, once for
-  each CRT half: the signature goes 512.3 to 466.9 through the Haskell API
-  and the two exponentiations 502.6 to 457.0.  Curves that go through
-  crypton_ecc.c pay the same setup once per context and gain the same.
-  Public-key operations still go through GMP and do not change
-* perf(ecdsa): P-256 verification multiplies both scalars at once, in
-  variable time, where it used to do two constant-time multiplications and
-  add the results.  Everything a verification touches is public -- the
-  message, the signature and the public key -- so the constant-time work
-  there was paid for nothing, and the two multiplications can share their
-  doublings besides.  Both scalars go into non-adjacent form, width 7 for
-  the base point, whose odd multiples are a table in the library, and width
-  5 for the public key, whose eight are built per call; one pass down the
-  digits does a doubling at every step and an addition where a digit is not
-  zero.  Measured through the Haskell API on an Apple M4, a verification
-  goes 30.37 to 25.48 microseconds, and the multiplication itself 29.94 to
-  25.34; on an x86-64, 85.04 to 71.53.  Signing is untouched.  s2n-bignum's
-  point addition is correct except when its two arguments are the same
-  point, which is the side condition its proof carries, so a sum that comes
-  out as the point at infinity from arguments that were not is given up on
-  and the constant-time pair answers instead -- 1203 cases covering that,
-  including 41 that take the fallback, agree with the old answers on both
-  architectures
-* perf(gcm): AES-GCM uses the 512-bit form of the AES and carry-less
-  multiply instructions where the processor has them and they are worth
-  having, which is Ice Lake and Zen 5 onwards.  Four blocks to an
-  instruction where the 256-bit form takes two; a group is thirty-two
-  blocks in eight registers and its GHASH is two passes of sixteen, since
-  sixteen is how many powers of H the table holds.  Measured on GitHub's
-  runners over 16 KiB, AES-128-GCM and AES-256-GCM in MB/s: an EPYC 9V45
-  goes 9616 to 14268 and 8422 to 12674, a Xeon 6973P-C 8095 to 9848 and
-  7187 to 8323, a Xeon 8573C 6983 to 8447 and 6166 to 7113.  Zen 4 is left
-  on the 256-bit path -- there the 512-bit instructions are two passes
-  through a 256-bit datapath, and AES-GCM measured slightly slower -- and
-  the run-time check asks for three more bits of XCR0 as well as the
-  instruction bits, since a machine can report these and still fault on
-  them
-* perf(ed25519): the base point multiplication goes through s2n-bignum,
-  which signing does twice -- once for the nonce's point and once for the
-  public key, which `sign` derives from the secret key every time rather
-  than trusting the one it is handed.  Measured through the Haskell API on
-  an Apple M4, signing goes 11.92 to 7.27 microseconds and `toPublic` 5.97
-  to 3.52; at the C level on an x86-64 without ADX, where the `_alt` form
-  runs, a public key goes 13.25 to 9.93 and a signature with the key in
-  hand 14.74 to 11.34.  Verification is untouched: it multiplies two
-  scalars at once and crypton's variable-time code is ahead of the
-  constant-time assembly there.  ed25519-donna's table stays for every
-  other architecture, and 5000 key and signature pairs agree between the
-  two paths on both architectures
-* perf(rsa): the masked scan of the exponentiation's table goes four limbs
-  at a time on x86-64 with AVX2.  Every entry of the table is read and a
-  mask keeps the one the window asks for, which is what keeps the address
-  stream off the exponent, and at RSA-2048's CRT size that is two kilobytes
-  read per window with 256 windows to an exponentiation -- 11% of the whole
-  where s2n-bignum's multiplication runs, measured by taking the scan out
-  altogether.  With the vector form almost all of it comes back: one
-  RSA-2048 CRT private operation goes 812.4 to 720.8 microseconds against a
-  707.1 floor with no scan at all, and on the same machine without ADX
-  1646.1 to 1599.3.  AArch64 keeps the scalar form, where the same
-  measurement puts the scan at 1% and there is nothing to win.  The
-  processor is asked once per call, and without the AVX2 bit, or built
-  without `use_target_attributes`, the scalar scan is what runs
-* perf(rsa): the modular exponentiation squares into the other of its two
-  buffers and swaps them, rather than squaring into one and copying it back.
-  That is a copy of the modulus' width saved 1280 times per exponentiation,
-  and which of the three buffers a pointer names is nobody's secret, so
-  nothing about the timing changes.  Measured by thread CPU time, best of
-  many, on one RSA-2048 CRT private operation: an Apple M4 goes 604.3 to
-  595.9 microseconds and an x86-64 without ADX 1678.0 to 1665.6.  Where
-  s2n-bignum's multiplication runs the difference is below the noise, that
-  multiplication being most of the time there.  Also writes down what a
-  five-bit window is worth, which was measured and is not taken: 3.5% on the
-  M4, 1% the wrong way on an older x86-64, and 7% the wrong way wherever the
-  assembly runs, because a table twice as long is a masked scan twice as long
+* fix(aead): reject missing and oversized authentication tags
+  [#233](https://github.com/kazu-yamamoto/crypton/pull/233)
+* fix(chacha): remove redundant Word8 import
+  [#234](https://github.com/kazu-yamamoto/crypton/pull/234)
+* test(number): cover the two modulus sizes the assembly runs at
+  [#235](https://github.com/kazu-yamamoto/crypton/pull/235)
+* perf(rsa): swap the buffers instead of copying them back
+  [#236](https://github.com/kazu-yamamoto/crypton/pull/236)
+* perf(rsa): scan the exponentiation's table four limbs at a time
+  [#237](https://github.com/kazu-yamamoto/crypton/pull/237)
+* fix(gcm): write the field doubling from its definition
+  [#238](https://github.com/kazu-yamamoto/crypton/pull/238)
+* doc(gcm): carry the MIT notice for the parts that follow fusion
+  [#239](https://github.com/kazu-yamamoto/crypton/pull/239)
+* perf(ed25519): the base point multiplication through s2n-bignum
+  [#240](https://github.com/kazu-yamamoto/crypton/pull/240)
+* perf(gcm): AES-GCM through the 512-bit VAES and VPCLMULQDQ
+  [#241](https://github.com/kazu-yamamoto/crypton/pull/241)
+* doc: the README said AVX-512 was not used, and it is
+  [#242](https://github.com/kazu-yamamoto/crypton/pull/242)
+* perf(ecdsa): P-256 verification multiplies both scalars at once
+  [#243](https://github.com/kazu-yamamoto/crypton/pull/243)
+* perf(rsa): four limbs and two carry chains on AArch64
+  [#244](https://github.com/kazu-yamamoto/crypton/pull/244)
+* perf(rsa): write out the ragged end of the AArch64 row
+  [#245](https://github.com/kazu-yamamoto/crypton/pull/245)
+* perf(rsa): build R^2 by squaring, not by doubling
+  [#246](https://github.com/kazu-yamamoto/crypton/pull/246)
+* perf(rsa): stop clearing the scratch a Montgomery multiply writes over
+  [#247](https://github.com/kazu-yamamoto/crypton/pull/247)
+* doc(gcm): write down what the AArch64 GHASH is short of
+  [#248](https://github.com/kazu-yamamoto/crypton/pull/248)
+* security(aes): refuse a nonce of no bytes in Crypto.Cipher.AES.GCM
+  [#250](https://github.com/kazu-yamamoto/crypton/pull/250)
+* ci: build and test the C the other architectures use
+  [#251](https://github.com/kazu-yamamoto/crypton/pull/251)
+* perf(p256): five teeth to a comb block, over the signed representation
+  [#252](https://github.com/kazu-yamamoto/crypton/pull/252)
+* security(cipher): stop truncating message lengths on the way to the C
+  [#253](https://github.com/kazu-yamamoto/crypton/pull/253)
+* fix(c): two left shifts the standard leaves undefined
+  [#254](https://github.com/kazu-yamamoto/crypton/pull/254)
+* ci: run the C under the sanitizers
+  [#255](https://github.com/kazu-yamamoto/crypton/pull/255)
+* fix(c): read words out of a block rather than pointing at it
+  [#256](https://github.com/kazu-yamamoto/crypton/pull/256)
+* fix(internal): drop an import nothing uses any more
+  [#257](https://github.com/kazu-yamamoto/crypton/pull/257)
+* fix(c): decide the dispatch table once, not on every key
+  [#258](https://github.com/kazu-yamamoto/crypton/pull/258)
+* Fix the three cabal flag settings that were broken
+  [#259](https://github.com/kazu-yamamoto/crypton/pull/259)
+* Run the C that only 32-bit architectures get, and fix what that found
+  [#260](https://github.com/kazu-yamamoto/crypton/pull/260)
+* Let the last addition of each scalar multiplication be a complete one
+  [#261](https://github.com/kazu-yamamoto/crypton/pull/261)
+* Ask whether the secrets decide anything
+  [#262](https://github.com/kazu-yamamoto/crypton/pull/262)
+* Ask a big-endian machine the same questions
+  [#263](https://github.com/kazu-yamamoto/crypton/pull/263)
+* Ask what the secrets leave behind
+  [#264](https://github.com/kazu-yamamoto/crypton/pull/264)
+* Stop taking eighteen runner slots to test three things
+  [#265](https://github.com/kazu-yamamoto/crypton/pull/265)
+* Make the scrubs ones the compiler cannot drop, and finish round ten
+  [#266](https://github.com/kazu-yamamoto/crypton/pull/266)
+* Feed the parsers bytes nobody chose
+  [#268](https://github.com/kazu-yamamoto/crypton/pull/268)
 
 ## 2.1.2
 
-* perf(gcm): AES-GCM uses the 256-bit form of the AES and carry-less
-  multiply instructions where the processor has them, which is Zen 3 and Ice
-  Lake onwards.  Measured on an EPYC 7763 over 16 KiB, in the library as
-  cabal builds it, AES-128-GCM goes 4245 to 6042 MB/s and AES-256-GCM 3932
-  to 5463 -- 1.42 and 1.39 times, and ahead of OpenSSL 3.0.13 on that
-  machine, which reaches 4266 and 3946.  `crypton_cpu.c` asks the processor
-  first and everything else is unchanged
-* perf(x25519): X25519 goes through s2n-bignum, and key generation reads a
-  table rather than multiplying the base point 9 the general way, which is
-  what crypton did for want of anything else.  Measured through the Haskell
-  API on an Apple M4, the shared secret goes 19.87 to 13.78 microseconds and
-  a key generation 19.92 to 3.83 -- on x86-64 the C level is 41.19 to 26.96
-  and 41.18 to 8.54.  The RFC 7748 vectors say the answers are the same
-* perf(ecdsa): inverting modulo the group order, which ECDSA does once per
-  signature and once per verification, takes a fixed number of division
-  steps instead of a whole exponentiation.  Measured on an Apple M4:
-  P-256 6.02 to 0.80 microseconds, P-384 31.3 to 1.20, P-521 63.2 to 2.05.
-  Through the Haskell API that is ECDSA P-256 signing 11.77 to 7.10, which
-  is faster than OpenSSL on that machine, verification 36.75 to 32.10, and
-  P-384 signing 171.6 to 151.3.  `inverseSafe` carries it, so DSA, ElGamal,
-  RSA's `qinv` and `Crypto.PubKey.ECC.Prim` get it too; it checks its answer
-  by multiplying out, as it always has, and falls back where that fails
-* perf(rsa): the modular exponentiation's Montgomery multiplication and
-  square go through s2n-bignum on x86-64 with ADX, which is twice as fast as
-  the C there because the C cannot form the two carry chains `ADCX` and
-  `ADOX` give: measured on an EPYC 7763 at 1024 bits, 0.4832 to 0.2479
-  microseconds for a multiplication and 0.3984 to 0.1994 for a square.  The
-  window, the table and its masked scan are untouched, and so is every other
-  size and architecture -- on AArch64 the C measures faster than the
-  assembly, so nothing is even vendored for it
-* perf(p256): ECDSA signing is 2.4 times faster and verification 2.2, which
-  finishes what the two entries below began.  Signing and key generation go
-  through s2n-bignum's fixed-base routine, which reads a table of multiples
-  of the base point that `cbits/p256/gen_base_table.py` builds and that the
-  test suite checks against crypton's own answer; verification goes through
-  that one and the variable-point one, with the addition of the two left
-  where it was.  Measured through the Haskell API on an Apple M4, signing
-  goes 28.55 to 12.03 microseconds and verification 82.68 to 37.73, which
-  leaves both within a tenth of OpenSSL on that machine where they were at
-  four tenths of it.  The table costs 52 KiB of constant data, against the
-  2.4 KiB of the one it replaces
-* perf(ecc): P-384 and P-521 go through s2n-bignum as well, where the curve
-  is exactly one of those two.  Measured through the Haskell API on an Apple
-  M4, ECDH P-384 goes 549.5 to 75.4 microseconds and ECDSA P-384
-  verification 772.4 to 295.8; at the C level P-384 is 7x and P-521 between
-  9 and 10x, on both architectures.  Signing does not move: there is no
-  fixed-base routine upstream for these two, so it keeps crypton's comb.
-  Every other curve `crypton_ecc_mul` is asked about, including these two
-  named with a different a or b, goes on to the C as before
-* perf(p256): ECDH is 2.7 times faster on x86-64 and AArch64.  The
-  variable-point scalar multiplication now goes through AWS's
-  [s2n-bignum](https://github.com/awslabs/s2n-bignum), vendored in
-  `cbits/s2n`: hand-written assembly, constant-time, and carrying a
-  machine-checked proof in HOL-Light that it computes what it says.  Measured
-  through the Haskell API on an Apple M4, ECDH P-256 goes 57.50 to 21.32
-  microseconds; at the C level it is 2.6x there, 3.2x on an x86-64 with ADX
-  and 2.6x on the `_alt` path taken where `CPUID` does not report it.  Its licence is `Apache-2.0 OR ISC OR MIT-0`,
-  which is what makes this possible at all -- OpenSSL's and BoringSSL's
-  `ecp_nistz256` is Apache-2.0 only.  Every other architecture keeps the C,
-  as does Windows for now, and `-f-support_s2n_bignum` turns it off
-* perf(p256): the field inversion takes the least squarings an exponent of
-  256 bits can be done in.  It built the low 94 ones of p-2 in a second
-  accumulator and multiplied the two at the end, which cost 287 squarings
-  where 255 will do; the exponent is now built left to right from the shape
-  of p-2 in one pass.  Measured on an Apple M4 the inversion goes 4.224 ->
-  3.765 microseconds, about 11%, which is 0.9% of an ECDH since that is where
-  the inversion sits.  The same 13 multiplications either way
+* perf(p256): 255 squarings for the field inversion, not 287
+  [#223](https://github.com/kazu-yamamoto/crypton/pull/223)
+* perf(p256): ECDH through s2n-bignum, 2.7x
+  [#224](https://github.com/kazu-yamamoto/crypton/pull/224)
+* perf(ecc): P-384 and P-521 through s2n-bignum, 7x and 9x
+  [#225](https://github.com/kazu-yamamoto/crypton/pull/225)
+* perf(p256): ECDSA signing 2.4x and verification 2.2x
+  [#226](https://github.com/kazu-yamamoto/crypton/pull/226)
+* perf(rsa): the Montgomery multiplication through s2n-bignum on x86-64
+  [#227](https://github.com/kazu-yamamoto/crypton/pull/227)
+* perf(ecdsa): invert modulo the order in division steps, not an exponentiation
+  [#228](https://github.com/kazu-yamamoto/crypton/pull/228)
+* perf(x25519): X25519 through s2n-bignum, and a table for key generation
+  [#229](https://github.com/kazu-yamamoto/crypton/pull/229)
+* perf(gcm): AES-GCM through VAES and VPCLMULQDQ
+  [#230](https://github.com/kazu-yamamoto/crypton/pull/230)
+* perf(gcm): compile the wide loop once per key length
+  [#231](https://github.com/kazu-yamamoto/crypton/pull/231)
 
 ## 2.1.1
 
-* docs(rsa): the haddock says what the optional blinder covers -- that the
-  private exponent is not what is at risk, `expSafe` keeping its value out of
-  the work, and that what a blinder covers is the input, which without one is
-  the ciphertext as it arrived and so a number an attacker may have chosen.
-  The eight places taking a `Maybe Blinder` point at t'Blinder' rather than
-  repeating half of it; the four in `Crypto.PubKey.RSA.PSS` said nothing at
-  all before
-
-* feat(chachapoly): `Crypto.Cipher.ChaCha.Poly1305`, which does a whole
-  ChaCha20-Poly1305 message in one call, the shape `Crypto.Cipher.AES.GCM`
-  has.  `Crypto.Cipher.ChaChaPoly1305` takes a message in steps, which is
-  right when it arrives in pieces and is eight foreign calls and the
-  allocations between them when it was already whole.  Measured on an Apple
-  M4 through the Haskell interface, a 100-byte message goes 0.97 -> 0.415
-  microseconds and a 1400-byte one 2.89 -> 2.36.  The nonce is the twelve
-  bytes RFC 8439 defines; eight is the other ChaCha construction and is
-  refused rather than quietly encrypted under a scheme nobody asked for
-
-* feat(gcm): `Crypto.Cipher.AES.GCM.decryptWithTag`, which decrypts and hands
-  back the tag it computed rather than comparing it.  For a protocol that
-  carries the tag apart from the ciphertext, where `decrypt` -- which wants
-  the two together -- does not fit.  It returns an `AuthTag`, whose `Eq` is a
-  constant-time comparison, so the safe way to use it is also the obvious one
-
-* feat(ecdsa): `Crypto.PubKey.ECDSA` gains the deterministic nonce of RFC
-  6979, which `Crypto.PubKey.ECC.ECDSA` already had.  The fast module was the
-  one without it, so moving to it for the speed meant giving up the one
-  protection against the mistake that hands over an ECDSA private key.  Three
-  new names: `deterministicNonce`, and `signDeterministic` and
-  `signDigestDeterministic` over it.  Held to the implementation in
-  `Crypto.PubKey.ECC.ECDSA`, which is itself held to the vectors in the RFC,
-  on P-256, P-384 and P-521 with SHA-1 through SHA-512
+* feat(ecdsa): RFC 6979 deterministic nonces for Crypto.PubKey.ECDSA
+  [#219](https://github.com/kazu-yamamoto/crypton/pull/219)
+* feat(gcm): a decrypt that hands back the tag instead of comparing it
+  [#220](https://github.com/kazu-yamamoto/crypton/pull/220)
+* feat(chachapoly): ChaCha20-Poly1305 a message at a time
+  [#221](https://github.com/kazu-yamamoto/crypton/pull/221)
+* docs(rsa): say in the haddock what the optional blinder covers
+  [#222](https://github.com/kazu-yamamoto/crypton/pull/222)
 
 ## 2.1.0
 
-* perf(p256): a signed five-bit window for the variable-point scalar
-  multiplication, which is what ECDH and ECDSA signing spend their time in.
-  The scalar is recoded into 52 digits, every one of them odd, so the table
-  holds only the odd multiples P, 3P, ..., 31P and a negative digit costs a
-  negation of y, which is free.  The main loop goes from 252 doublings and 64
-  additions to 255 and 51, and -- because no digit is zero and no partial sum
-  is the infinity -- it drops the masks that stood in for infinity on every
-  iteration.  The table is built so that each pair of neighbouring odd
-  multiples comes out of one doubling and one addition that shares everything
-  but a squaring and a multiplication between X+P and X-P.  Counted exactly,
-  the field multiplications and squarings go 3477 -> 3326.  Measured on an
-  idle Intel Haswell, thirty runs each, ECDH is 158.5 -> 153.3 microseconds,
-  about 4%; on an Apple M4 under desktop load the difference did not come out
-  of the noise.  One scalar, 30, would have reached the last addition with
-  the accumulator equal to the point being added, which these formulas cannot
-  do; the recoder detects that from the scalar and the last iteration doubles
-  instead.  Suggested by Kyle Butt
+* fix(cpu): stop reading Intel's SDBG bit as AMD's XOP
+  [#204](https://github.com/kazu-yamamoto/crypton/pull/204)
+* fix(bench): build the benchmark against the checked ChaCha20-Poly1305 key
+  [#205](https://github.com/kazu-yamamoto/crypton/pull/205)
+* ci: key the cache on the package version
+  [#206](https://github.com/kazu-yamamoto/crypton/pull/206)
+* ci: build the benchmarks
+  [#207](https://github.com/kazu-yamamoto/crypton/pull/207)
+* perf(gcm): a fused AES-GCM for x86-64
+  [#208](https://github.com/kazu-yamamoto/crypton/pull/208)
+* perf(gcm): a fused AES-GCM for AArch64
+  [#209](https://github.com/kazu-yamamoto/crypton/pull/209)
+* perf(gcm): build the counter in vector registers
+  [#210](https://github.com/kazu-yamamoto/crypton/pull/210)
+* perf(gcm): a spare lane for E(K,Y0), and a cheaper short block
+  [#211](https://github.com/kazu-yamamoto/crypton/pull/211)
+* perf(gcm): unroll the tail pass, and take its blocks from registers
+  [#212](https://github.com/kazu-yamamoto/crypton/pull/212)
+* perf(gcm): read a short block where it lies
+  [#213](https://github.com/kazu-yamamoto/crypton/pull/213)
+* perf(gcm): the length block and the counter, in registers
+  [#214](https://github.com/kazu-yamamoto/crypton/pull/214)
+* perf(gcm): let the one-call interface specialise
+  [#215](https://github.com/kazu-yamamoto/crypton/pull/215)
+* perf(gcm): decryption takes the fused path too
+  [#216](https://github.com/kazu-yamamoto/crypton/pull/216)
+* perf(gcm): GHASH takes the ciphertext from the output buffer
+  [#217](https://github.com/kazu-yamamoto/crypton/pull/217)
+* perf(p256): a signed five-bit window for the variable-point multiply
+  [#218](https://github.com/kazu-yamamoto/crypton/pull/218)
 
-* perf(gcm): GHASH takes the ciphertext from the output buffer.  A group's
-  multiplies are issued between the rounds of the group after it, and the
-  blocks were copied into six registers' worth of scratch to wait there --
-  six stores a group for bytes that had just been written to the output
-  anyway.  The multiplies read the output instead, which is what picotls's
-  fusion does.  On an Intel Haswell this is worth two to three points against
-  fusion between 400 and 1440 bytes, and it removes the queue from the
-  AES-128 path
+## 2.0.1
 
-* perf(gcm): decryption takes the fused path too, on both x86-64 and
-  AArch64.  It had been left on the generic framing, so a received packet
-  cost what a sent one did before any of this: measured at 100 bytes, three
-  times what encrypting the same packet cost on either.  It is the simpler of
-  the two -- what GHASH absorbs is the ciphertext, and the ciphertext is the
-  input, so the multiplies need not wait on the AES and nothing is carried
-  between groups.  On an Intel Haswell, 100 bytes goes 0.165 -> 0.050
-  microseconds and 1440 bytes 0.362 -> 0.290; on an Apple M4, 0.230 -> 0.077
-  and 0.396 -> 0.321.  Decrypting is now about what encrypting is rather than
-  three times it.  The tag is still compared a byte at a time over its whole
-  length whichever way the answer goes
-
-* perf(gcm): let the one-call interface specialise.  `gcmFullEncrypt`,
-  `gcmFullDecrypt` and `gcmFullEncryptMask` take three `ByteArrayAccess`
-  arguments and were marked `NOINLINE`, which is this module's habit and is
-  right for a wrapper that is called once; these are called once a packet.
-  With no specialisation every `withByteArray` and every `length` went through
-  a dictionary, and on an Apple M4 that measured **0.15 of the 0.265
-  microseconds** a 100-byte packet cost through the Haskell interface -- more
-  than the encryption it wrapped.  Marked `INLINABLE` so the caller can
-  specialise them, 100 bytes falls to 0.128, where the same work measured in C
-  is 0.114: the Haskell layer costs 0.014 rather than 0.15
-
-* perf(gcm): build the length block and the initial counter in registers.
-  The length block -- the two bit counts GHASH ends on -- was assembled by
-  sixteen byte stores to the stack and read back, which measured about 9 of
-  the 58 nanoseconds a 100-byte packet cost.  Reversed the way every block is
-  on its way to GHASH, that block is just the two counts as little endian
-  words with the message's in the low half, so one `_mm_set_epi64x` makes it
-  and no shuffle is needed.  The initial counter likewise: the nonce is read
-  where it lies and masked, rather than in three pieces of four bytes.  On an
-  Intel Haswell a 100-byte packet goes from 0.058 to 0.049 microseconds.  With
-  this every length measured is at 90 per cent of fusion's speed or better --
-  100 bytes 90 and 95 with the header protection mask, 200 bytes 96, 1440
-  bytes 94, 16 KiB 95 -- where the series began at 31 per cent for 100 bytes
-
-* perf(gcm): read a short block without going through the stack.  Zeroing
-  sixteen bytes, copying the block in and loading them back is three trips to
-  memory with a store the load must wait for, and at packet lengths that was a
-  tenth of the call.  The sixteen bytes are read where they lie and what is
-  above the length masked off, which is safe everywhere except at the end of a
-  page -- and a block near the end of a page whose own bytes stop short of it
-  is read aligned, which cannot leave the page, and shuffled down.  This is
-  how picotls's fusion does it.  On an Intel Haswell a 100-byte packet goes
-  from 0.0625 to 0.058 microseconds, 79 per cent of fusion's speed against 73,
-  and with the header protection mask 83
-* perf(gcm): the tail of a message gets what the groups already had.  The
-  six-wide pass that finishes a message was still running its rounds from a
-  loop over a count held in the key, so the compiler could not place the
-  waiting multiplies between them, and the blocks it produced went through an
-  array indexed by a loop variable, which it cannot see through -- each block
-  then reloaded its own keystream from memory.  Written out for the ten rounds
-  of AES-128, with the multiplies at slots named at compile time, and the
-  blocks taken from the registers the pass left them in.  The pass itself
-  falls from about 29 to 6 nanoseconds; on an Intel Haswell 112 bytes is 13
-  per cent faster and 400 bytes goes from 81 to 86 per cent of fusion's speed
-
-* perf(gcm): give E(K,Y0) a lane that would otherwise sit idle, and stop
-  copying the last short block through the stack.  Six blocks are in flight
-  whatever the message length, so a message leaving a tail of four blocks or
-  fewer has lanes to spare; the block that masks the tag rides in one of them
-  instead of taking ten rounds nothing overlaps, which at 100 bytes measured
-  9.3 of 78.9 nanoseconds.  And the last short block was stored to the stack
-  and copied back, when the tag that follows it is about to overwrite the
-  bytes above it anyway -- where there are sixteen to spare, one store does.
-  On an Intel Haswell, 100 bytes goes from 60 to 69 per cent of fusion's speed
-  and 200 bytes from 68 to 82
-
-* perf(gcm): build the counter block without leaving the vector registers,
-  and keep each power of H beside its Karatsuba term.  Both came from reading
-  what picotls's `fusion` does differently.  The counter was being stepped in
-  a general register, byte swapped there and inserted into a vector one, which
-  is a move across register files for every lane and six to a group; held
-  byte reversed in a vector register instead, `_mm_add_epi32` steps the low
-  thirty-two bits and wraps them where GCM wants, and a shuffle puts the bytes
-  back.  The powers were in two arrays 256 bytes apart, so a multiply touched
-  two cache lines for operands it always wants together; they are now
-  adjacent.  On an Intel Haswell a 1200-byte message goes from 0.311 to 0.281
-  microseconds and 1440 bytes from 79 to 90 per cent of fusion's speed.  The
-  multiplies are also now genuinely issued between the AES rounds, which the
-  comment claimed and the generated code did not do: a test before each one
-  ended the basic block the scheduler works inside, and the first group is
-  peeled so that there is nothing to test
-
-* perf(gcm): the same for AArch64, where what costs is the framing rather
-  than a missing fast path.  `armv8_impl.c` already encrypts eight blocks at a
-  time and folds their GHASH into one reduction; what sat outside it was the
-  additional data, the tag and the counter, each reached through the branch
-  table so that the running state went back to memory between them and a
-  one-block header paid a reduction of its own.  Measured on an Apple M4, that
-  framing was 0.07 of the 0.112 microseconds a 100-byte packet cost -- more
-  than the encryption of the packet itself.  Taking the whole message in one
-  call, with the tag and the counter in registers from end to end and the
-  additional data and the length block riding in the same batches as the
-  ciphertext: a 100-byte packet 3.0x, 200 bytes 2.6x, 400 bytes 1.6x, 1200
-  bytes 1.30x, 1440 bytes 1.23x, and level from about 6 KB up.  With the QUIC
-  header protection mask, 100 bytes is 3.3x.  Unlike x86-64 there is no length
-  above which something else is faster, because there is no vendored assembly
-  on this side to hand a long message to, so every length goes this way.  Held
-  against the interface it replaces on two key sizes, seven lengths of
-  additional data, fifteen message lengths up to 16 KB, three tag lengths and
-  every sample offset that fits
-
-* perf(gcm): a fused AES-GCM for x86-64, for messages short enough that the
-  stitched assembly will not take them.  That assembly refuses anything under
-  288 bytes, so until now a QUIC packet paid for the AES key schedule and the
-  GHASH one block at a time, through a branch table that put the 128-bit state
-  back in memory at every step: a 100-byte packet cost 0.153 us of which the
-  encryption was a small part.  This is the design Kazuho Oku sets out for
-  picotls's `fusion` -- keep AES-NI issuing every clock, six blocks in flight,
-  and fit the additional data, the tag and the QUIC header protection mask
-  into the gaps between the rounds -- written in C with intrinsics, for the
-  reason he gives: what is complicated here is the scheduling, and it has to
-  stay readable to stay correct.  On an Intel Haswell a 100-byte packet goes
-  from 0.153 to 0.082 us and a 1200-byte one from 0.373 to 0.317, and the
-  header protection mask becomes **free** wherever it can be taken: 400 bytes
-  is 0.131 with it and 0.131 without, against 0.181 and 0.177, because it
-  rides in a lane of the AES pipeline that the message length leaves idle
-  rather than taking a block of its own.  It can be taken there only when the
-  sample lies in output already written and the two key schedules are the same
-  length, which is what TLS and QUIC do; otherwise it is computed after the
-  tag, where everything it may cover exists.  Above
-  1536 bytes the assembly is faster -- by 12 per cent at 3 KB and 20 at 16 KB
-  -- so longer messages still go there and nothing about TLS-sized records
-  changes.  The powers of H are built once per key, sixteen of them, which
-  adds 512 bytes to what a key holds and no parameter to any interface: a
-  power per block of the message would fold the whole GHASH into one reduction
-  but would make that state grow with the longest message a caller might send.
-  Held against the incremental interface on every combination of three key
-  sizes, seven lengths of additional data, twelve message lengths and three
-  tag lengths
-
-* fix(cpu): stop reading Intel's SDBG bit as AMD's XOP, which crashed SHA-512
-  and ChaCha20 on Broadwell and later.  The vendored assembly dispatches on a
-  capability word this library fills, and reads bit 11 of its second dword as
-  XOP -- which is CPUID leaf 0x80000001 ECX bit 11, an AMD extended leaf.
-  crypton put the raw leaf 1 ECX there, whose bit 11 is SDBG, the silicon
-  debug interface, which Intel has reported since Broadwell.  On such a
-  processor `sha512-x86_64.S` took `.Lxop_shortcut` and
-  `chacha-x86_64.S` took `.Lcrypton_chacha20_asm_4xop`, and the first
-  `vprotq` is an invalid opcode: SIGILL, for SHA-512 and SHA-384, and for
-  ChaCha20 and so ChaCha20-Poly1305.  OpenSSL clears leaf 1's bit 11 before
-  merging the real flag in; crypton now clears it and leaves it clear, so the
-  XOP paths are never taken.  Nothing is lost -- XOP ran from AMD's Bulldozer
-  to Excavator and Zen dropped it -- and it is the reason the AVX-512 bits
-  beside it are cleared as well.  Reported by @lucasdicioccio, who
-  disassembled the trap
-  [#202](https://github.com/kazu-yamamoto/crypton/issues/202)
-
-* feat(aes): `encryptWithMask`, for the QUIC header protection mask.  QUIC
-  takes the sample for its header protection from the ciphertext, so the mask
-  cannot be had before the encryption -- but it can be had before coming back.
-  `newHeaderKey` builds the second key schedule once, where `quic` builds it
-  per packet, and `encryptWithMask` seals the message and writes the sixteen
-  bytes of mask, both into buffers the caller already has, so that nothing is
-  allocated for either.  On an Apple M4 the mask then costs about 0.02 us
-  against 0.09 to 0.11 asked for separately: a 1440-byte packet goes from
-  0.473 to 0.382 us and a 100-byte one from 0.343 to 0.260.  Most of that is
-  the allocations rather than the crossing -- a version returning the two as
-  bytearrays was measured at 0.419 and 0.299, so it recovered less than a
-  third of it -- and the AES block itself is under two nanoseconds
-
-* feat(aes): `Crypto.Cipher.AES.GCM`, for many short messages under one key.
-  The interface in `Crypto.Cipher.Types` builds a state from the key *and* the
-  nonce and then walks it through appending the additional data, encrypting
-  and finalizing, copying the 320-byte state at each step.  For a stream that
-  is nothing next to the encryption; for a datagram it is most of the work.
-  Measured on an Apple M4, a 1440-byte packet with a 20-byte header took
-  1.30 us, of which 0.17 us was the encryption: the AES key schedule and the
-  table of multiples of `H` were rebuilt for every nonce although both depend
-  on the key alone, and three state copies and four foreign calls carried the
-  rest.  A `Context` now holds what the key determines and is built once, and
-  `encrypt` takes a nonce and a whole message and answers in one call, giving
-  the ciphertext with the tag after it -- the shape a packet wants.  `decrypt`
-  takes that shape back and compares the tag itself, in C, looking at every
-  byte either way.  1440 bytes: 1.30 to 0.37 us, 3.5x; 100 bytes 0.83 to 0.23;
-  a 16 KiB TLS record 2.86 to 2.20, where the saving is the setup rather than
-  the call.  A message of 4 KiB or less goes through an unsafe foreign call,
-  which is worth 0.075 us and is only right because such a call is over
-  quickly; anything longer keeps the safe one.  This computes what the general
-  interface computes, which the tests hold it to on the same vectors
-* Breaking change: fix(chachapoly1305): take a checked key, so that
-  initializing cannot fail.  The nonce was already a checked type, built by
-  `nonce8`, `nonce12` or `nonce24`, so the key length was the only way
-  `initialize` and `initializeX` could fail -- and callers answered that with
-  `throwCryptoError`, `tls` among them, where
-  `noFail (ChaChaPoly1305.nonce12 nonce >>= ChaChaPoly1305.initialize key)`
-  re-checked a length once per record for a key fixed for the connection.
-  There is now a `Key` with `key` to build one, and
-  `initialize :: Key -> Nonce -> State` and
-  `initializeX :: Key -> XNonce -> State` are total.
-  `aeadChacha20poly1305Init` is unchanged and still reports a bad key length.
-  This also closes the last of #28: `initFromRootState` wrapped a
-  `throwCryptoError` around a `B.take 32`, and the Poly1305 key type now has a
-  home in a hidden module so the modules here that know the length can say so
-  [#193](https://github.com/kazu-yamamoto/crypton/issues/193)
-
-* feat(hash): Skein with the digest size as a type parameter.  Skein is
-  defined for any digest size and the C here has always taken one -- the
-  length goes to `crypton_skein512_init` and `crypton_skein512_finalize`, and
-  the output is produced in counter mode for as many blocks as are asked for
-  -- but Haskell could only reach the four sizes that had a type of their own.
-  `Skein256 (bitlen :: Nat)` and `Skein512 (bitlen :: Nat)` take any, in the
-  manner `SHAKE128` and `SHAKE256` already did; `Skein512 512` is
-  `Skein512_512`, which the tests hold it to, and the named types are
-  untouched.  This also brought back the `Skein256-160` and `Skein512-160`
-  known-answer vectors, which had been commented out of the test suite for
-  want of a type to run them against.  One large digest is a good deal cheaper
-  than the same bytes from repeated small ones: 512 KiB at 947 MB/s in one
-  digest against 172 MB/s as 8192 separate `Skein512_512` ones, on an M4
-  [#56](https://github.com/kazu-yamamoto/crypton/issues/56)
+* feat(hash): Skein with the digest size as a type parameter
+  [#197](https://github.com/kazu-yamamoto/crypton/pull/197)
+* fix(chachapoly1305): take a checked key, so that initializing cannot fail
+  [#198](https://github.com/kazu-yamamoto/crypton/pull/198)
+* feat(aes): Crypto.Cipher.AES.GCM, for many short messages under one key
+  [#199](https://github.com/kazu-yamamoto/crypton/pull/199)
+* build: say which platforms the fallback AES sources are for
+  [#200](https://github.com/kazu-yamamoto/crypton/pull/200)
+* feat(aes): encryptWithMask, for the QUIC header protection mask
+  [#201](https://github.com/kazu-yamamoto/crypton/pull/201)
+* fix(cpu): stop reading Intel's SDBG bit as AMD's XOP
+  [#203](https://github.com/kazu-yamamoto/crypton/pull/203)
 
 ## 2.0.0
 
-* fix(docs): export the names the documentation already referred to.
-  `Crypto.Number.ModArithmetic` throws `CoprimesAssertionError` and
-  `ModulusAssertionError` from `inverseCoprimes` and `squareRoot`, and said so
-  in the haddock, without exporting either, so a caller could not name the
-  exception it was told to expect; `Crypto.PubKey.Rabin.Types.generatePrimes`
-  takes a `PrimeCondition` in its exported signature and that synonym was not
-  exported either.  All three are now exported
-  [#195](https://github.com/kazu-yamamoto/crypton/pull/195)
+**Breaking changes.**  Input that used to be accepted is now refused: a value
+at or above an RSA or Rabin modulus, a signature of the wrong length or out of
+range, a digest too short for HOTP's dynamic truncation, a non-canonical
+Ed25519 signature, a PKCS#7 block size outside 1..255, and block cipher input
+that is not a whole number of blocks.  A refused KDF, Argon2 or bcrypt
+parameter is reported as a `CryptoError` rather than raised as an `ErrorCall`,
+and `CryptoError_ParameterInvalid` is appended to `CryptoError`;
+`tryGetShared` is added beside `getShared`.  No exported function changed its
+signature.
 
-* Breaking change: fix(bcrypt): refuse a cost bcrypt does not have rather than
-  substituting one.  A cost below 4 came back as a cost-10 hash and a cost
-  above 31 as a cost-31 one, with nothing said either way, so a caller asking
-  for something bcrypt does not do was answered with something else and had no
-  way to tell -- `hashPassword 3` and `hashPassword 10` returned the same
-  thing.  Both ends are now reported as `CryptoError_ParameterInvalid`, which
-  is what every other KDF here already did for a refused parameter.
-  `hashPassword` can therefore fail where it could not before, so
-  `tryHashPassword` is added beside it; the salt it generates is always the
-  right length, so the cost is the only thing it can report
-  [#59](https://github.com/kazu-yamamoto/crypton/issues/59)
+**Deprecated.**  The eighteen curves over a binary field in
+`Crypto.ECC.Simple.Types`.  They are obsolete, they are the curves whose
+cofactor is not 1, and they will go in a later major version.  Prefer a prime
+curve, or X25519.
 
-* Breaking change: fix(poly1305): take a checked key, so that initializing
-  cannot fail.  A Poly1305 key is thirty-two bytes and nothing else about it
-  can be wrong, so `initialize` returning a `CryptoFailable` put an error case
-  in front of every caller for a length most of them know is right -- and they
-  answered it with `throwCryptoError`, this library included: the one in
-  `Crypto.Cipher.ChaChaPoly1305` guarded a `B.take 32`, and `auth` did not
-  even do that, it called `error`.  There is now a `Key` with `key` to build
-  one, the length is checked there, and `initialize :: Key -> State` and
-  `auth :: Key -> ba -> Auth` are total.  A caller checks once and then
-  initializes as often as it likes with nothing to handle.  `initialize k`
-  becomes `initialize <$> key k` where the length is unknown, and where it is
-  known the check moves to where the key is made.  `Key` has no `Show`, as
-  key material should not
-  [#28](https://github.com/kazu-yamamoto/crypton/issues/28)
-
-* fix(pubkey): stop printing private keys.  `Show` is what `print`, a message
-  built with `error`, an exception and a test framework's failure output all
-  reach for, so it is the instance a key travels on when nobody meant to send
-  it anywhere; the library already kept that promise for the secret keys held
-  in a `ScrubbedBytes`, and the documentation for `ScrubbedBytes` advertises
-  it, while ten other types printed theirs in full.  Those ten --
-  `RSA.PrivateKey` and `RSA.KeyPair`, `DSA.PrivateKey` and `DSA.KeyPair`,
-  `ECDSA.PrivateKey` and `ECDSA.KeyPair`, `DH.PrivateNumber`, and the
-  `PrivateKey` of `Rabin.Basic`, `Rabin.Modified` and `Rabin.RW` -- now render
-  the public part and `<secret>` for the rest.  Nothing else about them
-  changes: `Read`, `Eq`, `Data`, `Generic` and `NFData` are all still derived.
-  The new `Crypto.Debug` exports a class `DebugShow` whose `debugShow` returns
-  exactly what the derived `Show` used to return, for those ten and for the
-  five `ScrubbedBytes` secret keys as well, which never had a `Show` that
-  spoke.  **Code that serialized a key through `show` has to say `debugShow`
-  instead**; `read (debugShow k) == k` still holds, but `read` given the
-  output of `show` will now fail at run time, which the compiler cannot point
-  at
-  [#72](https://github.com/kazu-yamamoto/crypton/issues/72)
-
-* deprecate(ecc): the curves over a binary field.  They are obsolete, they are
-  the curves a cofactor makes delicate, and pyca/cryptography deprecated them
-  for removal in the release that fixed CVE-2026-26007.  A `DEPRECATED` pragma
-  now covers the eighteen `SEC_t*` constructors of `CurveName` and the
-  eighteen types of the same names in `Crypto.ECC.Simple.Types`; nothing is
-  removed, so the only effect is a warning where one of them is named, and
-  they will go in a later major version.  The prime curves with a cofactor,
-  `SEC_p112r2` and `SEC_p128r2`, are not deprecated: the check above covers
-  them
-  [#66](https://github.com/kazu-yamamoto/crypton/issues/66)
-
-* fix(ecc): refuse a public point outside the prime-order subgroup.  A point
-  that satisfies the curve equation is not necessarily in the subgroup the
-  base point generates; the two coincide only where the cofactor is 1.  Of the
-  curves in `CurveName` twenty have a cofactor -- the eighteen binary ones,
-  and `SEC_p112r2` and `SEC_p128r2`, whose cofactor is 4 -- and on those the
-  other party could offer a point of small order, at which point the value
-  that came back depended on our private number only through its residue
-  modulo that order, and offering it and watching the answer handed them those
-  bits.  This is the flaw pyca/cryptography fixed as CVE-2026-26007; what is
-  fixed here is the same one, found by following that report.
-  `Crypto.PubKey.ECC.DH.getShared` and `tryGetShared`, and
-  `Crypto.ECC.Simple.Prim.pointFromIntegers`, now require the point to be in
-  the subgroup and report `CryptoError_PointSubgroupInvalid` when it is not.
-  The check is `isPointInSubgroup`, newly exported from both prim modules:
-  where the cofactor is 1 it answers without work, and otherwise it multiplies
-  by the group order and requires the point at infinity, which is what
-  OpenSSL's `EC_KEY_check_key` does and costs one further scalar
-  multiplication -- an exchange on an affected curve is about twice the price,
-  and one on every other curve is unchanged.  The typed `Crypto.ECC` interface
-  offers only cofactor-1 curves and dedicated implementations, so nothing
-  reaching elliptic curves through it, `tls` among them, was affected
-
-* perf(p256): inline the field arithmetic on AArch64.  `felem_mul` and
-  `felem_square` end in `felem_reduce_degree`, a carry chain the whole width
-  of the number, and that chain is what their latency is: one product feeding
-  the next costs 18.1 ns on an Apple M4, while four independent ones cost 11.4
-  ns each.  The curve arithmetic has independent products to offer -- the two
-  squarings that open a point doubling, the multiplication and the squaring
-  that close it -- but only if the compiler inlines the reduction instead of
-  calling it, since a call is a fence.  Plain `inline` does not change its
-  mind; `always_inline` does, and it is worth asking where there are registers
-  to hold two carry chains at once and not where there are not: 1.23x on an
-  M4, 1.12x and 1.05x on a Neoverse under clang and gcc, and 0.95x and 0.82x
-  on x86-64, whose fifteen general-purpose registers are not enough.  So it is
-  gated on the architecture and x86-64 is left byte-identical.  ECDH P-256 on
-  an M4: 69.16 to 56.24 us, against openssl's 24.68, so 0.36 becomes 0.44;
-  ECDSA P-256 signing and verification move with it.  The cost is code, 30 to
-  116 kilobytes of it
-  [#188](https://github.com/kazu-yamamoto/crypton/pull/188)
-* perf(number): count bytes from the bit count, not from base 256.  `numBytes`
-  asked GMP how many base-256 digits a number has, and GHC's bignum answers
-  that by dividing the number down to nothing, one digit at a time, where the
-  same question in base two is a look at the highest limb.  On a 2048-bit
-  `Integer` that is 1.65 us against 0.01.  Every serialization here asks for
-  the size before it allocates and `i2ospOf` asks twice, so the cost landed on
-  every RSA, DSA and DH operation leaving the `Integer` world: `i2ospOf_` at
-  256 bytes goes from 2.87 to 0.09 us and RSA-2048 verification from 18.4 to
-  15.5 us on an M4.  Signing moves by a percent; it is two exponentiations and
-  hardly touches this
-  [#187](https://github.com/kazu-yamamoto/crypton/pull/187)
-* perf(ecc): stop sharing the doublings in the double multiplication.
-  `pointAddTwoMuls` was Shamir's trick, one pass over the bits of both scalars
-  at once in `Integer` arithmetic, which is the right trade when the two
-  multiplications would cost the same.  They have not for a while: `pointMul`
-  goes to C, and over a prime field it multiplies the base point through a
-  table of its multiples at about a third of the price -- and the base point
-  is one of the two, since ECDSA verification is the only caller.  Doing them
-  separately and adding: ECDSA P-384 verification 1397 to 698 us on an M4 in
-  the typed API, 9839 to 738 in the older one, and a curve over a binary field
-  641 ms to 2.6.  P-256 keeps the double multiplication it has in C
-  [#186](https://github.com/kazu-yamamoto/crypton/pull/186)
-* perf(sha3): take the CRYPTOGAMS Keccak for x86-64 as well.  The same module
-  as [#181](https://github.com/kazu-yamamoto/crypton/pull/181) on the other
-  architecture, and the reason it was not taken at the time was a measurement
-  taken on the wrong machine: crypton on Apple silicon against openssl on
-  x86-64, which said there was nothing to gain.  Measured on one machine there
-  was: SHA3-256 on an EPYC 7763 goes from 109 to 421 MB/s, against openssl's
-  426, so 0.26 becomes 0.99
-  [#184](https://github.com/kazu-yamamoto/crypton/pull/184)
-* perf(sha1): take the CRYPTOGAMS SHA-1 for AArch64.  The instructions are the
-  ones [#170](https://github.com/kazu-yamamoto/crypton/pull/170) put in, and
-  the arrangement is what the module has over them: the message schedule of
-  the next four rounds runs against the rounds of this one, which is not
-  something a C function is going to be made to do --
-  [#179](https://github.com/kazu-yamamoto/crypton/pull/179) tried the one
-  thing C can do here, handing over a run of blocks, and on this processor it
-  measured nothing at all.  The entry point for processors that have the
-  instructions is not exported, so the module's own dispatch picks it and the
-  answer to the runtime question goes into the word that dispatch reads.  On
-  Apple silicon: 3155 to 3379 MB/s at 16 KiB, against openssl's 3350 on the
-  same machine, so where this was at 0.94 it is now a shade ahead.  The
-  intrinsics stay for the block a message ends with, and for any processor
-  that has the instructions but is built without the assembly
-  [#182](https://github.com/kazu-yamamoto/crypton/pull/182)
-* perf(sha3): take the CRYPTOGAMS Keccak for AArch64.  The instructions are
-  the ones [#171](https://github.com/kazu-yamamoto/crypton/pull/171) put in --
-  EOR3, RAX1, XAR and BCAX -- and what this module does with them is take a
-  run of blocks rather than one at a time, and schedule the round it is in
-  against the next one.  The absorb loop hands over the whole run, which also
-  drops the alignment trampoline on that path: the assembly reads the message
-  as bytes.  SHA3-256 on Apple silicon: 1002 to 1104 MB/s at 16 KiB, against
-  openssl's 1058 on the same machine.  Only the absorb side is handed over;
-  the squeeze, which SHAKE uses to produce output, is entangled with this
-  side's buffer bookkeeping and is not where the time goes
-  [#181](https://github.com/kazu-yamamoto/crypton/pull/181)
-* perf(xts): double the XTS tweak in the integer registers.  The tweak
-  advances by doubling in GF(2^128) once per block, and it was doing that in a
-  vector register: six operations on the same units that are running the
-  rounds and the exclusive ors, in a chain where each waits for the one
-  before.  On a processor whose AES is fast that is not a detail -- taking the
-  doubling out of a diagnostic build, which gives the wrong answer but says
-  where the time goes, left XTS running at the speed of ECB.  It costs three
-  integer operations instead, and the integer units have nothing else to do
-  here; what crosses over is one move per block.  On x86-64 that also gets
-  eight values out of a register file with sixteen entries, so the round keys
-  stay where they were.  AES-128-XTS at 16 KiB: 9644 to 18646 MB/s on Apple
-  silicon and 4504 to 7660 on a Haswell-generation x86-64, against openssl's
-  17382 and 6997 on the same machines, so both are now a little ahead where
-  they were at 0.55 and 0.64.  No assembly: the AArch64 module in CRYPTOGAMS
-  has no XTS, and the x86-64 one's is inside a module this does not otherwise
-  want
-  [#180](https://github.com/kazu-yamamoto/crypton/pull/180)
-* perf(sha1): hand the SHA-1 block loop a run of blocks rather than one at a
-  time.  A block at a time means the state goes out to memory and comes back
-  either side of every block, with the two shuffles that put it in the order
-  the instructions want; against the hundred-odd cycles a block costs with the
-  SHA extensions that is most of what stood between this and openssl.  On an
-  EPYC 7763: 1364 to 1677 MB/s, against openssl's 1670 on the same machine,
-  and on a Xeon 8370C 1506 to 1619.  On Apple silicon it measures nothing at
-  all -- that processor hides the cost -- and is kept there only so the two
-  paths have one shape.  The intended file for this was CRYPTOGAMS'
-  `sha1-x86_64.pl`, which turns out to be the 2006 scalar implementation: no
-  SSSE3, no AVX, no SHA extensions.  Processors without the extensions are
-  therefore where they were, 664 MB/s against openssl's 791 on a Haswell
-  [#179](https://github.com/kazu-yamamoto/crypton/pull/179)
-* perf(sha2): take the CRYPTOGAMS SHA-256 and SHA-512 for x86-64.  One
-  generator gives both, as on AArch64, and each dispatches on what the
-  processor has: the SHA extensions, AVX2, AVX, SSSE3 or plain integer code.
-  That replaces everything written here for x86-64 -- `sha256_x86.c` and
-  `sha512_x86.c` go -- since it is ahead of all of it either way.  At 16 KiB:
-  on an EPYC 7763, SHA-256 1430 to 1584 MB/s and SHA-512 423 to 769; on a
-  Haswell-generation part, SHA-256 318 to 379 and SHA-512 488 to 593, where
-  openssl reports 378 and 589.  The block loops hand over the whole run of
-  blocks rather than one at a time, and the alignment trampoline goes with it.
-  This also fixes a bug in the capability word
-  [#176](https://github.com/kazu-yamamoto/crypton/pull/176) added: bit 29 of
-  leaf 7 EBX is the SHA extensions, not an AVX-512 bit, and was being cleared
-  along with them -- which cost the SHA-256 assembly two thirds of its speed
-  on a processor that has them, and which no machine here could have shown,
-  since none has them
-  [#178](https://github.com/kazu-yamamoto/crypton/pull/178)
-* perf(chacha): take the CRYPTOGAMS ChaCha20 for x86-64 as well.  The C here
-  vectorises from eight blocks up and takes anything shorter one block at a
-  time, so a message of a few hundred bytes -- a QUIC packet, a small TLS
-  record -- ran at a fifth of the bulk rate.  The module has vector code for
-  those lengths and is a few per cent ahead in bulk besides: 494 to 1091 MB/s
-  at 256 bytes, 477 to 701 at 128, and 2201 to 2374 at 16 KiB, which is
-  openssl's 2389 on the same machine.  It is handed everything from one block
-  up, where the AArch64 module is handed nothing below three, that one's
-  scalar path measuring level with the C.  Keystream generation is still the
-  C on both, having no input to exclusive-or
-  [#177](https://github.com/kazu-yamamoto/crypton/pull/177)
-* perf(poly1305): take the CRYPTOGAMS Poly1305 for x86-64 as well.  The same
-  module for the other architecture, through the same three functions, so what
-  this adds is the capability word: where the AArch64 one reads
-  `crypton_armcap_P`, this one reads `crypton_ia32cap_P`, which is cpuid's own
-  words in the order OpenSSL keeps them, filled with the bits for anything the
-  operating system will not preserve cleared.  What it brings over the AVX2
-  written here is a hand-scheduled scalar path, which is what a message of a
-  few hundred bytes actually uses, and an AVX path for machines with no AVX2:
-  on a Haswell-generation x86-64, 4298 to 5345 MB/s at 16 KiB and 556 to 1573
-  at 64 bytes, against the roughly 5270 openssl reaches there.  `poly1305_avx2.c`
-  goes the way the NEON did.  The module's AVX-512 paths are not taken: the
-  generator chooses what to emit from the version of the assembler it is told
-  about, and it is now told one that predates them, no machine here being able
-  to run them and an assembler still in use being unable to assemble them.
-  Pinning that version also makes the checked-in assembly independent of the
-  host that produced it
-  [#176](https://github.com/kazu-yamamoto/crypton/pull/176)
-* perf(sha256): take the CRYPTOGAMS SHA-256 for AArch64.  The instructions are
-  the ones the intrinsics here already use; what the module does with them is
-  schedule them across a whole run of blocks rather than one at a time, and
-  keep the message schedule of the next block moving while the rounds of this
-  one are still going, which a function that is handed one block and returns
-  cannot do whatever it is written in.  So the block loop hands over the whole
-  run, which also drops the alignment trampoline on this path -- the assembly
-  reads the message as bytes and wants neither the alignment nor the copy.  On
-  Apple silicon: 2637 to 3279 MB/s at 16 KiB, against openssl's 3323 on the
-  same machine, and 1576 to 1966 at 64 bytes.  SHA-512, which the same
-  generator emits, is not taken: 1876 here against openssl's 1880, the
-  ARMv8.2 instructions for it having gone in with #110
-  [#175](https://github.com/kazu-yamamoto/crypton/pull/175)
-* perf(poly1305): take the CRYPTOGAMS Poly1305 for AArch64.  One
-  multiplication modulo 2^130 - 5 depends on the one before it, so what there
-  is to win is in how the multiplies and the carries are laid against each
-  other, and in keeping the accumulator in whichever base costs less: the
-  module works in base 2^64 while the message is short and switches to base
-  2^26 for the four-way vector loop, deciding that for itself.  Unlike the
-  other two it is the whole of the arithmetic rather than a bulk loop bolted
-  to the side, so the context now holds either the 26-bit limbs the C works in
-  or the 192 bytes the assembly keeps, as a union, and grows from 84 bytes to
-  232.  On Apple silicon: 4269 to 8060 MB/s at 16 KiB and 1542 to 4355 at 64
-  bytes, and ChaCha20-Poly1305 together, which is what this is for, 1416 to
-  2284 against openssl's 2180 on the same machine.  `poly1305_neon.c`, which
-  [#169](https://github.com/kazu-yamamoto/crypton/pull/169) added, goes: the
-  assembly is faster at every length on every target that gets it, and the
-  scalar C remains for the targets that do not.  The tests came first and
-  found that the chunking property here had been testing nothing -- it used
-  the all-zero key, whose r is zero, so both sides were the nonce whatever
-  they did, which is how it came to feed the chunks to `update` in reverse
-  order and pass
-  [#174](https://github.com/kazu-yamamoto/crypton/pull/174)
-* perf(chacha): take the CRYPTOGAMS ChaCha20 for AArch64.  The vector
-  registers hold four ChaCha states and there is no room for a fifth, so once
-  four blocks are in flight the only place further parallelism can come from
-  is the integer side: that module runs a fifth block through the general
-  registers alongside four in the vector ones, and above 512 bytes two
-  alongside six.  Which register holds which word is the whole of the trick
-  and C has no way to say it, which is why the intrinsics here sat at about
-  0.63 of what openssl gets out of this very file.  On Apple silicon, a
-  message per call: 1911 to 3069 MB/s at 512 bytes, 1913 to 3093 at 4 KiB and
-  2056 to 3112 at 64 KiB, against openssl 3.6's 3164 on the same machine,
-  which is this code.  It is handed only the states it fits -- twenty rounds,
-  a 256-bit key, and as many blocks as the 32-bit counter has room for, since
-  crypton's counter is 64 bits wide and carries where the assembly wraps --
-  and nothing below 192 bytes, where its own vector path starts.  The tests
-  came first: the properties here generated one shape of state, so the
-  256-bit constants were never exercised by them
-  [#173](https://github.com/kazu-yamamoto/crypton/pull/173)
-* perf(gcm): take the CRYPTOGAMS stitched AES-GCM for x86-64, which is the
-  first assembly in the package.  Counter-mode AES and GHASH do not compete
-  for the same execution ports, so a loop that interleaves them at
-  instruction granularity runs both in about the time the rounds alone take;
-  written in C that interleaving does not survive the compiler, which sinks
-  every multiply to the end of the group, and the disassembly of what
-  [#160](https://github.com/kazu-yamamoto/crypton/pull/160) produced says so.
-  On a Haswell-generation x86-64, a message per call, AES-128-GCM: 2672 to
-  3172 MB/s at 1152 bytes, 3394 to 4271 at 4 KiB and 3657 to 5110 at 16 KiB,
-  where openssl speed on the same machine reports 4896; decryption within a
-  couple of points of that, and AES-256-GCM 3147 to 4297 at 16 KiB against
-  openssl's 4206.  `cbits/asm` holds the module, the translator it needs and the
-  generated assembly, one file per object format, so that building needs no
-  perl; `cbits/asm/README.md` records where it came from and what was done to
-  it, which is to rename the entry points, a program linking both crypton
-  and openssl being entitled to object to two definitions of
-  `aesni_gcm_encrypt`.  What the assembly reads is laid out OpenSSL's way and
-  is built per message in `cbits/aes/gcm_x86_asm.c`, the powers of H being
-  the ones crypton already has, shifted up a bit.  Short messages are not
-  handed over at all.  `cabal-version` is now 3.0, for `asm-sources`
-  [#172](https://github.com/kazu-yamamoto/crypton/pull/172)
-* perf(sha3): use the ARMv8.2 SHA-3 instructions.  Keccak was the plain C
-  everywhere, a round at a time over tables of rotation amounts and lane
-  positions, at half of what openssl manages on the same machine.  EOR3,
-  RAX1, XAR and BCAX exist for exactly this permutation and take a round from
-  around a hundred and fifty operations to sixty-six; they come with the
-  SHA-512 extension the tree already asks for.  Rho and pi move one lane of
-  every row into every other row, so the round cannot be done in place, and
-  four rounds go in an iteration, which is worth a fifth over one.  SHA3-256
-  551 to 991 MB/s (openssl 1064), SHAKE128 700 to 1166, Keccak-256 559 to
-  944.  The body is generated from the definitions in FIPS 202 rather than
-  copied in, and the script that worked out the rotations and the lane
-  permutation checked itself against the published digests of the empty
-  string and of "abc" before emitting any C, which is how a first attempt
-  with chi reading lanes another row had already overwritten was caught.  x86
-  is untouched: nothing there has instructions for this
-  [#171](https://github.com/kazu-yamamoto/crypton/pull/171)
-* perf(sha1): use the ARMv8 SHA-1 instructions.  The AArch64 paths for
-  SHA-256 and SHA-512 went in with #104 and #110 and x86 got its SHA-1
-  instructions in [#165](https://github.com/kazu-yamamoto/crypton/pull/165),
-  but the AArch64 SHA-1 ones were never used -- and they are part of the same
-  optional feature as the SHA-256 ones, so every processor that has those has
-  these.  SHA1C, SHA1P and SHA1M each do four rounds with one of the three
-  round functions, SHA1H carries E from one group to the next, and SHA1SU0
-  and SHA1SU1 do the message schedule between them.  On Apple silicon: 1272
-  to 3180 MB/s, against openssl 3.6's 3350 on the same machine.  Checked
-  against the hardware rather than through an emulation of the instructions,
-  the machine here having them: the digests agree with the generic
-  implementation over every message length from 0 to 2000, with each input
-  split in two updates
-  [#170](https://github.com/kazu-yamamoto/crypton/pull/170)
-* perf(poly1305): four blocks at a time with NEON.  AArch64 had only the
-  scalar loop, whose five 26-bit limbs and 32-bit multiplies are the shape a
-  32-bit machine wants.  This is the arithmetic of the AVX2 path in NEON,
-  written as a transliteration of that file rather than a fresh formulation,
-  since the maths there is already pinned by the known-answer tests; what
-  differs is the width, AVX2 holding four 64-bit products in a register where
-  NEON holds two, so each product becomes a pair and the limbs are packed
-  back into four 32-bit lanes before the next multiply.  On Apple silicon:
-  Poly1305 2783 to 4840 MB/s, and ChaCha20-Poly1305 together 1164 to 1368.
-  Checked against the scalar implementation over forty keys and every message
-  length from 0 to 400, with each input split in two updates.  Also measured
-  and left alone: BLAKE2b at 1612 MB/s against openssl's 1378, the reference
-  C being the faster of the two
-  [#169](https://github.com/kazu-yamamoto/crypton/pull/169)
-* perf(modes): stop the generic cipher modes allocating per byte.  Counter
-  mode with a cipher whose modes are not in C ran at a third of what the same
-  cipher managed in ECB, and at an eighth for Blowfish, for two reasons
-  outside the cipher.  The counters were built one at a time by `ivAdd`,
-  which allocates a block and walks the whole width of the counter from the
-  original for each of them; they are now one buffer filled in place.  And
-  the exclusive or was `Data.ByteArray`'s, which walks a byte at a time
-  through an IO applicative -- 420 MB of heap for 8 MiB of counter mode,
-  against 17 MB for the same data through ECB, which is fifty bytes allocated
-  per byte produced and cost more than the cipher did.  There is a
-  `crypton_memxor` to call instead, a pass of words, which the modes and CMAC
-  use.  The serial modes also took each block as a copy and take shared
-  slices now.  On Apple silicon, counter mode: Camellia-128 79.7 to 285.9
-  MB/s, Blowfish 60.4 to 282.6, DES 46.2 to 114.9, CAST5 40.2 to 86.6,
-  Twofish-128 37.4 to 57.6, 3DES 25.2 to 36.3, and CBC and CMAC by a third to
-  a half as much again.  AES is unchanged: its modes are in C and never came
-  this way
-  [#168](https://github.com/kazu-yamamoto/crypton/pull/168)
-* build: compile the C at -O3, which is what came of looking at P-256 against
-  openssl.  The comparison in the problem list was wrong -- a base point
-  multiplication here against openssl's ECDH, which is a variable point one --
-  and measured properly P-256 is 2.8 to 3.3 times slower rather than the 1.27
-  claimed.  The time is in the field arithmetic, five 51-bit limbs in
-  Montgomery form at 44.4 ns a multiplication, against hand-written assembly
-  using `mulx`, `adcx` and `adox`; a four-limb saturated Montgomery
-  multiplication written in C to see what a compiler would give measured 41.3
-  ns, so that is not the way in.  What did move is the optimisation level GHC
-  passes: a P-256 base point multiplication goes from 71.0 to 59.8 us on x86-64
-  and 26.0 to 24.3 on Apple silicon, AES-128-GCM from 3455 to 3708 MB/s and
-  AES-128-OCB from 2187 to 2484, with ChaCha20, Poly1305, SHA-1 and MD5 within
-  a couple of per cent either way.  The masked selections in the curve and
-  field code compile to no conditional jumps at either level
-  [#167](https://github.com/kazu-yamamoto/crypton/pull/167)
-* refactor(aes): drop the keystream generator nobody can call.  `genCTR` and
-  `genCounter` are exported from a module in `other-modules`, so nothing
-  outside the library could reach them and nothing inside used them; the only
-  mention left was a test commented out since the cryptonite days.  They were
-  also the slowest thing in the file, a block at a time through the
-  single-block entry point at 715 MB/s where counter mode does 5788, and the
-  three ways of fixing that are each worse than removing them: counter mode
-  over zeros costs Apple silicon a fifth, counters through ECB costs both, and
-  a keystream loop written out per key size is eighty lines for an API no
-  caller can see.  Also declares `crypton_aes_encrypt_ctr` and
-  `crypton_aes_encrypt_c32` in the header, which had them defined and imported
-  but never declared
-  [#166](https://github.com/kazu-yamamoto/crypton/pull/166)
-* perf(sha1): use the Intel SHA extensions on x86-64.  The extension that
-  carries the SHA-256 instructions carries four for SHA-1 as well, and the same
-  cpuid bit answers for both, so this is one file and one branch.  On an AMD
-  EPYC 7763: 725.1 to 1363.8 MB/s, against openssl's 1668.2 on the same
-  machine.  1.9x, where the SHA-256 instructions were worth 4.8x -- SHA-1's
-  rounds are cheaper to begin with, so there is less for an instruction to
-  replace.  The sequence was checked by replacing the four instructions with C
-  that follows the SDM and comparing against the generic implementation over
-  every length from 0 to 1024, which found the same missing schedule step
-  [#155](https://github.com/kazu-yamamoto/crypton/pull/155) had
-  [#165](https://github.com/kazu-yamamoto/crypton/pull/165)
-* docs(sidechannel): say what the modules that still work in `Integer` keep
-  from the clock, and fix the two places where something could be done about
-  it.  ElGamal inverted the shared secret with the extended Euclidean
-  algorithm, whose steps follow the bits it is given -- the modulus is prime,
-  so Fermat reaches it.  Its signing inverts the ephemeral value modulo an even
-  number, where Fermat does not reach, so `sign` blinds instead: the algorithm
-  is handed that value times a fresh random unit and the blinder divided out
-  afterwards.  What is left is written down rather than fixed -- the Jacobi
-  symbols Rabin takes modulo its private primes, and the cost of `Integer`
-  arithmetic following the size of the numbers -- and `Crypto.Cipher.AES` now
-  says which implementation a machine gets and that the fallback, being
-  table-driven, is not constant time
-  [#164](https://github.com/kazu-yamamoto/crypton/pull/164)
-* perf(poly1305): shorten the carry chain and stop the AVX2 loop spilling.  The
-  carries go in pairs, since the two halves of that chain do not depend on each
-  other; the powers of r are read from memory, there being sixteen registers
-  and ten of them wanted for the accumulator and the products; and the message
-  is added limb by limb as the block comes apart rather than five limbs being
-  formed first.  4203 to 4452 MB/s, and ChaCha20-Poly1305 together from 1412 to
-  1488.  What is left is the instruction count: 107 per 64 bytes, of which 25
-  are the multiply
-  [#163](https://github.com/kazu-yamamoto/crypton/pull/163)
-* perf(chacha): combine as the keystream comes out of the registers.  All three
-  vector implementations wrote it to a buffer on the stack and read it back to
-  exclusive-or it with the input, which is a pass over every byte for something
-  the registers were already holding.  2128 to 2230 MB/s on x86-64, and nothing
-  on Apple silicon, where the round trip was free.  Measured while doing it:
-  the AVX2 path already did eight blocks at a time, and what is left of the gap
-  to openssl in this AEAD is Poly1305 rather than the cipher
-  [#162](https://github.com/kazu-yamamoto/crypton/pull/162)
-* perf(sha): compute the message schedule in vector registers on x86.  SHA-512
-  has no instruction there and SHA-256 has none on a processor older than
-  Goldmont or Zen, which includes the Ice Lake and Cascade Lake server parts.
-  The rounds are a chain and stay where they are; the schedule is a quarter of
-  the work, comes out four words at a time and depends on nothing but the
-  message, so it goes into the vector registers and runs alongside rounds that
-  need the general ones.  SHA-256 228 to 314 MB/s, SHA-512 354 to 480
-  [#161](https://github.com/kazu-yamamoto/crypton/pull/161)
-* perf(gcm): take the GHASH of the group before, alongside this group's rounds.
-  Held a group apart the multiply and the rounds run through each other, where
-  in step neither could start until the other finished.  With it, the multiply
-  called directly rather than through a branch pointer the compiler cannot see
-  through, and the round keys read from memory rather than spilled: AES-128-GCM
-  2797 to 3458 MB/s and AES-256-GCM 2458 to 3053.  openssl does 4895 and 4205
-  on the same machine; the rest of that is instruction-level interleaving,
-  which does not survive being written in intrinsics
-  [#160](https://github.com/kazu-yamamoto/crypton/pull/160)
-* perf(ocb): drive OCB through the ECB paths a group at a time.  It ran one
-  block at a time through the single-block entry point and so cost four times
-  what GCM costs, for a mode that does less work than GCM.  The offsets have to
-  be worked out in order but the block cipher calls under them do not depend on
-  each other, so eight go through ECB together.  OCB-128 1130 to 3500 MB/s on
-  Apple silicon and 694 to 2173 on x86-64, the authenticated data 1141 to 5900
-  and 692 to 2526.  CCM is unchanged and stays that way: what is left there is
-  CBC-MAC, where each block waits for the one before it
-  [#159](https://github.com/kazu-yamamoto/crypton/pull/159)
-* test(aes): run the XTS vectors, and add OCB and CCM at 192 and 256 bits.  The
-  XTS known-answer tests never ran: the call was commented out and the test it
-  would have called did not compile, so vectors at both key sizes sat in the
-  tree unused.  XTS is defined only for a 128-bit block, which the general KAT
-  runner cannot promise, so it gains a counterpart for a cipher that can.  OCB
-  and CCM had vectors at 128 bits only.  2613 examples to 2679
-  [#158](https://github.com/kazu-yamamoto/crypton/pull/158)
-* perf(aes): build the AArch64 key schedule with the instructions rather than
-  the S-box table.  The AArch64 path expanded a key by calling the generic
-  implementation and then inverting the round keys, so every schedule went
-  through sixteen lookups at addresses derived from the key -- a small thing
-  next to the per-block indexing the extensions exist to remove, but a key
-  schedule is what an attacker most wants out of a cache, and x86 has never
-  needed the table.  AArch64 has no counterpart to AESKEYGENASSIST, but AESE
-  against a zero key is SubBytes and ShiftRows, and a word given to it in all
-  four columns comes back as SubWord in each of them.  The words stay in
-  vector registers throughout, which is what makes it free: moving each one to
-  a general register for the instruction and back cost more than the
-  instruction did, 87 to 144 ns for an AES-128 schedule, where keeping them in
-  registers gives 81.4
-  [#157](https://github.com/kazu-yamamoto/crypton/pull/157)
-* perf(aes): AES-192 through the processor's AES instructions.  Every 192-bit
-  slot in the branch table was left at the generic code, on x86 and on AArch64
-  alike, so a 192-bit key got the table-driven software AES while 128 and 256
-  got the instructions.  It was 164 times slower for counter mode on the x86
-  machine measured and 62 on Apple silicon, and it was also the only key size
-  whose data path indexes a table with bytes derived from the key -- a caller
-  who picks AES-192 over AES-128 for a wider margin was quietly given a weaker
-  one.  Counter mode then GCM, before and after: Apple silicon 152.7 to 9452.0
-  MB/s and 112.3 to 7049.3, x86-64 40.4 to 6635.1 and 39.9 to 2633.5.  Both
-  implementations were already written once per key size, so this instantiates
-  them again at twelve rounds; x86 also needed the 192-bit schedule, which
-  does not fall into 128-bit pieces the way the other two do
-  [#156](https://github.com/kazu-yamamoto/crypton/pull/156)
-* perf(sha256): use the Intel SHA extensions on x86-64, which is what issue
-  [#31](https://github.com/kazu-yamamoto/crypton/issues/31) reports -- SHA-256
-  four to eight times slower than sha256sum and openssl, both of which use the
-  processor's instructions.  AArch64 got its instructions in #104 and is at
-  parity with them; x86 had nothing.  SHA256RNDS2 does two rounds at a time and
-  SHA256MSG1 and SHA256MSG2 help with the message schedule, so a block costs
-  four groups of sixteen instructions instead of sixty-four rounds of scalar
-  work.  On an AMD EPYC 9V74: 338.3 to 1612.7 MB/s, against openssl's 1783.8 on
-  the same machine.  The extensions arrived with Goldmont and Ice Lake at Intel
-  and with Zen at AMD, far later than AES-NI, so a processor without them is
-  ordinary rather than ancient: the code sits behind a target attribute and a
-  cpuid question, and the plain C stays for everything else
-  [#155](https://github.com/kazu-yamamoto/crypton/pull/155)
-* perf(bcrypt): Blowfish, and the key setup bcrypt wraps it in, in C.  bcrypt
-  is a cost parameter and a promise that the cost is paid, and what pays it is
-  the Blowfish key schedule; in Haskell that cost about twice what the usual
-  implementations charge, so a hash of a given length of time had to be asked
-  for with a lower cost than elsewhere.  Cost 8 goes from 25.97 to 9.98 ms,
-  cost 10 from 102.01 to 39.79, cost 12 from 418.78 to 159.41, `bcrypt_pbkdf`
-  from 109.76 to 40.38, and Blowfish over 4 KiB from 0.05 to 0.01 -- at cost
-  10 that is 39.8 ms against the 52 `htpasswd` takes on the same machine.  The
-  Haskell cipher goes with it, so there is one implementation rather than two,
-  and nothing exposed changes
-  [#154](https://github.com/kazu-yamamoto/crypton/pull/154)
-* perf(prime): fewer Miller-Rabin rounds for a candidate nobody chose.  A
-  number handed over may have been built to pass, and against that the only
-  thing to go on is that a round catches three quarters of the composites
-  there are, so `isProbablyPrime`, `findPrimeFrom` and `findPrimeFromWith`,
-  which all take their number from the caller, keep their thirty rounds.  A
-  candidate drawn here is the case Damgard, Landrock and Pomerance worked out
-  and Table 4.4 of the Handbook of Applied Cryptography tabulates:
-  `generatePrime` and `generateSafePrime` now use twice what it asks for one
-  chance in 2^80, capped at the thirty they had, which leaves the chance far
-  under one in 2^100 at every size.  With the candidates held fixed,
-  `generatePrime 1024` goes from 28.5 to 16.9 ms and an RSA-2048 key from 52.9
-  to 39.2
-  [#153](https://github.com/kazu-yamamoto/crypton/pull/153)
-* fix(rsa): work the private exponent out without the extended Euclidean
-  algorithm.  The modulus is the secret there, so multiplying the value by a
-  random number hides nothing; what does is that `e` is public.  Whatever `d`
-  is, `e * d = 1 + k * phi` for some `k` under `e`, and reading that modulo
-  `e` gives `k` as an inverse modulo a number of a handful of bits, which for
-  a prime `e` is Fermat; `d` is then an exact division.  What phi touches is a
-  remainder and a division, and nothing in either follows it
-  [#152](https://github.com/kazu-yamamoto/crypton/pull/152)
-* perf(f2m): ask aarch64 for its carry-less multiply as well.  #148 used PMULL
-  only where the compiler had been told the machine has the crypto
-  extensions, which is so on Apple and not on a Linux built for the bare
-  ARMv8 baseline, though every processor that runs such a build has it.  It is
-  now compiled behind an attribute and the machine asked at run time, through
-  the auxiliary vector on Linux and Android, elf_aux_info on FreeBSD and a
-  sysctl on Apple: sect283k1 421.2 to 168.9 us there, sect571r1 2289.2 to
-  579.9
-  [#151](https://github.com/kazu-yamamoto/crypton/pull/151)
-* refactor(ecc): one multiplication for both of the curve APIs, and one place
-  for each buffer's size.  Which path a point multiplication takes was written
-  out twice, and the copy in `Crypto.ECC.Simple.Prim` cannot be reached from
-  outside the library on a curve over a binary field, so the suite never ran
-  it; it moves to the internal module both already share, which makes the copy
-  nobody can call the same code everybody runs.  The two buffers for a C call
-  that still had their size written out separately from the offsets into them
-  now take both from one list, as the one that was wrong in #141 does -- the
-  note there records that neither valgrind nor the debug RTS catches that
-  mistake, both having been tried
-  [#150](https://github.com/kazu-yamamoto/crypton/pull/150)
-* perf(f2m): use the x86 carry-less multiply where the processor has it.
-  PCLMULQDQ is not part of the x86-64 baseline, so the cpuid the package
-  already runs for AES-NI reports one more bit and the multiplication that
-  uses the instruction sits behind an attribute.  Measured through Rosetta,
-  which translates rather than runs it, so the ratio is what to read:
-  sect283k1 560.4 to 177.5 us, sect571r1 3049.6 to 623.9
-  [#149](https://github.com/kazu-yamamoto/crypton/pull/149)
-* perf(f2m): do the binary field arithmetic in C.  The ladder of #142 spent
-  nearly all its time on one thing -- a carry-less multiplication, which
-  ordinary arithmetic does not give and which in Haskell was `Integer` shifts
-  and exclusive ors, about 4 us for a 283-bit multiplication.  The field and
-  the ladder over it are now C, with the processor's instruction where there
-  is one and four interleaved groups of bits where there is not, folding for
-  the reduction and Fermat for the inverse.  sect163k1 3431 to 67.4 us with
-  the instruction and 117.3 without, sect283k1 10181 to 157.6 and 386.2,
-  sect571r1 40469 to 521.6 and 2101.0.  It is also constant time, which the
-  Haskell ladder was not
-  [#148](https://github.com/kazu-yamamoto/crypton/pull/148)
-* perf(bignum): start the doubling for `R^2 mod m` at the highest power of two
-  under the modulus rather than at one, which for a modulus that fills its
-  limbs is half the steps.  Two to three percent of a curve operation, and
-  every curve operation and every `expSafe` pays for it once.  Folding instead
-  of Montgomery for the primes shaped `2^k - c` was written and measured
-  alongside it and is not here: it is slower in this representation, 87.8 ns
-  against 76.8 for a 521-bit multiplication, because the shift down by `k`
-  costs more than the reduction pass it replaces when `k` does not land on a
-  limb boundary
-  [#147](https://github.com/kazu-yamamoto/crypton/pull/147)
-* perf(ecc): keep a table of the multiples of each curve's base point, which
-  is the point signing and making a key multiply and the only one worth a
-  table.  A multiplication with it is one addition per four bits and no
-  doublings: secp256k1 211.1 to 59.8 us, secp384r1 519.3 to 144.2, secp521r1
-  1047.7 to 283.0, and ECDSA P-384 signing 556.4 to 179.9 on both elliptic
-  curve APIs, which share the table.  A table is built when a curve is first
-  asked for one -- 2.8 ms for secp256k1, 5.5 for secp384r1, 10.6 for secp521r1
-  -- and is 221 KB and 456 KB for the last two, so it pays for itself after
-  about fifteen multiplications
-  [#146](https://github.com/kazu-yamamoto/crypton/pull/146)
-* perf(bignum): take the limbs four and two at a time as well as eight in the
-  loop every modular multiplication is built out of.  Four and six limbs, which
-  is what most of the curves want, fell entirely to the one-at-a-time tail
-  before: a field multiplication at six limbs goes from about 58 to 49 ns,
-  secp384r1 scalar multiplication from 596.7 to 519.3 us and ECDSA P-384
-  signing from 645.0 to 556.4.  Specialising the sizes further, which is what a
-  generated implementation would do, measures about 4% more and is not here
-  [#145](https://github.com/kazu-yamamoto/crypton/pull/145)
-* fix(rsa): keep the blinding factor out of the extended Euclidean algorithm.
-  The blinder is a random number and its inverse, and the inverse went through
-  an algorithm whose steps follow the number handed to it -- the number the
-  blinding rests on, and unlike the other inverses this one is worked out once
-  per operation rather than once per key.  `n` being composite leaves no
-  Fermat to fall back on, so the algorithm is handed the factor multiplied by
-  sixteen fresh random bytes and its answer multiplied by them again, which
-  leaves the inverse wanted and shows the algorithm nothing to do with it.  In
-  IO, where every draw of randomness goes to the system, `generateBlinder`
-  goes from 74 to about 120 us and a PKCS#1 v1.5 `signSafer` from 719 to about
-  765; under a DRG the caller carries, 24.7 to 24.9
-  [#144](https://github.com/kazu-yamamoto/crypton/pull/144)
-* fix(rsa): work `qinv` out without the extended Euclidean algorithm.  Making
-  a key inverts one prime modulo the other and both of them are the key
-  itself, so that inverse is now Fermat's little theorem through `expSafe`,
-  which the other prime being prime allows: 308.6 us against 10.1, on a key
-  that takes tens of milliseconds to make.  Making a key cannot be constant
-  time -- the search for the primes takes as long as it takes -- but what that
-  leaks is about the search rather than about the primes it settles on, and
-  the haddock now says which is which
-  [#143](https://github.com/kazu-yamamoto/crypton/pull/143)
-* perf(ecc): a ladder for the curves over a binary field.  These were the last
-  multiplication whose cost followed the scalar: an affine double-and-add, one
-  addition for every bit that was set and none for the others, which on
-  sect283k1 ran from 9665 us for a scalar with two bits set to 17958 for one
-  with 270.  It is now Montgomery's ladder, which carries the multiples of two
-  consecutive numbers -- their difference being the point is what lets it
-  carry only their x coordinates -- and spends one addition and one doubling
-  on every bit whichever way it goes, working the y out at the end from the
-  two x it is left with, so one division does for the whole multiplication
-  where the affine code had one per step.  The multiplication is now flat, and
-  quicker: sect163k1 4428 to 3431 us, sect233r1 9304 to 6806, sect283k1 13797
-  to 10181, sect409k1 30826 to 20584, sect571r1 61931 to 40469.  Uniform is
-  not constant time -- these are `Integer` operations, whose cost follows the
-  values -- and the point with no x, which is its own negation, keeps the code
-  that was there
-  [#142](https://github.com/kazu-yamamoto/crypton/pull/142)
-* perf(ecc): multiply points in C on curves over a prime field.  P-256 has had
-  a C implementation all along; every other prime curve -- P-384, P-521,
-  secp256k1 and the rest -- multiplied points with `Integer` arithmetic, which
-  cannot be constant time, since what an `Integer` operation costs follows the
-  value it is given.  The C walks four bits of scalar at a time, taking the
-  multiple to add from a table of sixteen that it reads by touching every
-  entry and keeping one with a mask, and its addition and doubling are the
-  complete formulas of Renes, Costello and Batina, which answer for every pair
-  of points with no case to choose between.  A P-384 multiplication goes from
-  1557 to 585 us and no longer follows the scalar, ECDSA P-384 signing from
-  1700 to 636 us, P-521 from 1942 to 1123.  Binary curves are unchanged, and a
-  point that is not on the curve keeps the answer the Haskell gives it
-  [#141](https://github.com/kazu-yamamoto/crypton/pull/141)
-* fix(ecc): add at every bit in the prime-curve multiplication, which laziness
-  was skipping.  The multiplication adds at every bit, set or not, so that its
-  cost follows the width of the curve's order rather than the scalar -- but
-  the addition was a binding only one branch of the following `if` used, so at
-  a bit that was not set it stayed a thunk and was never worked out.  The cost
-  followed the number of bits set in the scalar, which is the nonce when
-  signing and the private key in ECDH: on P-384, 765.8 us for a scalar with
-  two bits set against 1671.5 for one with 383, in a straight line between.
-  Both copies of the multiplication had it, so both elliptic curve APIs were
-  affected on every prime curve but P-256
-  [#140](https://github.com/kazu-yamamoto/crypton/pull/140)
-* fix(ecdsa): keep the P-256 signature out of `Integer` arithmetic.  The
-  scalar handed to the C implementation was reduced with `mod`, a division,
-  whose steps follow the number being divided -- the nonce when signing, the
-  private key in ECDH.  Twice the order is more than 256 bits hold, so a
-  scalar that fits is brought under the order by one masked subtraction
-  instead.  The second half of a signature, `kInv * (z + r * d)`, was
-  `Integer` arithmetic as well, and now goes through `scalarAdd` and
-  `scalarMul`, which on P-256 are the C implementation's fixed-width
-  arithmetic.  What is left on that curve is the conversion between `Integer`
-  and fixed-width scalars, which is also what it costs: signing goes from 34.1
-  to 39.3 us, and ECDH and the other curves are unchanged
-  [#139](https://github.com/kazu-yamamoto/crypton/pull/139)
-* fix(dsa,ecdsa): invert the signing nonce without a side channel.  Both
-  inverted it with the extended Euclidean algorithm, whose step count and
-  branches follow the bits of what it is given -- and a handful of signatures
-  whose nonces are partly known give the private key away, so the nonce is
-  worth as much as the key.  `Crypto.Number.ModArithmetic.inverseSafe` works
-  the inverse out with Fermat's little theorem through `expSafe` instead,
-  falling back on `inverse` when the modulus turns out not to be prime, so
-  every answer is the one it was.  On P-256 the C implementation does it.
-  Signing costs a little more: ECDSA P-256 30.6 to 34.1 us, ECDSA P-384 678.7
-  to 703.4, DSA-2048 422.5 to 437.1.  Verification inverts a value that
-  arrives in the signature and is left alone
-  [#138](https://github.com/kazu-yamamoto/crypton/pull/138)
-* perf(number): square, and multiply, faster in `expSafe`.  The product and
-  the Montgomery reduction are now a full product followed by a reduction
-  rather than interleaved, built out of one loop that takes its limbs eight at
-  a time, and squaring works out only the products on one side of the diagonal
-  and doubles their sum.  At 2048 bits the constant-time exponentiation goes
-  from 3.59 to 2.15 ms, which is 1.4x GMP's own rather than 2.4x; RSA-2048
-  signing goes from 0.80 to 0.63 ms and DH-2048 `getShared` from 2.43 to 1.67
-  [#137](https://github.com/kazu-yamamoto/crypton/pull/137)
-* fix(number): make `expSafe` hide the exponent again.  It asked integer-gmp
-  for `powModSecInteger` and fell back on the ordinary `powModInteger` when
-  that was missing; since integer-gmp 1.1 it is always missing, so on every
-  GHC this package supports `expSafe` was the same windowed exponentiation as
-  `expFast`, table indexed by the exponent's bits, for RSA, DSA, DH, ElGamal
-  and Rabin alike.  It now goes to C: four bits of exponent at a time, the
-  table of sixteen read by touching every entry and keeping one with a mask,
-  and a Montgomery multiplication whose final subtraction is masked too.  The
-  exponent's length is still visible, rounded up to a whole 64-bit word, which
-  is what GMP's own `mpz_powm_sec` lets slip.  Hiding the exponent costs 1.6x
-  at 512 bits and 2.4x at 2048: RSA-2048 signing goes from 0.46 to 0.80 ms and
-  DH-2048 `getShared` from 1.04 to 2.43
-  [#136](https://github.com/kazu-yamamoto/crypton/pull/136)
-* perf(prime): stop running a Fermat test that Miller-Rabin subsumes.  Every
-  candidate was tested to base 2 before the Miller-Rabin rounds, which begin
-  with the same base and prove more; the primes it passed paid for it twice
-  and the composites it caught were nearly all caught by trial division first.
-  RSA-2048 key generation goes from 55.0 to 32.8 ms
-  [#135](https://github.com/kazu-yamamoto/crypton/pull/135)
-* perf(f2m): reduce the binary field by folding the top back in rather than
-  taking a step per bit of excess, square a byte at a time through a table of
-  the patterns a byte spreads into, and take four bits of a multiplier at a
-  time rather than one.  On the 283-bit field, squaring goes from 5440 to 2068
-  ns and multiplication from 7526 to 4086.  A scalar multiplication there is
-  still affine, so it inverts once per addition, which is where its time now
-  goes
-  [#134](https://github.com/kazu-yamamoto/crypton/pull/134)
-* perf(ecc): fold instead of dividing in the generic prime-curve arithmetic,
-  and add the point being multiplied as the affine point it is.  These primes
-  are `2^k - c` with `c` far smaller, so the top half of a product folds back
-  in with a shift, a multiplication and an addition, where dividing costs four
-  times as much -- above 256 bits, below which the folding costs more than it
-  saves.  P-521 scalar multiplication goes from 892 to 492 us and P-384 from
-  684 to 572
-  [#133](https://github.com/kazu-yamamoto/crypton/pull/133)
-* perf(ecc): route P-256 through the C implementation the library already had.
-  `Crypto.PubKey.ECDSA` reached `cbits/p256`; `Crypto.PubKey.ECC.*`, the older
-  and more widely used API, never did.  ECDSA signing goes from 590 to 28.7 us,
-  verification from 726 to 91.4, and `getShared` from 1177 to 96.  On P-256
-  that multiplication is now constant time, where the generic code branches on
-  the scalar at every bit
-  [#132](https://github.com/kazu-yamamoto/crypton/pull/132)
-* Breaking change: perf(camellia): put Camellia in C, 40 to 321 MiB/s.  The
-  round function ran a byte at a time in Haskell; generating the tables that
-  take a byte straight to its contribution gained 14%, and the rest was the
-  language.  Input that is not a whole number of blocks now raises, where the
-  tail of the answer used to be uninitialised memory
-  [#131](https://github.com/kazu-yamamoto/crypton/pull/131)
-* Breaking change: perf(twofish): walk the blocks once and carry them in words
-  rather than appending each result to what came before and going through lists
-  per block.  2 MiB goes from 0.14 to 56 MiB/s, and the rate no longer falls as
-  the message grows.  Input that is not a whole number of blocks now raises,
-  where it used to come back longer than it went in
-  [#130](https://github.com/kazu-yamamoto/crypton/pull/130)
-* perf(modes): cut the message without copying the rest of it in the generic
-  block cipher modes, which every cipher but AES uses, and hand whole slices to
-  the cipher in the modes whose blocks do not depend on one another.  Camellia
-  in CBC goes from 1.8 to 22.9 MiB/s at 1 MiB, DES CBC decryption from 0.5 to
-  83, and every figure is now flat in the message length where it used to fall
-  [#129](https://github.com/kazu-yamamoto/crypton/pull/129)
-* Breaking change: perf(des): put DES in C.  It was carried over lists of
-  `Bool`, one cons cell per bit, with the key schedule recomputed for every
-  block: 0.04 MiB/s, and 3DES 0.013, against 105 and 41 for OpenSSL.  They are
-  now 112 and 37.  Input that is not a whole number of blocks now raises, where
-  the tail of the answer used to be uninitialised memory
-  [#128](https://github.com/kazu-yamamoto/crypton/pull/128)
-* perf(cmac): slice the message rather than copying what is left of it once per
-  block, and chain through CBC, which is what CMAC's chaining is.  A MAC over
-  4 MiB goes from 0.36 to 1628 MiB/s, which is the speed of AES-CBC itself
-  [#127](https://github.com/kazu-yamamoto/crypton/pull/127)
-* fix(rabin): decode OAEP without early exits, as
-  `Crypto.PubKey.RSA.OAEP.unpad` has since #91.  The difference is not
-  measurable against the cost of mask generation, and is structural: the scan
-  across the padding no longer depends on the data
-  [#126](https://github.com/kazu-yamamoto/crypton/pull/126)
-* Breaking change: fix(rabin): refuse a ciphertext or a signature that is not
-  below the modulus, and a ciphertext carrying a leading zero octet.  Squaring
-  and the square roots that undo it work modulo n, so Basic and Rabin-Williams
-  decrypted `c + n` to whatever `c` decrypted to, and all three schemes verified
-  `s + n`, and `-s`, wherever they verified `s`.  `Basic.signWith` also refuses a
-  padding whose first octet is zero, which the signature cannot carry: about one
-  signature in 256 was one its own `verify` rejected
-  [#125](https://github.com/kazu-yamamoto/crypton/pull/125)
-* fix(prime): derive the Miller-Rabin witnesses from the number being tested and
-  from a secret drawn once per process.  They came from one generator made once
-  and shared by every call, so the witnesses for one number were the witnesses
-  for every number, and testing a number again told the caller nothing it had
-  not already been told.  This is the path every GHC since 9.0 takes, integer-gmp
-  1.1 having no Miller-Rabin of its own
-  [#124](https://github.com/kazu-yamamoto/crypton/pull/124)
-* docs(elgamal): say what `signWith` requires of its ephemeral value: the range
-  is 1 to p-2, not the "between 0 and p-1" the haddock claimed, and the value is
-  a private key that a signature discloses if it is reused or revealed
-  [#123](https://github.com/kazu-yamamoto/crypton/pull/123)
-* Breaking change: fix(afis): give `split` and `merge` one answer for a parameter
-  they cannot use.  They had four between them, including a division by zero for
-  an expand count of zero and, for a count of one, handing the diffused data back
-  as though it were the secret
-  [#122](https://github.com/kazu-yamamoto/crypton/pull/122)
-* Breaking change: fix(rsa): refuse a ciphertext or a signature whose integer
-  representative is not below the modulus, which RFC 8017 requires in sections
-  5.1.2 and 5.2.2.  `PKCS15.decrypt` and `OAEP.decrypt` decrypted `c + n` to the
-  same message as `c`, and `PSS.verifyDigest` accepted `s + n` wherever it
-  accepted `s`
-  [#121](https://github.com/kazu-yamamoto/crypton/pull/121)
-* fix(otp): search the HOTP resynchronization window without early exits.  The
-  time taken read out both where in the window the client's counter was found
-  and how many of the submitted values were right -- the second of which the
-  answer itself does not give, being `Nothing` either way.  A call now costs one
-  HMAC per counter in the window plus one per extra value, every time
-  [#120](https://github.com/kazu-yamamoto/crypton/pull/120)
-* Breaking change: fix(kdf): report a refused parameter as a `CryptoError` rather
-  than as an `ErrorCall` carrying a string, with a `'`-suffixed variant of each
-  entry point returning `CryptoFailable`.  PBKDF2 had no validation at all: a
-  negative output length reached `memSet` and killed the process with SIGBUS, and
-  an iteration count of zero returned 32 bytes of zeroes
-  [#119](https://github.com/kazu-yamamoto/crypton/pull/119)
-* perf(xts): take eight blocks at a time on AArch64 and x86-64, and dispatch XTS
-  decryption through the branch table, which it had never used.  AArch64 goes
-  from 1200 to 7742 MiB/s encrypting and 1166 to 7763 decrypting, x86-64 from
-  1220 to 3464 and from 594 to 3461
-  [#118](https://github.com/kazu-yamamoto/crypton/pull/118)
-* perf(poly1305): take four blocks at a time with AVX2 on x86-64, folding the
-  lanes back together weighted by the powers of r.  1347 to 4137 MiB/s
-  [#117](https://github.com/kazu-yamamoto/crypton/pull/117)
-* perf(ecc): work in Jacobian coordinates in both generic prime-field scalar
-  multiplications, and say in `Crypto.ECC` which curves branch on a secret
-  scalar.  P-384 and P-521 ECDSA are 2.3x: signing goes from 3.36 to 1.46 ms and
-  from 5.96 to 2.61 ms.  P-256, which has its own C implementation, is unaffected
-  [#116](https://github.com/kazu-yamamoto/crypton/pull/116)
-* Breaking change: fix(padding): bound PKCS#7 padding by the block rather than by
-  the whole input, which had let a block of sixteen accept a claim of twenty, and
-  refuse a `ZERO` size of zero rather than dividing by it.  What `ZERO` can and
-  cannot undo is now written down
-  [#115](https://github.com/kazu-yamamoto/crypton/pull/115)
-* perf(gcm): give x86 its own GCM decryption loop.  It fell to the generic one,
-  which calls the block function once per block, and ran at a quarter the speed
-  of encryption; both directions now take eight blocks at a time and fold their
-  GHASH into one reduction.  AES-256-GCM decryption goes from 561 to 2733 MiB/s
-  and AES-128 from 667 to 3150
-  [#114](https://github.com/kazu-yamamoto/crypton/pull/114)
-* perf(chacha): take eight blocks at a time with AVX2 where the machine has it,
-  with the cpuid and XGETBV checks that decide.  ChaCha20 on x86-64 goes from
-  900 to 2074 MiB/s
-  [#113](https://github.com/kazu-yamamoto/crypton/pull/113)
-* perf(chacha): do four blocks at a time with SSE2 on x86-64, where the cipher
-  had no vector code at all.  ChaCha20 goes from 493 to 900 MiB/s
-  [#112](https://github.com/kazu-yamamoto/crypton/pull/112)
-* perf(chacha): do four blocks at a time with NEON on AArch64.  ChaCha20 goes
-  from 1025 to 1955 MiB/s
-  [#111](https://github.com/kazu-yamamoto/crypton/pull/111)
-* feat(sha512): use the ARMv8.2 SHA-512 instructions on AArch64, which SHA-384
-  and the truncated SHA-512/t variants share.  Hashing 1 MiB goes from 1.53 ms
-  to 597 us.  The extension is optional, so it is asked for at runtime on both
-  Apple and Linux rather than assumed
-  [#110](https://github.com/kazu-yamamoto/crypton/pull/110)
-* perf(gcm): drive GCM from AArch64 rather than the generic loop, with a group
-  of eight blocks folding into a single GHASH reduction.  AES-128-GCM goes from
-  4030 to 8266 MiB/s and AES-256 from 4043 to 7172
-  [#109](https://github.com/kazu-yamamoto/crypton/pull/109)
-* perf(aes): specialise the AArch64 code by key size and interleave eight
-  blocks, and give CTR its own loop.  AES-256 ECB goes from 3886 to 15991
-  MiB/s, CTR from 2935 to 13567 and CBC decryption from 4366 to 15807
-  [#108](https://github.com/kazu-yamamoto/crypton/pull/108)
-
-* perf(aes): build the AES-NI paths on Windows, which was missing from the list of
-  systems that compile them.  Windows builds have been doing AES, and GHASH with it,
-  in the generic C
-  [#107](https://github.com/kazu-yamamoto/crypton/pull/107)
-* fix(armv8): compile the AArch64 sources on a toolchain whose baseline lacks the
-  crypto extensions.  They had not built with GCC on AArch64 Linux since #100; CI now
-  builds and tests there
-  [#106](https://github.com/kazu-yamamoto/crypton/pull/106)
-* perf(gcm): fold four GHASH blocks into one reduction.  AES-256-GCM is 1.6x at 1 KiB
-  and 2.6x at 64 KiB on Apple silicon, and the x86 paths gain the same structure
-  [#105](https://github.com/kazu-yamamoto/crypton/pull/105)
-* perf(sha256): use the ARMv8 SHA-2 instructions on AArch64.  SHA-256 and SHA-224 are
-  5.5x
-  [#104](https://github.com/kazu-yamamoto/crypton/pull/104)
-* ci: keep the macOS jobs from queueing behind each other, and supersede a branch's
-  earlier run
-  [#103](https://github.com/kazu-yamamoto/crypton/pull/103)
-* perf(aes): use PMULL for GHASH on AArch64
-  [#102](https://github.com/kazu-yamamoto/crypton/pull/102)
-* ci: ask cabal where its caches live rather than assuming, and keep the build
-  products in the cache
-  [#101](https://github.com/kazu-yamamoto/crypton/pull/101)
-* perf(aes): use the ARMv8 cryptographic extensions on AArch64.  With the GHASH work
-  in #102 and #105, AES-256-ECB goes from 121 to 2992 MiB/s and AES-256-GCM from 92 to
-  2318 MiB/s on Apple silicon
-  [#100](https://github.com/kazu-yamamoto/crypton/pull/100)
-* build(bench): move the benchmarks from gauge, which is no longer maintained, to
-  tasty-bench, and let them resolve on a current GHC
-  [#99](https://github.com/kazu-yamamoto/crypton/pull/99)
-* Breaking change: fix(padding): reject a `PKCS7` block size outside 1..255.  `pad`
-  raises and `unpad` returns `Nothing`, where both previously narrowed the size to a
-  `Word8` and silently agreed on the wrong value
-  [#98](https://github.com/kazu-yamamoto/crypton/pull/98)
-* feat(elgamal): fix `Crypto.PubKey.ElGamal` and expose it
-  [#97](https://github.com/kazu-yamamoto/crypton/pull/97)
-* docs(bcrypt): say that only the first 72 bytes of a password count
-  [#96](https://github.com/kazu-yamamoto/crypton/pull/96)
-* test: move the test suite from tasty to hspec, with hspec-discover.  `cabal-version`
-  is now 2.0
-  [#95](https://github.com/kazu-yamamoto/crypton/pull/95)
-
-* feat(aead): add `tryAeadSimpleDecrypt`, which takes the tag length as its own argument instead of reading it off the supplied tag
-  [#94](https://github.com/kazu-yamamoto/crypton/pull/94)
-* Breaking change: feat(dh): add `tryGetShared` to `Crypto.PubKey.DH` and `Crypto.PubKey.ECC.DH`, reporting a rejected peer value as `CryptoFailable`; `getShared` is now defined in terms of it and so raises a `CryptoError` rather than an `ErrorCall`
-  [#93](https://github.com/kazu-yamamoto/crypton/pull/93)
-* fix(otp): compare TOTP candidates without an early exit
-  [#92](https://github.com/kazu-yamamoto/crypton/pull/92)
-* fix(rsa): drop the early exits from PKCS#1 v1.5 and OAEP unpadding
-  [#91](https://github.com/kazu-yamamoto/crypton/pull/91)
-* Breaking change: fix(argon2): report invalid options as `CryptoFailed` rather than raising, adding `CryptoError_ParameterInvalid` to `CryptoError`
-  [#90](https://github.com/kazu-yamamoto/crypton/pull/90)
-* Breaking change: fix(dh): validate the peer public number, and size the shared secret from `p` rather than `params_bits`
-  [#89](https://github.com/kazu-yamamoto/crypton/pull/89)
-* fix(dsa): do not crash on values that are not invertible modulo `q`
-  [#88](https://github.com/kazu-yamamoto/crypton/pull/88)
-* Breaking change: fix(ecdh): validate the peer point before the exchange
-  [#87](https://github.com/kazu-yamamoto/crypton/pull/87)
-* Breaking change: fix(pkcs15): reject PKCS#1 v1.5 signatures of the wrong length or out of range
-  [#86](https://github.com/kazu-yamamoto/crypton/pull/86)
-* Breaking change: fix(otp): require a digest long enough for RFC 4226 dynamic truncation, which was reading past the end of the MAC
-  [#85](https://github.com/kazu-yamamoto/crypton/pull/85)
-* fix(ecc): accept zero-x P-256 shared secret
-  [#84](https://github.com/kazu-yamamoto/crypton/pull/84)
+* Add GHC 9.14 to CI
+  [#74](https://github.com/kazu-yamamoto/crypton/pull/74)
+* fix(ed25519): reject non-canonical signatures
+  [#81](https://github.com/kazu-yamamoto/crypton/pull/81)
+* fix(hkdf): enforce RFC 5869 output limit
+  [#82](https://github.com/kazu-yamamoto/crypton/pull/82)
 * fix(p256): accept valid edge-case points
   [#83](https://github.com/kazu-yamamoto/crypton/pull/83)
-* Breaking change: fix(hkdf): enforce output length limit
-  [#82](https://github.com/kazu-yamamoto/crypton/pull/82)
-* Breaking change: fix(ed25519): reject non-canonical signatures
-  [#81](https://github.com/kazu-yamamoto/crypton/pull/81)
-* Support GHC 9.14; `tested-with` now covers 9.10.2, 9.12.4 and 9.14.1
-  [#74](https://github.com/kazu-yamamoto/crypton/pull/74)
-
-### API changes
-
-* New exports: `Crypto.OTP.minimumDigestSize`, `Crypto.PubKey.DH.tryGetShared`,
-  `Crypto.PubKey.ECC.DH.tryGetShared`, `Crypto.Cipher.Types.AEAD.tryAeadSimpleDecrypt`,
-  `Crypto.Number.ModArithmetic.inverseSafe`, `Crypto.PubKey.ECC.Prim.scalarInverse`,
-  `scalarAdd` and `scalarMul`, `Crypto.PubKey.ECC.P256.scalarReduce`,
-  and the whole of `Crypto.PubKey.ElGamal`, which was present but not exposed.
-  The variant of an entry point that reports a refusal rather than raising is
-  named `try` followed by the name it varies, `tryExpand` beside `expand`.  A
-  trailing apostrophe was the obvious spelling and is what these were called
-  until shortly before release; it collides too easily, since a caller that
-  imports one of these modules unqualified and has its own `expand'` or
-  `split'` no longer compiles, and `tls` did.  `Safe` was considered and set
-  aside: this library already uses that suffix for something else, in
-  `Crypto.Number.ModArithmetic.expSafe` and `inverseSafe` and in
-  `Crypto.PubKey.ECC.P256.scalarInvSafe`, where it means the value being
-  worked on stays out of the timing.
-  The KDFs gained a variant of each entry point that can refuse its parameters,
-  returning `CryptoFailable` instead of raising: `Crypto.KDF.Scrypt.tryGenerate`,
-  `Crypto.KDF.BCrypt.tryBcrypt`, `Crypto.KDF.BCryptPBKDF.tryGenerate` and
-  `tryHashInternal`, `Crypto.KDF.HKDF.tryExpand`, `Crypto.KDF.PBKDF2.tryGenerate` and
-  `tryFastPBKDF2_SHA1`, `tryFastPBKDF2_SHA256` and `tryFastPBKDF2_SHA512`, and
-  `Crypto.Data.AFIS.trySplit` and `tryMerge`.  These are additions and break nothing.
-* Breaking change: `CryptoError_ParameterInvalid` is added to `CryptoError`.  It is
-  appended, so the `Enum` values of the existing constructors are unchanged, but an
-  exhaustive `case` without a wildcard will warn.  Adding a constructor to an exported
-  datatype is what requires a major version bump under the PVP, which would have been
-  1.2.0; this release goes to 2.0.0.  Everything else below changes behaviour rather
-  than types.
-* Breaking change: `getShared` in both DH modules raises a `CryptoError` where it
-  previously raised an `ErrorCall`, since it is now defined in terms of `tryGetShared`.
-  The same is now true of `Crypto.KDF.Scrypt.generate`, `Crypto.KDF.BCrypt.bcrypt`,
-  `Crypto.KDF.BCryptPBKDF.generate` and `hashInternal`, and `Crypto.Data.AFIS.split`
-  and `merge`, each of which is defined in terms of the variant above.
-* Breaking change: input that used to be accepted is now rejected -- a digest shorter
-  than 20 bytes in `Crypto.OTP.hotp`, a signature of the wrong length or out of range
-  in `Crypto.PubKey.RSA.PKCS15.verify`, an off-curve peer point or a peer public number
-  outside `1 < y < p-1` in `getShared`, an output beyond 255 blocks in
-  `Crypto.KDF.HKDF.expand`, a non-canonical Ed25519 signature, and `Options` the
-  implementation refuses in `Crypto.KDF.Argon2.hash`.
-* Breaking change: a value at or above the modulus is now rejected where it used to be
-  reduced and accepted -- a ciphertext in `Crypto.PubKey.RSA.PKCS15.decrypt` and
-  `Crypto.PubKey.RSA.OAEP.decrypt`, a signature in `Crypto.PubKey.RSA.PSS.verify`, and
-  both, along with a negated signature and a ciphertext with a leading zero octet, in
-  the three `Crypto.PubKey.Rabin.*` schemes.
-* Breaking change: parameters that used to be accepted are now refused -- an iteration
-  count below one or a negative output length in `Crypto.KDF.PBKDF2`, an expand count
-  below two or a secret of no bytes in `Crypto.Data.AFIS`, a `PKCS7` claim longer than
-  the block and a `ZERO` size of zero in `Crypto.Data.Padding`, and a signature padding
-  whose first octet is zero in `Crypto.PubKey.Rabin.Basic.signWith`.
-* Breaking change: DES, 3DES, Twofish and Camellia now raise on input that is not a
-  whole number of blocks, as AES already did.  Before, DES and Camellia returned an
-  answer whose tail was never written -- uninitialised memory -- and Twofish returned
-  more than it was given, the missing bytes read as zero.
-* Breaking change: `Crypto.Data.Padding.pad` raises on a `PKCS7` block size outside
-  1..255, and `unpad` returns `Nothing` for one, where both used to narrow the size to
-  a `Word8` and hand back something other than what was padded.
-* No exported function changed its signature.
+* fix(ecc): accept zero-x P-256 shared secrets
+  [#84](https://github.com/kazu-yamamoto/crypton/pull/84)
+* fix(otp): require a digest long enough for dynamic truncation
+  [#85](https://github.com/kazu-yamamoto/crypton/pull/85)
+* fix(pkcs15): reject malformed PKCS#1 v1.5 signatures
+  [#86](https://github.com/kazu-yamamoto/crypton/pull/86)
+* fix(ecdh): validate the peer point before the exchange
+  [#87](https://github.com/kazu-yamamoto/crypton/pull/87)
+* fix(dsa): do not crash on non-invertible values
+  [#88](https://github.com/kazu-yamamoto/crypton/pull/88)
+* fix(dh): validate the peer public number
+  [#89](https://github.com/kazu-yamamoto/crypton/pull/89)
+* fix(argon2): report invalid options as CryptoFailed
+  [#90](https://github.com/kazu-yamamoto/crypton/pull/90)
+* fix(rsa): drop the early exits from PKCS#1 v1.5 and OAEP unpadding
+  [#91](https://github.com/kazu-yamamoto/crypton/pull/91)
+* fix(otp): compare TOTP candidates without an early exit
+  [#92](https://github.com/kazu-yamamoto/crypton/pull/92)
+* feat(dh): add getShared' reporting rejections as CryptoFailable
+  [#93](https://github.com/kazu-yamamoto/crypton/pull/93)
+* feat(aead): add aeadSimpleDecrypt' taking the tag length
+  [#94](https://github.com/kazu-yamamoto/crypton/pull/94)
+* test: move the suite to hspec, with hspec-discover
+  [#95](https://github.com/kazu-yamamoto/crypton/pull/95)
+* docs(bcrypt): say that only the first 72 bytes of a password count
+  [#96](https://github.com/kazu-yamamoto/crypton/pull/96)
+* feat(elgamal): fix and expose Crypto.PubKey.ElGamal
+  [#97](https://github.com/kazu-yamamoto/crypton/pull/97)
+* fix(padding): reject a PKCS7 block size outside 1..255
+  [#98](https://github.com/kazu-yamamoto/crypton/pull/98)
+* build(bench): move the benchmarks from gauge to tasty-bench
+  [#99](https://github.com/kazu-yamamoto/crypton/pull/99)
+* feat(aes): use the ARMv8 cryptographic extensions on AArch64
+  [#100](https://github.com/kazu-yamamoto/crypton/pull/100)
+* ci: stop throwing the cache away, and keep the build products in it
+  [#101](https://github.com/kazu-yamamoto/crypton/pull/101)
+* feat(aes): use PMULL for GHASH on AArch64
+  [#102](https://github.com/kazu-yamamoto/crypton/pull/102)
+* ci: cut the macOS queueing and supersede stale branch runs
+  [#103](https://github.com/kazu-yamamoto/crypton/pull/103)
+* feat(sha256): use the ARMv8 SHA-2 instructions on AArch64
+  [#104](https://github.com/kazu-yamamoto/crypton/pull/104)
+* perf(gcm): fold four GHASH blocks into one reduction
+  [#105](https://github.com/kazu-yamamoto/crypton/pull/105)
+* ci: build and test on aarch64 Linux
+  [#106](https://github.com/kazu-yamamoto/crypton/pull/106)
+* fix(cabal): build the AES-NI paths on Windows too
+  [#107](https://github.com/kazu-yamamoto/crypton/pull/107)
+* perf(aes): specialise by key size and interleave eight blocks on AArch64
+  [#108](https://github.com/kazu-yamamoto/crypton/pull/108)
+* perf(gcm): drive GCM from AArch64 rather than the generic loop
+  [#109](https://github.com/kazu-yamamoto/crypton/pull/109)
+* feat(sha512): use the ARMv8.2 SHA-512 instructions on AArch64
+  [#110](https://github.com/kazu-yamamoto/crypton/pull/110)
+* perf(chacha): do four blocks at a time with NEON on AArch64
+  [#111](https://github.com/kazu-yamamoto/crypton/pull/111)
+* perf(chacha): do four blocks at a time with SSE2 on x86-64
+  [#112](https://github.com/kazu-yamamoto/crypton/pull/112)
+* perf(chacha): take eight blocks with AVX2 where the machine has it
+  [#113](https://github.com/kazu-yamamoto/crypton/pull/113)
+* perf(gcm): give x86 its own decryption loop, and eight blocks either way
+  [#114](https://github.com/kazu-yamamoto/crypton/pull/114)
+* fix(padding): bound PKCS7 padding by the block, and check ZERO's size
+  [#115](https://github.com/kazu-yamamoto/crypton/pull/115)
+* ecc: say which curves branch on a secret scalar, and work in Jacobian coordinates
+  [#116](https://github.com/kazu-yamamoto/crypton/pull/116)
+* perf(poly1305): take four blocks at a time with AVX2 on x86-64
+  [#117](https://github.com/kazu-yamamoto/crypton/pull/117)
+* perf(xts): drive XTS eight blocks at a time, and dispatch its decryption
+  [#118](https://github.com/kazu-yamamoto/crypton/pull/118)
+* Report refused KDF parameters as CryptoError, and fix a PBKDF2 SIGBUS
+  [#119](https://github.com/kazu-yamamoto/crypton/pull/119)
+* Search the HOTP resynchronization window without early exits
+  [#120](https://github.com/kazu-yamamoto/crypton/pull/120)
+* Refuse an RSA representative that is not below the modulus
+  [#121](https://github.com/kazu-yamamoto/crypton/pull/121)
+* Give AFIS one answer for a parameter it cannot use
+  [#122](https://github.com/kazu-yamamoto/crypton/pull/122)
+* Say what ElGamal's signWith requires of k
+  [#123](https://github.com/kazu-yamamoto/crypton/pull/123)
+* Draw Miller-Rabin witnesses per number, not once per process
+  [#124](https://github.com/kazu-yamamoto/crypton/pull/124)
+* Refuse Rabin values that are not below the modulus, and keep the padding that was signed
+  [#125](https://github.com/kazu-yamamoto/crypton/pull/125)
+* Decode Rabin's OAEP without early exits
+  [#126](https://github.com/kazu-yamamoto/crypton/pull/126)
+* Make CMAC linear, and chain it through CBC
+  [#127](https://github.com/kazu-yamamoto/crypton/pull/127)
+* Put DES in C
+  [#128](https://github.com/kazu-yamamoto/crypton/pull/128)
+* Make the generic block cipher modes linear, and bulk where the blocks allow
+  [#129](https://github.com/kazu-yamamoto/crypton/pull/129)
+* Walk Twofish's blocks once, and carry them in words
+  [#130](https://github.com/kazu-yamamoto/crypton/pull/130)
+* Put Camellia in C
+  [#131](https://github.com/kazu-yamamoto/crypton/pull/131)
+* Route P-256 through the C implementation it already had
+  [#132](https://github.com/kazu-yamamoto/crypton/pull/132)
+* Fold instead of dividing in the generic curve arithmetic
+  [#133](https://github.com/kazu-yamamoto/crypton/pull/133)
+* Reduce the binary field by folding, and work a byte and a nibble at a time
+  [#134](https://github.com/kazu-yamamoto/crypton/pull/134)
+* Stop running a Fermat test Miller-Rabin subsumes
+  [#135](https://github.com/kazu-yamamoto/crypton/pull/135)
+* Make expSafe hide the exponent again
+  [#136](https://github.com/kazu-yamamoto/crypton/pull/136)
+* Square, and multiply, faster in expSafe
+  [#137](https://github.com/kazu-yamamoto/crypton/pull/137)
+* Invert the signing nonce without a side channel
+  [#138](https://github.com/kazu-yamamoto/crypton/pull/138)
+* Keep the P-256 signature out of Integer arithmetic
+  [#139](https://github.com/kazu-yamamoto/crypton/pull/139)
+* Add at every bit in the prime-curve multiplication, which laziness was skipping
+  [#140](https://github.com/kazu-yamamoto/crypton/pull/140)
+* Multiply points in C on curves over a prime field
+  [#141](https://github.com/kazu-yamamoto/crypton/pull/141)
+* A ladder for the curves over a binary field
+  [#142](https://github.com/kazu-yamamoto/crypton/pull/142)
+* Work RSA's qinv out without the extended Euclidean algorithm
+  [#143](https://github.com/kazu-yamamoto/crypton/pull/143)
+* Keep the RSA blinding factor out of the extended algorithm
+  [#144](https://github.com/kazu-yamamoto/crypton/pull/144)
+* Unroll the inner loop at four and two as well
+  [#145](https://github.com/kazu-yamamoto/crypton/pull/145)
+* Keep a table for each curve's base point
+  [#146](https://github.com/kazu-yamamoto/crypton/pull/146)
+* Start R squared at the top of the modulus, and why folding did not pay
+  [#147](https://github.com/kazu-yamamoto/crypton/pull/147)
+* Do the binary field arithmetic in C
+  [#148](https://github.com/kazu-yamamoto/crypton/pull/148)
+* Use the x86 carry-less multiply where the processor has it
+  [#149](https://github.com/kazu-yamamoto/crypton/pull/149)
+* Close the two testing gaps: one multiplication for both APIs, one place for each buffer's size
+  [#150](https://github.com/kazu-yamamoto/crypton/pull/150)
+* Ask aarch64 for its carry-less multiply as well
+  [#151](https://github.com/kazu-yamamoto/crypton/pull/151)
+* Work the RSA private exponent out without the extended algorithm
+  [#152](https://github.com/kazu-yamamoto/crypton/pull/152)
+* Fewer Miller-Rabin rounds for a candidate nobody chose
+  [#153](https://github.com/kazu-yamamoto/crypton/pull/153)
+* Blowfish, and the key setup bcrypt wraps it in, in C
+  [#154](https://github.com/kazu-yamamoto/crypton/pull/154)
+* perf(sha256): use the Intel SHA extensions on x86-64
+  [#155](https://github.com/kazu-yamamoto/crypton/pull/155)
+* perf(aes): AES-192 through the processor's AES instructions
+  [#156](https://github.com/kazu-yamamoto/crypton/pull/156)
+* perf(aes): build the AArch64 key schedule with AESE, not the S-box table
+  [#157](https://github.com/kazu-yamamoto/crypton/pull/157)
+* test(aes): run the XTS vectors, and OCB and CCM at 192 and 256 bits
+  [#158](https://github.com/kazu-yamamoto/crypton/pull/158)
+* perf(ocb): drive OCB through the ECB paths a group at a time
+  [#159](https://github.com/kazu-yamamoto/crypton/pull/159)
+* perf(gcm): take the GHASH of the group before, alongside this group's rounds
+  [#160](https://github.com/kazu-yamamoto/crypton/pull/160)
+* perf(sha): compute the message schedule in vector registers on x86
+  [#161](https://github.com/kazu-yamamoto/crypton/pull/161)
+* perf(chacha): combine as the keystream comes out of the registers
+  [#162](https://github.com/kazu-yamamoto/crypton/pull/162)
+* perf(poly1305): shorten the carry chain and stop spilling the loop
+  [#163](https://github.com/kazu-yamamoto/crypton/pull/163)
+* docs(sidechannel): say what the prime-field modules keep from the clock
+  [#164](https://github.com/kazu-yamamoto/crypton/pull/164)
+* perf(sha1): use the Intel SHA extensions on x86-64
+  [#165](https://github.com/kazu-yamamoto/crypton/pull/165)
+* refactor(aes): drop the keystream generator nobody can call
+  [#166](https://github.com/kazu-yamamoto/crypton/pull/166)
+* build: compile the C at -O3
+  [#167](https://github.com/kazu-yamamoto/crypton/pull/167)
+* perf(modes): stop the generic cipher modes allocating per byte
+  [#168](https://github.com/kazu-yamamoto/crypton/pull/168)
+* perf(poly1305): four blocks at a time with NEON
+  [#169](https://github.com/kazu-yamamoto/crypton/pull/169)
+* perf(sha1): use the ARMv8 SHA-1 instructions
+  [#170](https://github.com/kazu-yamamoto/crypton/pull/170)
+* perf(sha3): use the ARMv8.2 SHA-3 instructions
+  [#171](https://github.com/kazu-yamamoto/crypton/pull/171)
+* perf(gcm): the CRYPTOGAMS stitched AES-GCM on x86-64
+  [#172](https://github.com/kazu-yamamoto/crypton/pull/172)
+* perf(chacha): the CRYPTOGAMS ChaCha20 on AArch64
+  [#173](https://github.com/kazu-yamamoto/crypton/pull/173)
+* perf(poly1305): the CRYPTOGAMS Poly1305 on AArch64
+  [#174](https://github.com/kazu-yamamoto/crypton/pull/174)
+* perf(sha256): the CRYPTOGAMS SHA-256 on AArch64
+  [#175](https://github.com/kazu-yamamoto/crypton/pull/175)
+* perf(poly1305): the CRYPTOGAMS Poly1305 on x86-64 too
+  [#176](https://github.com/kazu-yamamoto/crypton/pull/176)
+* perf(chacha): the CRYPTOGAMS ChaCha20 on x86-64 too
+  [#177](https://github.com/kazu-yamamoto/crypton/pull/177)
+* perf(sha2): the CRYPTOGAMS SHA-256 and SHA-512 on x86-64
+  [#178](https://github.com/kazu-yamamoto/crypton/pull/178)
+* perf(sha1): hand the SHA-1 block loop a run of blocks, not one at a time
+  [#179](https://github.com/kazu-yamamoto/crypton/pull/179)
+* perf(xts): double the tweak in the integer registers
+  [#180](https://github.com/kazu-yamamoto/crypton/pull/180)
+* perf(sha3): take the CRYPTOGAMS Keccak for AArch64
+  [#181](https://github.com/kazu-yamamoto/crypton/pull/181)
+* perf(sha1): take the CRYPTOGAMS SHA-1 for AArch64
+  [#182](https://github.com/kazu-yamamoto/crypton/pull/182)
+* docs: put the performance tables in the README
+  [#183](https://github.com/kazu-yamamoto/crypton/pull/183)
+* perf(sha3): take the CRYPTOGAMS Keccak for x86-64 as well
+  [#184](https://github.com/kazu-yamamoto/crypton/pull/184)
+* docs: rebuild the performance tables
+  [#185](https://github.com/kazu-yamamoto/crypton/pull/185)
+* perf(ecc): stop sharing the doublings in the double multiplication
+  [#186](https://github.com/kazu-yamamoto/crypton/pull/186)
+* perf(number): count bytes from the bit count, not from base 256
+  [#187](https://github.com/kazu-yamamoto/crypton/pull/187)
+* perf(p256): inline the field arithmetic on AArch64
+  [#188](https://github.com/kazu-yamamoto/crypton/pull/188)
+* fix(api): name the reporting variants try..., not with an apostrophe
+  [#189](https://github.com/kazu-yamamoto/crypton/pull/189)
+* fix(ecc): require a public point to be in the prime-order subgroup
+  [#190](https://github.com/kazu-yamamoto/crypton/pull/190)
+* fix(pubkey): stop printing private keys, and add Crypto.Debug
+  [#191](https://github.com/kazu-yamamoto/crypton/pull/191)
+* fix(poly1305): take a checked key, so that initializing cannot fail
+  [#192](https://github.com/kazu-yamamoto/crypton/pull/192)
+* fix(bcrypt): refuse a cost bcrypt does not have rather than substituting one
+  [#194](https://github.com/kazu-yamamoto/crypton/pull/194)
+* chore: build without a warning
+  [#195](https://github.com/kazu-yamamoto/crypton/pull/195)
+* docs: build the documentation without a warning
+  [#196](https://github.com/kazu-yamamoto/crypton/pull/196)
 
 ## 1.1.5
 
@@ -2128,3 +848,4 @@ API CHANGES:
 ## 0.1
 
 * Initial release
+
