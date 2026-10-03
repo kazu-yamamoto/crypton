@@ -27,6 +27,14 @@ decaf_src="$D/ed448goldilocks/decaf_all.c $D/ed448goldilocks/eddsa.c
 decaf_inc="-DCRYPTON_DECAF_WORD_BITS=64 -I$D/include -I$D/p448
            -I$D/include/arch_ref64 -I$D/p448/arch_ref64"
 
+mlkem_src="cbits/mlkem/crypton_mlkem.c"
+mlkem_inc="-Icbits/mlkem"
+# And the hand-written backend, where the architecture has one.  Both builds
+# have to be silent: unlike the AES pair below there is no variable-time
+# implementation here for one of them to expose.
+mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S"
+mlkem_native_inc="$mlkem_inc -DCRYPTON_MLKEM_NATIVE_BACKEND"
+
 # The generic C, not whatever the machine happens to offer.  A build that
 # takes AES-NI reports nothing from the AES driver and says nothing about the
 # table-driven code every other machine runs.
@@ -46,11 +54,16 @@ if command -v valgrind > /dev/null 2>&1; then
 	ct_define=-DCRYPTON_CT_VALGRIND
 fi
 
+# run_one <name> <sources> <includes> [driver]
+#
+# The driver defaults to ct_<name>.c.  It is given separately where one
+# driver is built twice -- the same question asked of the portable C and of
+# the hand-written backend -- rather than copying the file to a second name.
 run_one() {
-	name=$1; srcs=$2; inc=$3
+	name=$1; srcs=$2; inc=$3; drv=${4:-$1}
 	# shellcheck disable=SC2086
 	$cc -O2 -g $ct_define -Icbits -Icbits/include64 $inc \
-		-o "$out/$name" "cbits/tests/ct/ct_$name.c" $srcs 2> "$out/$name.cc" || {
+		-o "$out/$name" "cbits/tests/ct/ct_$drv.c" $srcs 2> "$out/$name.cc" || {
 		echo "FAIL $name did not build"; sed -n '1,12p' "$out/$name.cc"; status=1; return
 	}
 	if [ "$have_valgrind" = no ]; then
@@ -150,6 +163,7 @@ run_one x25519  "cbits/curve25519/curve25519-donna-c64.c" ""
 run_one ed25519 "cbits/ed25519/ed25519.c cbits/crypton_sha512.c" "-Icbits/ed25519"
 run_one decaf   "$decaf_src" "$decaf_inc"
 run_one chapoly "cbits/crypton_chacha.c cbits/crypton_poly1305.c" ""
+run_one mlkem   "$mlkem_src" "$mlkem_inc"
 run_one aes     "$aes_src" ""
 
 # Only where the instructions exist.  Elsewhere there is nothing to measure
@@ -157,6 +171,17 @@ run_one aes     "$aes_src" ""
 case $(uname -m) in
 aarch64 | arm64)
 	run_one aes_armv8 "$armv8_src" "$armv8_inc"
+	;;
+esac
+
+# The ML-KEM backend, on both architectures that have one.  x86-64 wants the
+# flags its own build system passes, or the AVX2 sources do not assemble.
+case $(uname -m) in
+aarch64 | arm64)
+	run_one mlkem_native "$mlkem_native_src" "$mlkem_native_inc" mlkem
+	;;
+x86_64 | amd64)
+	run_one mlkem_native "$mlkem_native_src" "$mlkem_native_inc -mavx2 -mbmi2" mlkem
 	;;
 esac
 

@@ -301,6 +301,8 @@ library
         Crypto.PubKey.Ed25519
         Crypto.PubKey.Ed448
         Crypto.PubKey.EdDSA
+        Crypto.PubKey.MLKEM
+        Crypto.PubKey.MLDSA
         Crypto.PubKey.MaskGenFunction
         Crypto.PubKey.Rabin.Basic
         Crypto.PubKey.Rabin.Modified
@@ -952,6 +954,10 @@ test-suite test-crypton
         PubKey.DSASpec
         PubKey.ECCSpec
         PubKey.ECDSASpec
+        PubKey.MLKEMSpec
+        PubKey.MLKEMVectors
+        PubKey.MLDSASpec
+        PubKey.MLDSAVectors
         PubKey.ElGamalSpec
         PubKey.MGF1Spec
         PubKey.OAEPSpec
