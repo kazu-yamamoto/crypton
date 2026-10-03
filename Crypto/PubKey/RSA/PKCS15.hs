@@ -1,3 +1,7 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+
 -- |
 -- Module      : Crypto.PubKey.RSA.PKCS15
 -- License     : BSD-style
@@ -15,10 +19,13 @@ module Crypto.PubKey.RSA.PKCS15 (
     decryptSafer,
     sign,
     signSafer,
+    signWithHash,
+    signSaferWithHash,
 
     -- * Public key operations
     encrypt,
     verify,
+    verifyWithHash,
 
     -- * Hash ASN1 description
     HashAlgorithmASN1,
@@ -536,6 +543,36 @@ signSafer hashAlg pk m = do
     blinder <- generateBlinder (private_n pk)
     return (sign (Just blinder) hashAlg pk m)
 
+-- | Sign a message after hashing it with the statically selected algorithm.
+-- Select the algorithm with a visible type application. Unlike 'sign', this
+-- operation always hashes the message.
+signWithHash
+    :: forall hashAlg.
+       HashAlgorithmASN1 hashAlg
+    => Maybe Blinder
+    -- ^ optional blinder
+    -> PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ message to hash and sign
+    -> Either Error ByteString
+signWithHash blinder pk m =
+    dp blinder pk `fmap` makeSignatureWithHash @hashAlg (private_size pk) m
+
+-- | Sign a message with a statically selected hash and an automatically
+-- generated blinder. See 'signSafer' for the blinding guarantee.
+signSaferWithHash
+    :: forall hashAlg m.
+       (HashAlgorithmASN1 hashAlg, MonadRandom m)
+    => PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ message to hash and sign
+    -> m (Either Error ByteString)
+signSaferWithHash pk m = do
+    blinder <- generateBlinder (private_n pk)
+    return (signWithHash @hashAlg (Just blinder) pk m)
+
 -- | verify message with the signed message
 --
 -- Following RFC 8017, the signature is rejected unless it is exactly as long
@@ -562,6 +599,25 @@ verify hashAlg pk m sm
             Left _ -> False
             Right s -> s == (ep pk sm)
 
+-- | Verify a message's signature using the statically selected hash
+-- algorithm. Select the algorithm with visible type application.
+verifyWithHash
+    :: forall hashAlg.
+       HashAlgorithmASN1 hashAlg
+    => PublicKey
+    -> ByteString
+    -- ^ message
+    -> ByteString
+    -- ^ signature
+    -> Bool
+verifyWithHash pk m sm
+    | B.length sm /= public_size pk = False
+    | os2ip sm >= public_n pk = False
+    | otherwise =
+        case makeSignatureWithHash @hashAlg (public_size pk) m of
+            Left _ -> False
+            Right s -> s == ep pk sm
+
 -- | make signature digest, used in 'sign' and 'verify'
 makeSignature
     :: HashAlgorithmASN1 hashAlg
@@ -572,3 +628,12 @@ makeSignature
     -> Either Error ByteString
 makeSignature Nothing klen m = padSignature klen m
 makeSignature (Just hashAlg) klen m = padSignature klen (hashDigestASN1 $ hashWith hashAlg m)
+
+makeSignatureWithHash
+    :: forall hashAlg.
+       HashAlgorithmASN1 hashAlg
+    => Int
+    -> ByteString
+    -> Either Error ByteString
+makeSignatureWithHash klen m =
+    padSignature klen (hashDigestASN1 (hash m :: Digest hashAlg))
