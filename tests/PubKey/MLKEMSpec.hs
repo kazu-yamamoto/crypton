@@ -32,7 +32,7 @@ hex s = case convertFromBase Base16 (BS.pack (map (fromIntegral . fromEnum) s)) 
 -- turns the name back into one.
 withSet
     :: String
-    -> (forall p. KEM p => Proxy p -> r)
+    -> (forall p. MLKEM p => Proxy p -> r)
     -> r
 withSet "ML-KEM-512" k = k (Proxy :: Proxy MLKEM512)
 withSet "ML-KEM-768" k = k (Proxy :: Proxy MLKEM768)
@@ -101,7 +101,7 @@ decapCase v =
 -- first and fail the second.
 checkCase
     :: String
-    -> (forall p. KEM p => Proxy p -> BS.ByteString -> Bool)
+    -> (forall p. MLKEM p => Proxy p -> BS.ByteString -> Bool)
     -> KeyCheckVector
     -> Spec
 checkCase what accepts v =
@@ -112,13 +112,13 @@ checkCase what accepts v =
         | ckPasses v = " (a sound " ++ what ++ ")"
         | otherwise = " (" ++ what ++ " the standard refuses)"
 
-encapsulationKeyOf :: KEM p => Proxy p -> BS.ByteString -> Bool
+encapsulationKeyOf :: MLKEM p => Proxy p -> BS.ByteString -> Bool
 encapsulationKeyOf (_ :: Proxy p) bs =
     case encapsulationKey bs :: CryptoFailable (EncapsulationKey p) of
         CryptoPassed _ -> True
         CryptoFailed _ -> False
 
-decapsulationKeyOf :: KEM p => Proxy p -> BS.ByteString -> Bool
+decapsulationKeyOf :: MLKEM p => Proxy p -> BS.ByteString -> Bool
 decapsulationKeyOf (_ :: Proxy p) bs =
     case decapsulationKey bs :: CryptoFailable (DecapsulationKey p) of
         CryptoPassed _ -> True
@@ -127,7 +127,7 @@ decapsulationKeyOf (_ :: Proxy p) bs =
 -- The seed and the coins are drawn as lists of bytes and padded to the
 -- lengths the entry points want; there is no Arbitrary ByteString in scope
 -- and one is not worth adding for this.
-roundTrip :: KEM p => String -> Proxy p -> Spec
+roundTrip :: MLKEM p => String -> Proxy p -> Spec
 roundTrip name p =
     prop (name ++ ": the two sides agree") $ \(seedBytes :: [Word8]) coinBytes ->
         let pad n bs = BS.take n (bs `BS.append` BS.replicate n 0)
@@ -145,7 +145,7 @@ roundTrip name p =
 -- and that something is not the other key pair's secret.  ML-KEM rejects
 -- implicitly, so there is no error to look for -- only a secret that does not
 -- match, which is what a caller would see.
-implicitRejection :: KEM p => String -> Proxy p -> Spec
+implicitRejection :: MLKEM p => String -> Proxy p -> Spec
 implicitRejection name p =
     it (name ++ ": answers a secret that does not match") $ do
         let seedA = BS.replicate 64 7

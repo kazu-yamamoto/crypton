@@ -29,7 +29,7 @@ module Crypto.PubKey.MLDSA (
     MLDSA44 (..),
     MLDSA65 (..),
     MLDSA87 (..),
-    DSA (verificationKeySize, signingKeySize, signatureSize),
+    MLDSA (verificationKeySize, signingKeySize, signatureSize),
 
     -- * Keys and signatures
     VerificationKey,
@@ -105,10 +105,11 @@ data MLDSA87 = MLDSA87 deriving (Show, Eq)
 
 -- | The three parameter sets of FIPS 204.
 --
--- Only the sizes are exported.  The remaining methods are the calls into
--- the implementation, and the class is closed in practice: FIPS 204 defines
--- these three and no more.
-class DSA p where
+-- Named for the algorithm rather than \"DSA\", which is a different one that
+-- crypton also has, in "Crypto.PubKey.DSA".  It is the three sets FIPS 204
+-- defines, closed, carrying their sizes and the calls into the
+-- implementation; only the sizes are exported.
+class MLDSA p where
     -- | Size in bytes of a 'VerificationKey' of this parameter set.
     verificationKeySize :: proxy p -> Int
 
@@ -201,7 +202,7 @@ mu bs
 -- @'signExternalMuDeterministic' sk ('messageRepresentative' ('toPublic' sk) ctx msg)@
 -- and @'signDeterministic' sk ctx msg@ are the same signature.
 messageRepresentative
-    :: (DSA p, ByteArrayAccess msg)
+    :: (MLDSA p, ByteArrayAccess msg)
     => VerificationKey p -> Context -> msg -> Mu
 messageRepresentative vk ctx msg = Mu (B.convert d)
   where
@@ -226,7 +227,7 @@ signingRandomnessSize = 32
 -- that is not a real key simply verifies nothing.
 verificationKey
     :: forall p ba
-     . (DSA p, ByteArrayAccess ba)
+     . (MLDSA p, ByteArrayAccess ba)
     => ba -> CryptoFailable (VerificationKey p)
 verificationKey bs
     | B.length bs == verificationKeySize (Proxy :: Proxy p) =
@@ -243,7 +244,7 @@ verificationKey bs
 -- verifies.
 signingKey
     :: forall p ba
-     . (DSA p, ByteArrayAccess ba)
+     . (MLDSA p, ByteArrayAccess ba)
     => ba -> CryptoFailable (SigningKey p)
 signingKey bs
     | B.length bs /= signingKeySize p = CryptoFailed CryptoError_SecretKeySizeInvalid
@@ -262,7 +263,7 @@ signingKey bs
 -- signature of anything is what 'verify' answers.
 signature
     :: forall p ba
-     . (DSA p, ByteArrayAccess ba)
+     . (MLDSA p, ByteArrayAccess ba)
     => ba -> CryptoFailable (Signature p)
 signature bs
     | B.length bs == signatureSize (Proxy :: Proxy p) =
@@ -270,7 +271,7 @@ signature bs
     | otherwise = CryptoFailed CryptoError_ParameterInvalid
 
 -- | Recover the verification key a signing key was made with.
-toPublic :: forall p. DSA p => SigningKey p -> VerificationKey p
+toPublic :: forall p. MLDSA p => SigningKey p -> VerificationKey p
 toPublic sk = VerificationKey $ unsafeDoIO $ do
     (_ :: CInt, pk) <- B.allocRet (verificationKeySize p) $ \ppk ->
         withByteArray sk $ \psk -> c_pkFromSk p ppk psk
@@ -282,7 +283,7 @@ toPublic sk = VerificationKey $ unsafeDoIO $ do
 -- | Generate a key pair.
 generateKeyPair
     :: forall p proxy m
-     . (DSA p, MonadRandom m)
+     . (MLDSA p, MonadRandom m)
     => proxy p -> m (VerificationKey p, SigningKey p)
 generateKeyPair p = do
     seed <- getRandomBytes seedSize :: m ScrubbedBytes
@@ -294,7 +295,7 @@ generateKeyPair p = do
 -- 'seedSize' bytes.
 keyPairFromSeed
     :: forall p proxy ba
-     . (DSA p, ByteArrayAccess ba)
+     . (MLDSA p, ByteArrayAccess ba)
     => proxy p -> ba -> CryptoFailable (VerificationKey p, SigningKey p)
 keyPairFromSeed p seed
     | B.length seed /= seedSize = CryptoFailed CryptoError_SeedSizeInvalid
@@ -322,7 +323,7 @@ keyPairFromSeed p seed
 -- of the three entry points made the signature.
 sign
     :: forall p m msg
-     . (DSA p, MonadRandom m, ByteArrayAccess msg)
+     . (MLDSA p, MonadRandom m, ByteArrayAccess msg)
     => SigningKey p -> Context -> msg -> m (Signature p)
 sign sk ctx msg = do
     rnd <- getRandomBytes signingRandomnessSize :: m ScrubbedBytes
@@ -337,7 +338,7 @@ sign sk ctx msg = do
 -- use wants 'sign'.
 signWith
     :: forall p msg rnd
-     . (DSA p, ByteArrayAccess msg, ByteArrayAccess rnd)
+     . (MLDSA p, ByteArrayAccess msg, ByteArrayAccess rnd)
     => SigningKey p -> Context -> msg -> rnd -> CryptoFailable (Signature p)
 signWith sk ctx msg rnd
     | B.length rnd /= signingRandomnessSize = CryptoFailed CryptoError_SeedSizeInvalid
@@ -352,7 +353,7 @@ signWith sk ctx msg rnd
 -- there is a usable random source 'sign' is the better default.
 signDeterministic
     :: forall p msg
-     . (DSA p, ByteArrayAccess msg)
+     . (MLDSA p, ByteArrayAccess msg)
     => SigningKey p -> Context -> msg -> Signature p
 signDeterministic sk ctx msg =
     case signInternal sk ctx msg (Nothing :: Maybe Bytes) of
@@ -361,7 +362,7 @@ signDeterministic sk ctx msg =
 
 signInternal
     :: forall p msg rnd
-     . (DSA p, ByteArrayAccess msg, ByteArrayAccess rnd)
+     . (MLDSA p, ByteArrayAccess msg, ByteArrayAccess rnd)
     => SigningKey p -> Context -> msg -> Maybe rnd -> CryptoFailable (Signature p)
 signInternal sk ctx msg mrnd = unsafeDoIO $ do
     -- B.zero, not B.alloc with an empty action: alloc hands back whatever
@@ -403,7 +404,7 @@ signInternal sk ctx msg mrnd = unsafeDoIO $ do
 -- this does not take one.
 signExternalMu
     :: forall p m
-     . (DSA p, MonadRandom m)
+     . (MLDSA p, MonadRandom m)
     => SigningKey p -> Mu -> m (Signature p)
 signExternalMu sk m = do
     rnd <- getRandomBytes signingRandomnessSize :: m ScrubbedBytes
@@ -413,7 +414,7 @@ signExternalMu sk m = do
 
 -- | Sign a message representative with the randomness supplied.
 signExternalMuWith
-    :: (DSA p, ByteArrayAccess rnd)
+    :: (MLDSA p, ByteArrayAccess rnd)
     => SigningKey p -> Mu -> rnd -> CryptoFailable (Signature p)
 signExternalMuWith sk m rnd
     | B.length rnd /= signingRandomnessSize = CryptoFailed CryptoError_SeedSizeInvalid
@@ -421,7 +422,7 @@ signExternalMuWith sk m rnd
 
 -- | Sign a message representative deterministically.
 signExternalMuDeterministic
-    :: DSA p => SigningKey p -> Mu -> Signature p
+    :: MLDSA p => SigningKey p -> Mu -> Signature p
 signExternalMuDeterministic sk m =
     case signMu sk m (Nothing :: Maybe Bytes) of
         CryptoPassed s -> s
@@ -430,7 +431,7 @@ signExternalMuDeterministic sk m =
 
 -- | Verify a signature of a message representative.
 verifyExternalMu
-    :: forall p. DSA p => VerificationKey p -> Mu -> Signature p -> Bool
+    :: forall p. MLDSA p => VerificationKey p -> Mu -> Signature p -> Bool
 verifyExternalMu vk m sig
     | B.length sig /= signatureSize p = False
     | otherwise = unsafeDoIO $
@@ -458,7 +459,7 @@ verifyExternalMu vk m sig
 -- implementation is told so.
 signMu
     :: forall p rnd
-     . (DSA p, ByteArrayAccess rnd)
+     . (MLDSA p, ByteArrayAccess rnd)
     => SigningKey p -> Mu -> Maybe rnd -> CryptoFailable (Signature p)
 signMu sk m mrnd = unsafeDoIO $ do
     let zeroes = B.zero signingRandomnessSize :: ScrubbedBytes
@@ -484,7 +485,7 @@ signMu sk m mrnd = unsafeDoIO $ do
 -- rejection, which is what the context is for.
 verify
     :: forall p msg
-     . (DSA p, ByteArrayAccess msg)
+     . (MLDSA p, ByteArrayAccess msg)
     => VerificationKey p -> Context -> msg -> Signature p -> Bool
 verify vk ctx msg sig
     | B.length sig /= signatureSize p = False
@@ -517,7 +518,7 @@ domainPrefix :: Context -> Bytes
 domainPrefix (Context ctx) =
     B.concat [B.pack [0, fromIntegral (B.length ctx)] :: Bytes, B.convert ctx]
 
-instance DSA MLDSA44 where
+instance MLDSA MLDSA44 where
     verificationKeySize _ = 1312
     signingKeySize _ = 2560
     signatureSize _ = 2420
@@ -526,7 +527,7 @@ instance DSA MLDSA44 where
     c_verify _ = c_mldsa44_verify
     c_pkFromSk _ = c_mldsa44_pk_from_sk
 
-instance DSA MLDSA65 where
+instance MLDSA MLDSA65 where
     verificationKeySize _ = 1952
     signingKeySize _ = 4032
     signatureSize _ = 3309
@@ -535,7 +536,7 @@ instance DSA MLDSA65 where
     c_verify _ = c_mldsa65_verify
     c_pkFromSk _ = c_mldsa65_pk_from_sk
 
-instance DSA MLDSA87 where
+instance MLDSA MLDSA87 where
     verificationKeySize _ = 2592
     signingKeySize _ = 4896
     signatureSize _ = 4627

@@ -26,7 +26,7 @@ hex s = case convertFromBase Base16 (BS.pack (map (fromIntegral . fromEnum) s)) 
     Left e -> error ("bad hex in a test vector: " ++ e)
     Right b -> b
 
-withSet :: String -> (forall p. DSA p => Proxy p -> r) -> r
+withSet :: String -> (forall p. MLDSA p => Proxy p -> r) -> r
 withSet "ML-DSA-44" k = k (Proxy :: Proxy MLDSA44)
 withSet "ML-DSA-65" k = k (Proxy :: Proxy MLDSA65)
 withSet "ML-DSA-87" k = k (Proxy :: Proxy MLDSA87)
@@ -165,7 +165,7 @@ muCase v =
                     when (sgDeterministic v) $
                         viaMu `shouldBe` hex (sgSignature v)
 
-roundTrip :: DSA p => String -> Proxy p -> Spec
+roundTrip :: MLDSA p => String -> Proxy p -> Spec
 roundTrip name p =
     it (name ++ ": a signature this module makes, it verifies") $
         case keyPairFromSeed p (BS.replicate 32 5) of

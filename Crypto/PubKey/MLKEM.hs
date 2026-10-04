@@ -31,7 +31,7 @@ module Crypto.PubKey.MLKEM (
     MLKEM512 (..),
     MLKEM768 (..),
     MLKEM1024 (..),
-    KEM (encapsulationKeySize, decapsulationKeySize, ciphertextSize),
+    MLKEM (encapsulationKeySize, decapsulationKeySize, ciphertextSize),
 
     -- * Keys, ciphertexts and shared secrets
     EncapsulationKey,
@@ -88,10 +88,12 @@ data MLKEM1024 = MLKEM1024 deriving (Show, Eq)
 
 -- | The three parameter sets of FIPS 203.
 --
--- Only the sizes are exported.  The remaining methods are the calls into
--- the implementation, and the class is closed in practice: FIPS 203 defines
--- these three and no more.
-class KEM p where
+-- This is not an abstract KEM interface and does not try to be: it is the
+-- three sets FIPS 203 defines, closed, carrying their sizes and the calls
+-- into the implementation.  Only the sizes are exported.  If crypton grows
+-- a second KEM and an interface common to both is wanted, that belongs in
+-- a module of its own, with this as one of its instances.
+class MLKEM p where
     -- | Size in bytes of an 'EncapsulationKey' of this parameter set.
     encapsulationKeySize :: proxy p -> Int
 
@@ -158,7 +160,7 @@ sharedSecretSize = 32
 -- it is not one any honest party produced.
 encapsulationKey
     :: forall p ba
-     . (KEM p, ByteArrayAccess ba)
+     . (MLKEM p, ByteArrayAccess ba)
     => ba -> CryptoFailable (EncapsulationKey p)
 encapsulationKey bs
     | B.length bs /= encapsulationKeySize p = CryptoFailed CryptoError_PublicKeySizeInvalid
@@ -181,7 +183,7 @@ encapsulationKey bs
 -- the implicit rejection every time.
 decapsulationKey
     :: forall p ba
-     . (KEM p, ByteArrayAccess ba)
+     . (MLKEM p, ByteArrayAccess ba)
     => ba -> CryptoFailable (DecapsulationKey p)
 decapsulationKey bs
     | B.length bs /= decapsulationKeySize p = CryptoFailed CryptoError_SecretKeySizeInvalid
@@ -199,7 +201,7 @@ decapsulationKey bs
 -- the right length is a ciphertext that 'decapsulate' will answer.
 ciphertext
     :: forall p ba
-     . (KEM p, ByteArrayAccess ba)
+     . (MLKEM p, ByteArrayAccess ba)
     => ba -> CryptoFailable (Ciphertext p)
 ciphertext bs
     | B.length bs == ciphertextSize (Proxy :: Proxy p) =
@@ -209,7 +211,7 @@ ciphertext bs
 -- | Generate a key pair.
 generateKeyPair
     :: forall p proxy m
-     . (KEM p, MonadRandom m)
+     . (MLKEM p, MonadRandom m)
     => proxy p -> m (EncapsulationKey p, DecapsulationKey p)
 generateKeyPair p = do
     seed <- getRandomBytes seedSize :: m ScrubbedBytes
@@ -226,7 +228,7 @@ generateKeyPair p = do
 -- itself.
 keyPairFromSeed
     :: forall p proxy ba
-     . (KEM p, ByteArrayAccess ba)
+     . (MLKEM p, ByteArrayAccess ba)
     => proxy p
     -> ba
     -> CryptoFailable (EncapsulationKey p, DecapsulationKey p)
@@ -251,7 +253,7 @@ keyPairFromSeed p seed
 -- | Encapsulate against a public key, drawing the randomness.
 encapsulate
     :: forall p m
-     . (KEM p, MonadRandom m)
+     . (MLKEM p, MonadRandom m)
     => EncapsulationKey p -> m (Ciphertext p, SharedSecret)
 encapsulate ek = do
     coins <- getRandomBytes encapsulationCoinsSize :: m ScrubbedBytes
@@ -268,7 +270,7 @@ encapsulate ek = do
 -- for test vectors and for callers who are deliberately supplying their own.
 encapsulateWith
     :: forall p ba
-     . (KEM p, ByteArrayAccess ba)
+     . (MLKEM p, ByteArrayAccess ba)
     => EncapsulationKey p -> ba -> CryptoFailable (Ciphertext p, SharedSecret)
 encapsulateWith ek coins
     | B.length coins /= encapsulationCoinsSize = CryptoFailed CryptoError_SeedSizeInvalid
@@ -315,7 +317,7 @@ encapsulateWith ek coins
 -- what it finds is better reported than turned into an exception.
 decapsulate
     :: forall p
-     . KEM p
+     . MLKEM p
     => DecapsulationKey p -> Ciphertext p -> CryptoFailable SharedSecret
 decapsulate dk ct = unsafeDoIO $ do
     (r, ss) <- B.allocRet sharedSecretSize $ \pss ->
@@ -328,7 +330,7 @@ decapsulate dk ct = unsafeDoIO $ do
             else CryptoFailed CryptoError_SecretKeyStructureInvalid
 {-# NOINLINE decapsulate #-}
 
-instance KEM MLKEM512 where
+instance MLKEM MLKEM512 where
     encapsulationKeySize _ = 800
     decapsulationKeySize _ = 1632
     ciphertextSize _ = 768
@@ -338,7 +340,7 @@ instance KEM MLKEM512 where
     c_checkPk _ = c_mlkem512_check_pk
     c_checkSk _ = c_mlkem512_check_sk
 
-instance KEM MLKEM768 where
+instance MLKEM MLKEM768 where
     encapsulationKeySize _ = 1184
     decapsulationKeySize _ = 2400
     ciphertextSize _ = 1088
@@ -348,7 +350,7 @@ instance KEM MLKEM768 where
     c_checkPk _ = c_mlkem768_check_pk
     c_checkSk _ = c_mlkem768_check_sk
 
-instance KEM MLKEM1024 where
+instance MLKEM MLKEM1024 where
     encapsulationKeySize _ = 1568
     decapsulationKeySize _ = 3168
     ciphertextSize _ = 1568
