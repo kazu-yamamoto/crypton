@@ -85,12 +85,12 @@ encapCase v =
 decapCase :: DecapVector -> Spec
 decapCase v =
     it (deSet v ++ " tcId " ++ show (deId v)) $
-        withSet (deSet v) $ \(_ :: Proxy p) ->
+        withSet (deSet v) $ \(p :: Proxy p) ->
             case ( decapsulationKey (hex (deDk v)) :: CryptoFailable (DecapsulationKey p)
                  , ciphertext (hex (deC v)) :: CryptoFailable (Ciphertext p)
                  ) of
                 (CryptoPassed dk, CryptoPassed ct) ->
-                    case decapsulate dk ct of
+                    case decapsulate p dk ct of
                         CryptoPassed ss -> B.convert ss `shouldBe` hex (deK v)
                         CryptoFailed e -> expectationFailure (show e)
                 (CryptoFailed e, _) -> expectationFailure (show e)
@@ -138,7 +138,7 @@ roundTrip name p =
                 CryptoPassed (ek, dk) -> case encapsulateWith ek m of
                     CryptoFailed e -> error (show e)
                     CryptoPassed (ct, ss) ->
-                        (B.convert <$> decapsulate dk ct)
+                        (B.convert <$> decapsulate p dk ct)
                             == CryptoPassed (B.convert ss :: BS.ByteString)
 
 -- | Decapsulating a ciphertext made for a different key answers something,
@@ -155,7 +155,7 @@ implicitRejection name p =
             (CryptoPassed (ekA, _), CryptoPassed (_, dkB)) ->
                 case encapsulateWith ekA m of
                     CryptoPassed (ct, ss) ->
-                        case decapsulate dkB ct of
+                        case decapsulate p dkB ct of
                             CryptoPassed ss' ->
                                 (B.convert ss' :: BS.ByteString)
                                     `shouldNotBe` B.convert ss

@@ -24,6 +24,10 @@
 -- an ML-KEM-1024 one is expected.  The three are fixed by FIPS 203 and the
 -- class has no other instances.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Crypto.PubKey.MLKEM (
@@ -34,24 +38,20 @@ module Crypto.PubKey.MLKEM (
     MLKEM (encapsulationKeySize, decapsulationKeySize, ciphertextSize),
 
     -- * Keys, ciphertexts and shared secrets
-    EncapsulationKey,
-    DecapsulationKey,
-    Ciphertext,
-    SharedSecret,
+    --
+    -- | These are the associated types of 'KEM', re-exported so that a
+    -- caller of this module alone has them.
+    KEM (..),
+    SharedSecret (..),
 
     -- * Smart constructors
     encapsulationKey,
     decapsulationKey,
     ciphertext,
 
-    -- * Generating a key pair
-    generateKeyPair,
+    -- * What ML-KEM has beyond the class
     keyPairFromSeed,
-
-    -- * Encapsulation and decapsulation
-    encapsulate,
     encapsulateWith,
-    decapsulate,
 
     -- * Sizes
     seedSize,
@@ -65,6 +65,7 @@ import Foreign.Ptr (Ptr)
 
 import Crypto.Debug (DebugShow (..), debugShowBytes)
 import Crypto.Error
+import Crypto.KEM
 import Crypto.Internal.ByteArray (
     ByteArrayAccess,
     Bytes,
@@ -93,7 +94,14 @@ data MLKEM1024 = MLKEM1024 deriving (Show, Eq)
 -- into the implementation.  Only the sizes are exported.  If crypton grows
 -- a second KEM and an interface common to both is wanted, that belongs in
 -- a module of its own, with this as one of its instances.
-class MLKEM p where
+class
+    ( KEM p
+    , EncapsulationKey p ~ MLKEMEncapsulationKey p
+    , DecapsulationKey p ~ MLKEMDecapsulationKey p
+    , Ciphertext p ~ MLKEMCiphertext p
+    ) =>
+    MLKEM p
+    where
     -- | Size in bytes of an 'EncapsulationKey' of this parameter set.
     encapsulationKeySize :: proxy p -> Int
 
@@ -110,33 +118,23 @@ class MLKEM p where
     c_checkSk :: proxy p -> Ptr Word8 -> IO CInt
 
 -- | A public encapsulation key, @ek@ in FIPS 203.
-newtype EncapsulationKey p = EncapsulationKey Bytes
+newtype MLKEMEncapsulationKey p = MLKEMEncapsulationKey Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
 -- | A private decapsulation key, @dk@ in FIPS 203.  It embeds the matching
 -- encapsulation key, which is why it is the larger of the two.
-newtype DecapsulationKey p = DecapsulationKey ScrubbedBytes
+newtype MLKEMDecapsulationKey p = MLKEMDecapsulationKey ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
 
-instance Show (DecapsulationKey p) where
+instance Show (MLKEMDecapsulationKey p) where
     show _ = "DecapsulationKey <redacted>"
 
-instance DebugShow (DecapsulationKey p) where
+instance DebugShow (MLKEMDecapsulationKey p) where
     debugShow = debugShowBytes "DecapsulationKey"
 
 -- | The value 'encapsulate' produces and 'decapsulate' consumes.
-newtype Ciphertext p = Ciphertext Bytes
+newtype MLKEMCiphertext p = MLKEMCiphertext Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
-
--- | The 32 bytes both sides end up holding.
-newtype SharedSecret = SharedSecret ScrubbedBytes
-    deriving (Eq, ByteArrayAccess, NFData)
-
-instance Show SharedSecret where
-    show _ = "SharedSecret <redacted>"
-
-instance DebugShow SharedSecret where
-    debugShow = debugShowBytes "SharedSecret"
 
 -- | Size in bytes of the seed 'keyPairFromSeed' takes, which is @d@ and @z@
 -- of FIPS 203 one after the other.
@@ -168,7 +166,7 @@ encapsulationKey bs
         r <- c_checkPk p inp
         return $
             if r == 0
-                then CryptoPassed $ EncapsulationKey $ B.copyAndFreeze bs (\_ -> return ())
+                then CryptoPassed $ MLKEMEncapsulationKey $ B.copyAndFreeze bs (\_ -> return ())
                 else CryptoFailed CryptoError_PublicKeyStructureInvalid
   where
     p = Proxy :: Proxy p
@@ -191,7 +189,7 @@ decapsulationKey bs
         r <- c_checkSk p inp
         return $
             if r == 0
-                then CryptoPassed $ DecapsulationKey $ B.copyAndFreeze bs (\_ -> return ())
+                then CryptoPassed $ MLKEMDecapsulationKey $ B.copyAndFreeze bs (\_ -> return ())
                 else CryptoFailed CryptoError_SecretKeyStructureInvalid
   where
     p = Proxy :: Proxy p
@@ -205,15 +203,15 @@ ciphertext
     => ba -> CryptoFailable (Ciphertext p)
 ciphertext bs
     | B.length bs == ciphertextSize (Proxy :: Proxy p) =
-        CryptoPassed $ Ciphertext $ B.copyAndFreeze bs (\_ -> return ())
+        CryptoPassed $ MLKEMCiphertext $ B.copyAndFreeze bs (\_ -> return ())
     | otherwise = CryptoFailed CryptoError_PointSizeInvalid
 
 -- | Generate a key pair.
-generateKeyPair
+mlkemGenerateKeyPair
     :: forall p proxy m
      . (MLKEM p, MonadRandom m)
-    => proxy p -> m (EncapsulationKey p, DecapsulationKey p)
-generateKeyPair p = do
+    => proxy p -> m (MLKEMEncapsulationKey p, DecapsulationKey p)
+mlkemGenerateKeyPair p = do
     seed <- getRandomBytes seedSize :: m ScrubbedBytes
     case keyPairFromSeed p seed of
         CryptoPassed r -> return r
@@ -231,7 +229,7 @@ keyPairFromSeed
      . (MLKEM p, ByteArrayAccess ba)
     => proxy p
     -> ba
-    -> CryptoFailable (EncapsulationKey p, DecapsulationKey p)
+    -> CryptoFailable (MLKEMEncapsulationKey p, DecapsulationKey p)
 keyPairFromSeed p seed
     | B.length seed /= seedSize = CryptoFailed CryptoError_SeedSizeInvalid
     | otherwise = unsafeDoIO $ do
@@ -246,20 +244,19 @@ keyPairFromSeed p seed
                     c_keypair p pek pdk pseed
         return $
             if r == 0
-                then CryptoPassed (EncapsulationKey ek, DecapsulationKey dk)
+                then CryptoPassed (MLKEMEncapsulationKey ek, MLKEMDecapsulationKey dk)
                 else CryptoFailed CryptoError_ParameterInvalid
 {-# NOINLINE keyPairFromSeed #-}
 
 -- | Encapsulate against a public key, drawing the randomness.
-encapsulate
+mlkemEncapsulate
     :: forall p m
      . (MLKEM p, MonadRandom m)
-    => EncapsulationKey p -> m (Ciphertext p, SharedSecret)
-encapsulate ek = do
+    => MLKEMEncapsulationKey p
+    -> m (CryptoFailable (Ciphertext p, SharedSecret))
+mlkemEncapsulate ek = do
     coins <- getRandomBytes encapsulationCoinsSize :: m ScrubbedBytes
-    case encapsulateWith ek coins of
-        CryptoPassed r -> return r
-        CryptoFailed e -> error ("Crypto.PubKey.MLKEM.encapsulate: " ++ show e)
+    return (encapsulateWith ek coins)
 
 -- | Encapsulate with randomness supplied, which is @m@ of FIPS 203 and must
 -- be 'encapsulationCoinsSize' bytes.
@@ -283,7 +280,7 @@ encapsulateWith ek coins
                         c_enc p pct pss pek pcoins
         return $
             if r == 0
-                then CryptoPassed (Ciphertext ct, SharedSecret ss)
+                then CryptoPassed (MLKEMCiphertext ct, SharedSecret ss)
                 else CryptoFailed CryptoError_ParameterInvalid
   where
     p = Proxy :: Proxy p
@@ -315,11 +312,11 @@ encapsulateWith ek coins
 -- can produce.  It is 'CryptoFailable' rather than a bare 'SharedSecret'
 -- because the implementation checks the key again on its way through, and
 -- what it finds is better reported than turned into an exception.
-decapsulate
+mlkemDecapsulate
     :: forall p
      . MLKEM p
     => DecapsulationKey p -> Ciphertext p -> CryptoFailable SharedSecret
-decapsulate dk ct = unsafeDoIO $ do
+mlkemDecapsulate dk ct = unsafeDoIO $ do
     (r, ss) <- B.allocRet sharedSecretSize $ \pss ->
         withByteArray ct $ \pct ->
             withByteArray dk $ \pdk ->
@@ -328,7 +325,34 @@ decapsulate dk ct = unsafeDoIO $ do
         if r == (0 :: CInt)
             then CryptoPassed (SharedSecret ss)
             else CryptoFailed CryptoError_SecretKeyStructureInvalid
-{-# NOINLINE decapsulate #-}
+{-# NOINLINE mlkemDecapsulate #-}
+
+-- The class's view of the three sets.  The operations are the ones above;
+-- only the shape of the arguments differs, because the class takes the
+-- mechanism as a proxy.
+instance KEM MLKEM512 where
+    type EncapsulationKey MLKEM512 = MLKEMEncapsulationKey MLKEM512
+    type DecapsulationKey MLKEM512 = MLKEMDecapsulationKey MLKEM512
+    type Ciphertext MLKEM512 = MLKEMCiphertext MLKEM512
+    generateKeyPair = mlkemGenerateKeyPair
+    encapsulate _ = mlkemEncapsulate
+    decapsulate _ = mlkemDecapsulate
+
+instance KEM MLKEM768 where
+    type EncapsulationKey MLKEM768 = MLKEMEncapsulationKey MLKEM768
+    type DecapsulationKey MLKEM768 = MLKEMDecapsulationKey MLKEM768
+    type Ciphertext MLKEM768 = MLKEMCiphertext MLKEM768
+    generateKeyPair = mlkemGenerateKeyPair
+    encapsulate _ = mlkemEncapsulate
+    decapsulate _ = mlkemDecapsulate
+
+instance KEM MLKEM1024 where
+    type EncapsulationKey MLKEM1024 = MLKEMEncapsulationKey MLKEM1024
+    type DecapsulationKey MLKEM1024 = MLKEMDecapsulationKey MLKEM1024
+    type Ciphertext MLKEM1024 = MLKEMCiphertext MLKEM1024
+    generateKeyPair = mlkemGenerateKeyPair
+    encapsulate _ = mlkemEncapsulate
+    decapsulate _ = mlkemDecapsulate
 
 instance MLKEM MLKEM512 where
     encapsulationKeySize _ = 800

@@ -271,6 +271,7 @@ library
         Crypto.Hash
         Crypto.Hash.Algorithms
         Crypto.Hash.IO
+        Crypto.KEM
         Crypto.KDF.Argon2
         Crypto.KDF.BCrypt
         Crypto.KDF.BCryptPBKDF
