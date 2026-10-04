@@ -41,14 +41,17 @@ jobs:
 
     - uses: actions/checkout@v5
 
-    # The same OpenSSL the README's tables use, built here because the
-    # distribution's is a 3.
-    - name: OpenSSL 4.0.3
+    # master, not the 4.0.3 release.  4.0.3's ML-KEM and ML-DSA are plain C;
+    # master has an x86-64 NTT for ML-DSA, vec128 arithmetic for both, and
+    # ppc64le and s390x work besides, so a comparison against the release
+    # measures something that is already out of date.  The commit is printed
+    # so that a figure can be tied to one.
+    - name: OpenSSL master
       run: |
         cd /tmp
-        curl -sL -o o.tar.gz https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz
-        tar xzf o.tar.gz
-        cd openssl-4.0.3
+        git clone -q --depth 1 https://github.com/openssl/openssl.git openssl-master
+        cd openssl-master
+        git log -1 --format='%H %cI %s'
         ./Configure no-docs no-tests > /tmp/conf.log 2>&1
         make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
         LD_LIBRARY_PATH=$PWD ./apps/openssl version
@@ -117,6 +120,6 @@ jobs:
     - name: The tables
       run: |
         grep -m1 'model name' /proc/cpuinfo
-        python3 bench/pq/pqrun.py /tmp/openssl-4.0.3/apps/openssl /tmp/pqbin \
+        python3 bench/pq/pqrun.py /tmp/openssl-master/apps/openssl /tmp/pqbin \
           "${{ github.event.inputs.reps || '5' }}" \
           "${{ github.event.inputs.seconds || '1' }}" 
