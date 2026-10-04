@@ -12,6 +12,7 @@ import qualified Data.ByteArray as B
 import Data.ByteArray.Encoding (Base (Base16), convertFromBase)
 import qualified Data.ByteString as BS
 import Data.Proxy (Proxy (..))
+import Control.Monad (when)
 import Test.Hspec hiding (context)
 
 import Crypto.Error
@@ -45,6 +46,10 @@ spec = do
         mapM_ sigGenCase sigGenVectors
     describe "what a signature is bound to" $
         mapM_ bindingCase sigGenVectors
+    describe "ACVP sigGen, the external-mu interface" $
+        mapM_ extMuCase extMuVectors
+    describe "the message representative" $
+        mapM_ muCase sigGenVectors
     describe "round trip" $ do
         roundTrip "ML-DSA-44" (Proxy :: Proxy MLDSA44)
         roundTrip "ML-DSA-65" (Proxy :: Proxy MLDSA65)
@@ -108,6 +113,57 @@ bindingCase v =
     -- any context other than the one it was signed under
     otherContext "" = ctxOf "00"
     otherContext _ = noContext
+
+-- Signing a representative the vector supplies.
+extMuCase :: ExtMuVector -> Spec
+extMuCase v =
+    it (xmSet v ++ " tcId " ++ show (xmId v) ++ det) $
+        withSet (xmSet v) $ \(_ :: Proxy p) ->
+            case ( signingKey (hex (xmSk v)) :: CryptoFailable (SigningKey p)
+                 , mu (hex (xmMu v))
+                 ) of
+                (CryptoPassed sk, CryptoPassed m) -> do
+                    let got
+                            | xmDeterministic v =
+                                CryptoPassed (signExternalMuDeterministic sk m)
+                            | otherwise = signExternalMuWith sk m (hex (xmRnd v))
+                    case got of
+                        CryptoFailed e -> expectationFailure (show e)
+                        CryptoPassed sig -> do
+                            B.convert sig `shouldBe` hex (xmSignature v)
+                            verifyExternalMu (toPublic sk) m sig `shouldBe` True
+                (CryptoFailed e, _) -> expectationFailure (show e)
+                (_, CryptoFailed e) -> expectationFailure (show e)
+  where
+    det = if xmDeterministic v then ", deterministic" else ", hedged"
+
+-- messageRepresentative, against a vector that never mentions mu.
+--
+-- The vectors for the external-mu interface supply the representative, so
+-- using them would only say that signing it works, not that this computes
+-- the right one.  Taking a vector from the ordinary interface and computing
+-- the representative from its key, context and message does say that: the
+-- signature has to come out the same as the one the vector gives for
+-- signing that message directly.
+muCase :: SigGenVector -> Spec
+muCase v =
+    it (label v) $
+        withSet (sgSet v) $ \(_ :: Proxy p) ->
+            case signingKey (hex (sgSk v)) :: CryptoFailable (SigningKey p) of
+                CryptoFailed e -> expectationFailure (show e)
+                CryptoPassed sk -> do
+                    let vk = toPublic sk
+                        ctx = ctxOf (sgContext v)
+                        msg = hex (sgMessage v)
+                        m = messageRepresentative vk ctx msg
+                    B.length m `shouldBe` muSize
+                    let viaMu = B.convert (signExternalMuDeterministic sk m)
+                        direct = B.convert (signDeterministic sk ctx msg)
+                    (viaMu :: BS.ByteString) `shouldBe` direct
+                    -- and for the deterministic vectors it is the
+                    -- signature the vector itself gives
+                    when (sgDeterministic v) $
+                        viaMu `shouldBe` hex (sgSignature v)
 
 roundTrip :: DSA p => String -> Proxy p -> Spec
 roundTrip name p =

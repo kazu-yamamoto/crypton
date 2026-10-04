@@ -20,6 +20,7 @@
 -- This is pure ML-DSA: the message goes in whole.  The pre-hash variant
 -- (HashML-DSA) is a different algorithm with a different domain separator
 -- and is not offered here.
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -50,23 +51,37 @@ module Crypto.PubKey.MLDSA (
     context,
     noContext,
 
+    -- * The message representative
+    Mu,
+    mu,
+    messageRepresentative,
+
     -- * Signing and verifying
     sign,
     signWith,
     signDeterministic,
     verify,
 
+    -- * Signing and verifying a message representative
+    signExternalMu,
+    signExternalMuWith,
+    signExternalMuDeterministic,
+    verifyExternalMu,
+
     -- * Sizes
     seedSize,
     signingRandomnessSize,
     maxContextLength,
+    muSize,
 ) where
 
 import Data.Proxy (Proxy (..))
 import Foreign.C.Types (CInt (..), CSize (..))
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, nullPtr)
 
 import Crypto.Debug (DebugShow (..), debugShowBytes)
+import Crypto.Hash (Digest, hash)
+import Crypto.Hash.Algorithms (SHAKE256 (..))
 import Crypto.Error
 import Crypto.Internal.ByteArray (
     ByteArrayAccess,
@@ -158,6 +173,45 @@ context bs
 -- its length is encoded in one byte.
 maxContextLength :: Int
 maxContextLength = 255
+
+-- | The message representative, @mu@ in FIPS 204: a 64-byte commitment to
+-- the verification key, the context string and the message, and the only
+-- part of them that signing and verification actually read.
+--
+-- Signing it directly is the "external mu" interface.  It is for a caller
+-- that has the representative without having the message in one piece: a
+-- message arriving as a stream, or hashed on another machine, or by a
+-- device that holds the key and is handed only this.  TLS does not need it.
+newtype Mu = Mu Bytes
+    deriving (Show, Eq, ByteArrayAccess, NFData)
+
+-- | Size in bytes of a 'Mu'.
+muSize :: Int
+muSize = 64
+
+-- | Try to read a message representative.
+mu :: ByteArrayAccess ba => ba -> CryptoFailable Mu
+mu bs
+    | B.length bs == muSize = CryptoPassed $ Mu $ B.copyAndFreeze bs (\_ -> return ())
+    | otherwise = CryptoFailed CryptoError_ParameterInvalid
+
+-- | Compute the message representative, for a caller that wants to make it
+-- here and sign it later, or sign it elsewhere.
+--
+-- @'signExternalMuDeterministic' sk ('messageRepresentative' ('toPublic' sk) ctx msg)@
+-- and @'signDeterministic' sk ctx msg@ are the same signature.
+messageRepresentative
+    :: (DSA p, ByteArrayAccess msg)
+    => VerificationKey p -> Context -> msg -> Mu
+messageRepresentative vk ctx msg = Mu (B.convert d)
+  where
+    -- FIPS 204: tr <- H(pk, 64) at key generation, and mu <- H(tr || M', 64)
+    -- when signing, with M' the domain-separated message.
+    tr = B.convert (shake64 (B.convert vk :: Bytes)) :: Bytes
+    d = shake64 (B.concat [tr, domainPrefix ctx, B.convert msg] :: Bytes)
+
+shake64 :: ByteArrayAccess ba => ba -> Digest (SHAKE256 512)
+shake64 = hash
 
 -- | Size in bytes of the seed 'keyPairFromSeed' takes, @xi@ in FIPS 204.
 seedSize :: Int
@@ -342,6 +396,87 @@ signInternal sk ctx msg mrnd = unsafeDoIO $ do
     p = Proxy :: Proxy p
     pre = domainPrefix ctx
 {-# NOINLINE signInternal #-}
+
+-- | Sign a message representative, drawing the randomness.
+--
+-- The context string is already inside the representative, which is why
+-- this does not take one.
+signExternalMu
+    :: forall p m
+     . (DSA p, MonadRandom m)
+    => SigningKey p -> Mu -> m (Signature p)
+signExternalMu sk m = do
+    rnd <- getRandomBytes signingRandomnessSize :: m ScrubbedBytes
+    case signExternalMuWith sk m rnd of
+        CryptoPassed s -> return s
+        CryptoFailed e -> error ("Crypto.PubKey.MLDSA.signExternalMu: " ++ show e)
+
+-- | Sign a message representative with the randomness supplied.
+signExternalMuWith
+    :: (DSA p, ByteArrayAccess rnd)
+    => SigningKey p -> Mu -> rnd -> CryptoFailable (Signature p)
+signExternalMuWith sk m rnd
+    | B.length rnd /= signingRandomnessSize = CryptoFailed CryptoError_SeedSizeInvalid
+    | otherwise = signMu sk m (Just rnd)
+
+-- | Sign a message representative deterministically.
+signExternalMuDeterministic
+    :: DSA p => SigningKey p -> Mu -> Signature p
+signExternalMuDeterministic sk m =
+    case signMu sk m (Nothing :: Maybe Bytes) of
+        CryptoPassed s -> s
+        CryptoFailed e ->
+            error ("Crypto.PubKey.MLDSA.signExternalMuDeterministic: " ++ show e)
+
+-- | Verify a signature of a message representative.
+verifyExternalMu
+    :: forall p. DSA p => VerificationKey p -> Mu -> Signature p -> Bool
+verifyExternalMu vk m sig
+    | B.length sig /= signatureSize p = False
+    | otherwise = unsafeDoIO $
+        withByteArray sig $ \psig ->
+            withByteArray m $ \pmu ->
+                withByteArray vk $ \pvk -> do
+                    r <-
+                        c_verify
+                            p
+                            psig
+                            pmu
+                            (fromIntegral muSize)
+                            nullPtr
+                            0
+                            pvk
+                            1
+                    return (r == 0)
+  where
+    p = Proxy :: Proxy p
+{-# NOINLINE verifyExternalMu #-}
+
+-- The external-mu entry points are the ordinary ones with the last argument
+-- set: the representative goes in where the message would, there is no
+-- domain separation prefix to prepend because it is already inside, and the
+-- implementation is told so.
+signMu
+    :: forall p rnd
+     . (DSA p, ByteArrayAccess rnd)
+    => SigningKey p -> Mu -> Maybe rnd -> CryptoFailable (Signature p)
+signMu sk m mrnd = unsafeDoIO $ do
+    let zeroes = B.zero signingRandomnessSize :: ScrubbedBytes
+        withRnd f = case mrnd of
+            Just r -> withByteArray r f
+            Nothing -> withByteArray zeroes f
+    (r, sig) <- B.allocRet (signatureSize p) $ \psig ->
+        withByteArray m $ \pmu ->
+            withRnd $ \prnd ->
+                withByteArray sk $ \psk ->
+                    c_sign p psig pmu (fromIntegral muSize) nullPtr 0 prnd psk 1
+    return $
+        if r == 0
+            then CryptoPassed (Signature sig)
+            else CryptoFailed CryptoError_ParameterInvalid
+  where
+    p = Proxy :: Proxy p
+{-# NOINLINE signMu #-}
 
 -- | Verify a signature.
 --

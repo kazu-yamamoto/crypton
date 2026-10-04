@@ -296,13 +296,34 @@ encapsulateWith ek coins
 -- is the point -- telling them apart is what a chosen-ciphertext attack
 -- needs.  A ciphertext that does not belong here shows up later, as the two
 -- sides failing to agree on anything.
+--
+-- The checks FIPS 203 does require have not gone anywhere; they are at the
+-- point where bytes become a value of these types, which is where they can
+-- be reported:
+--
+-- * The ciphertext type check of section 7.3 is its length, and
+--   'ciphertext' is the only way to build a 'Ciphertext' from bytes.  There
+--   is nothing else to check: a ciphertext's coefficients are compressed to
+--   fewer than twelve bits, so every bit pattern decodes to a value in
+--   range.
+-- * The hash check of section 7.3 is on the decapsulation key, and
+--   'decapsulationKey' runs it; a key from 'generateKeyPair' or
+--   'keyPairFromSeed' satisfies it by construction.
+--
+-- Those two together are why decapsulation cannot fail here.
 decapsulate :: forall p. KEM p => DecapsulationKey p -> Ciphertext p -> SharedSecret
 decapsulate dk ct = SharedSecret $ unsafeDoIO $ do
-    (_ :: CInt, ss) <- B.allocRet sharedSecretSize $ \pss ->
+    (r, ss) <- B.allocRet sharedSecretSize $ \pss ->
         withByteArray ct $ \pct ->
             withByteArray dk $ \pdk ->
                 c_dec (Proxy :: Proxy p) pss pct pdk
-    return ss
+    if r == (0 :: CInt)
+        then return ss
+        else
+            -- Only the key's hash check can fail, and both ways of making a
+            -- DecapsulationKey exclude it, so this is a broken invariant in
+            -- crypton rather than anything the caller did.
+            error "Crypto.PubKey.MLKEM.decapsulate: the decapsulation key failed its own hash check"
 {-# NOINLINE decapsulate #-}
 
 instance KEM MLKEM512 where
