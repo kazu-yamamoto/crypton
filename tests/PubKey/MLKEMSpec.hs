@@ -90,7 +90,9 @@ decapCase v =
                  , ciphertext (hex (deC v)) :: CryptoFailable (Ciphertext p)
                  ) of
                 (CryptoPassed dk, CryptoPassed ct) ->
-                    B.convert (decapsulate dk ct) `shouldBe` hex (deK v)
+                    case decapsulate dk ct of
+                        CryptoPassed ss -> B.convert ss `shouldBe` hex (deK v)
+                        CryptoFailed e -> expectationFailure (show e)
                 (CryptoFailed e, _) -> expectationFailure (show e)
                 (_, CryptoFailed e) -> expectationFailure (show e)
 
@@ -136,7 +138,8 @@ roundTrip name p =
                 CryptoPassed (ek, dk) -> case encapsulateWith ek m of
                     CryptoFailed e -> error (show e)
                     CryptoPassed (ct, ss) ->
-                        B.convert (decapsulate dk ct) == (B.convert ss :: BS.ByteString)
+                        (B.convert <$> decapsulate dk ct)
+                            == CryptoPassed (B.convert ss :: BS.ByteString)
 
 -- | Decapsulating a ciphertext made for a different key answers something,
 -- and that something is not the other key pair's secret.  ML-KEM rejects
@@ -152,7 +155,10 @@ implicitRejection name p =
             (CryptoPassed (ekA, _), CryptoPassed (_, dkB)) ->
                 case encapsulateWith ekA m of
                     CryptoPassed (ct, ss) ->
-                        (B.convert (decapsulate dkB ct) :: BS.ByteString)
-                            `shouldNotBe` B.convert ss
+                        case decapsulate dkB ct of
+                            CryptoPassed ss' ->
+                                (B.convert ss' :: BS.ByteString)
+                                    `shouldNotBe` B.convert ss
+                            CryptoFailed e -> expectationFailure (show e)
                     CryptoFailed e -> expectationFailure (show e)
             _ -> expectationFailure "could not derive the two key pairs"

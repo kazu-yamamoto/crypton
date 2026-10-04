@@ -289,17 +289,16 @@ encapsulateWith ek coins
 
 -- | Recover the shared secret from a ciphertext.
 --
--- This is total, and deliberately so.  ML-KEM rejects implicitly: a
--- ciphertext that was not produced by encapsulating against the matching
--- key yields a secret derived from the private key and the ciphertext
--- rather than an error.  The caller cannot tell the two cases apart, which
--- is the point -- telling them apart is what a chosen-ciphertext attack
--- needs.  A ciphertext that does not belong here shows up later, as the two
--- sides failing to agree on anything.
+-- A ciphertext that was not produced by encapsulating against the matching
+-- key is not an error.  ML-KEM rejects implicitly: it yields a secret
+-- derived from the private key and the ciphertext, and the caller cannot
+-- tell that case from the other one, which is the point -- telling them
+-- apart is what a chosen-ciphertext attack needs.  A ciphertext that does
+-- not belong here shows up later, as the two sides failing to agree on
+-- anything.
 --
--- The checks FIPS 203 does require have not gone anywhere; they are at the
--- point where bytes become a value of these types, which is where they can
--- be reported:
+-- The checks FIPS 203 does require are at the point where bytes become a
+-- value of these types, which is where they can be reported:
 --
 -- * The ciphertext type check of section 7.3 is its length, and
 --   'ciphertext' is the only way to build a 'Ciphertext' from bytes.  There
@@ -310,20 +309,23 @@ encapsulateWith ek coins
 --   'decapsulationKey' runs it; a key from 'generateKeyPair' or
 --   'keyPairFromSeed' satisfies it by construction.
 --
--- Those two together are why decapsulation cannot fail here.
-decapsulate :: forall p. KEM p => DecapsulationKey p -> Ciphertext p -> SharedSecret
-decapsulate dk ct = SharedSecret $ unsafeDoIO $ do
+-- So the result is 'CryptoPassed' for every key and ciphertext this module
+-- can produce.  It is 'CryptoFailable' rather than a bare 'SharedSecret'
+-- because the implementation checks the key again on its way through, and
+-- what it finds is better reported than turned into an exception.
+decapsulate
+    :: forall p
+     . KEM p
+    => DecapsulationKey p -> Ciphertext p -> CryptoFailable SharedSecret
+decapsulate dk ct = unsafeDoIO $ do
     (r, ss) <- B.allocRet sharedSecretSize $ \pss ->
         withByteArray ct $ \pct ->
             withByteArray dk $ \pdk ->
                 c_dec (Proxy :: Proxy p) pss pct pdk
-    if r == (0 :: CInt)
-        then return ss
-        else
-            -- Only the key's hash check can fail, and both ways of making a
-            -- DecapsulationKey exclude it, so this is a broken invariant in
-            -- crypton rather than anything the caller did.
-            error "Crypto.PubKey.MLKEM.decapsulate: the decapsulation key failed its own hash check"
+    return $
+        if r == (0 :: CInt)
+            then CryptoPassed (SharedSecret ss)
+            else CryptoFailed CryptoError_SecretKeyStructureInvalid
 {-# NOINLINE decapsulate #-}
 
 instance KEM MLKEM512 where
