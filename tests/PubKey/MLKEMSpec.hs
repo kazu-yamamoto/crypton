@@ -77,10 +77,10 @@ keyGenCase v =
 encapCase :: EncapVector -> Spec
 encapCase v =
     it (enSet v ++ " tcId " ++ show (enId v)) $
-        withSet (enSet v) $ \(_ :: Proxy p) ->
+        withSet (enSet v) $ \(p :: Proxy p) ->
             case encapsulationKey (hex (enEk v)) :: CryptoFailable (EncapsulationKey p) of
                 CryptoFailed e -> expectationFailure (show e)
-                CryptoPassed ek -> case encapsulateWith ek (hex (enM v)) of
+                CryptoPassed ek -> case encapsulateWith p ek (B.convert (hex (enM v))) of
                     CryptoFailed e -> expectationFailure (show e)
                     CryptoPassed (ct, ss) -> do
                         B.convert ct `shouldBe` hex (enC v)
@@ -155,7 +155,7 @@ roundTrip name p =
             m = pad 32 (BS.pack coinBytes)
          in case keyPairFromSeed p d of
                 CryptoFailed e -> error (show e)
-                CryptoPassed (ek, dk) -> case encapsulateWith ek m of
+                CryptoPassed (ek, dk) -> case encapsulateWith p ek (B.convert m) of
                     CryptoFailed e -> error (show e)
                     CryptoPassed (ct, ss) ->
                         (B.convert <$> decapsulate p dk ct)
@@ -173,7 +173,7 @@ implicitRejection name p =
             m = BS.replicate 32 3
         case (keyPairFromSeed p seedA, keyPairFromSeed p seedB) of
             (CryptoPassed (ekA, _), CryptoPassed (_, dkB)) ->
-                case encapsulateWith ekA m of
+                case encapsulateWith p ekA (B.convert m) of
                     CryptoPassed (ct, ss) ->
                         case decapsulate p dkB ct of
                             CryptoPassed ss' ->

@@ -23,8 +23,12 @@
 -- value has neither.  A protocol can supply the binding at its own level --
 -- TLS 1.3 does, in the key schedule -- but then the binding belongs to the
 -- protocol, not to this class, and offering the raw exchange here would
--- invite its use somewhere that supplies nothing.  An instance for DHKEM
--- proper can be added when there is one to point at.
+-- invite its use somewhere that supplies nothing.
+--
+-- DHKEM proper is an instance, and it is not here either: the labels it
+-- derives under carry the HPKE ciphersuite identifier, which is an IANA
+-- registry value rather than anything a primitive knows, so the instances
+-- live beside the registry in the @hpke@ package.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -72,6 +76,13 @@ class KEM kem where
     -- | What travels back, and is decapsulated.
     type Ciphertext kem :: Type
 
+    -- | The randomness 'encapsulate' draws, for the instances that let a
+    -- caller supply it.  In ML-KEM it is @m@ of FIPS 203, a string of
+    -- bytes; in DHKEM it is the ephemeral secret key, a scalar of the
+    -- group.  Both are secret, and both determine the shared secret
+    -- completely.
+    type Coins kem :: Type
+
     -- | Generate a key pair for the decapsulating side.
     generateKeyPair
         :: MonadRandom m
@@ -87,6 +98,20 @@ class KEM kem where
         => proxy kem
         -> EncapsulationKey kem
         -> m (CryptoFailable (Ciphertext kem, SharedSecret))
+
+    -- | Encapsulate with the randomness supplied rather than drawn.
+    --
+    -- The secret this produces is a deterministic function of the key and
+    -- these coins, so they must come from a source no other party can
+    -- predict or repeat, and must not be used twice.  'encapsulate' is the
+    -- entry point for ordinary use; this one is for test vectors, and for a
+    -- protocol that has to name the ephemeral value it used -- HPKE lets a
+    -- sender supply its own, and the RFC 9180 vectors are written that way.
+    encapsulateWith
+        :: proxy kem
+        -> EncapsulationKey kem
+        -> Coins kem
+        -> CryptoFailable (Ciphertext kem, SharedSecret)
 
     -- | Recover the secret.
     decapsulate

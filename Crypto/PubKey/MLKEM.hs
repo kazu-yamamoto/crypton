@@ -52,7 +52,6 @@ module Crypto.PubKey.MLKEM (
     -- * What ML-KEM has beyond the class
     generateKeyPairAndSeed,
     keyPairFromSeed,
-    encapsulateWith,
 
     -- * Sizes
     seedSize,
@@ -100,6 +99,7 @@ class
     , EncapsulationKey p ~ MLKEMEncapsulationKey p
     , DecapsulationKey p ~ MLKEMDecapsulationKey p
     , Ciphertext p ~ MLKEMCiphertext p
+    , Coins p ~ ScrubbedBytes
     ) =>
     MLKEM p
     where
@@ -281,20 +281,17 @@ mlkemEncapsulate
     -> m (CryptoFailable (Ciphertext p, SharedSecret))
 mlkemEncapsulate ek = do
     coins <- getRandomBytes encapsulationCoinsSize :: m ScrubbedBytes
-    return (encapsulateWith ek coins)
+    return (mlkemEncapsulateWith ek coins)
 
--- | Encapsulate with randomness supplied, which is @m@ of FIPS 203 and must
--- be 'encapsulationCoinsSize' bytes.
---
--- The secret this produces is a deterministic function of the key and these
--- bytes, so they must come from a source no other party can predict or
--- repeat.  'encapsulate' is the entry point for ordinary use; this one is
--- for test vectors and for callers who are deliberately supplying their own.
-encapsulateWith
-    :: forall p ba
-     . (MLKEM p, ByteArrayAccess ba)
-    => EncapsulationKey p -> ba -> CryptoFailable (Ciphertext p, SharedSecret)
-encapsulateWith ek coins
+-- The class's 'encapsulateWith' for ML-KEM, where the coins are @m@ of
+-- FIPS 203 and must be 'encapsulationCoinsSize' bytes.
+mlkemEncapsulateWith
+    :: forall p
+     . MLKEM p
+    => MLKEMEncapsulationKey p
+    -> ScrubbedBytes
+    -> CryptoFailable (Ciphertext p, SharedSecret)
+mlkemEncapsulateWith ek coins
     | B.length coins /= encapsulationCoinsSize = CryptoFailed CryptoError_SeedSizeInvalid
     | otherwise = unsafeDoIO $ do
         ss <- B.alloc sharedSecretSize (\_ -> return ()) :: IO ScrubbedBytes
@@ -309,7 +306,7 @@ encapsulateWith ek coins
                 else CryptoFailed CryptoError_ParameterInvalid
   where
     p = Proxy :: Proxy p
-{-# NOINLINE encapsulateWith #-}
+{-# NOINLINE mlkemEncapsulateWith #-}
 
 -- | Recover the shared secret from a ciphertext.
 --
@@ -359,24 +356,30 @@ instance KEM MLKEM512 where
     type EncapsulationKey MLKEM512 = MLKEMEncapsulationKey MLKEM512
     type DecapsulationKey MLKEM512 = MLKEMDecapsulationKey MLKEM512
     type Ciphertext MLKEM512 = MLKEMCiphertext MLKEM512
+    type Coins MLKEM512 = ScrubbedBytes
     generateKeyPair = mlkemGenerateKeyPair
     encapsulate _ = mlkemEncapsulate
+    encapsulateWith _ = mlkemEncapsulateWith
     decapsulate _ = mlkemDecapsulate
 
 instance KEM MLKEM768 where
     type EncapsulationKey MLKEM768 = MLKEMEncapsulationKey MLKEM768
     type DecapsulationKey MLKEM768 = MLKEMDecapsulationKey MLKEM768
     type Ciphertext MLKEM768 = MLKEMCiphertext MLKEM768
+    type Coins MLKEM768 = ScrubbedBytes
     generateKeyPair = mlkemGenerateKeyPair
     encapsulate _ = mlkemEncapsulate
+    encapsulateWith _ = mlkemEncapsulateWith
     decapsulate _ = mlkemDecapsulate
 
 instance KEM MLKEM1024 where
     type EncapsulationKey MLKEM1024 = MLKEMEncapsulationKey MLKEM1024
     type DecapsulationKey MLKEM1024 = MLKEMDecapsulationKey MLKEM1024
     type Ciphertext MLKEM1024 = MLKEMCiphertext MLKEM1024
+    type Coins MLKEM1024 = ScrubbedBytes
     generateKeyPair = mlkemGenerateKeyPair
     encapsulate _ = mlkemEncapsulate
+    encapsulateWith _ = mlkemEncapsulateWith
     decapsulate _ = mlkemDecapsulate
 
 instance MLKEM MLKEM512 where
