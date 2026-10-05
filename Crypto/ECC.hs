@@ -1,10 +1,8 @@
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 
 -- |
 -- Module      : Crypto.ECC
@@ -51,7 +49,7 @@ import qualified Crypto.ECC.Edwards25519 as Edwards25519
 import qualified Crypto.ECC.Simple.Prim as Simple
 import qualified Crypto.ECC.Simple.Types as Simple
 import Crypto.Error
-import Crypto.KEM
+import Crypto.KEM (SharedSecret (..))
 import Crypto.Internal.ByteArray (
     ByteArray,
     ByteArrayAccess,
@@ -493,79 +491,3 @@ ecScalarMul
 ecScalarMul (Simple.Scalar a) (Simple.Scalar b) = Simple.Scalar ((a * b) `mod` n)
   where
     n = Simple.curveEccN $ Simple.curveParameters (Proxy :: Proxy curve)
-
--- | A Diffie-Hellman exchange, read as a key encapsulation.
---
--- The names line up: what is published is the receiver's point, what comes
--- back is the ephemeral one, and decapsulating is the exchange.  This is the
--- exchange above under the interface of "Crypto.KEM",
--- so that a caller can be written once and given either this or ML-KEM.
---
--- Unlike ML-KEM, encapsulating here can fail: the exchange refuses a peer
--- point that would make the secret degenerate.
---
--- One instance per curve rather than one for every curve at once, because a
--- class with a bare type variable in its head would also claim ML-KEM.
-ecKemKeyPair
-    :: (EllipticCurve curve, MonadRandom m)
-    => proxy curve -> m (Point curve, Scalar curve)
-ecKemKeyPair p = do
-    KeyPair pub pri <- curveGenerateKeyPair p
-    return (pub, pri)
-
--- The two halves, which are what Crypto.PubKey.ECIES exports under its own
--- names.  They are written out here rather than imported, because that
--- module is above this one.
-ecKemEncapsulate
-    :: (EllipticCurveDH curve, MonadRandom m)
-    => proxy curve
-    -> Point curve
-    -> m (CryptoFailable (Point curve, SharedSecret))
-ecKemEncapsulate p pub = do
-    KeyPair rPoint rScalar <- curveGenerateKeyPair p
-    return $ (,) rPoint <$> ecdh p rScalar pub
-
-ecKemDecapsulate
-    :: EllipticCurveDH curve
-    => proxy curve -> Scalar curve -> Point curve -> CryptoFailable SharedSecret
-ecKemDecapsulate p pri ct = ecdh p pri ct
-
-instance KEM Curve_P256R1 where
-    type EncapsulationKey Curve_P256R1 = Point Curve_P256R1
-    type DecapsulationKey Curve_P256R1 = Scalar Curve_P256R1
-    type Ciphertext Curve_P256R1 = Point Curve_P256R1
-    generateKeyPair = ecKemKeyPair
-    encapsulate = ecKemEncapsulate
-    decapsulate = ecKemDecapsulate
-
-instance KEM Curve_P384R1 where
-    type EncapsulationKey Curve_P384R1 = Point Curve_P384R1
-    type DecapsulationKey Curve_P384R1 = Scalar Curve_P384R1
-    type Ciphertext Curve_P384R1 = Point Curve_P384R1
-    generateKeyPair = ecKemKeyPair
-    encapsulate = ecKemEncapsulate
-    decapsulate = ecKemDecapsulate
-
-instance KEM Curve_P521R1 where
-    type EncapsulationKey Curve_P521R1 = Point Curve_P521R1
-    type DecapsulationKey Curve_P521R1 = Scalar Curve_P521R1
-    type Ciphertext Curve_P521R1 = Point Curve_P521R1
-    generateKeyPair = ecKemKeyPair
-    encapsulate = ecKemEncapsulate
-    decapsulate = ecKemDecapsulate
-
-instance KEM Curve_X25519 where
-    type EncapsulationKey Curve_X25519 = Point Curve_X25519
-    type DecapsulationKey Curve_X25519 = Scalar Curve_X25519
-    type Ciphertext Curve_X25519 = Point Curve_X25519
-    generateKeyPair = ecKemKeyPair
-    encapsulate = ecKemEncapsulate
-    decapsulate = ecKemDecapsulate
-
-instance KEM Curve_X448 where
-    type EncapsulationKey Curve_X448 = Point Curve_X448
-    type DecapsulationKey Curve_X448 = Scalar Curve_X448
-    type Ciphertext Curve_X448 = Point Curve_X448
-    generateKeyPair = ecKemKeyPair
-    encapsulate = ecKemEncapsulate
-    decapsulate = ecKemDecapsulate
