@@ -153,10 +153,10 @@ newtype Signature p = Signature Bytes
 -- 'maxContextLength' bytes.
 --
 -- FIPS 204 mixes it into what is signed, so a signature made under one
--- context does not verify under another.  Two uses of one key that agree on
--- a context string cannot be made to accept each other's signatures.  Use
--- 'noContext' where there is nothing to separate -- TLS, for one, signs
--- with an empty context.
+-- context does not verify under another.  Two uses of one key that don't
+-- agree on a context string cannot be made to accept each other's
+-- signatures.  Use 'noContext' where there is nothing to separate -- TLS,
+-- for one, signs with an empty context.
 newtype Context = Context Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
