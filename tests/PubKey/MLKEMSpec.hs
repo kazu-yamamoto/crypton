@@ -51,6 +51,10 @@ spec = do
         mapM_ (checkCase "encapsulation key" encapsulationKeyOf) ekCheckVectors
     describe "ACVP decapsulation key check (FIPS 203 7.3)" $
         mapM_ (checkCase "decapsulation key" decapsulationKeyOf) dkCheckVectors
+    describe "the seed a key pair came from" $ do
+        seedKeeps "ML-KEM-512" (Proxy :: Proxy MLKEM512)
+        seedKeeps "ML-KEM-768" (Proxy :: Proxy MLKEM768)
+        seedKeeps "ML-KEM-1024" (Proxy :: Proxy MLKEM1024)
     describe "round trip" $ do
         roundTrip "ML-KEM-512" (Proxy :: Proxy MLKEM512)
         roundTrip "ML-KEM-768" (Proxy :: Proxy MLKEM768)
@@ -127,6 +131,27 @@ decapsulationKeyOf (_ :: Proxy p) bs =
 -- The seed and the coins are drawn as lists of bytes and padded to the
 -- lengths the entry points want; there is no Arbitrary ByteString in scope
 -- and one is not worth adding for this.
+-- The class's generateKeyPair throws the seed away, so an application that
+-- has to keep it draws it itself.  That path has to give the same key pair
+-- every time, and a different one for a different seed.
+seedKeeps :: MLKEM p => String -> Proxy p -> Spec
+seedKeeps name p =
+    it (name ++ ": the seed determines the key pair") $ do
+        seed <- generateSeed p
+        B.length seed `shouldBe` seedSize
+        case (keyPairFromSeed p seed, keyPairFromSeed p seed) of
+            (CryptoPassed (ek1, dk1), CryptoPassed (ek2, dk2)) -> do
+                (B.convert ek1 :: BS.ByteString) `shouldBe` B.convert ek2
+                (B.convert dk1 :: BS.ByteString) `shouldBe` B.convert dk2
+                other <- generateSeed p
+                case keyPairFromSeed p other of
+                    CryptoPassed (ek3, _) ->
+                        (B.convert ek3 :: BS.ByteString)
+                            `shouldNotBe` B.convert ek1
+                    CryptoFailed e -> expectationFailure (show e)
+            (CryptoFailed e, _) -> expectationFailure (show e)
+            (_, CryptoFailed e) -> expectationFailure (show e)
+
 roundTrip :: MLKEM p => String -> Proxy p -> Spec
 roundTrip name p =
     prop (name ++ ": the two sides agree") $ \(seedBytes :: [Word8]) coinBytes ->

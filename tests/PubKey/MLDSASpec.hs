@@ -50,6 +50,10 @@ spec = do
         mapM_ extMuCase extMuVectors
     describe "the message representative" $
         mapM_ muCase sigGenVectors
+    describe "the seed a key pair came from" $ do
+        seedKeeps "ML-DSA-44" (Proxy :: Proxy MLDSA44)
+        seedKeeps "ML-DSA-65" (Proxy :: Proxy MLDSA65)
+        seedKeeps "ML-DSA-87" (Proxy :: Proxy MLDSA87)
     describe "round trip" $ do
         roundTrip "ML-DSA-44" (Proxy :: Proxy MLDSA44)
         roundTrip "ML-DSA-65" (Proxy :: Proxy MLDSA65)
@@ -164,6 +168,27 @@ muCase v =
                     -- signature the vector itself gives
                     when (sgDeterministic v) $
                         viaMu `shouldBe` hex (sgSignature v)
+
+-- generateKeyPair throws the seed away, so an application that has to
+-- write the seed form draws it itself.  What that path has to give is the
+-- same key pair every time, and a different one for a different seed.
+seedKeeps :: MLDSA p => String -> Proxy p -> Spec
+seedKeeps name p =
+    it (name ++ ": the seed determines the key pair") $ do
+        seed <- generateSeed p
+        B.length seed `shouldBe` seedSize
+        case (keyPairFromSeed p seed, keyPairFromSeed p seed) of
+            (CryptoPassed (vk1, sk1), CryptoPassed (vk2, sk2)) -> do
+                (B.convert vk1 :: BS.ByteString) `shouldBe` B.convert vk2
+                (B.convert sk1 :: BS.ByteString) `shouldBe` B.convert sk2
+                other <- generateSeed p
+                case keyPairFromSeed p other of
+                    CryptoPassed (vk3, _) ->
+                        (B.convert vk3 :: BS.ByteString)
+                            `shouldNotBe` B.convert vk1
+                    CryptoFailed e -> expectationFailure (show e)
+            (CryptoFailed e, _) -> expectationFailure (show e)
+            (_, CryptoFailed e) -> expectationFailure (show e)
 
 roundTrip :: MLDSA p => String -> Proxy p -> Spec
 roundTrip name p =

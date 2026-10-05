@@ -43,6 +43,7 @@ module Crypto.PubKey.MLDSA (
 
     -- * Generating a key pair
     generateKeyPair,
+    generateSeed,
     keyPairFromSeed,
     toPublic,
 
@@ -280,7 +281,27 @@ toPublic sk = VerificationKey $ unsafeDoIO $ do
     p = Proxy :: Proxy p
 {-# NOINLINE toPublic #-}
 
+-- | Draw a seed of the length this parameter set wants.
+--
+-- 'generateKeyPair' draws one of these and throws it away, which is all
+-- most callers need.  A caller that must be able to write the key out in
+-- the seed form -- RFC 9881 lets a private key be the seed, the expanded
+-- key, or both -- cannot get the seed back from the pair, so it draws the
+-- seed here and expands it with 'keyPairFromSeed':
+--
+-- > seed <- generateSeed MLDSA65
+-- > case keyPairFromSeed MLDSA65 seed of
+-- >     CryptoPassed (vk, sk) -> ...
+--
+-- The length is taken from the parameter set rather than left to the
+-- caller, which is the whole of what this adds over 'getRandomBytes'.
+generateSeed :: (MLDSA p, MonadRandom m) => proxy p -> m ScrubbedBytes
+generateSeed _ = getRandomBytes seedSize
+
 -- | Generate a key pair.
+--
+-- The seed it is derived from is drawn here and not kept; see
+-- 'generateSeed' for the case where it has to be.
 generateKeyPair
     :: forall p proxy m
      . (MLDSA p, MonadRandom m)
