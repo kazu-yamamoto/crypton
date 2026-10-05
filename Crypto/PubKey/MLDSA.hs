@@ -43,7 +43,7 @@ module Crypto.PubKey.MLDSA (
 
     -- * Generating a key pair
     generateKeyPair,
-    generateSeed,
+    generateKeyPairAndSeed,
     keyPairFromSeed,
     toPublic,
 
@@ -281,36 +281,41 @@ toPublic sk = VerificationKey $ unsafeDoIO $ do
     p = Proxy :: Proxy p
 {-# NOINLINE toPublic #-}
 
--- | Draw a seed of the length this parameter set wants.
---
--- 'generateKeyPair' draws one of these and throws it away, which is all
--- most callers need.  A caller that must be able to write the key out in
--- the seed form -- RFC 9881 lets a private key be the seed, the expanded
--- key, or both -- cannot get the seed back from the pair, so it draws the
--- seed here and expands it with 'keyPairFromSeed':
---
--- > seed <- generateSeed MLDSA65
--- > case keyPairFromSeed MLDSA65 seed of
--- >     CryptoPassed (vk, sk) -> ...
---
--- The length is taken from the parameter set rather than left to the
--- caller, which is the whole of what this adds over 'getRandomBytes'.
-generateSeed :: (MLDSA p, MonadRandom m) => proxy p -> m ScrubbedBytes
-generateSeed _ = getRandomBytes seedSize
-
 -- | Generate a key pair.
 --
--- The seed it is derived from is drawn here and not kept; see
--- 'generateSeed' for the case where it has to be.
+-- The seed it is derived from is drawn here and thrown away.  Use
+-- 'generateKeyPairAndSeed' where it has to be kept.
 generateKeyPair
     :: forall p proxy m
      . (MLDSA p, MonadRandom m)
     => proxy p -> m (VerificationKey p, SigningKey p)
 generateKeyPair p = do
+    (vk, sk, _) <- generateKeyPairAndSeed p
+    return (vk, sk)
+
+-- | Generate a key pair and hand back the seed it was derived from, @xi@
+-- in FIPS 204.
+--
+-- A 'SigningKey' is the expanded key and nothing else, so the seed cannot
+-- be recovered from a pair afterwards.  An application that has to write
+-- the key out in a form that keeps the seed -- RFC 9881 lets an ML-DSA
+-- private key be the seed, the expanded key, or both -- has to generate it
+-- here:
+--
+-- > (vk, sk, seed) <- generateKeyPairAndSeed MLDSA65
+--
+-- The seed is as secret as the signing key: 'keyPairFromSeed' turns it
+-- back into the same pair.
+generateKeyPairAndSeed
+    :: forall p proxy m
+     . (MLDSA p, MonadRandom m)
+    => proxy p -> m (VerificationKey p, SigningKey p, ScrubbedBytes)
+generateKeyPairAndSeed p = do
     seed <- getRandomBytes seedSize :: m ScrubbedBytes
     case keyPairFromSeed p seed of
-        CryptoPassed r -> return r
-        CryptoFailed e -> error ("Crypto.PubKey.MLDSA.generateKeyPair: " ++ show e)
+        CryptoPassed (vk, sk) -> return (vk, sk, seed)
+        CryptoFailed e ->
+            error ("Crypto.PubKey.MLDSA.generateKeyPairAndSeed: " ++ show e)
 
 -- | Derive a key pair from a seed, @xi@ in FIPS 204, which must be
 -- 'seedSize' bytes.

@@ -50,7 +50,7 @@ module Crypto.PubKey.MLKEM (
     ciphertext,
 
     -- * What ML-KEM has beyond the class
-    generateSeed,
+    generateKeyPairAndSeed,
     keyPairFromSeed,
     encapsulateWith,
 
@@ -208,32 +208,39 @@ ciphertext bs
     | otherwise = CryptoFailed CryptoError_PointSizeInvalid
 
 -- | Generate a key pair.
+--
+-- The seed it is derived from is drawn here and thrown away.  Use
+-- 'generateKeyPairAndSeed' where it has to be kept.
 mlkemGenerateKeyPair
     :: forall p proxy m
      . (MLKEM p, MonadRandom m)
     => proxy p -> m (MLKEMEncapsulationKey p, DecapsulationKey p)
 mlkemGenerateKeyPair p = do
+    (ek, dk, _) <- generateKeyPairAndSeed p
+    return (ek, dk)
+
+-- | Generate a key pair and hand back the seed it was derived from, @d@
+-- and @z@ of FIPS 203 one after the other.
+--
+-- A 'DecapsulationKey' is the expanded key and nothing else, so the seed
+-- cannot be recovered from a pair afterwards.  An application that has to
+-- write the key out in a form that keeps the seed has to generate it here:
+--
+-- > (ek, dk, seed) <- generateKeyPairAndSeed MLKEM768
+--
+-- The seed is as secret as the decapsulation key: 'keyPairFromSeed' turns
+-- it back into the same pair.
+generateKeyPairAndSeed
+    :: forall p proxy m
+     . (MLKEM p, MonadRandom m)
+    => proxy p
+    -> m (MLKEMEncapsulationKey p, DecapsulationKey p, ScrubbedBytes)
+generateKeyPairAndSeed p = do
     seed <- getRandomBytes seedSize :: m ScrubbedBytes
     case keyPairFromSeed p seed of
-        CryptoPassed r -> return r
-        CryptoFailed e -> error ("Crypto.PubKey.MLKEM.generateKeyPair: " ++ show e)
-
--- | Draw a seed of the length this parameter set wants.
---
--- 'generateKeyPair' draws one of these and throws it away, which is all
--- most callers need.  A caller that must be able to write the key out in
--- the seed form -- RFC 9881 lets a private key be the seed, the expanded
--- key, or both -- cannot get the seed back from the pair, so it draws the
--- seed here and expands it with 'keyPairFromSeed':
---
--- > seed <- generateSeed MLKEM768
--- > case keyPairFromSeed MLKEM768 seed of
--- >     CryptoPassed (ek, dk) -> ...
---
--- The length is taken from the parameter set rather than left to the
--- caller, which is the whole of what this adds over 'getRandomBytes'.
-generateSeed :: (MLKEM p, MonadRandom m) => proxy p -> m ScrubbedBytes
-generateSeed _ = getRandomBytes seedSize
+        CryptoPassed (ek, dk) -> return (ek, dk, seed)
+        CryptoFailed e ->
+            error ("Crypto.PubKey.MLKEM.generateKeyPairAndSeed: " ++ show e)
 
 -- | Derive a key pair from a seed, which is @d@ and @z@ of FIPS 203 one
 -- after the other and must be 'seedSize' bytes.

@@ -131,26 +131,21 @@ decapsulationKeyOf (_ :: Proxy p) bs =
 -- The seed and the coins are drawn as lists of bytes and padded to the
 -- lengths the entry points want; there is no Arbitrary ByteString in scope
 -- and one is not worth adding for this.
--- The class's generateKeyPair throws the seed away, so an application that
--- has to keep it draws it itself.  That path has to give the same key pair
--- every time, and a different one for a different seed.
+-- The seed generateKeyPairAndSeed hands back has to be the one the pair
+-- was derived from: expanding it again has to give that very pair, not
+-- merely some pair.  Two generated pairs also have to differ.
 seedKeeps :: MLKEM p => String -> Proxy p -> Spec
 seedKeeps name p =
-    it (name ++ ": the seed determines the key pair") $ do
-        seed <- generateSeed p
+    it (name ++ ": the seed comes back and rebuilds the pair") $ do
+        (ek, dk, seed) <- generateKeyPairAndSeed p
         B.length seed `shouldBe` seedSize
-        case (keyPairFromSeed p seed, keyPairFromSeed p seed) of
-            (CryptoPassed (ek1, dk1), CryptoPassed (ek2, dk2)) -> do
-                (B.convert ek1 :: BS.ByteString) `shouldBe` B.convert ek2
-                (B.convert dk1 :: BS.ByteString) `shouldBe` B.convert dk2
-                other <- generateSeed p
-                case keyPairFromSeed p other of
-                    CryptoPassed (ek3, _) ->
-                        (B.convert ek3 :: BS.ByteString)
-                            `shouldNotBe` B.convert ek1
-                    CryptoFailed e -> expectationFailure (show e)
-            (CryptoFailed e, _) -> expectationFailure (show e)
-            (_, CryptoFailed e) -> expectationFailure (show e)
+        case keyPairFromSeed p seed of
+            CryptoPassed (ek', dk') -> do
+                (B.convert ek' :: BS.ByteString) `shouldBe` B.convert ek
+                (B.convert dk' :: BS.ByteString) `shouldBe` B.convert dk
+            CryptoFailed e -> expectationFailure (show e)
+        (ek2, _, _) <- generateKeyPairAndSeed p
+        (B.convert ek2 :: BS.ByteString) `shouldNotBe` B.convert ek
 
 roundTrip :: MLKEM p => String -> Proxy p -> Spec
 roundTrip name p =

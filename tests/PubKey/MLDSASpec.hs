@@ -169,26 +169,21 @@ muCase v =
                     when (sgDeterministic v) $
                         viaMu `shouldBe` hex (sgSignature v)
 
--- generateKeyPair throws the seed away, so an application that has to
--- write the seed form draws it itself.  What that path has to give is the
--- same key pair every time, and a different one for a different seed.
+-- The seed generateKeyPairAndSeed hands back has to be the one the pair
+-- was derived from: expanding it again has to give that very pair, not
+-- merely some pair.  Two generated pairs also have to differ.
 seedKeeps :: MLDSA p => String -> Proxy p -> Spec
 seedKeeps name p =
-    it (name ++ ": the seed determines the key pair") $ do
-        seed <- generateSeed p
+    it (name ++ ": the seed comes back and rebuilds the pair") $ do
+        (vk, sk, seed) <- generateKeyPairAndSeed p
         B.length seed `shouldBe` seedSize
-        case (keyPairFromSeed p seed, keyPairFromSeed p seed) of
-            (CryptoPassed (vk1, sk1), CryptoPassed (vk2, sk2)) -> do
-                (B.convert vk1 :: BS.ByteString) `shouldBe` B.convert vk2
-                (B.convert sk1 :: BS.ByteString) `shouldBe` B.convert sk2
-                other <- generateSeed p
-                case keyPairFromSeed p other of
-                    CryptoPassed (vk3, _) ->
-                        (B.convert vk3 :: BS.ByteString)
-                            `shouldNotBe` B.convert vk1
-                    CryptoFailed e -> expectationFailure (show e)
-            (CryptoFailed e, _) -> expectationFailure (show e)
-            (_, CryptoFailed e) -> expectationFailure (show e)
+        case keyPairFromSeed p seed of
+            CryptoPassed (vk', sk') -> do
+                (B.convert vk' :: BS.ByteString) `shouldBe` B.convert vk
+                (B.convert sk' :: BS.ByteString) `shouldBe` B.convert sk
+            CryptoFailed e -> expectationFailure (show e)
+        (vk2, _, _) <- generateKeyPairAndSeed p
+        (B.convert vk2 :: BS.ByteString) `shouldNotBe` B.convert vk
 
 roundTrip :: MLDSA p => String -> Proxy p -> Spec
 roundTrip name p =
