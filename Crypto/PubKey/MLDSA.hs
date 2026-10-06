@@ -61,6 +61,13 @@ module Crypto.PubKey.MLDSA (
     mu,
     messageRepresentative,
 
+    -- ** A message that does not arrive in one piece
+    MuContext,
+    muInit,
+    muUpdate,
+    muUpdates,
+    muFinalize,
+
     -- * Signing and verifying
     sign,
     signWith,
@@ -85,7 +92,8 @@ import Foreign.C.Types (CInt (..), CSize (..))
 import Foreign.Ptr (Ptr, nullPtr)
 
 import Crypto.Debug (DebugShow (..), debugShowBytes)
-import Crypto.Hash (Digest, hash)
+import Crypto.Hash (Digest, hash, hashFinalize, hashInit, hashUpdate, hashUpdates)
+import qualified Crypto.Hash as Hash (Context)
 import Crypto.Hash.Algorithms (SHAKE256 (..))
 import Crypto.Error
 import Crypto.Internal.ByteArray (
@@ -209,12 +217,41 @@ mu bs
 messageRepresentative
     :: (MLDSA p, ByteArrayAccess msg)
     => VerificationKey p -> Context -> msg -> Mu
-messageRepresentative vk ctx msg = Mu (B.convert d)
-  where
+messageRepresentative vk ctx msg = muFinalize (muUpdate (muInit vk ctx) msg)
+
+-- | A 'Mu' being computed, with the message going in a piece at a time.
+--
+-- The name is not 'Context': that is ML-DSA's context string, which this
+-- is built from and is not.
+newtype MuContext = MuContext (Hash.Context (SHAKE256 512))
+
+-- | Begin a message representative.  The key and the context string are
+-- what it is bound to, and they are all that is needed before the message.
+--
+-- > muFinalize (muUpdates (muInit vk ctx) chunks)
+--
+-- is 'messageRepresentative' of the chunks joined, so a message too large
+-- to hold at once never has to be.
+muInit :: MLDSA p => VerificationKey p -> Context -> MuContext
+muInit vk ctx =
     -- FIPS 204: tr <- H(pk, 64) at key generation, and mu <- H(tr || M', 64)
-    -- when signing, with M' the domain-separated message.
+    -- when signing, with M' the domain-separated message.  Everything up to
+    -- the message itself is absorbed here.
+    MuContext $ hashUpdates hashInit [tr, domainPrefix ctx]
+  where
     tr = B.convert (shake64 (B.convert vk :: Bytes)) :: Bytes
-    d = shake64 (B.concat [tr, domainPrefix ctx, B.convert msg] :: Bytes)
+
+-- | Absorb a piece of the message.
+muUpdate :: ByteArrayAccess msg => MuContext -> msg -> MuContext
+muUpdate (MuContext c) msg = MuContext (hashUpdate c msg)
+
+-- | Absorb several pieces, which is 'muUpdate' one after the other.
+muUpdates :: ByteArrayAccess msg => MuContext -> [msg] -> MuContext
+muUpdates (MuContext c) msgs = MuContext (hashUpdates c msgs)
+
+-- | The message representative of everything absorbed so far.
+muFinalize :: MuContext -> Mu
+muFinalize (MuContext c) = Mu (B.convert (hashFinalize c :: Digest (SHAKE256 512)))
 
 shake64 :: ByteArrayAccess ba => ba -> Digest (SHAKE256 512)
 shake64 = hash

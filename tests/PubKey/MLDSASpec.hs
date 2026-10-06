@@ -12,7 +12,8 @@ import qualified Data.ByteArray as B
 import Data.ByteArray.Encoding (Base (Base16), convertFromBase)
 import qualified Data.ByteString as BS
 import Data.Proxy (Proxy (..))
-import Control.Monad (when)
+import Control.Monad (forM_, when)
+import Data.List (nub)
 import Test.Hspec hiding (context)
 
 import Crypto.Error
@@ -50,6 +51,8 @@ spec = do
         mapM_ extMuCase extMuVectors
     describe "the message representative" $
         mapM_ muCase sigGenVectors
+    describe "the message representative, a piece at a time" $
+        mapM_ muStreamCase sigGenVectors
     describe "the seed a key pair came from" $ do
         seedKeeps "ML-DSA-44" (Proxy :: Proxy MLDSA44)
         seedKeeps "ML-DSA-65" (Proxy :: Proxy MLDSA65)
@@ -168,6 +171,46 @@ muCase v =
                     -- signature the vector itself gives
                     when (sgDeterministic v) $
                         viaMu `shouldBe` hex (sgSignature v)
+
+-- The streaming form, against the same vectors.
+--
+-- Where the message is cut must not matter, so every cut is tried: none,
+-- at the front, at the back, at thirds, and one byte at a time.  All of
+-- them have to give what 'messageRepresentative' gives for the whole
+-- message, and -- for the deterministic vectors -- signing that has to
+-- give the signature the vector itself holds.  Without that last step the
+-- test would only say two of this module's paths agree with each other.
+muStreamCase :: SigGenVector -> Spec
+muStreamCase v =
+    it (label v) $
+        withSet (sgSet v) $ \(_ :: Proxy p) ->
+            case signingKey (hex (sgSk v)) :: CryptoFailable (SigningKey p) of
+                CryptoFailed e -> expectationFailure (show e)
+                CryptoPassed sk -> do
+                    let vk = toPublic sk
+                        ctx = ctxOf (sgContext v)
+                        msg = hex (sgMessage v)
+                        whole = B.convert (messageRepresentative vk ctx msg)
+                        n = BS.length msg
+                        cuts = nub [0, 1, n `div` 3, n `div` 2, n - 1, n]
+                        chunked :: [BS.ByteString] -> BS.ByteString
+                        chunked cs =
+                            B.convert (muFinalize (muUpdates (muInit vk ctx) cs))
+                    forM_ (filter (\i -> i >= 0 && i <= n) cuts) $ \i ->
+                        let (a, b) = BS.splitAt i msg
+                         in chunked [a, b] `shouldBe` (whole :: BS.ByteString)
+                    chunked (map BS.singleton (BS.unpack msg))
+                        `shouldBe` (whole :: BS.ByteString)
+                    -- an empty piece is not a piece
+                    chunked [BS.empty, msg, BS.empty]
+                        `shouldBe` (whole :: BS.ByteString)
+                    let streamed =
+                            muFinalize $
+                                muUpdate (muUpdate (muInit vk ctx) (BS.take 1 msg)) $
+                                    BS.drop 1 msg
+                    when (sgDeterministic v) $
+                        (B.convert (signExternalMuDeterministic sk streamed) :: BS.ByteString)
+                            `shouldBe` hex (sgSignature v)
 
 -- The seed generateKeyPairAndSeed hands back has to be the one the pair
 -- was derived from: expanding it again has to give that very pair, not
