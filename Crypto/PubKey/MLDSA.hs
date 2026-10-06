@@ -13,6 +13,10 @@
 -- > sig      <- sign sk noContext message
 -- > verify vk noContext message sig
 --
+-- What 'generateKeyPair' and 'sign' draw their randomness from is the
+-- 'Crypto.Random.MonadRandom' instance in use.  Its documentation says what
+-- an instance of your own has to be.
+--
 -- The parameter set is a type, so an ML-DSA-65 key cannot be passed where
 -- an ML-DSA-87 one is expected.  The three are fixed by FIPS 204 and the
 -- class has no other instances.

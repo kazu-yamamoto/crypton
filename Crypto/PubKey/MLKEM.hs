@@ -20,6 +20,10 @@
 -- > let ss'   =  decapsulate dk ct               -- the receiver, again
 -- > ss == ss'
 --
+-- What 'generateKeyPair' and 'encapsulate' draw their randomness from is
+-- the 'Crypto.Random.MonadRandom' instance in use.  Its documentation says
+-- what an instance of your own has to be.
+--
 -- The parameter set is a type, so an ML-KEM-768 key cannot be passed where
 -- an ML-KEM-1024 one is expected.  The three are fixed by FIPS 203 and the
 -- class has no other instances.

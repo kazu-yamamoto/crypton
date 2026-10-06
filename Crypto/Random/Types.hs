@@ -15,6 +15,18 @@ import Crypto.Internal.ByteArray
 import Crypto.Random.Entropy
 
 -- | A monad constraint that allows to generate random bytes
+--
+-- Everything in this library that draws a key, a nonce or a signature's
+-- randomness draws it through this class, and cannot tell a strong source
+-- from a weak one.  The two instances below are the ones to reach for:
+-- @IO@ reads the system entropy source, and @MonadPseudoRandom@ runs a
+-- 'DRG' seeded from it.
+--
+-- An instance of your own is held to the same standard.  A generator that
+-- another party can predict, or that repeats, yields keys and signatures
+-- that give away what they are meant to keep -- so the deliberately
+-- repeatable instance that makes a test reproducible is not one to ship
+-- with.
 class Monad m => MonadRandom m where
     getRandomBytes :: ByteArray byteArray => Int -> m byteArray
 
