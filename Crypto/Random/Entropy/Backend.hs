@@ -23,13 +23,22 @@ import Crypto.Random.Entropy.RDRand
 #ifdef WINDOWS
 import Crypto.Random.Entropy.Windows
 #else
+import Crypto.Random.Entropy.SysRandom
 import Crypto.Random.Entropy.Unix
 #endif
 
--- | All supported backends 
+-- | All supported backends, best first.
+--
+-- The system call comes before everything else: it is the kernel's own
+-- generator, it needs no descriptor, and it is what the rest of the world
+-- reaches for now.  RDRAND and the device files are what is left when the
+-- system has no such call.
 supportedBackends :: [IO (Maybe EntropyBackend)]
 supportedBackends =
     [
+#ifndef WINDOWS
+    openBackend (Proxy :: Proxy SysRandom),
+#endif
 #ifdef SUPPORT_RDRAND
     openBackend (Proxy :: Proxy RDRand),
 #endif
