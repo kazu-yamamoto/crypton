@@ -1,6 +1,6 @@
 # CHANGELOG for crypton
 
-## Unreleased
+## 2.1.8
 
 * chore: stop hiding foldl' from Prelude
   [#294](https://github.com/kazu-yamamoto/crypton/pull/294)
