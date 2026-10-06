@@ -6,6 +6,8 @@
   [#294](https://github.com/kazu-yamamoto/crypton/pull/294)
 * chore: ask for hidden visibility only where the format has it
   [#295](https://github.com/kazu-yamamoto/crypton/pull/295)
+* feat: ML-KEM and ML-DSA, through mlkem-native and mldsa-native
+  [#297](https://github.com/kazu-yamamoto/crypton/pull/297)
 
 ## 2.1.7
 

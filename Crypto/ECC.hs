@@ -49,13 +49,12 @@ import qualified Crypto.ECC.Edwards25519 as Edwards25519
 import qualified Crypto.ECC.Simple.Prim as Simple
 import qualified Crypto.ECC.Simple.Types as Simple
 import Crypto.Error
+import Crypto.KEM (SharedSecret (..))
 import Crypto.Internal.ByteArray (
     ByteArray,
     ByteArrayAccess,
-    ScrubbedBytes,
  )
 import qualified Crypto.Internal.ByteArray as B
-import Crypto.Internal.Imports
 import Crypto.Number.Basic (numBits)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import qualified Crypto.Number.Serialize.LE as LE
@@ -74,16 +73,6 @@ data KeyPair curve = KeyPair
     { keypairGetPublic :: !(Point curve)
     , keypairGetPrivate :: !(Scalar curve)
     }
-
--- | Secret shared via key exchange
-newtype SharedSecret = SharedSecret ScrubbedBytes
-    deriving (Eq, ByteArrayAccess, NFData)
-
-instance Semigroup SharedSecret where
-    SharedSecret x <> SharedSecret y = SharedSecret (x <> y)
-
-instance Monoid SharedSecret where
-    mempty = SharedSecret mempty
 
 class EllipticCurve curve where
     -- | Point on an Elliptic Curve

@@ -57,6 +57,10 @@ data CryptoError
       -- the base point generates, so multiplying it would answer modulo a
       -- small order.  Appended for the same reason as the constructor above.
       CryptoError_PointSubgroupInvalid
+    | -- | A public key is the right length but is not a well-formed encoding
+      -- of one, so no honest party produced it.  Appended for the same
+      -- reason as the two constructors above.
+      CryptoError_PublicKeyStructureInvalid
     deriving (Show, Eq, Enum, Data)
 
 instance E.Exception CryptoError
