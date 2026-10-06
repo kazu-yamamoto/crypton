@@ -890,7 +890,10 @@ library
         build-depends:   Win32 <2.15
 
     else
-        other-modules: Crypto.Random.Entropy.Unix
+        c-sources:     cbits/crypton_sysrandom.c
+        other-modules:
+            Crypto.Random.Entropy.SysRandom
+            Crypto.Random.Entropy.Unix
 
     if (impl(ghc >=0) && flag(integer-gmp))
         build-depends: integer-gmp <1.2
@@ -975,6 +978,7 @@ test-suite test-crypton
         PubKey.RabinSpec
         PubKey.SecrecySpec
         PubKey.RSASpec
+        EntropySpec
         RuntimeSpec
         StreamCipher.ChaChaPoly1305Spec
         StreamCipher.ChaChaSpec
