@@ -6,6 +6,7 @@
 -- Portability : Good
 module Crypto.Random.Entropy (
     getEntropy,
+    EntropyError (..),
 ) where
 
 import Crypto.Internal.ByteArray (ByteArray)

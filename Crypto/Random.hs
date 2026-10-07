@@ -31,11 +31,15 @@ module Crypto.Random (
     -- * Random abstraction
     MonadRandom (..),
     MonadPseudoRandom,
+
+    -- * When the system will not give any
+    EntropyError (..),
 ) where
 
 import Crypto.Error
 import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
+import Crypto.Random.Entropy (EntropyError (..))
 import Crypto.Random.SystemDRG
 import Crypto.Random.Types
 import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)

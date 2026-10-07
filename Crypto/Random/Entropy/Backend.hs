@@ -11,6 +11,7 @@ module Crypto.Random.Entropy.Backend
     ( EntropyBackend
     , supportedBackends
     , gatherBackend
+    , EntropyError(..)
     ) where
 
 import Foreign.Ptr
