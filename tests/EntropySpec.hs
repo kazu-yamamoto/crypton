@@ -8,13 +8,14 @@
 -- backend that forgets to loop answers a short buffer for anything larger.
 module EntropySpec (spec) where
 
+import Control.Exception (try)
 import qualified Data.ByteString as BS
 import Data.Maybe (catMaybes)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Test.Hspec
 
-import Crypto.Random.Entropy (getEntropy)
-import Crypto.Random.Entropy.Unsafe (gatherBackend, supportedBackends)
+import Crypto.Random.Entropy (EntropyError (..), getEntropy)
+import Crypto.Random.Entropy.Unsafe (gatherBackend, replenish, supportedBackends)
 
 spec :: Spec
 spec = describe "the system entropy source" $ do
@@ -40,6 +41,15 @@ spec = describe "the system entropy source" $ do
             (b : _) -> do
                 n <- allocaBytes 1000 $ \ptr -> gatherBackend b ptr 1000
                 n `shouldBe` 1000
+
+    -- A system with no source of entropy is the one failure this library
+    -- cannot answer, and it used to be an `error`, which a caller could not
+    -- tell from a bug.  There is no way to take the sources away from a
+    -- running machine, but replenish can be handed the empty list, which is
+    -- the same question.
+    it "says so with an exception when there is no source at all" $ do
+        r <- allocaBytes 16 $ \ptr -> try (replenish 16 [] ptr)
+        r `shouldBe` Left NoEntropySource
 
 lengthCase :: Int -> Spec
 lengthCase n =

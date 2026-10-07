@@ -23,6 +23,7 @@ import Foreign.Marshal.Utils (toBool)
 import Foreign.Storable (peek)
 import System.Win32.Types (getLastError)
 
+import Control.Exception (throwIO)
 import Crypto.Random.Entropy.Source
 
 
@@ -38,7 +39,8 @@ instance EntropySource WinCryptoAPI where
         case mctx of
             Nothing  -> do
                 lastError <- getLastError
-                fail $ "cannot re-grab win crypto api: error " ++ show lastError
+                throwIO $ EntropySourceLost
+                    ("the Windows crypto API: error " ++ show lastError)
             Just ctx -> do
                 r <- cryptGenRandom ctx ptr n
                 cryptReleaseCtx ctx
@@ -100,4 +102,5 @@ cryptReleaseCtx h = do
         then return ()
         else do
             lastError <- getLastError
-            fail $ "cryptReleaseCtx: error " ++ show lastError
+            throwIO $ EntropySourceLost
+                ("cryptReleaseCtx: error " ++ show lastError)

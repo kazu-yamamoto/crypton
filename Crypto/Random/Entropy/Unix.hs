@@ -61,7 +61,7 @@ withDev :: String -> (H -> IO a) -> IO a
 withDev filepath f =
     openDev filepath >>= \h ->
         case h of
-            Nothing -> error ("device " ++ filepath ++ " cannot be grabbed")
+            Nothing -> E.throwIO (EntropySourceLost filepath)
             Just fd -> f fd `E.finally` closeDev fd
 
 closeDev :: H -> IO ()
