@@ -28,7 +28,6 @@
 -- an ML-KEM-1024 one is expected.  The three are fixed by FIPS 203 and the
 -- class has no other instances.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
