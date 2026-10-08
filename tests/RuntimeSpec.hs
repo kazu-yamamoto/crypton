@@ -12,7 +12,12 @@ module RuntimeSpec (spec) where
 import Data.List (nub, sort)
 import Test.Hspec
 
-import Crypto.System.CPU
+import Crypto.System.CPU (
+    ProcessorOption (..),
+    hasAESAcceleration,
+    hasGHASHAcceleration,
+    processorOptions,
+ )
 
 -- | Every name this module gives, which is also the set 'Show' has to
 -- cover.

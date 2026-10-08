@@ -11,29 +11,31 @@
 --
 -- Gives information about crypton runtime environment.
 module Crypto.System.CPU (
-    ProcessorOption,
+    -- The names are bundled with the type rather than listed as
+    -- `pattern' exports, so an importer writes ProcessorOption (..), or
+    -- names the ones it wants, as it would for a type with constructors.
+    ProcessorOption (
+        -- x86
+        AESNI,
+        PCLMUL,
+        RDRAND,
+        SSSE3,
+        AVX,
+        AVX2,
+        SHANI,
+        MOVBE,
+        ADX,
+        VAES,
+        VAES512,
+        -- AArch64
+        NEON,
+        ARMAES,
+        ARMPMULL,
+        ARMSHA1,
+        ARMSHA2,
+        ARMSHA512
+    ),
     processorOptions,
-
-    -- * What an x86 processor was found to have
-    pattern AESNI,
-    pattern PCLMUL,
-    pattern RDRAND,
-    pattern SSSE3,
-    pattern AVX,
-    pattern AVX2,
-    pattern SHANI,
-    pattern MOVBE,
-    pattern ADX,
-    pattern VAES,
-    pattern VAES512,
-
-    -- * What an AArch64 processor was found to have
-    pattern NEON,
-    pattern ARMAES,
-    pattern ARMPMULL,
-    pattern ARMSHA1,
-    pattern ARMSHA2,
-    pattern ARMSHA512,
 
     -- * Questions that do not name an architecture
     hasAESAcceleration,
@@ -68,6 +70,12 @@ import Crypto.Random.Entropy.Source
 -- The names are the processor's, not the operation's.  'AESNI' is x86's
 -- and 'ARMAES' is AArch64's, and a machine reports only the ones it has;
 -- ask 'hasAESAcceleration' if the question is whether AES is fast here.
+--
+-- They are bundled with the type in the export list, so @ProcessorOption
+-- (..)@ brings in all of them and naming one brings in that one, as for a
+-- type with constructors.  The constructor underneath is not exported:
+-- these values say what the processor was found to have, and a caller has
+-- nothing to build.
 newtype ProcessorOption = ProcessorOption Word16
     deriving (Eq, Ord)
 
