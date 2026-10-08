@@ -34,7 +34,7 @@ withSet "ML-DSA-87" k = k (Proxy :: Proxy MLDSA87)
 withSet s _ = error ("unknown parameter set in a test vector: " ++ s)
 
 ctxOf :: String -> Context
-ctxOf "" = noContext
+ctxOf "" = emptyContext
 ctxOf s = case context (hex s) of
     CryptoPassed c -> c
     CryptoFailed e -> error (show e)
@@ -119,7 +119,7 @@ bindingCase v =
         | otherwise = BS.cons (BS.head b `seq` BS.head b + 1) (BS.tail b)
     -- any context other than the one it was signed under
     otherContext "" = ctxOf "00"
-    otherContext _ = noContext
+    otherContext _ = emptyContext
 
 -- Signing a representative the vector supplies.
 extMuCase :: ExtMuVector -> Spec

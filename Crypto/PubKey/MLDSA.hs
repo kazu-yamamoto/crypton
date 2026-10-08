@@ -10,8 +10,8 @@
 -- parameter sets.
 --
 -- > (vk, sk) <- generateKeyPair MLDSA65
--- > sig      <- sign sk noContext message
--- > verify vk noContext message sig
+-- > sig      <- sign sk emptyContext message
+-- > verify vk emptyContext message sig
 --
 -- What 'generateKeyPair' and 'sign' draw their randomness from is the
 -- 'Crypto.Random.MonadRandom' instance in use.  Its documentation says what
@@ -54,7 +54,7 @@ module Crypto.PubKey.MLDSA (
     -- * The context string
     Context,
     context,
-    noContext,
+    emptyContext,
 
     -- * The message representative
     Mu,
@@ -167,14 +167,18 @@ newtype Signature p = Signature Bytes
 -- FIPS 204 mixes it into what is signed, so a signature made under one
 -- context does not verify under another.  Two uses of one key that don't
 -- agree on a context string cannot be made to accept each other's
--- signatures.  Use 'noContext' where there is nothing to separate -- TLS,
+-- signatures.  Use 'emptyContext' where there is nothing to separate -- TLS,
 -- for one, signs with an empty context.
 newtype Context = Context Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
--- | The empty context.
-noContext :: Context
-noContext = Context B.empty
+-- | The context string of length zero, which is what to sign under when
+-- there is nothing to separate.
+--
+-- It is a context and not the absence of one: 'sign' always takes one, and
+-- what this separates from is every non-empty context there is.
+emptyContext :: Context
+emptyContext = Context B.empty
 
 -- | Try to build a context string.
 context :: ByteArrayAccess ba => ba -> CryptoFailable Context
