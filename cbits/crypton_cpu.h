@@ -98,6 +98,26 @@ void crypton_x86_ia32cap_resolve(void);
 extern unsigned int crypton_armcap_P;
 #endif
 
+/*
+ * The two slots of the array crypton_aes.c fills and crypton_aes_cpu_init
+ * hands out.  Here rather than in that file because crypton_cpu.c reads
+ * them too, to answer for Crypto.System.CPU.
+ */
+#define CPU_AESNI        0
+#define CPU_PCLMUL       1
+#define CPU_OPTION_COUNT 2
+
+/*
+ * One question at a time, numbered the way Crypto.System.CPU numbers its
+ * ProcessorOption rather than the way any array here is indexed.  The
+ * numbering is the module's to choose and this answers for it; reading an
+ * array by the Haskell constructor's Enum index is what kept that type at
+ * three names.  Returns 1 if the processor has it and crypton was built to
+ * use it, 0 otherwise -- including for anything this does not know, so an
+ * older library answers a newer caller rather than failing to link.
+ */
+int crypton_cpu_option(unsigned int option);
+
 #ifdef USE_AESNI
 void crypton_aesni_initialize_hw(void (*init_table)(int, int));
 #else

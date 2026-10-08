@@ -1,5 +1,10 @@
 # CHANGELOG for crypton
 
+## 2.2.0
+
+* feat: name every processor feature crypton dispatches on, not three of them
+* fix: an AArch64 machine no longer reports AESNI and PCLMUL
+
 ## 2.1.8
 
 * chore: stop hiding foldl' from Prelude
