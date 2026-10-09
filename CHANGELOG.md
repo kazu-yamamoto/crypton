@@ -1,5 +1,10 @@
 # CHANGELOG for crypton
 
+## 2.1.9
+
+* feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
+
 ## 2.1.8
 
 * chore: stop hiding foldl' from Prelude
