@@ -7,6 +7,7 @@
 * feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
 * chore(rsa): deprecate `sign`, `signSafer` and `verify` in favour of them
 * feat(dsa): sign and verify over a digest
+* feat(elgamal): sign and verify over a digest
 
 ## 2.1.8
 
