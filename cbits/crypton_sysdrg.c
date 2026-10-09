@@ -94,7 +94,7 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	struct sha512_ctx h;
 	uint8_t buf[64];
 	uint8_t digest[64];
-	int got, any = 0;
+	int got;
 
 	crypton_sha512_init(&h);
 
@@ -103,25 +103,28 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	 * it has, rather than this file growing a second copy of the device
 	 * reading that Crypto.Random.Entropy.Unix already does. */
 	got = crypton_sysrandom_available() ? crypton_sysrandom_bytes(buf, 64) : 0;
-	if (got > 0) {
-		crypton_sha512_update(&h, buf, (uint32_t) got);
-		any = 1;
-	}
-
-#ifdef SUPPORT_RDRAND
-	if (crypton_cpu_has_rdrand()) {
-		got = crypton_get_rand_bytes(buf, 32);
-		if (got > 0)
-			crypton_sha512_update(&h, buf, (uint32_t) got);
-		/* deliberately does not set `any`: RDRAND alone is not a seed */
-	}
-#endif
-
-	if (!any) {
+	if (got <= 0) {
+		/* Nothing else here is a seed on its own, so there is nothing to
+		 * go on with: return before drawing anything that would only be
+		 * thrown away. */
 		scrub(&h, sizeof h);
 		scrub(buf, sizeof buf);
 		return 0;
 	}
+	crypton_sha512_update(&h, buf, (uint32_t) got);
+
+#ifdef SUPPORT_RDRAND
+	/* Defence in depth rather than a second source.  On Linux the kernel
+	 * already feeds RDRAND and RDSEED into the pool the call above draws
+	 * from, so this is not independent of it; what it covers is that pool
+	 * having gone wrong.  It is never asked alone -- the return above saw
+	 * to that -- and it is not counted anywhere as entropy obtained. */
+	if (crypton_cpu_has_rdrand()) {
+		got = crypton_get_rand_bytes(buf, 32);
+		if (got > 0)
+			crypton_sha512_update(&h, buf, (uint32_t) got);
+	}
+#endif
 
 	crypton_sha512_finalize(&h, digest);
 	memcpy(out, digest, SEED_LEN);
