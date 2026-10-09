@@ -8,6 +8,8 @@
   [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
 * feat(elgamal): sign and verify over a digest
   [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
+* feat(rabin): Rabin-Williams and Modified Rabin sign and verify over a digest
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
 
 ## 2.1.8
 
