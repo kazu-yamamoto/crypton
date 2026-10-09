@@ -25,6 +25,38 @@
 --
 -- Around all of that is 'Integer' arithmetic, whose cost follows the size of
 -- the numbers; see "Crypto.PubKey.DSA" for that note at more length.
+--
+-- == The hash algorithm is passed as a value, and that is not going to change
+--
+-- 'sign', 'signWith' and 'verify' take a @hash@ argument whose value they
+-- never read.  Every 'Crypto.Hash.HashAlgorithm' instance is a nullary
+-- constructor, and the algorithm comes from the type; the value is there to
+-- carry the type and nothing else.  A caller holding a value loses nothing
+-- by it, and a caller that is itself polymorphic in the algorithm has no
+-- value to pass.
+--
+-- Elsewhere in crypton that is answered by taking a
+-- 'Crypto.Hash.Digest' instead: the digest carries the algorithm in its
+-- type and the bytes in its value, so nothing is passed only to name a
+-- type.  "Crypto.PubKey.RSA.PKCS15", "Crypto.PubKey.DSA",
+-- "Crypto.PubKey.ElGamal", "Crypto.PubKey.Rabin.RW" and
+-- "Crypto.PubKey.Rabin.Modified" all do that.
+--
+-- This module cannot.  What is hashed here is not the message:
+--
+-- > h = os2ip $ hashWith hashAlg $ B.append padding m
+--
+-- and the padding is not the caller's either.  'sign' searches for one,
+-- drawing eight bytes at a time until the first octet is non-zero and the
+-- Jacobi symbols of the hash modulo each private prime are both 1.  Which
+-- bytes get hashed is therefore decided inside the signing operation, after
+-- the caller has handed over the message, so there is no digest for a
+-- caller to compute in advance.
+--
+-- A proxy argument would work where a digest cannot.  It is deliberately
+-- not added: it would be the one exception to a rule the rest of the
+-- library now follows, and this module has no callers asking for it.  See
+-- the survey in <https://github.com/kazu-yamamoto/crypton/issues/304>.
 module Crypto.PubKey.Rabin.Basic (
     PublicKey (..),
     PrivateKey (..),

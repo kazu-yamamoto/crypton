@@ -386,19 +386,27 @@ vectorToPublic vector =
         , DSA.public_params = pgq vector
         }
 
-doSignatureTest hashAlg i vector = it (show i) (actual `shouldBe` expected)
+-- Both routes, and each against the vector rather than against the other:
+-- they share everything below the hash, so a test that only made them agree
+-- would pass with that shared part broken.
+doSignatureTest hashAlg i vector = describe (show i) $ do
+    it "signWith" $
+        DSA.signWith (k vector) key hashAlg (msg vector) `shouldBe` expected
+    it "signDigestWith" $
+        DSA.signDigestWith (k vector) key (hashWith hashAlg (msg vector))
+            `shouldBe` expected
   where
+    key = vectorToPrivate vector
     expected = Just $ DSA.Signature (r vector) (s vector)
-    actual = DSA.signWith (k vector) (vectorToPrivate vector) hashAlg (msg vector)
 
-doVerifyTest hashAlg i vector = it (show i) (actual `shouldBe` True)
+doVerifyTest hashAlg i vector = describe (show i) $ do
+    it "verify" $
+        DSA.verify hashAlg pub sig (msg vector) `shouldBe` True
+    it "verifyDigest" $
+        DSA.verifyDigest pub sig (hashWith hashAlg (msg vector)) `shouldBe` True
   where
-    actual =
-        DSA.verify
-            hashAlg
-            (vectorToPublic vector)
-            (DSA.Signature (r vector) (s vector))
-            (msg vector)
+    pub = vectorToPublic vector
+    sig = DSA.Signature (r vector) (s vector)
 
 -- | Both sign and verify invert a value modulo q with 'fromJust'.  The
 -- inverse does not exist when the value shares a factor with q, and neither
