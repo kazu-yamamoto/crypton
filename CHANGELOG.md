@@ -8,6 +8,7 @@
 * chore(rsa): deprecate `sign`, `signSafer` and `verify` in favour of them
 * feat(dsa): sign and verify over a digest
 * feat(elgamal): sign and verify over a digest
+* feat(rabin): Rabin-Williams and Modified Rabin sign and verify over a digest
 
 ## 2.1.8
 
