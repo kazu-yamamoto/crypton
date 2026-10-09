@@ -15,10 +15,16 @@ module Crypto.PubKey.RSA.PKCS15 (
     decryptSafer,
     sign,
     signSafer,
+    signDigest,
+    signSaferDigest,
+    signDigestInfo,
+    signSaferDigestInfo,
 
     -- * Public key operations
     encrypt,
     verify,
+    verifyDigest,
+    verifyDigestInfo,
 
     -- * Hash ASN1 description
     HashAlgorithmASN1,
@@ -554,13 +560,124 @@ verify
     -> ByteString
     -- ^ Signature
     -> Bool
-verify hashAlg pk m sm
+verify hashAlg pk m sm =
+    verifyEncoded pk (makeSignature hashAlg (public_size pk) m) sm
+
+-- | The two checks of RFC 8017 and the comparison, shared by the three
+-- verification entry points.  The expected encoding is a thunk and is
+-- forced only once the checks have passed, as it was when this was written
+-- out inside 'verify'.
+verifyEncoded
+    :: PublicKey
+    -> Either Error ByteString
+    -- ^ the encoding a signature of this message would have
+    -> ByteString
+    -- ^ signature
+    -> Bool
+verifyEncoded pk expected sm
     | B.length sm /= public_size pk = False
     | os2ip sm >= public_n pk = False
     | otherwise =
-        case makeSignature hashAlg (public_size pk) m of
+        case expected of
             Left _ -> False
-            Right s -> s == (ep pk sm)
+            Right s -> s == ep pk sm
+
+-- | Sign a digest.
+--
+-- The digest's type says which algorithm made it, so this needs nothing
+-- else to name one: the ASN.1 DigestInfo prefix comes from the
+-- 'HashAlgorithmASN1' instance that type selects.  'sign' takes @Maybe
+-- hashAlg@ and never reads the value inside the @Just@ -- it is there only
+-- to fix the type -- which is no burden when the caller has a value and
+-- leaves nothing to pass when the caller is itself polymorphic in the
+-- algorithm.
+--
+-- > signDigest blinder key (hashWith SHA256 message)
+--
+-- The blinder is optional and 'Nothing' is accepted, but see t'Blinder' for
+-- what it covers and when leaving it out is a decision rather than a
+-- default.  'signSaferDigest' generates one for you.
+signDigest
+    :: HashAlgorithmASN1 hashAlg
+    => Maybe Blinder
+    -- ^ optional blinder
+    -> PrivateKey
+    -- ^ private key
+    -> Digest hashAlg
+    -- ^ digest of the message to sign
+    -> Either Error ByteString
+signDigest blinder pk digest =
+    dp blinder pk `fmap` padSignature (private_size pk) (hashDigestASN1 digest)
+
+-- | 'signDigest' with a blinder generated for the occasion, as 'signSafer'
+-- is to 'sign'.
+signSaferDigest
+    :: (HashAlgorithmASN1 hashAlg, MonadRandom m)
+    => PrivateKey
+    -- ^ private key
+    -> Digest hashAlg
+    -- ^ digest of the message to sign
+    -> m (Either Error ByteString)
+signSaferDigest pk digest = do
+    blinder <- generateBlinder (private_n pk)
+    return (signDigest (Just blinder) pk digest)
+
+-- | Sign something that is already a DigestInfo, the ASN.1 structure
+-- naming a hash algorithm and carrying a digest under it.
+--
+-- This is what @'sign' blinder 'Nothing'@ does.  It needs no
+-- 'HashAlgorithmASN1' constraint, because nothing here hashes or encodes:
+-- the caller has done both.  @'sign' blinder 'Nothing'@ carries the
+-- constraint anyway, and since the type variable then appears nowhere else
+-- the caller has to name an algorithm that is never used --
+-- @'sign' blinder ('Nothing' :: 'Maybe' 'Crypto.Hash.SHA256')@ -- to say
+-- which one it is not using.
+signDigestInfo
+    :: Maybe Blinder
+    -- ^ optional blinder
+    -> PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ a DigestInfo, encoded
+    -> Either Error ByteString
+signDigestInfo blinder pk di =
+    dp blinder pk `fmap` padSignature (private_size pk) di
+
+-- | 'signDigestInfo' with a blinder generated for the occasion.
+signSaferDigestInfo
+    :: MonadRandom m
+    => PrivateKey
+    -- ^ private key
+    -> ByteString
+    -- ^ a DigestInfo, encoded
+    -> m (Either Error ByteString)
+signSaferDigestInfo pk di = do
+    blinder <- generateBlinder (private_n pk)
+    return (signDigestInfo (Just blinder) pk di)
+
+-- | Verify a signature over a digest.  The checks are 'verify's.
+verifyDigest
+    :: HashAlgorithmASN1 hashAlg
+    => PublicKey
+    -> Digest hashAlg
+    -- ^ digest of the message
+    -> ByteString
+    -- ^ signature
+    -> Bool
+verifyDigest pk digest sm =
+    verifyEncoded pk (padSignature (public_size pk) (hashDigestASN1 digest)) sm
+
+-- | Verify a signature over something that is already a DigestInfo, which
+-- is what @'verify' 'Nothing'@ does.
+verifyDigestInfo
+    :: PublicKey
+    -> ByteString
+    -- ^ a DigestInfo, encoded
+    -> ByteString
+    -- ^ signature
+    -> Bool
+verifyDigestInfo pk di sm =
+    verifyEncoded pk (padSignature (public_size pk) di) sm
 
 -- | make signature digest, used in 'sign' and 'verify'
 makeSignature

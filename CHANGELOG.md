@@ -4,6 +4,7 @@
 
 * feat: name every processor feature crypton dispatches on, not three of them
 * fix: an AArch64 machine no longer reports AESNI and PCLMUL
+* feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
 
 ## 2.1.8
 
