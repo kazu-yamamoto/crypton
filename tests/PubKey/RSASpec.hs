@@ -1,3 +1,7 @@
+-- The properties below hold the new entry points against sign, signSafer
+-- and verify, which are deprecated as of this release.  Comparing against
+-- them is the point, so the warning is off here and nowhere else.
+{-# OPTIONS_GHC -Wno-deprecations #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 

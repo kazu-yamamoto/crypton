@@ -512,6 +512,12 @@ encrypt pk m = do
 
 -- | sign message using private key, a hash and its ASN1 description
 --
+-- __Deprecated.__  Use 'signDigest', or 'signDigestInfo' where this would
+-- have been given 'Nothing'.  The @Maybe hashAlg@ argument says both \"hash
+-- it with this\" and \"do not hash it\", and down the first path the value
+-- inside the 'Just' is never read: it is there to fix the type, which
+-- leaves a caller that has only a type with nothing to pass.
+--
 -- The blinder is optional and 'Nothing' is accepted, but see t'Blinder' for
 -- what it covers and when leaving it out is a decision rather than a default.
 -- 'signSafer' generates one for you.
@@ -527,8 +533,14 @@ sign
     -- ^ message to sign
     -> Either Error ByteString
 sign blinder hashDescr pk m = dp blinder pk `fmap` makeSignature hashDescr (private_size pk) m
+{-# DEPRECATED
+    sign
+    "Use signDigest, or signDigestInfo when the message is already a DigestInfo"
+    #-}
 
 -- | sign message using the private key and by automatically generating a blinder.
+--
+-- __Deprecated.__  Use 'signSaferDigest', or 'signSaferDigestInfo'.
 signSafer
     :: (HashAlgorithmASN1 hashAlg, MonadRandom m)
     => Maybe hashAlg
@@ -541,8 +553,15 @@ signSafer
 signSafer hashAlg pk m = do
     blinder <- generateBlinder (private_n pk)
     return (sign (Just blinder) hashAlg pk m)
+{-# DEPRECATED
+    signSafer
+    "Use signSaferDigest, or signSaferDigestInfo when the message is already a DigestInfo"
+    #-}
 
 -- | verify message with the signed message
+--
+-- __Deprecated.__  Use 'verifyDigest', or 'verifyDigestInfo' where this
+-- would have been given 'Nothing'.
 --
 -- Following RFC 8017, the signature is rejected unless it is exactly as long
 -- as the modulus (section 8.2.2, step 1) and its integer representative is
@@ -562,6 +581,10 @@ verify
     -> Bool
 verify hashAlg pk m sm =
     verifyEncoded pk (makeSignature hashAlg (public_size pk) m) sm
+{-# DEPRECATED
+    verify
+    "Use verifyDigest, or verifyDigestInfo when the message is already a DigestInfo"
+    #-}
 
 -- | The two checks of RFC 8017 and the comparison, shared by the three
 -- verification entry points.  The expected encoding is a thunk and is
