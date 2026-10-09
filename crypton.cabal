@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               crypton
-version:            2.1.8
+version:            2.2.0
 -- crypton's own code is BSD-3-Clause.  The parts of
 -- cbits/aes/gcm_fused_x86.c that follow picotls's fusion are MIT, and the
 -- vendored s2n-bignum assembly in cbits/s2n is taken under ISC; each has
@@ -355,6 +355,8 @@ library
         cbits/crypton_chacha.c
         cbits/crypton_chachapoly.c
         cbits/crypton_cpu.c
+        cbits/crypton_sysdrg.c
+        cbits/crypton_sysrandom.c
         cbits/crypton_des.c
         cbits/crypton_ecc.c
         cbits/crypton_f2m.c
@@ -438,6 +440,7 @@ library
         Crypto.PubKey.Internal
         Crypto.Random.ChaChaDRG
         Crypto.Random.Entropy.Backend
+        Crypto.Random.SysDRG
         Crypto.Random.Entropy.Source
         Crypto.Random.HmacDRG
         Crypto.Random.Probabilistic
@@ -724,7 +727,10 @@ library
             asm-options: -mavx2 -mbmi2
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
+        -- cc-options too: crypton_sysdrg.c mixes RDRAND into its seed and
+        -- has to know whether the symbol is there to call.
         cpp-options:   -DSUPPORT_RDRAND
+        cc-options:    -DSUPPORT_RDRAND
         c-sources:     cbits/crypton_rdrand.c
         other-modules: Crypto.Random.Entropy.RDRand
 
@@ -890,7 +896,9 @@ library
         build-depends:   Win32 <2.15
 
     else
-        other-modules: Crypto.Random.Entropy.Unix
+        other-modules:
+            Crypto.Random.Entropy.SysRandom
+            Crypto.Random.Entropy.Unix
 
     if (impl(ghc >=0) && flag(integer-gmp))
         build-depends: integer-gmp <1.2
@@ -975,7 +983,9 @@ test-suite test-crypton
         PubKey.RabinSpec
         PubKey.SecrecySpec
         PubKey.RSASpec
+        EntropySpec
         RuntimeSpec
+        SysDRGSpec
         StreamCipher.ChaChaPoly1305Spec
         StreamCipher.ChaChaSpec
         StreamCipher.RC4Spec
@@ -996,6 +1006,45 @@ test-suite test-crypton
     default-language: Haskell2010
     ghc-options:
         -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
+        -threaded "-with-rtsopts=-N2"
+
+-- The generator behind MonadRandom and a fork made from Haskell.  Its own
+-- executables because the suite above runs with -N2, where GHC does not
+-- support forkProcess, and because the answer may differ between the
+-- threaded runtime and the one without it -- so it is built for both.
+-- Not on Windows, which has no fork and no unix package.
+test-suite test-forkprocess-threaded
+    type:             exitcode-stdio-1.0
+    main-is:          ForkProcess.hs
+    hs-source-dirs:   tests/forkprocess
+    default-language: Haskell2010
+    ghc-options:
+        -Wall -rtsopts -threaded "-with-rtsopts=-N1"
+
+    if os(windows)
+        buildable: False
+    else
+        build-depends:
+            base >=4.13 && <5,
+            bytestring,
+            crypton,
+            unix
+
+test-suite test-forkprocess-unthreaded
+    type:             exitcode-stdio-1.0
+    main-is:          ForkProcess.hs
+    hs-source-dirs:   tests/forkprocess
+    default-language: Haskell2010
+    ghc-options:      -Wall -rtsopts
+
+    if os(windows)
+        buildable: False
+    else
+        build-depends:
+            base >=4.13 && <5,
+            bytestring,
+            crypton,
+            unix
 
 benchmark bench-crypton
     type:             exitcode-stdio-1.0
