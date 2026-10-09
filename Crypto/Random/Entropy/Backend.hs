@@ -17,9 +17,6 @@ import Foreign.Ptr
 import Data.Proxy
 import Data.Word (Word8)
 import Crypto.Random.Entropy.Source
-#ifdef SUPPORT_RDRAND
-import Crypto.Random.Entropy.RDRand
-#endif
 #ifdef WINDOWS
 import Crypto.Random.Entropy.Windows
 #else
@@ -31,16 +28,20 @@ import Crypto.Random.Entropy.Unix
 --
 -- The system call comes before everything else: it is the kernel's own
 -- generator, it needs no descriptor, and it is what the rest of the world
--- reaches for now.  RDRAND and the device files are what is left when the
--- system has no such call.
+-- reaches for now.  The device files are what is left when the system has
+-- no such call.
+--
+-- RDRAND is deliberately not here, though it used to be first on x86.  A
+-- list like this one is a list of alternatives, and whichever answers
+-- first decides the bytes on its own -- which is the one thing #298 says
+-- RDRAND should not do.  It still contributes, as one input among others
+-- to the seed in @cbits\/crypton_sysdrg.c@, where it goes through SHA-512
+-- with the system call's bytes and cannot determine the result by itself.
 supportedBackends :: [IO (Maybe EntropyBackend)]
 supportedBackends =
     [
 #ifndef WINDOWS
     openBackend (Proxy :: Proxy SysRandom),
-#endif
-#ifdef SUPPORT_RDRAND
-    openBackend (Proxy :: Proxy RDRand),
 #endif
 #ifdef WINDOWS
     openBackend (Proxy :: Proxy WinCryptoAPI)
