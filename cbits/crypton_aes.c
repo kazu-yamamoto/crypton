@@ -272,10 +272,6 @@ typedef void (*gf_mul4_f)(block128 *a, const block128 *blocks, const table_4bit 
 #define crypton_gf_mul4(a,b,t) crypton_aes_generic_gf_mul4(a,b,t)
 #endif
 
-#define CPU_AESNI        0
-#define CPU_PCLMUL       1
-#define CPU_OPTION_COUNT 2
-
 static uint8_t crypton_aes_cpu_options[CPU_OPTION_COUNT] = {};
 
 #if defined(ARCH_X86) && defined(WITH_AESNI)

@@ -157,29 +157,40 @@ jobs:
     # Every image in the matrix is hardware that has AES and carry-less
     # multiply -- every x86-64 part since about 2010, and both AArch64 ones --
     # so anything less means crypton failed to reach for them, whether the
-    # runtime check said no or the build never compiled the code.  Covers the
-    # AES and PMULL checks; the SHA-2 one is not reported through this
-    # interface.
+    # runtime check said no or the build never compiled the code.
+    #
+    # Asked through hasAESAcceleration and hasGHASHAcceleration rather than by
+    # name, because the names are the processor's: x86 reports AESNI and
+    # PCLMUL, AArch64 reports ARMAES and ARMPMULL, and a check written against
+    # either pair passes on one architecture and fails on the other.  The list
+    # is printed as well, and that printout is the only place the detection
+    # itself is looked at -- a feature silently missing from it is a wrong
+    # #ifdef, not a failure.
     - name: Report the implementations crypton selected
       shell: bash
       run: |
         cat > ci-cpu-check.hs <<'EOF'
         import Crypto.System.CPU
-        main = print processorOptions
+        main = do
+            print processorOptions
+            print (hasAESAcceleration, hasGHASHAcceleration)
         EOF
         # Compiled and linked rather than run through runghc: the answer comes
         # from a foreign call, and the bytecode interpreter cannot resolve
-        # crypton_aes_cpu_init.  -i keeps the source tree we are standing in
+        # crypton_cpu_option.  -i keeps the source tree we are standing in
         # from shadowing the built library, and -package crypton exposes it,
         # since cabal exec puts the project's package-db on the path without
         # exposing anything out of it.
         cabal exec --enable-tests --enable-benchmarks -- \
           ghc -v0 -O0 -i -package crypton ci-cpu-check.hs -o ci-cpu-check
-        options=$(./ci-cpu-check 2>/dev/null || ./ci-cpu-check.exe)
+        out=$(./ci-cpu-check 2>/dev/null || ./ci-cpu-check.exe)
+        options=$(echo "$out" | sed -n 1p)
+        accel=$(echo "$out" | sed -n 2p)
         echo "processorOptions = $options"
-        case "$options" in
-          *AESNI*PCLMUL*) ;;
-          *) echo "::error::expected AESNI and PCLMUL on ${{ matrix.os }}, got $options"
+        echo "(hasAESAcceleration, hasGHASHAcceleration) = $accel"
+        case "$accel" in
+          "(True,True)") ;;
+          *) echo "::error::expected hardware AES and carry-less multiply on ${{ matrix.os }}, got $accel from $options"
              exit 1 ;;
         esac
 

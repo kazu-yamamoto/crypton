@@ -313,3 +313,100 @@ void crypton_aesni_initialize_hw(void (*init_table)(int, int))
 #endif
 
 #endif
+
+/*
+ * What Crypto.System.CPU reports.
+ *
+ * The numbers are that module's, and this answers for them.  The old shape
+ * was the other way round -- Haskell read crypton_aes.c's two-entry array by
+ * the Enum index of its own constructors -- which tied the list of names to
+ * the indices of an array that had no reason to grow, and so it never did.
+ *
+ * Nothing here is cached: every answer is either a static array filled by a
+ * constructor, a value resolved once and remembered by the function that
+ * owns it, or a runtime check that does its own remembering.  Haskell calls
+ * this once, for a CAF.
+ */
+uint8_t *crypton_aes_cpu_init(void);
+
+#ifdef WITH_ARMV8_CRYPTO
+int crypton_aes_armv8_available(void);
+int crypton_aes_armv8_pmull_available(void);
+#endif
+#ifdef WITH_ARMV8_SHA1
+extern int crypton_sha1_armv8_available(void);
+#endif
+#ifdef WITH_ARMV8_SHA2
+extern int crypton_sha256_armv8_available(void);
+#endif
+#ifdef WITH_ARMV8_SHA512
+extern int crypton_sha512_armv8_available(void);
+#endif
+
+/* Keep in step with Crypto/System/CPU.hs, which is where these are named.
+ * 2 is RDRAND, which Haskell answers for itself: it opens the instruction
+ * and draws from it rather than trusting what cpuid says, and an AMD erratum
+ * is the reason that is worth doing. */
+#define OPT_AESNI      0
+#define OPT_PCLMUL     1
+#define OPT_SSSE3      3
+#define OPT_AVX        4
+#define OPT_AVX2       5
+#define OPT_SHANI      6
+#define OPT_MOVBE      7
+#define OPT_ADX        8
+#define OPT_VAES       9
+#define OPT_VAES512   10
+#define OPT_NEON      11
+#define OPT_ARMAES    12
+#define OPT_ARMPMULL  13
+#define OPT_ARMSHA1   14
+#define OPT_ARMSHA2   15
+#define OPT_ARMSHA512 16
+
+int crypton_cpu_option(unsigned int option)
+{
+#ifdef ARCH_X86
+	uint32_t f = crypton_x86_simd_features();
+
+	switch (option) {
+	case OPT_AESNI:    return crypton_aes_cpu_init()[CPU_AESNI] != 0;
+	case OPT_PCLMUL:   return crypton_aes_cpu_init()[CPU_PCLMUL] != 0;
+	case OPT_SSSE3:    return (f & CRYPTON_X86_SSSE3)   != 0;
+	case OPT_AVX:      return (f & CRYPTON_X86_AVX)     != 0;
+	case OPT_AVX2:     return (f & CRYPTON_X86_AVX2)    != 0;
+	case OPT_SHANI:    return (f & CRYPTON_X86_SHA_NI)  != 0;
+	case OPT_MOVBE:    return (f & CRYPTON_X86_MOVBE)   != 0;
+	case OPT_ADX:      return (f & CRYPTON_X86_ADX)     != 0;
+	case OPT_VAES:     return (f & CRYPTON_X86_VAES)    != 0;
+	case OPT_VAES512:  return (f & CRYPTON_X86_VAES512) != 0;
+	default:           return 0;
+	}
+#else
+	switch (option) {
+	/* NEON is not optional on AArch64, and crypton_armcap_P is set from
+	 * the start for it.  Where there is no ARM assembly at all there is
+	 * nothing to say. */
+#ifdef CRYPTON_ARM_ASM
+	case OPT_NEON:     return (crypton_armcap_P & CRYPTON_ARMCAP_NEON) != 0;
+#endif
+#ifdef WITH_ARMV8_CRYPTO
+	/* The array rather than the check: it is what the branch table was
+	 * actually built from, so it says what will run, not merely what the
+	 * processor has. */
+	case OPT_ARMAES:   return crypton_aes_cpu_init()[CPU_AESNI]  != 0;
+	case OPT_ARMPMULL: return crypton_aes_cpu_init()[CPU_PCLMUL] != 0;
+#endif
+#ifdef WITH_ARMV8_SHA1
+	case OPT_ARMSHA1:  return crypton_sha1_armv8_available()   != 0;
+#endif
+#ifdef WITH_ARMV8_SHA2
+	case OPT_ARMSHA2:  return crypton_sha256_armv8_available() != 0;
+#endif
+#ifdef WITH_ARMV8_SHA512
+	case OPT_ARMSHA512: return crypton_sha512_armv8_available() != 0;
+#endif
+	default:           return 0;
+	}
+#endif
+}
