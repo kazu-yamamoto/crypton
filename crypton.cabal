@@ -355,6 +355,8 @@ library
         cbits/crypton_chacha.c
         cbits/crypton_chachapoly.c
         cbits/crypton_cpu.c
+        cbits/crypton_sysdrg.c
+        cbits/crypton_sysrandom.c
         cbits/crypton_des.c
         cbits/crypton_ecc.c
         cbits/crypton_f2m.c
@@ -438,6 +440,7 @@ library
         Crypto.PubKey.Internal
         Crypto.Random.ChaChaDRG
         Crypto.Random.Entropy.Backend
+        Crypto.Random.SysDRG
         Crypto.Random.Entropy.Source
         Crypto.Random.HmacDRG
         Crypto.Random.Probabilistic
@@ -893,7 +896,6 @@ library
         build-depends:   Win32 <2.15
 
     else
-        c-sources:     cbits/crypton_sysrandom.c
         other-modules:
             Crypto.Random.Entropy.SysRandom
             Crypto.Random.Entropy.Unix
@@ -983,6 +985,7 @@ test-suite test-crypton
         PubKey.RSASpec
         EntropySpec
         RuntimeSpec
+        SysDRGSpec
         StreamCipher.ChaChaPoly1305Spec
         StreamCipher.ChaChaSpec
         StreamCipher.RC4Spec
@@ -1003,6 +1006,45 @@ test-suite test-crypton
     default-language: Haskell2010
     ghc-options:
         -Wall -fno-warn-orphans -fno-warn-missing-signatures -rtsopts
+        -threaded "-with-rtsopts=-N2"
+
+-- The generator behind MonadRandom and a fork made from Haskell.  Its own
+-- executables because the suite above runs with -N2, where GHC does not
+-- support forkProcess, and because the answer may differ between the
+-- threaded runtime and the one without it -- so it is built for both.
+-- Not on Windows, which has no fork and no unix package.
+test-suite test-forkprocess-threaded
+    type:             exitcode-stdio-1.0
+    main-is:          ForkProcess.hs
+    hs-source-dirs:   tests/forkprocess
+    default-language: Haskell2010
+    ghc-options:
+        -Wall -rtsopts -threaded "-with-rtsopts=-N1"
+
+    if os(windows)
+        buildable: False
+    else
+        build-depends:
+            base >=4.13 && <5,
+            bytestring,
+            crypton,
+            unix
+
+test-suite test-forkprocess-unthreaded
+    type:             exitcode-stdio-1.0
+    main-is:          ForkProcess.hs
+    hs-source-dirs:   tests/forkprocess
+    default-language: Haskell2010
+    ghc-options:      -Wall -rtsopts
+
+    if os(windows)
+        buildable: False
+    else
+        build-depends:
+            base >=4.13 && <5,
+            bytestring,
+            crypton,
+            unix
 
 benchmark bench-crypton
     type:             exitcode-stdio-1.0
