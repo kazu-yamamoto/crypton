@@ -3,7 +3,7 @@
 module PubKey.ElGamalSpec (spec) where
 
 import Crypto.Error
-import Crypto.Hash (SHA256 (..))
+import Crypto.Hash (SHA256 (..), hashWith)
 import qualified Crypto.PubKey.DH as DH
 import qualified Crypto.PubKey.ElGamal as ElGamal
 import Crypto.Random (drgNewTest, withDRG)
@@ -103,6 +103,35 @@ signatureTests = describe "signature" $ do
                     `shouldBe` False
     it "rejects a signature with r out of range" $
         ElGamal.verify params pub SHA256 msg (ElGamal.Signature 0 1) `shouldBe` False
+    -- The digest route and the hash-value route, crossed: a signature made
+    -- by one has to verify under the other.  Each route alone would pass
+    -- with its own arguments in the wrong order; crossing them would not.
+    it "verifies under the digest route what the hash route signed" $
+        case ElGamal.signWith k params priv SHA256 msg of
+            Nothing -> expectationFailure "expected a signature"
+            Just sig ->
+                ElGamal.verifyDigest params pub (hashWith SHA256 msg) sig
+                    `shouldBe` True
+    it "verifies under the hash route what the digest route signed" $
+        case ElGamal.signDigestWith k params priv (hashWith SHA256 msg) of
+            Nothing -> expectationFailure "expected a signature"
+            Just sig -> ElGamal.verify params pub SHA256 msg sig `shouldBe` True
+    it "rejects a digest of another message" $
+        case ElGamal.signDigestWith k params priv (hashWith SHA256 msg) of
+            Nothing -> expectationFailure "expected a signature"
+            Just sig ->
+                ElGamal.verifyDigest
+                    params
+                    pub
+                    (hashWith SHA256 ("other" :: ByteString))
+                    sig
+                    `shouldBe` False
+    it "verifies what signDigest signs when it draws k itself" $
+        let (sig, _) =
+                withDRG
+                    (drgNewTest (1, 2, 3, 4, 5))
+                    (ElGamal.signDigest params priv (hashWith SHA256 msg))
+         in ElGamal.verifyDigest params pub (hashWith SHA256 msg) sig `shouldBe` True
     -- 'sign' draws a blinder for the inversion of k, so it takes a path
     -- 'signWith' does not: the inverse comes back from a different number
     -- than the one wanted, times the blinder

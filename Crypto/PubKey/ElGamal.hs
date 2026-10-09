@@ -57,10 +57,13 @@ module Crypto.PubKey.ElGamal (
 
     -- * Signature primitives
     signWith,
+    signDigestWith,
     sign,
+    signDigest,
 
     -- * Verification primitives
     verify,
+    verifyDigest,
 ) where
 
 import Crypto.Error
@@ -194,7 +197,27 @@ signWith
     -> msg
     -- ^ message to sign
     -> Maybe Signature
-signWith = signWithBlinder 1
+signWith k params priv hashAlg msg =
+    signDigestWith k params priv (hashWith hashAlg msg)
+
+-- | Sign a digest with an explicit ephemeral value.
+--
+-- The digest's type says which algorithm made it, so this needs nothing else
+-- to name one.  'signWith' takes a @hash@ value and never reads it -- it is
+-- there to fix the type -- which leaves a caller that is itself polymorphic
+-- in the algorithm with nothing to pass.
+signDigestWith
+    :: HashAlgorithm hash
+    => Integer
+    -- ^ ephemeral value k, in [1, p-2] and coprime with p-1
+    -> Params
+    -- ^ DH params (p,g)
+    -> PrivateNumber
+    -- ^ DH private key
+    -> Digest hash
+    -- ^ digest of the message to sign
+    -> Maybe Signature
+signDigestWith = signWithBlinder 1
 
 -- | The same with a blinder for the inversion of @k@.
 --
@@ -210,15 +233,15 @@ signWith = signWithBlinder 1
 -- When @b@ shares a factor with @p-1@ the algorithm reports it the same way
 -- it reports one in @k@, and the answer is the same: draw again.
 signWithBlinder
-    :: (ByteArrayAccess msg, HashAlgorithm hash)
-    => Integer -> Integer -> Params -> PrivateNumber -> hash -> msg -> Maybe Signature
-signWithBlinder b k (Params p g _) (PrivateNumber x) hashAlg msg
+    :: HashAlgorithm hash
+    => Integer -> Integer -> Params -> PrivateNumber -> Digest hash -> Maybe Signature
+signWithBlinder b k (Params p g _) (PrivateNumber x) digest
     | k <= 0 || k >= p - 1 || b <= 0 || d > 1 = Nothing
     | s == 0 = Nothing
     | otherwise = Just $ Signature r s
   where
     r = expSafe g k p
-    h = os2ip $ hashWith hashAlg msg
+    h = os2ip digest
     s = ((h - x * r) * kInv) `mod` (p - 1)
     kInv = (kbInv * b) `mod` (p - 1)
     (kbInv, _, d) = gcde ((k * b) `mod` (p - 1)) (p - 1)
@@ -239,13 +262,20 @@ sign
     -> msg
     -- ^ message to sign
     -> m Signature
-sign params@(Params p _ _) priv hashAlg msg = do
+sign params priv hashAlg msg = signDigest params priv (hashWith hashAlg msg)
+
+-- | Sign a digest, drawing the ephemeral value.  See 'signDigestWith' for
+-- why a digest rather than a @hash@ value.
+signDigest
+    :: (HashAlgorithm hash, MonadRandom m)
+    => Params -> PrivateNumber -> Digest hash -> m Signature
+signDigest params@(Params p _ _) priv digest = do
     k <- generateMax (p - 1)
     -- and a blinder for the inversion of k, which is the one step here that
     -- the extended Euclidean algorithm has to do
     b <- generateMax (p - 1)
-    case signWithBlinder b k params priv hashAlg msg of
-        Nothing -> sign params priv hashAlg msg
+    case signWithBlinder b k params priv digest of
+        Nothing -> signDigest params priv digest
         Just sig -> return sig
 
 -- | verify a signature
@@ -257,10 +287,18 @@ verify
     -> msg
     -> Signature
     -> Bool
-verify (Params p g _) (PublicNumber y) hashAlg msg (Signature r s)
+verify params pub hashAlg msg sig =
+    verifyDigest params pub (hashWith hashAlg msg) sig
+
+-- | Verify a signature over a digest.  See 'signDigestWith' for why a digest
+-- rather than a @hash@ value.
+verifyDigest
+    :: HashAlgorithm hash
+    => Params -> PublicNumber -> Digest hash -> Signature -> Bool
+verifyDigest (Params p g _) (PublicNumber y) digest (Signature r s)
     | or [r <= 0, r >= p, s <= 0, s >= (p - 1)] = False
     | otherwise = lhs == rhs
   where
-    h = os2ip $ hashWith hashAlg msg
+    h = os2ip digest
     lhs = expFast g h p
     rhs = (expFast y r p * expFast r s p) `mod` p
