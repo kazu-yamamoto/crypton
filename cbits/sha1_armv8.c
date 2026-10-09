@@ -13,10 +13,7 @@
 
 #include <stdint.h>
 #include <arm_neon.h>
-#if defined(__linux__)
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#endif
+#include "crypton_cpu.h"
 
 /*
  * The instructions are an extension, so a translation unit compiled for
@@ -159,11 +156,5 @@ void crypton_sha1_armv8_do_chunk(uint32_t state[5], const uint8_t buf[64])
  */
 int crypton_sha1_armv8_available(void)
 {
-#if defined(__APPLE__)
-	return 1;
-#elif defined(__linux__)
-	return (getauxval(AT_HWCAP) & HWCAP_SHA1) != 0;
-#else
-	return 0;
-#endif
+	return (crypton_arm_features() & CRYPTON_ARM_SHA1) != 0;
 }

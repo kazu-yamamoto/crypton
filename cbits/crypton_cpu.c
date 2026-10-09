@@ -60,6 +60,114 @@ CRYPTON_HIDDEN unsigned int crypton_armcap_P =
     CRYPTON_ARMCAP_NEON;
 #endif
 
+#if defined(__aarch64__)
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#elif defined(__linux__)
+#include <sys/auxv.h>
+#include <asm/hwcap.h>
+#elif defined(__FreeBSD__)
+#include <sys/auxv.h>
+#endif
+
+/*
+ * The HWCAP bit positions are the ARM ELF ABI's, so every system that
+ * reports through the auxiliary vector agrees on them.  What differs is
+ * AT_HWCAP itself -- 16 on Linux, 25 on FreeBSD -- and that comes from each
+ * system's own header, which is why the tag is never written out here.
+ * Defined only where the system's headers did not define them, the way
+ * compiler-rt does it, so that a system which reports through the auxiliary
+ * vector without shipping the ARM names still compiles.
+ */
+#ifndef HWCAP_AES
+#define HWCAP_AES    (1 << 3)
+#endif
+#ifndef HWCAP_PMULL
+#define HWCAP_PMULL  (1 << 4)
+#endif
+#ifndef HWCAP_SHA1
+#define HWCAP_SHA1   (1 << 5)
+#endif
+#ifndef HWCAP_SHA2
+#define HWCAP_SHA2   (1 << 6)
+#endif
+#ifndef HWCAP_SHA3
+#define HWCAP_SHA3   (1 << 17)
+#endif
+#ifndef HWCAP_SHA512
+#define HWCAP_SHA512 (1 << 21)
+#endif
+
+#if defined(__APPLE__)
+static int apple_has(const char *name)
+{
+	int v = 0;
+	size_t n = sizeof(v);
+
+	if (sysctlbyname(name, &v, &n, NULL, 0) != 0)
+		return 0;
+	return v != 0;
+}
+#endif
+
+/*
+ * Systems still answering zero, and what each would need:
+ *
+ *   OpenBSD, NetBSD   sysctl on machdep.id_aa64isar0, which hands out the
+ *                     ID_AA64ISAR0_EL1 fields rather than a HWCAP word, so
+ *                     it is a different shape of answer rather than another
+ *                     tag.
+ *   Windows on ARM    IsProcessorFeaturePresent with
+ *                     PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE, which covers
+ *                     AES, PMULL, SHA-1 and SHA-256 as one bit and says
+ *                     nothing about SHA-512 or SHA-3.  An ARM64 Windows
+ *                     guest answers 1 to it, but GHC has no native ARM64
+ *                     Windows target: there it builds x86-64 and the
+ *                     emulator reports AES-NI, so this file is not reached.
+ *
+ * Neither is written here because neither can be built and run to see it
+ * work, and an untested answer about whether a machine has AES is worse
+ * than the honest zero it replaces.
+ */
+unsigned int crypton_arm_features(void)
+{
+	static unsigned int features;
+	static int resolved;
+
+	if (!resolved) {
+		unsigned int f = 0;
+#if defined(__APPLE__)
+		/* AES, PMULL, SHA-1 and SHA-256 are not optional on Apple
+		 * silicon.  The two later ones are. */
+		f = CRYPTON_ARM_AES | CRYPTON_ARM_PMULL
+		  | CRYPTON_ARM_SHA1 | CRYPTON_ARM_SHA2;
+		if (apple_has("hw.optional.arm.FEAT_SHA512"))
+			f |= CRYPTON_ARM_SHA512;
+		if (apple_has("hw.optional.arm.FEAT_SHA3"))
+			f |= CRYPTON_ARM_SHA3;
+#else
+		unsigned long cap = 0;
+
+#if defined(__linux__)
+		cap = getauxval(AT_HWCAP);
+#elif defined(__FreeBSD__)
+		if (elf_aux_info(AT_HWCAP, &cap, sizeof(cap)) != 0)
+			cap = 0;
+#endif
+		if (cap & HWCAP_AES)    f |= CRYPTON_ARM_AES;
+		if (cap & HWCAP_PMULL)  f |= CRYPTON_ARM_PMULL;
+		if (cap & HWCAP_SHA1)   f |= CRYPTON_ARM_SHA1;
+		if (cap & HWCAP_SHA2)   f |= CRYPTON_ARM_SHA2;
+		if (cap & HWCAP_SHA512) f |= CRYPTON_ARM_SHA512;
+		if (cap & HWCAP_SHA3)   f |= CRYPTON_ARM_SHA3;
+#endif
+		features = f;
+		resolved = 1;
+	}
+	return features;
+}
+#endif /* __aarch64__ */
+
 #ifdef ARCH_X86
 static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {

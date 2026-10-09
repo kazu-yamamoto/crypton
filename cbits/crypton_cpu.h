@@ -99,6 +99,26 @@ extern unsigned int crypton_armcap_P;
 #endif
 
 /*
+ * Which of the optional ARMv8 instruction sets this processor has.
+ *
+ * Asked here rather than in each file that wants one.  Five files used to
+ * carry the same three-way conditional -- Apple, Linux, and otherwise zero
+ * -- and the "otherwise" is not a statement about the processor but about
+ * which systems someone had thought of.  It is what left FreeBSD running
+ * the table-driven AES and the C SHA on hardware that has the
+ * instructions.  In one place the next system is added once.
+ */
+#if defined(__aarch64__)
+#define CRYPTON_ARM_AES    (1u << 0)
+#define CRYPTON_ARM_PMULL  (1u << 1)
+#define CRYPTON_ARM_SHA1   (1u << 2)
+#define CRYPTON_ARM_SHA2   (1u << 3)
+#define CRYPTON_ARM_SHA512 (1u << 4)
+#define CRYPTON_ARM_SHA3   (1u << 5)
+unsigned int crypton_arm_features(void);
+#endif
+
+/*
  * The two slots of the array crypton_aes.c fills and crypton_aes_cpu_init
  * hands out.  Here rather than in that file because crypton_cpu.c reads
  * them too, to answer for Crypto.System.CPU.
