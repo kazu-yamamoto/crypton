@@ -17,7 +17,9 @@ module Crypto.PubKey.Rabin.Modified (
     PrivateKey (..),
     generate,
     sign,
+    signDigest,
     verify,
+    verifyDigest,
 ) where
 
 import Crypto.Debug (DebugShow (..))
@@ -109,10 +111,25 @@ sign
     -> ByteString
     -- ^ message to sign
     -> Either Error Integer
-sign pk hashAlg m =
+sign pk hashAlg m = signDigest pk (hashWith hashAlg m)
+
+-- | Sign a digest using the private key.
+--
+-- The digest's type says which algorithm made it, so this needs nothing else
+-- to name one.  'sign' takes a @hash@ value and never reads it -- it is there
+-- to fix the type -- which leaves a caller that is itself polymorphic in the
+-- algorithm with nothing to pass.
+signDigest
+    :: HashAlgorithm hash
+    => PrivateKey
+    -- ^ private key
+    -> Digest hash
+    -- ^ digest of the message to sign
+    -> Either Error Integer
+signDigest pk digest =
     let d = private_d pk
         n = public_n $ private_pub pk
-        h = os2ip $ hashWith hashAlg m
+        h = os2ip digest
         limit = (n - 6) `div` 16
      in if h > limit
             then Left MessageTooLong
@@ -135,14 +152,27 @@ verify
     -> Integer
     -- ^ signature
     -> Bool
-verify pk hashAlg m s
+verify pk hashAlg m s = verifyDigest pk (hashWith hashAlg m) s
+
+-- | Verify a signature over a digest.  See 'signDigest' for why a digest
+-- rather than a @hash@ value.
+verifyDigest
+    :: HashAlgorithm hash
+    => PublicKey
+    -- ^ public key
+    -> Digest hash
+    -- ^ digest of the message
+    -> Integer
+    -- ^ signature
+    -> Bool
+verifyDigest pk digest s
     -- squaring works modulo n, so s + n and -s would verify wherever s does
     | s < 0 || s >= n = False
     | otherwise = go
   where
     n = public_n pk
     go =
-        let h = os2ip $ hashWith hashAlg m
+        let h = os2ip digest
             s' = expSafe s 2 n
             s'' = case s' `mod` 8 of
                 6 -> s'

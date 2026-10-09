@@ -161,13 +161,22 @@ doBasicRabinVerifyTest key i vector = it (show i) (actual `shouldBe` True)
             (message vector)
             (BRabin.Signature ((os2ip $ padding vector), (signature vector)))
 
-doModifiedRabinSignTest key i vector = it (show i) (actual `shouldBe` Right (signature vector))
+-- Both routes, and each against the vector rather than against the other:
+-- they share everything below the hash, so a test that only made them agree
+-- would pass with the shared part broken.
+doModifiedRabinSignTest key i vector = describe (show i) $ do
+    it "sign" $ MRabin.sign key SHA1 (message vector) `shouldBe` expected
+    it "signDigest" $
+        MRabin.signDigest key (hashWith SHA1 (message vector)) `shouldBe` expected
   where
-    actual = MRabin.sign key SHA1 (message vector)
+    expected = Right (signature vector)
 
-doModifiedRabinVerifyTest key i vector = it (show i) (actual `shouldBe` True)
-  where
-    actual = MRabin.verify key SHA1 (message vector) (signature vector)
+doModifiedRabinVerifyTest key i vector = describe (show i) $ do
+    it "verify" $
+        MRabin.verify key SHA1 (message vector) (signature vector) `shouldBe` True
+    it "verifyDigest" $
+        MRabin.verifyDigest key (hashWith SHA1 (message vector)) (signature vector)
+            `shouldBe` True
 
 doRwEncryptTest key i vector = it (show i) (actual `shouldBe` Right (cipherText vector))
   where
@@ -182,13 +191,22 @@ doRwDecryptTest key i vector = it (show i) (actual `shouldBe` Just (plainText ve
   where
     actual = RW.decrypt (OAEP.defaultOAEPParams SHA1) key (cipherText vector)
 
-doRwSignTest key i vector = it (show i) (actual `shouldBe` Right (signature vector))
+-- Both routes, and each against the vector rather than against the other:
+-- they share everything below the hash, so a test that only made them agree
+-- would pass with the shared part broken.
+doRwSignTest key i vector = describe (show i) $ do
+    it "sign" $ RW.sign key SHA1 (message vector) `shouldBe` expected
+    it "signDigest" $
+        RW.signDigest key (hashWith SHA1 (message vector)) `shouldBe` expected
   where
-    actual = RW.sign key SHA1 (message vector)
+    expected = Right (signature vector)
 
-doRwVerifyTest key i vector = it (show i) (actual `shouldBe` True)
-  where
-    actual = RW.verify key SHA1 (message vector) (signature vector)
+doRwVerifyTest key i vector = describe (show i) $ do
+    it "verify" $
+        RW.verify key SHA1 (message vector) (signature vector) `shouldBe` True
+    it "verifyDigest" $
+        RW.verifyDigest key (hashWith SHA1 (message vector)) (signature vector)
+            `shouldBe` True
 
 -- | Squaring and the square roots that undo it both work modulo n, so a value
 -- at or above the modulus behaves exactly like the value it reduces to, and so

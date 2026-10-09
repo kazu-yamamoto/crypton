@@ -1,3 +1,8 @@
+-- The properties below hold the new entry points against sign, signSafer
+-- and verify, which are deprecated as of this release.  Comparing against
+-- them is the point, so the warning is off here and nowhere else.
+{-# OPTIONS_GHC -Wno-deprecations #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module PubKey.RSASpec (spec) where
@@ -130,20 +135,26 @@ doVerifyTest i vector = it (show i) (actual `shouldBe` True)
 -- and @s + n@ verify just as well as @s@ itself.
 doMalleabilityTest :: Show a => a -> VectorRSA -> Spec
 doMalleabilityTest i vector =
-    describe (show i) $ do
-        it "the signature itself verifies" $
-            verify' s `shouldBe` True
-        it "a leading zero octet is rejected" $
-            verify' (B.cons 0 s) `shouldBe` False
-        it "a trailing zero octet is rejected" $
-            verify' (B.snoc s 0) `shouldBe` False
-        it "s + n is rejected" $
-            verify' (i2osp (os2ip s + n vector)) `shouldBe` False
-        it "an empty signature is rejected" $
-            verify' B.empty `shouldBe` False
+    describe (show i) $ mapM_ checks [("verify", verify'), ("verifyDigest", verifyDigest')]
   where
+    -- Both routes, and absolutely rather than against each other: they
+    -- share the checks of RFC 8017, so a test that only made them agree
+    -- would pass with those checks gone.
+    checks (name, v) = describe name $ do
+        it "the signature itself verifies" $
+            v s `shouldBe` True
+        it "a leading zero octet is rejected" $
+            v (B.cons 0 s) `shouldBe` False
+        it "a trailing zero octet is rejected" $
+            v (B.snoc s 0) `shouldBe` False
+        it "s + n is rejected" $
+            v (i2osp (os2ip s + n vector)) `shouldBe` False
+        it "an empty signature is rejected" $
+            v B.empty `shouldBe` False
     s = fromRight (error "doMalleabilityTest") $ sig vector
     verify' = RSA.verify (Just SHA1) (vectorToPublic vector) (msg vector)
+    verifyDigest' =
+        RSA.verifyDigest (vectorToPublic vector) (hashWith SHA1 (msg vector))
 
 -- | The checks RFC 8017 section 7.2.2 puts on an EME-PKCS1-v1_5 block: the
 -- leading @00 02@, a padding string of at least eight nonzero octets, and the
@@ -287,6 +298,135 @@ privateExponentTests = describe "private exponent" $ do
         ]
     exponents = [3, 5, 17, 257, 65537, 9, 15, 2]
 
+
+-- | Every algorithm with a 'RSA.HashAlgorithmASN1' instance, so that a
+-- property quantifies over the lot of them rather than over the two or
+-- three somebody thought of.  Adding an instance and forgetting to add it
+-- here leaves a hole, which is why the count is asserted below.
+data SomeHashASN1
+    = forall hashAlg.
+        (RSA.HashAlgorithmASN1 hashAlg, Show hashAlg) =>
+      SomeHashASN1 hashAlg
+
+instance Show SomeHashASN1 where
+    show (SomeHashASN1 h) = show h
+
+instance Arbitrary SomeHashASN1 where
+    arbitrary = elements allHashASN1
+
+allHashASN1 :: [SomeHashASN1]
+allHashASN1 =
+    [ SomeHashASN1 MD2
+    , SomeHashASN1 MD5
+    , SomeHashASN1 SHA1
+    , SomeHashASN1 SHA224
+    , SomeHashASN1 SHA256
+    , SomeHashASN1 SHA384
+    , SomeHashASN1 SHA512
+    , SomeHashASN1 SHA512t_224
+    , SomeHashASN1 SHA512t_256
+    , SomeHashASN1 SHA3_224
+    , SomeHashASN1 SHA3_256
+    , SomeHashASN1 SHA3_384
+    , SomeHashASN1 SHA3_512
+    , SomeHashASN1 RIPEMD160
+    ]
+
+-- | Bytes of the length a DigestInfo has.  The ones this stands in for run
+-- from 34 bytes for MD5 to 83 for SHA-512, and 'RSA.padSignature' refuses
+-- anything that does not leave room for the padding, so the wide generator
+-- used elsewhere here would be discarded almost every time.
+newtype ArbitraryDigestInfo = ArbitraryDigestInfo ByteString
+    deriving (Show, Eq)
+
+instance Arbitrary ArbitraryDigestInfo where
+    arbitrary = ArbitraryDigestInfo `fmap` arbitraryBSof 0 200
+
+-- | The digest a message has under an algorithm picked at runtime, which is
+-- what the existential leaves us able to say.
+hashOf :: RSA.HashAlgorithmASN1 hashAlg => hashAlg -> ByteString -> Digest hashAlg
+hashOf = hashWith
+
+-- | The operations that take a 'Digest' or a DigestInfo, against the ones
+-- that take @Maybe hashAlg@.  Two routes to one signature drift apart
+-- unless something holds them together, so for every instance and every
+-- message these must answer alike -- on a genuine signature, on a tampered
+-- one, and on one of the wrong length.
+digestOperationTests :: Spec
+digestOperationTests = describe "operations taking a digest" $ do
+    it "covers every HashAlgorithmASN1 instance" $
+        length allHashASN1 `shouldBe` 14
+
+    prop "signs what sign signs" $ \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+        RSA.signDigest Nothing key (hashOf h m)
+            === RSA.sign Nothing (Just h) key m
+
+    prop "verifies what verify verifies" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+            case RSA.sign Nothing (Just h) key m of
+                Left err -> counterexample (show err) False
+                Right s ->
+                    let tampered = B.snoc (B.init s) (B.last s + 1)
+                        longer = B.snoc s 0
+                        dg = hashOf h m
+                     in conjoin
+                            [ RSA.verifyDigest pub dg s === RSA.verify (Just h) pub m s
+                            , RSA.verifyDigest pub dg tampered
+                                === RSA.verify (Just h) pub m tampered
+                            , RSA.verifyDigest pub dg longer
+                                === RSA.verify (Just h) pub m longer
+                            ]
+
+    prop "accepts its own signature and rejects a changed one" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) ->
+            let dg = hashOf h m
+             in case RSA.signDigest Nothing key dg of
+                    Left err -> counterexample (show err) False
+                    Right s ->
+                        let tampered = B.snoc (B.init s) (B.last s + 1)
+                         in property (RSA.verifyDigest pub dg s)
+                                .&&. property (not (RSA.verifyDigest pub dg tampered))
+
+    prop "blinding leaves the signature where it was" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) testDRG ->
+            let dg = hashOf h m
+                blinder = withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n pub)
+             in RSA.signDigest (Just blinder) key dg === RSA.signDigest Nothing key dg
+
+    prop "signSaferDigest signs what signDigest signs" $
+        \(SomeHashASN1 h) (ArbitraryBS0_2901 m) testDRG ->
+            let dg = hashOf h m
+             in withTestDRG testDRG (RSA.signSaferDigest key dg)
+                    === RSA.signDigest Nothing key dg
+
+    -- The DigestInfo pair take no HashAlgorithmASN1 constraint, since
+    -- nothing of theirs hashes or encodes.  sign and verify carry it even
+    -- for this path, and with the variable appearing nowhere else the
+    -- caller has to name an algorithm it is not using -- which is the
+    -- annotation below, and the wart these replace.
+    prop "signs what sign Nothing signs" $ \(ArbitraryDigestInfo di) ->
+        RSA.signDigestInfo Nothing key di
+            === RSA.sign Nothing (Nothing :: Maybe SHA256) key di
+
+    prop "verifies what verify Nothing verifies" $ \(ArbitraryDigestInfo di) ->
+        case RSA.signDigestInfo Nothing key di of
+            Left err -> counterexample (show err) False
+            Right s ->
+                conjoin
+                    [ RSA.verifyDigestInfo pub di s
+                        === RSA.verify (Nothing :: Maybe SHA256) pub di s
+                    , property (RSA.verifyDigestInfo pub di s)
+                    ]
+
+    prop "signSaferDigestInfo signs what signDigestInfo signs" $
+        \(ArbitraryDigestInfo di) testDRG ->
+            withTestDRG testDRG (RSA.signSaferDigestInfo key di)
+                === RSA.signDigestInfo Nothing key di
+  where
+    vector = firstVector vectorsSHA1
+    key = vectorToPrivate vector
+    pub = vectorToPublic vector
+
 spec :: Spec
 spec = do
     keyGenerationTests
@@ -302,5 +442,6 @@ spec = do
             sequence_ $
                 zipWith doMalleabilityTest [katZero ..] $
                     filter vectorHasSignature vectorsSHA1
+    digestOperationTests
     unpadTests
     ciphertextRangeTests

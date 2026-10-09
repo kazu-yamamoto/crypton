@@ -41,9 +41,12 @@ module Crypto.PubKey.DSA (
     -- * Signature primitive
     sign,
     signWith,
+    signDigest,
+    signDigestWith,
 
     -- * Verification primitive
     verify,
+    verifyDigest,
 
     -- * Key pair
     KeyPair (..),
@@ -59,7 +62,7 @@ import Crypto.Internal.ByteArray (ByteArrayAccess)
 import Crypto.Internal.Imports
 import Crypto.Number.Generate
 import Crypto.Number.ModArithmetic (expFast, expSafe, inverse, inverseSafe)
-import Crypto.PubKey.Internal (dsaTruncHash)
+import Crypto.PubKey.Internal (dsaTruncHashDigest)
 import Crypto.Random.Types
 
 -- | DSA Public Number, usually embedded in DSA Public Key
@@ -194,14 +197,31 @@ signWith
     -> msg
     -- ^ message to sign
     -> Maybe Signature
-signWith k pk hashAlg msg = do
+signWith k pk hashAlg msg = signDigestWith k pk (hashWith hashAlg msg)
+
+-- | Sign a digest using the private key and an explicit k number.
+--
+-- The digest's type says which algorithm made it, so this needs nothing else
+-- to name one.  'signWith' takes a @hash@ value and never reads it -- it is
+-- there to fix the type -- which leaves a caller that is itself polymorphic
+-- in the algorithm with nothing to pass.
+signDigestWith
+    :: HashAlgorithm hash
+    => Integer
+    -- ^ k random number
+    -> PrivateKey
+    -- ^ private key
+    -> Digest hash
+    -- ^ digest of the message to sign
+    -> Maybe Signature
+signDigestWith k pk digest = do
     -- k comes from the caller and is only invertible when it is coprime with
     -- q, which the caller cannot check without knowing q is prime.  It is also
     -- a secret worth as much as the private key, so it is inverted without
     -- the extended Euclidean algorithm, whose steps follow the bits of what
     -- it is given
     kInv <- inverseSafe k q
-    let hm = dsaTruncHash hashAlg msg q
+    let hm = dsaTruncHashDigest digest q
         r = expSafe g k p `mod` q
         s = (kInv * (hm + x * r)) `mod` q
     if r == 0 || s == 0 then Nothing else Just $ Signature r s
@@ -214,10 +234,17 @@ signWith k pk hashAlg msg = do
 sign
     :: (ByteArrayAccess msg, HashAlgorithm hash, MonadRandom m)
     => PrivateKey -> hash -> msg -> m Signature
-sign pk hashAlg msg = do
+sign pk hashAlg msg = signDigest pk (hashWith hashAlg msg)
+
+-- | Sign a digest using the private key.  See 'signDigestWith' for why a
+-- digest rather than a @hash@ value.
+signDigest
+    :: (HashAlgorithm hash, MonadRandom m)
+    => PrivateKey -> Digest hash -> m Signature
+signDigest pk digest = do
     k <- generateMax q
-    case signWith k pk hashAlg msg of
-        Nothing -> sign pk hashAlg msg
+    case signDigestWith k pk digest of
+        Nothing -> signDigest pk digest
         Just sig -> return sig
   where
     (Params _ _ q) = private_params pk
@@ -226,7 +253,13 @@ sign pk hashAlg msg = do
 verify
     :: (ByteArrayAccess msg, HashAlgorithm hash)
     => hash -> PublicKey -> Signature -> msg -> Bool
-verify hashAlg pk (Signature r s) m
+verify hashAlg pk sig m = verifyDigest pk sig (hashWith hashAlg m)
+
+-- | Verify a signature over a digest.  See 'signDigestWith' for why a digest
+-- rather than a @hash@ value.
+verifyDigest
+    :: HashAlgorithm hash => PublicKey -> Signature -> Digest hash -> Bool
+verifyDigest pk (Signature r s) digest
     -- Reject the signature if either 0 < r < q or 0 < s < q is not satisfied.
     | r <= 0 || r >= q || s <= 0 || s >= q = False
     -- s is invertible for every 0 < s < q when q is prime, but the parameters
@@ -235,7 +268,7 @@ verify hashAlg pk (Signature r s) m
   where
     (Params p g q) = public_params pk
     y = public_y pk
-    hm = dsaTruncHash hashAlg m q
+    hm = dsaTruncHashDigest digest q
     v = do
         w <- inverse s q
         let u1 = (hm * w) `mod` q
