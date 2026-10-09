@@ -724,7 +724,10 @@ library
             asm-options: -mavx2 -mbmi2
 
     if ((flag(support_rdrand) && (arch(i386) || arch(x86_64))) && !os(windows))
+        -- cc-options too: crypton_sysdrg.c mixes RDRAND into its seed and
+        -- has to know whether the symbol is there to call.
         cpp-options:   -DSUPPORT_RDRAND
+        cc-options:    -DSUPPORT_RDRAND
         c-sources:     cbits/crypton_rdrand.c
         other-modules: Crypto.Random.Entropy.RDRand
 
