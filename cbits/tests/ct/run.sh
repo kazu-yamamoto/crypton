@@ -75,6 +75,32 @@ mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S"
 mlkem_native_inc="$mlkem_inc -DCRYPTON_MLKEM_NATIVE_BACKEND"
 
 
+# Does this processor have AES instructions at all?
+#
+# Asked of the system rather than of crypton, because the question being
+# settled is whether crypton found what is there -- and a witness that comes
+# from the code under test cannot answer that.  "Cannot tell" counts as
+# having them, so an unfamiliar system turns into a loud failure rather than
+# a silent skip.
+#
+# CRYPTON_CT_CPUINFO is for testing this function itself; nothing else sets
+# it.
+machine_has_aes() {
+	cpuinfo=${CRYPTON_CT_CPUINFO:-/proc/cpuinfo}
+	if [ -r "$cpuinfo" ]; then
+		# "aes" in Features on ARM, in flags on x86; -w so that a model
+		# name containing the letters does not answer for the flags
+		grep -qw aes "$cpuinfo"
+		return
+	fi
+	if [ "$(uname -s)" = Darwin ]; then
+		[ "$(sysctl -n hw.optional.arm.FEAT_AES 2>/dev/null)" = 1 ] && return 0
+		[ "$(sysctl -n hw.optional.aes 2>/dev/null)" = 1 ] && return 0
+		return 1
+	fi
+	return 0
+}
+
 # run_one <name> <sources> <includes> [driver]
 #
 # The driver defaults to ct_<name>.c.  It is given separately where one
@@ -100,6 +126,16 @@ run_one() {
 		[ "$name" = aes ] || want=1
 		got=$("$out/$name" 2>/dev/null | sed -n 's/^dispatch aes=\([01]\).*/\1/p')
 		if [ "$got" != "$want" ]; then
+			# A processor with no AES instructions is not a failure of
+			# this driver; there is simply nothing here to measure, and
+			# the portable one above has already measured what does run.
+			# Boards in this position are common -- the Raspberry Pi 2,
+			# 3 and 4 among them, on either word size.
+			if [ "$want" = 1 ] && [ "$got" = 0 ] && ! machine_has_aes; then
+				echo "skip $name: this processor has no AES instructions,"
+				echo "     so there is nothing here to measure"
+				return
+			fi
 			echo "FAIL $name: dispatch took aes=$got, wanted aes=$want --"
 			echo "     this build is not running the implementation it is named for"
 			status=1
