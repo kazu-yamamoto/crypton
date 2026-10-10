@@ -38,6 +38,14 @@
 #define BRANCH_TABLE_SEARCH 64
 extern void *crypton_aes_branch_table[];
 
+/* the two GCM implementations, which crypton_aes.c declares but no header
+ * does: in this build the generic one reaches the portable block function
+ * too, so the two have to agree exactly, tag and all */
+void crypton_aes_generic_gcm_encrypt(uint8_t *, aes_gcm *, aes_key *, uint8_t *, uint32_t);
+void crypton_aes_generic_gcm_decrypt(uint8_t *, aes_gcm *, aes_key *, uint8_t *, uint32_t);
+void crypton_aes_bitsliced_gcm_encrypt(uint8_t *, aes_gcm *, aes_key *, uint8_t *, uint32_t);
+void crypton_aes_bitsliced_gcm_decrypt(uint8_t *, aes_gcm *, aes_key *, uint8_t *, uint32_t);
+
 /* ---- the vendored code, one block at a time, as aes_ct64_cbcenc.c does ---- */
 
 static void bear_key(uint64_t *comp_skey, unsigned *nr,
@@ -302,7 +310,51 @@ int main(int argc, char **argv)
 		same("ctr", got, want, len);
 	}
 
-	printf("== the branch table took the four-block CTR ==\n");
+	printf("== the four-block GCM against the one-block GCM ==\n");
+	for (round = 0; round < 200; round++) {
+		uint8_t key[32], iv[12], in[300], ga[300], gb[300];
+		size_t kl = klens[round % 3];
+		uint32_t len = 1 + (round % 300);
+		aes_key ck;
+		aes_gcm g1, g2;
+		int dec = round & 1;
+
+		rnd_fill(key, kl);
+		rnd_fill(iv, sizeof iv);
+		rnd_fill(in, len);
+		crypton_aes_initkey(&ck, key, (uint8_t) kl);
+		crypton_aes_gcm_init(&g1, &ck, iv, sizeof iv);
+		memcpy(&g2, &g1, sizeof g1);
+
+		if (dec) {
+			crypton_aes_generic_gcm_decrypt(ga, &g1, &ck, in, len);
+			crypton_aes_bitsliced_gcm_decrypt(gb, &g2, &ck, in, len);
+		} else {
+			crypton_aes_generic_gcm_encrypt(ga, &g1, &ck, in, len);
+			crypton_aes_bitsliced_gcm_encrypt(gb, &g2, &ck, in, len);
+		}
+		if (sabotage && round == 13) gb[0] ^= 1;
+		same("gcm text", ga, gb, len);
+		/* the running GHASH and counter, which the tag is made from */
+		same("gcm state", (const uint8_t *) &g1, (const uint8_t *) &g2,
+		     sizeof g1);
+	}
+
+	printf("== which implementation the build chose ==\n");
+#if !defined(WITH_AESNI) && !defined(WITH_ARMV8_CRYPTO)
+	/*
+	 * With no accelerator compiled in, crypton_aes.c does not read the
+	 * branch table at all -- its GET_ macros name the portable entries
+	 * directly -- so there is nothing here to look at, and which
+	 * implementation runs is settled by the preprocessor.  Scanning the
+	 * table in this build was a check that passed while telling nothing,
+	 * which is how the four-block CTR came to be written, installed, and
+	 * never called.
+	 */
+	printf("  named at compile time; the table is not read in this build\n");
+	(void) crypton_aes_branch_table;
+	if (sabotage) { /* nothing to corrupt here */ }
+#else
 	{
 		int i, ctr = 0, c32 = 0;
 
@@ -321,6 +373,7 @@ int main(int argc, char **argv)
 			failures++;
 		}
 	}
+#endif
 
 	printf("%s: %d mismatch(es)%s\n",
 	       failures ? "FAIL" : "ok", failures,
