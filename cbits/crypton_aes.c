@@ -1291,7 +1291,9 @@ void crypton_aes_generic_encrypt_c32(uint8_t *output, aes_key *key, aes_block *i
 void crypton_aes_generic_encrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit,
                              uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, tweak;
+	aes_sched sched;
+	aes_block tweak;
+	uint8_t buf[64], tw[64];
 
 	/* load IV and encrypt it using k2 as the tweak */
 	block128_copy(&tweak, dataunit);
@@ -1301,17 +1303,34 @@ void crypton_aes_generic_encrypt_xts(aes_block *output, aes_key *k1, aes_key *k2
 	while (spoint-- > 0)
 		crypton_aes_generic_gf_mulx(&tweak);
 
-	for ( ; nb_blocks-- > 0; input++, output++, crypton_aes_generic_gf_mulx(&tweak)) {
-		block128_vxor(&block, input, &tweak);
-		crypton_aes_encrypt_block(&block, k1, &block);
-		block128_vxor(output, &block, &tweak);
+	crypton_aes_generic_schedule(&sched, k1);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		/* the tweaks for a group depend on nothing but each other, so
+		 * all four are known before any block is enciphered */
+		for (i = 0; i < n; i++) {
+			block128_copy((block128 *) (tw + 16 * i), &tweak);
+			block128_vxor((block128 *) (buf + 16 * i), input + i, &tweak);
+			crypton_aes_generic_gf_mulx(&tweak);
+		}
+		crypton_aes_generic_blocks(buf, buf, n, &sched, 0);
+		for (i = 0; i < n; i++)
+			block128_vxor(output + i, (block128 *) (buf + 16 * i),
+			              (block128 *) (tw + 16 * i));
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 
 void crypton_aes_generic_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit,
                              uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, tweak;
+	aes_sched sched;
+	aes_block tweak;
+	uint8_t buf[64], tw[64];
 
 	/* load IV and encrypt it using k2 as the tweak */
 	block128_copy(&tweak, dataunit);
@@ -1321,10 +1340,25 @@ void crypton_aes_generic_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2
 	while (spoint-- > 0)
 		crypton_aes_generic_gf_mulx(&tweak);
 
-	for ( ; nb_blocks-- > 0; input++, output++, crypton_aes_generic_gf_mulx(&tweak)) {
-		block128_vxor(&block, input, &tweak);
-		crypton_aes_decrypt_block(&block, k1, &block);
-		block128_vxor(output, &block, &tweak);
+	crypton_aes_generic_schedule(&sched, k1);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		/* the tweaks for a group depend on nothing but each other, so
+		 * all four are known before any block is enciphered */
+		for (i = 0; i < n; i++) {
+			block128_copy((block128 *) (tw + 16 * i), &tweak);
+			block128_vxor((block128 *) (buf + 16 * i), input + i, &tweak);
+			crypton_aes_generic_gf_mulx(&tweak);
+		}
+		crypton_aes_generic_blocks(buf, buf, n, &sched, 1);
+		for (i = 0; i < n; i++)
+			block128_vxor(output + i, (block128 *) (buf + 16 * i),
+			              (block128 *) (tw + 16 * i));
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 

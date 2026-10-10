@@ -310,6 +310,56 @@ int main(int argc, char **argv)
 		same("ctr", got, want, len);
 	}
 
+	printf("== XTS four at a pass against one at a time ==\n");
+	for (round = 0; round < 200; round++) {
+		uint8_t key[32], key2[32], du[16], in[16 * 11];
+		uint8_t got[16 * 11], want[16 * 11];
+		size_t kl = klens[round % 3];
+		uint32_t nb = 1 + (round % 11);
+		uint32_t spoint = round % 3;
+		aes_key k1, k2;
+		aes_block tweak;
+		uint32_t i, j;
+		int dec = round & 1;
+
+		rnd_fill(key, kl);
+		rnd_fill(key2, kl);
+		rnd_fill(du, 16);
+		rnd_fill(in, nb * 16);
+		crypton_aes_initkey(&k1, key, (uint8_t) kl);
+		crypton_aes_initkey(&k2, key2, (uint8_t) kl);
+
+		{
+			aes_block d;
+			memcpy(&d, du, 16);
+			if (dec)
+				crypton_aes_decrypt_xts((aes_block *) got, &k1, &k2,
+				    &d, spoint, (aes_block *) in, nb);
+			else
+				crypton_aes_encrypt_xts((aes_block *) got, &k1, &k2,
+				    &d, spoint, (aes_block *) in, nb);
+		}
+
+		/* the same thing a block at a time */
+		memcpy(&tweak, du, 16);
+		crypton_aes_generic_encrypt_block(&tweak, &k2, &tweak);
+		for (j = 0; j < spoint; j++)
+			crypton_aes_generic_gf_mulx((block128 *) &tweak);
+		for (i = 0; i < nb; i++) {
+			aes_block t;
+
+			block128_vxor(&t, (block128 *) (in + 16 * i), &tweak);
+			if (dec)
+				crypton_aes_generic_decrypt_block(&t, &k1, &t);
+			else
+				crypton_aes_generic_encrypt_block(&t, &k1, &t);
+			block128_vxor((block128 *) (want + 16 * i), &t, &tweak);
+			crypton_aes_generic_gf_mulx((block128 *) &tweak);
+		}
+		if (sabotage && round == 17) got[16] ^= 8;
+		same("xts", got, want, nb * 16);
+	}
+
 	printf("== the four-block GCM against the one-block GCM ==\n");
 	for (round = 0; round < 200; round++) {
 		uint8_t key[32], iv[12], in[300], ga[300], gb[300];
