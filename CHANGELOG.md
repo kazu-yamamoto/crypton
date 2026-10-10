@@ -13,6 +13,8 @@
   [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
 * fix: ask one place which ARMv8 instruction sets the machine has
   [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+* fix: compute the portable AES and GHASH without a table
+  [#308](https://github.com/kazu-yamamoto/crypton/pull/308)
 
 ## 2.1.8
 
