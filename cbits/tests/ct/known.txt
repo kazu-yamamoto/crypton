@@ -22,15 +22,6 @@ f_generic.c:106   assert on the carry in crypton_gf_448_strong_reduce
 # arithmetic, and it too goes the same way on every valid input.
 decaf.c:136       assert(ret) in crypton_gf_invert
 
-# The table-driven AES and the table-driven GHASH index with a byte of the
-# state, which is what makes them fast and what makes them variable-time.
-# That is a property of those implementations rather than a defect in them;
-# a machine with AES-NI or the ARMv8 instructions runs neither.
-generic.c         the AES tables, in key expansion and in the rounds
-gf.c              the GHASH table
-crypton_aes.c     the same tables, attributed to the code that inlines them
-block128.h        likewise
-
 # AArch64 only.  gcc keeps a carry in the flags and takes it out with `cset`
 # or `cinc`, where on x86-64 it uses `adc` and the carry never leaves the
 # data path.  memcheck calls `cset` a conditional move and reports it, and

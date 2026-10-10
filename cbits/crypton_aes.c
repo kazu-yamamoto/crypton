@@ -54,6 +54,8 @@ void crypton_aes_generic_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2
                              uint32_t spoint, aes_block *input, uint32_t nb_blocks);
 void crypton_aes_generic_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_generic_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_bitsliced_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
+void crypton_aes_bitsliced_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_generic_ocb_encrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_generic_ocb_decrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length);
 void crypton_aes_generic_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
@@ -255,12 +257,16 @@ typedef void (*gf_mul4_f)(block128 *a, const block128 *blocks, const table_4bit 
 #define GET_ECB_DECRYPT(strength) crypton_aes_generic_decrypt_ecb
 #define GET_CBC_ENCRYPT(strength) crypton_aes_generic_encrypt_cbc
 #define GET_CBC_DECRYPT(strength) crypton_aes_generic_decrypt_cbc
-#define GET_CTR_ENCRYPT(strength) crypton_aes_generic_encrypt_ctr
-#define GET_C32_ENCRYPT(strength) crypton_aes_generic_encrypt_c32
+/* No accelerator is compiled in, so the portable schedule is the only one
+ * a key can hold and the four-block CTR is named here rather than installed
+ * at run time.  This is the build ppc64le, s390x, riscv64, 32-bit ARM and
+ * -f-support_aesni all get, and nothing in it reads the branch table. */
+#define GET_CTR_ENCRYPT(strength) crypton_aes_bitsliced_encrypt_ctr
+#define GET_C32_ENCRYPT(strength) crypton_aes_bitsliced_encrypt_c32
 #define GET_XTS_ENCRYPT(strength) crypton_aes_generic_encrypt_xts
 #define GET_XTS_DECRYPT(strength) crypton_aes_generic_decrypt_xts
-#define GET_GCM_ENCRYPT(strength) crypton_aes_generic_gcm_encrypt
-#define GET_GCM_DECRYPT(strength) crypton_aes_generic_gcm_decrypt
+#define GET_GCM_ENCRYPT(strength) crypton_aes_bitsliced_gcm_encrypt
+#define GET_GCM_DECRYPT(strength) crypton_aes_bitsliced_gcm_decrypt
 #define GET_OCB_ENCRYPT(strength) crypton_aes_generic_ocb_encrypt
 #define GET_OCB_DECRYPT(strength) crypton_aes_generic_ocb_decrypt
 #define GET_CCM_ENCRYPT(strength) crypton_aes_generic_ccm_encrypt
@@ -436,6 +442,35 @@ static void initialize_table_armv8(void)
  * A constructor runs while there is one thread, which is the cheapest way to
  * have no race at all: no flag to test, no lock to take, and one less thing
  * for crypton_aes_initkey to do per key. */
+/*
+ * The two CTR entries, where the portable implementation is the one that
+ * will run.  This is for the build that has an accelerator compiled in and
+ * did not find it on the processor; a build with no accelerator at all
+ * names them directly in the GET_ macros above and never reads this table.
+ *
+ * They cannot be the defaults.  crypton_aes_generic_encrypt_c32 is not
+ * overridden on AArch64 -- the ARMv8 table has no C32 of its own -- and
+ * neither CCM nor OCB is overridden anywhere, so those reach the block
+ * function through the branch table and work whatever is installed.  A CTR
+ * that read the portable schedule directly would be wrong on exactly those
+ * machines.  So these go in only once nothing has claimed AES.
+ */
+static void initialize_table_bitsliced(void)
+{
+	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_CTR_192] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_C32_128] = crypton_aes_bitsliced_encrypt_c32;
+	crypton_aes_branch_table[ENCRYPT_C32_192] = crypton_aes_bitsliced_encrypt_c32;
+	crypton_aes_branch_table[ENCRYPT_C32_256] = crypton_aes_bitsliced_encrypt_c32;
+	crypton_aes_branch_table[ENCRYPT_GCM_128] = crypton_aes_bitsliced_gcm_encrypt;
+	crypton_aes_branch_table[ENCRYPT_GCM_192] = crypton_aes_bitsliced_gcm_encrypt;
+	crypton_aes_branch_table[ENCRYPT_GCM_256] = crypton_aes_bitsliced_gcm_encrypt;
+	crypton_aes_branch_table[DECRYPT_GCM_128] = crypton_aes_bitsliced_gcm_decrypt;
+	crypton_aes_branch_table[DECRYPT_GCM_192] = crypton_aes_bitsliced_gcm_decrypt;
+	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aes_bitsliced_gcm_decrypt;
+}
+
 static void crypton_aes_cpu_setup(void)
 {
 #if defined(ARCH_X86) && defined(WITH_AESNI)
@@ -444,6 +479,8 @@ static void crypton_aes_cpu_setup(void)
 #ifdef WITH_ARMV8_CRYPTO
 	initialize_table_armv8();
 #endif
+	if (crypton_aes_cpu_options[CPU_AESNI] == 0)
+		initialize_table_bitsliced();
 }
 
 __attribute__((constructor))
@@ -1132,18 +1169,30 @@ void crypton_aes_ocb_finish(uint8_t *tag, aes_ocb *ocb, aes_key *key)
 	block128_xor((block128 *) tag, &ocb->sum_aad);
 }
 
+/*
+ * These three reach cbits/aes/generic.c directly rather than through the
+ * branch table, so they run only where the portable implementation was the
+ * one installed -- which is what lets them read its schedule and hand its
+ * core four blocks at a time.  The CTR entries below cannot do the same:
+ * they go through the branch table for the block, and so run on accelerated
+ * machines too.
+ */
 void crypton_aes_generic_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		crypton_aes_generic_encrypt_block(output, key, input);
-	}
+	aes_sched sched;
+
+	crypton_aes_generic_schedule(&sched, key);
+	crypton_aes_generic_blocks((uint8_t *) output, (const uint8_t *) input,
+	                           nb_blocks, &sched, 0);
 }
 
 void crypton_aes_generic_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		crypton_aes_generic_decrypt_block(output, key, input);
-	}
+	aes_sched sched;
+
+	crypton_aes_generic_schedule(&sched, key);
+	crypton_aes_generic_blocks((uint8_t *) output, (const uint8_t *) input,
+	                           nb_blocks, &sched, 1);
 }
 
 void crypton_aes_generic_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks)
@@ -1159,18 +1208,35 @@ void crypton_aes_generic_encrypt_cbc(aes_block *output, aes_key *key, aes_block 
 	}
 }
 
+/*
+ * Decryption, unlike encryption, does not wait for the block before it:
+ * every ciphertext block is ready at once and the chaining is a XOR
+ * afterwards.  So four at a pass, with the ciphertext copied aside first,
+ * since the caller is allowed to decrypt in place and the next group's IV
+ * is the last ciphertext block of this one.
+ */
 void crypton_aes_generic_decrypt_cbc(aes_block *output, aes_key *key, aes_block *ivini, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, blocko;
+	aes_sched sched;
 	aes_block iv;
+	uint8_t ct[64], plain[64];
 
-	/* preload IV in block */
+	crypton_aes_generic_schedule(&sched, key);
 	block128_copy(&iv, ivini);
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		block128_copy(&block, (block128 *) input);
-		crypton_aes_generic_decrypt_block(&blocko, key, &block);
-		block128_vxor((block128 *) output, &blocko, &iv);
-		block128_copy(&iv, &block);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		memcpy(ct, input, n * 16);
+		crypton_aes_generic_blocks(plain, ct, n, &sched, 1);
+		for (i = 0; i < n; i++) {
+			block128_vxor((block128 *) (output + i),
+			              (block128 *) (plain + 16 * i), &iv);
+			block128_copy(&iv, (block128 *) (ct + 16 * i));
+		}
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 
@@ -1225,7 +1291,9 @@ void crypton_aes_generic_encrypt_c32(uint8_t *output, aes_key *key, aes_block *i
 void crypton_aes_generic_encrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit,
                              uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, tweak;
+	aes_sched sched;
+	aes_block tweak;
+	uint8_t buf[64], tw[64];
 
 	/* load IV and encrypt it using k2 as the tweak */
 	block128_copy(&tweak, dataunit);
@@ -1235,17 +1303,34 @@ void crypton_aes_generic_encrypt_xts(aes_block *output, aes_key *k1, aes_key *k2
 	while (spoint-- > 0)
 		crypton_aes_generic_gf_mulx(&tweak);
 
-	for ( ; nb_blocks-- > 0; input++, output++, crypton_aes_generic_gf_mulx(&tweak)) {
-		block128_vxor(&block, input, &tweak);
-		crypton_aes_encrypt_block(&block, k1, &block);
-		block128_vxor(output, &block, &tweak);
+	crypton_aes_generic_schedule(&sched, k1);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		/* the tweaks for a group depend on nothing but each other, so
+		 * all four are known before any block is enciphered */
+		for (i = 0; i < n; i++) {
+			block128_copy((block128 *) (tw + 16 * i), &tweak);
+			block128_vxor((block128 *) (buf + 16 * i), input + i, &tweak);
+			crypton_aes_generic_gf_mulx(&tweak);
+		}
+		crypton_aes_generic_blocks(buf, buf, n, &sched, 0);
+		for (i = 0; i < n; i++)
+			block128_vxor(output + i, (block128 *) (buf + 16 * i),
+			              (block128 *) (tw + 16 * i));
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 
 void crypton_aes_generic_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2, aes_block *dataunit,
                              uint32_t spoint, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, tweak;
+	aes_sched sched;
+	aes_block tweak;
+	uint8_t buf[64], tw[64];
 
 	/* load IV and encrypt it using k2 as the tweak */
 	block128_copy(&tweak, dataunit);
@@ -1255,10 +1340,25 @@ void crypton_aes_generic_decrypt_xts(aes_block *output, aes_key *k1, aes_key *k2
 	while (spoint-- > 0)
 		crypton_aes_generic_gf_mulx(&tweak);
 
-	for ( ; nb_blocks-- > 0; input++, output++, crypton_aes_generic_gf_mulx(&tweak)) {
-		block128_vxor(&block, input, &tweak);
-		crypton_aes_decrypt_block(&block, k1, &block);
-		block128_vxor(output, &block, &tweak);
+	crypton_aes_generic_schedule(&sched, k1);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		/* the tweaks for a group depend on nothing but each other, so
+		 * all four are known before any block is enciphered */
+		for (i = 0; i < n; i++) {
+			block128_copy((block128 *) (tw + 16 * i), &tweak);
+			block128_vxor((block128 *) (buf + 16 * i), input + i, &tweak);
+			crypton_aes_generic_gf_mulx(&tweak);
+		}
+		crypton_aes_generic_blocks(buf, buf, n, &sched, 1);
+		for (i = 0; i < n; i++)
+			block128_vxor(output + i, (block128 *) (buf + 16 * i),
+			              (block128 *) (tw + 16 * i));
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 
@@ -1487,6 +1587,116 @@ void crypton_aes_generic_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key
 		block128_zero(&tmp);
 		block128_copy_bytes(&tmp, input, length);
 		ccm_cbcmac_add(ccm, key, &tmp);
+	}
+}
+
+/*
+ * GCM where the portable implementation is the one that will run.
+ *
+ * The same shape as the two above, with two differences: the four counter
+ * blocks of a group are encrypted together, which is what the bitsliced
+ * core is for, and the schedule is expanded once for the message rather
+ * than once per block.
+ *
+ * These cannot replace the generic pair.  That pair also runs on an x86
+ * machine that has AES-NI and no carry-less multiply, where crypton_aes.c
+ * installs the AES-NI block function and leaves GCM alone -- and there the
+ * key holds the AES-NI schedule, not this one.  So the choice is made where
+ * the rest of the portable entries are chosen.
+ */
+void crypton_aes_bitsliced_gcm_encrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	aes_sched sched;
+	aes_block out;
+
+	crypton_aes_generic_schedule(&sched, key);
+	gcm->length_input += length;
+	for (; length >= 64; input += 64, output += 64, length -= 64) {
+		aes_block buf[4];
+		int i;
+
+		for (i = 0; i < 4; i++) {
+			block128_inc32_be(&gcm->civ);
+			block128_copy(&buf[i], &gcm->civ);
+		}
+		crypton_aes_generic_blocks((uint8_t *) buf, (const uint8_t *) buf,
+		                           4, &sched, 0);
+		for (i = 0; i < 4; i++)
+			block128_xor(&buf[i], (block128 *) (input + 16 * i));
+		gcm_ghash_add4(gcm, buf);
+		for (i = 0; i < 4; i++)
+			block128_copy((block128 *) (output + 16 * i), &buf[i]);
+	}
+	for (; length >= 16; input += 16, output += 16, length -= 16) {
+		block128_inc32_be(&gcm->civ);
+		crypton_aes_generic_blocks((uint8_t *) &out,
+		                           (const uint8_t *) &gcm->civ, 1, &sched, 0);
+		block128_xor(&out, (block128 *) input);
+		gcm_ghash_add(gcm, &out);
+		block128_copy((block128 *) output, &out);
+	}
+	if (length > 0) {
+		aes_block tmp;
+		uint32_t i;
+
+		block128_inc32_be(&gcm->civ);
+		crypton_aes_generic_blocks((uint8_t *) &out,
+		                           (const uint8_t *) &gcm->civ, 1, &sched, 0);
+		block128_zero(&tmp);
+		block128_copy_bytes(&tmp, input, length);
+		block128_xor_bytes(&tmp, out.b, length);
+		gcm_ghash_add(gcm, &tmp);
+		for (i = 0; i < length; i++)
+			output[i] = tmp.b[i];
+	}
+}
+
+void crypton_aes_bitsliced_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	aes_sched sched;
+	aes_block out;
+
+	crypton_aes_generic_schedule(&sched, key);
+	gcm->length_input += length;
+	/* GHASH all four ciphertext blocks before writing any plaintext, since
+	 * output may be input */
+	for (; length >= 64; input += 64, output += 64, length -= 64) {
+		aes_block buf[4];
+		int i;
+
+		gcm_ghash_add4(gcm, (const block128 *) input);
+		for (i = 0; i < 4; i++) {
+			block128_inc32_be(&gcm->civ);
+			block128_copy(&buf[i], &gcm->civ);
+		}
+		crypton_aes_generic_blocks((uint8_t *) buf, (const uint8_t *) buf,
+		                           4, &sched, 0);
+		for (i = 0; i < 4; i++) {
+			block128_xor(&buf[i], (block128 *) (input + 16 * i));
+			block128_copy((block128 *) (output + 16 * i), &buf[i]);
+		}
+	}
+	for (; length >= 16; input += 16, output += 16, length -= 16) {
+		block128_inc32_be(&gcm->civ);
+		crypton_aes_generic_blocks((uint8_t *) &out,
+		                           (const uint8_t *) &gcm->civ, 1, &sched, 0);
+		gcm_ghash_add(gcm, (block128 *) input);
+		block128_xor(&out, (block128 *) input);
+		block128_copy((block128 *) output, &out);
+	}
+	if (length > 0) {
+		aes_block tmp;
+		uint32_t i;
+
+		block128_inc32_be(&gcm->civ);
+		crypton_aes_generic_blocks((uint8_t *) &out,
+		                           (const uint8_t *) &gcm->civ, 1, &sched, 0);
+		block128_zero(&tmp);
+		block128_copy_bytes(&tmp, input, length);
+		gcm_ghash_add(gcm, &tmp);
+		block128_xor_bytes(&tmp, out.b, length);
+		for (i = 0; i < length; i++)
+			output[i] = tmp.b[i];
 	}
 }
 

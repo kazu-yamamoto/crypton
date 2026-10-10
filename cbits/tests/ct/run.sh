@@ -27,16 +27,24 @@ decaf_src="$D/ed448goldilocks/decaf_all.c $D/ed448goldilocks/eddsa.c
 decaf_inc="-DCRYPTON_DECAF_WORD_BITS=64 -I$D/include -I$D/p448
            -I$D/include/arch_ref64 -I$D/p448/arch_ref64"
 
-# The generic C, not whatever the machine happens to offer.  A build that
-# takes AES-NI reports nothing from the AES driver and says nothing about the
-# table-driven code every other machine runs.
-aes_src="cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c"
+# The portable C, not whatever the machine happens to offer, and the BearSSL
+# it is written on.  All three builds below have to be silent, so what tells
+# them apart is which implementation each one's dispatch chose -- which the
+# driver prints and run_one checks, since otherwise a build that quietly took
+# the wrong path would pass by saying nothing.
+aes_src="cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c
+         cbits/bearssl/aes_ct64.c cbits/bearssl/aes_ct64_enc.c
+         cbits/bearssl/aes_ct64_dec.c cbits/bearssl/ghash_ctmul64.c
+         cbits/bearssl/dec32le.c"
 
-# And, on AArch64, the same driver again against the instructions.  That one
-# has to be silent; this one has to report.  Either going the wrong way says
-# the run is not measuring what it claims to.
+# The same driver again against the instructions, on each architecture that
+# has them.
 armv8_src="$aes_src cbits/aes/armv8.c cbits/crypton_cpu.c"
 armv8_inc="-DWITH_ARMV8_CRYPTO -march=armv8-a+crypto -Icbits/aes"
+
+x86ni_src="$aes_src cbits/aes/x86ni.c cbits/crypton_cpu.c
+           cbits/aes/gcm_vaes_x86.c cbits/aes/gcm_vaes512_x86.c"
+x86ni_inc="-DWITH_AESNI -DWITH_PCLMUL -maes -mpclmul -mssse3 -msse4.1 -Icbits/aes"
 
 status=0
 have_valgrind=no
@@ -79,6 +87,26 @@ run_one() {
 		-o "$out/$name" "cbits/tests/ct/ct_$drv.c" $srcs 2> "$out/$name.cc" || {
 		echo "FAIL $name did not build"; sed -n '1,12p' "$out/$name.cc"; status=1; return
 	}
+	# Which implementation did this build's dispatch actually take?  The
+	# driver says, and the three AES builds want different answers.  This
+	# used to be inferred: the portable build was required to report,
+	# because the tables leaked, and silence meant it had taken an
+	# accelerated path instead.  The tables are gone and all three are
+	# silent now, so the question is asked outright rather than read off a
+	# leak that no longer happens.
+	case $name in
+	aes | aes_armv8 | aes_x86ni)
+		want=0
+		[ "$name" = aes ] || want=1
+		got=$("$out/$name" 2>/dev/null | sed -n 's/^dispatch aes=\([01]\).*/\1/p')
+		if [ "$got" != "$want" ]; then
+			echo "FAIL $name: dispatch took aes=$got, wanted aes=$want --"
+			echo "     this build is not running the implementation it is named for"
+			status=1
+			return
+		fi
+		;;
+	esac
 	if [ "$have_valgrind" = no ]; then
 		"$out/$name" > /dev/null 2>&1 && echo "built $name (no valgrind here; nothing checked)" \
 			|| { echo "FAIL $name did not run"; status=1; }
@@ -123,27 +151,17 @@ run_one() {
 			echo "ok   canary: reported $n, so the marking works"
 		fi
 		;;
-	aes)
-		# Silence would mean the build took an accelerated path and so
-		# measured nothing; the tables reporting is the point.
+	aes | aes_armv8 | aes_x86ni)
+		# Nothing here looks anything up: the portable AES and GHASH are
+		# bitsliced, and the two instruction sets branch on nothing.  So
+		# anything at all is a finding and known.txt does not apply --
+		# until the tables went this entry read the other way round, with
+		# the portable build required to report.
 		if [ "$n" -eq 0 ]; then
-			echo "FAIL aes: reported nothing, so this build did not take the"
-			echo "     table-driven code the driver exists to measure"
-			status=1
+			echo "ok   $name: the secret decided nothing"
 		else
-			echo "note aes: $n report(s), from $(echo "$sites" | tr '\n' ' ')"
-		fi
-		;;
-	aes_armv8)
-		# The opposite demand, and known.txt does not apply: the entries in
-		# it are for the tables, and this build is not supposed to reach
-		# them.  Anything at all here is a finding, including a table site,
-		# which would mean the dispatch did not pick the instructions.
-		if [ "$n" -eq 0 ]; then
-			echo "ok   aes_armv8: the instructions decided nothing"
-		else
-			echo "FAIL aes_armv8: $n report(s) from the AArch64 AES or GHASH,"
-			echo "     which look nothing up and should branch on nothing:"
+			echo "FAIL $name: $n report(s) from AES or GHASH,"
+			echo "     which should branch on nothing:"
 			for site in $sites; do echo "         $site"; done
 			sed -n '/Conditional jump\|Use of uninitialised/,/^==[0-9]*== $/p' \
 				"$out/$name.log" | head -30 | sed 's/^/    /'
@@ -183,7 +201,10 @@ run_one aes     "$aes_src" ""
 # and the build would not even compile.
 case $(uname -m) in
 aarch64 | arm64)
-	run_one aes_armv8 "$armv8_src" "$armv8_inc"
+	run_one aes_armv8 "$armv8_src" "$armv8_inc" aes
+	;;
+x86_64 | amd64)
+	run_one aes_x86ni "$x86ni_src" "$x86ni_inc" aes
 	;;
 esac
 

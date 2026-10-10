@@ -3,8 +3,9 @@ name:               crypton
 version:            2.1.8
 -- crypton's own code is BSD-3-Clause.  The parts of
 -- cbits/aes/gcm_fused_x86.c that follow picotls's fusion are MIT, and the
--- vendored s2n-bignum assembly in cbits/s2n is taken under ISC; each has
--- its licence beside it, and they are listed below.  The CRYPTOGAMS
+-- vendored s2n-bignum assembly in cbits/s2n is taken under ISC, and the
+-- constant-time AES and GHASH in cbits/bearssl are BearSSL's under MIT;
+-- each has its licence beside it, and they are listed below.  The CRYPTOGAMS
 -- assembly in cbits/asm is taken under its BSD-3-Clause option, and the
 -- AArch64 multiply-accumulate loop in cbits/crypton_bignum.h follows Go's,
 -- which is BSD-3-Clause too; the first term already covers both.
@@ -15,6 +16,7 @@ license-files:
     cbits/aes/LICENSE.fusion
     cbits/asm/LICENSE.cryptogams
     cbits/s2n/LICENSE
+    cbits/bearssl/LICENSE
     cbits/mlkem/LICENSE
     cbits/mldsa/LICENSE
 copyright:
@@ -146,6 +148,11 @@ extra-source-files:
     cbits/s2n/import.sh
     cbits/s2n/include/*.h
     cbits/s2n/x86_att/*.S
+    cbits/bearssl/README.md
+    cbits/bearssl/VERSION
+    cbits/bearssl/import.sh
+    cbits/bearssl/inner.h
+    cbits/tests/*.c
     cbits/tests/ct/*.c
     cbits/tests/ct/*.h
     cbits/tests/ct/known.txt
@@ -355,6 +362,15 @@ library
         cbits/crypton_chacha.c
         cbits/crypton_chachapoly.c
         cbits/crypton_cpu.c
+        -- BearSSL's constant-time AES and GHASH, which cbits/aes/generic.c
+        -- and cbits/aes/gf.c are written on top of.  Unconditional because
+        -- those two are: every one of the three AES branches below names
+        -- them, accelerated or not.
+        cbits/bearssl/aes_ct64.c
+        cbits/bearssl/aes_ct64_dec.c
+        cbits/bearssl/aes_ct64_enc.c
+        cbits/bearssl/dec32le.c
+        cbits/bearssl/ghash_ctmul64.c
         cbits/crypton_des.c
         cbits/crypton_ecc.c
         cbits/crypton_f2m.c
