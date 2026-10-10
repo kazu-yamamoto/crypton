@@ -19,6 +19,8 @@
   [#309](https://github.com/kazu-yamamoto/crypton/pull/309)
 * test: skip the accelerated constant-time driver where the processor has no instructions
   [#310](https://github.com/kazu-yamamoto/crypton/pull/310)
+* feat: use the POWER8 AES and GHASH instructions on ppc64le
+  [#311](https://github.com/kazu-yamamoto/crypton/pull/311)
 
 ## 2.1.8
 

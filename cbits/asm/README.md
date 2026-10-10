@@ -2,7 +2,7 @@
 
 ## What is here
 
-Two modules from [CRYPTOGAMS](https://github.com/dot-asm/cryptogams), by Andy
+Modules from [CRYPTOGAMS](https://github.com/dot-asm/cryptogams), by Andy
 Polyakov, checked in unmodified together with the translators they need:
 
 | generator | what it is |
@@ -17,6 +17,8 @@ Polyakov, checked in unmodified together with the translators they need:
 | `sha1-armv8.pl` | SHA-1 for AArch64 |
 | `sha512-armv8.pl` | SHA-256 for AArch64 (the generator emits SHA-512 or SHA-256 according to the name it is given, and only the latter is wanted) |
 | `keccak1600-armv8.pl` | Keccak for AArch64 |
+| `aesp8-ppc.pl` | AES for PowerISA 2.07, which POWER8 was the first to implement |
+| `ghashp8-ppc.pl` | GHASH for the same, over `vpmsumd` |
 
 `x86_64-xlate.pl`, `arm-xlate.pl` and `arm_arch.h` are the machinery those
 modules use.  `generate.sh` runs the generators to produce the `.S` files, which are

@@ -124,6 +124,19 @@ unsigned int crypton_arm_features(void);
 #endif
 
 /*
+ * Which of the optional PowerISA instruction sets this processor has.
+ *
+ * One bit so far: the vector AES and the vector carry-less multiply that
+ * PowerISA 2.07 brought and POWER8 was the first to implement.  The system
+ * reports it in the second capability word, as AArch32 does, and with its
+ * own numbering again.
+ */
+#if defined(__powerpc64__) || defined(__PPC64__)
+#define CRYPTON_PPC_VCRYPTO (1u << 0)
+unsigned int crypton_ppc_features(void);
+#endif
+
+/*
  * The two slots of the array crypton_aes.c fills and crypton_aes_cpu_init
  * hands out.  Here rather than in that file because crypton_cpu.c reads
  * them too, to answer for Crypto.System.CPU.

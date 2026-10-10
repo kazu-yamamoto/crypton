@@ -202,6 +202,44 @@ unsigned int crypton_arm_features(void)
 }
 #endif /* __aarch64__ || __arm__ */
 
+#if defined(__powerpc64__) || defined(__PPC64__)
+#if defined(__linux__)
+#include <sys/auxv.h>
+#elif defined(__FreeBSD__)
+#include <sys/auxv.h>
+#endif
+
+/*
+ * PPC_FEATURE2_VEC_CRYPTO, from the Power ELF ABI.  Defined here only where
+ * the system's headers did not, so that a system reporting through the
+ * auxiliary vector without shipping the name still compiles.
+ */
+#ifndef PPC_FEATURE2_VEC_CRYPTO
+#define PPC_FEATURE2_VEC_CRYPTO 0x02000000
+#endif
+
+unsigned int crypton_ppc_features(void)
+{
+	static unsigned int features;
+	static int resolved;
+
+	if (!resolved) {
+		unsigned long cap = 0;
+
+#if defined(__linux__)
+		cap = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+		if (elf_aux_info(AT_HWCAP2, &cap, sizeof(cap)) != 0)
+			cap = 0;
+#endif
+		features = (cap & PPC_FEATURE2_VEC_CRYPTO)
+		         ? CRYPTON_PPC_VCRYPTO : 0;
+		resolved = 1;
+	}
+	return features;
+}
+#endif /* __powerpc64__ */
+
 #ifdef ARCH_X86
 static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {
@@ -505,6 +543,8 @@ extern int crypton_sha512_armv8_available(void);
 #define OPT_ARMSHA1   14
 #define OPT_ARMSHA2   15
 #define OPT_ARMSHA512 16
+#define OPT_PPCAES    17
+#define OPT_PPCVPMSUM 18
 
 int crypton_cpu_option(unsigned int option)
 {
@@ -547,6 +587,12 @@ int crypton_cpu_option(unsigned int option)
 #endif
 #ifdef WITH_ARMV8_SHA512
 	case OPT_ARMSHA512: return crypton_sha512_armv8_available() != 0;
+#endif
+#ifdef WITH_PPC8_CRYPTO
+	/* The array rather than the check, for the same reason as the ARM pair
+	 * above: it says what the branch table was built from. */
+	case OPT_PPCAES:    return crypton_aes_cpu_init()[CPU_AESNI]  != 0;
+	case OPT_PPCVPMSUM: return crypton_aes_cpu_init()[CPU_PCLMUL] != 0;
 #endif
 	default:           return 0;
 	}

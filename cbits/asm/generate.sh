@@ -12,6 +12,8 @@
 #     arm/sha1-armv8.pl		arm/sha512-armv8.pl
 #     arm/keccak1600-armv8.pl	arm/arm-xlate.pl
 #     arm/arm_arch.h
+#     ppc/aesp8-ppc.pl		ppc/ghashp8-ppc.pl
+#     ppc/ppc-xlate.pl
 #
 # The .pl files are the generator, not the product: each one emits
 # assembly for a given "flavour", which is the calling convention and the
@@ -150,4 +152,25 @@ for f in sha1-armv8-linux64.S sha256-armv8-linux64.S \
 
 	.section	.note.GNU-stack,"",%progbits
 	NOTE
+done
+
+# POWER8's AES and GHASH, little-endian only.  The generator emits a
+# big-endian flavour from the same source, and crypton does not build for
+# big-endian POWER: nothing here has been able to run that code, and an AES
+# path that has never been executed is not one to check in.  Adding
+# "linux64" to the list below is what it would take.
+#
+# These two read no capability word of their own -- unlike the ARM and x86-64
+# modules above -- so the entry points are all that is renamed.
+for flavour in linux64le; do
+	perl aesp8-ppc.pl $flavour tmp-$flavour.S
+	sed -e 's/\baes_p8_/crypton_aes_p8_/g' \
+	    tmp-$flavour.S > aesp8-ppc-$flavour.S
+
+	perl ghashp8-ppc.pl $flavour tmp-$flavour.S
+	sed -e 's/\bgcm_init_p8/crypton_gcm_init_p8/g' \
+	    -e 's/\bgcm_gmult_p8/crypton_gcm_gmult_p8/g' \
+	    -e 's/\bgcm_ghash_p8/crypton_gcm_ghash_p8/g' \
+	    tmp-$flavour.S > ghashp8-ppc-$flavour.S
+	rm -f tmp-$flavour.S
 done

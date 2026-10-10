@@ -38,6 +38,9 @@
 #include <aes/generic.h>
 #include <aes/gf.h>
 #include <aes/x86ni.h>
+#ifdef WITH_PPC8_CRYPTO
+#include <aes/ppc8.h>
+#endif
 #ifdef WITH_GCM_FUSED
 #include <aes/gcm_fused_x86.h>
 #endif
@@ -210,7 +213,7 @@ typedef void (*hinit_f)(table_4bit htable, const block128 *h);
 typedef void (*gf_mul_f)(block128 *a, const table_4bit htable);
 typedef void (*gf_mul4_f)(block128 *a, const block128 *blocks, const table_4bit htable);
 
-#if defined(WITH_AESNI) || defined(WITH_ARMV8_CRYPTO)
+#if defined(WITH_AESNI) || defined(WITH_ARMV8_CRYPTO) || defined(WITH_PPC8_CRYPTO)
 #define GET_INIT(strength) \
 	((init_f) (crypton_aes_branch_table[INIT_128 + strength]))
 #define GET_ECB_ENCRYPT(strength) \
@@ -471,6 +474,45 @@ static void initialize_table_bitsliced(void)
 	crypton_aes_branch_table[DECRYPT_GCM_256] = crypton_aes_bitsliced_gcm_decrypt;
 }
 
+#ifdef WITH_PPC8_CRYPTO
+/*
+ * POWER8.  One function per operation rather than three: the assembly reads
+ * the round count out of the key, so the same entry serves every key size.
+ *
+ * GCM and the 32-bit counter are left where they are.  Neither has an entry
+ * in the assembly, and the generic loops reach the block function and the
+ * GHASH through this table, so both get the instructions anyway.
+ */
+static void initialize_table_ppc8(void)
+{
+	int sz;
+
+	if (!crypton_aes_ppc8_available())
+		return;
+	/* what stops initialize_table_bitsliced below from putting its own CTR
+	 * in, which would read this key as a bitsliced schedule */
+	crypton_aes_cpu_options[CPU_AESNI] = 1;
+	crypton_aes_cpu_options[CPU_PCLMUL] = 1;
+
+	for (sz = 0; sz < 3; sz++) {
+		crypton_aes_branch_table[INIT_128 + sz] = crypton_aes_ppc8_init;
+		crypton_aes_branch_table[ENCRYPT_BLOCK_128 + sz] = crypton_aes_ppc8_encrypt_block;
+		crypton_aes_branch_table[DECRYPT_BLOCK_128 + sz] = crypton_aes_ppc8_decrypt_block;
+		crypton_aes_branch_table[ENCRYPT_ECB_128 + sz] = crypton_aes_ppc8_encrypt_ecb;
+		crypton_aes_branch_table[DECRYPT_ECB_128 + sz] = crypton_aes_ppc8_decrypt_ecb;
+		crypton_aes_branch_table[ENCRYPT_CBC_128 + sz] = crypton_aes_ppc8_encrypt_cbc;
+		crypton_aes_branch_table[DECRYPT_CBC_128 + sz] = crypton_aes_ppc8_decrypt_cbc;
+		crypton_aes_branch_table[ENCRYPT_CTR_128 + sz] = crypton_aes_ppc8_encrypt_ctr;
+		crypton_aes_branch_table[ENCRYPT_XTS_128 + sz] = crypton_aes_ppc8_encrypt_xts;
+		crypton_aes_branch_table[DECRYPT_XTS_128 + sz] = crypton_aes_ppc8_decrypt_xts;
+	}
+
+	crypton_aes_branch_table[GHASH_HINIT]   = crypton_aes_ppc8_hinit;
+	crypton_aes_branch_table[GHASH_GF_MUL]  = crypton_aes_ppc8_gf_mul;
+	crypton_aes_branch_table[GHASH_GF_MUL4] = crypton_aes_ppc8_gf_mul4;
+}
+#endif
+
 static void crypton_aes_cpu_setup(void)
 {
 #if defined(ARCH_X86) && defined(WITH_AESNI)
@@ -478,6 +520,9 @@ static void crypton_aes_cpu_setup(void)
 #endif
 #ifdef WITH_ARMV8_CRYPTO
 	initialize_table_armv8();
+#endif
+#ifdef WITH_PPC8_CRYPTO
+	initialize_table_ppc8();
 #endif
 	if (crypton_aes_cpu_options[CPU_AESNI] == 0)
 		initialize_table_bitsliced();

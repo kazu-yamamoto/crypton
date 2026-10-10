@@ -33,7 +33,10 @@ module Crypto.System.CPU (
         ARMPMULL,
         ARMSHA1,
         ARMSHA2,
-        ARMSHA512
+        ARMSHA512,
+        -- PowerISA
+        PPCAES,
+        PPCVPMSUM
     ),
     processorOptions,
 
@@ -148,6 +151,16 @@ pattern ARMSHA2 = ProcessorOption 15
 pattern ARMSHA512 :: ProcessorOption
 pattern ARMSHA512 = ProcessorOption 16
 
+-- | Support for the PowerISA 2.07 vector AES instructions, which POWER8 was
+-- the first to implement.
+pattern PPCAES :: ProcessorOption
+pattern PPCAES = ProcessorOption 17
+
+-- | Support for @vpmsumd@, the vector carry-less multiply that came with
+-- them, which is what makes GHASH fast.
+pattern PPCVPMSUM :: ProcessorOption
+pattern PPCVPMSUM = ProcessorOption 18
+
 -- | Named where the name is known, numbered where it is not, so that a
 -- binary built against an older crypton can still print a value a newer one
 -- produced.
@@ -169,6 +182,8 @@ instance Show ProcessorOption where
     show ARMSHA1 = "ARMSHA1"
     show ARMSHA2 = "ARMSHA2"
     show ARMSHA512 = "ARMSHA512"
+    show PPCAES = "PPCAES"
+    show PPCVPMSUM = "PPCVPMSUM"
     show (ProcessorOption n) = "ProcessorOption " ++ show n
 
 -- | Options which have been enabled at compile time and are supported by the
@@ -185,7 +200,7 @@ processorOptions = unsafeDoIO $ do
   where
     -- RDRAND is not asked of C: the answer below opens the instruction and
     -- draws from it rather than trusting what cpuid says.
-    allOptions = filter (/= RDRAND) [ProcessorOption n | n <- [0 .. 16]]
+    allOptions = filter (/= RDRAND) [ProcessorOption n | n <- [0 .. 18]]
     askC (ProcessorOption n) =
         (/= 0) <$> crypton_cpu_option (fromIntegral n)
 {-# NOINLINE processorOptions #-}
@@ -197,13 +212,17 @@ processorOptions = unsafeDoIO $ do
 -- than either name.
 hasAESAcceleration :: Bool
 hasAESAcceleration =
-    AESNI `elem` processorOptions || ARMAES `elem` processorOptions
+    any
+        (`elem` processorOptions)
+        [AESNI, ARMAES, PPCAES]
 
 -- | Is there a hardware carry-less multiply, which is what GHASH, and so
 -- AES-GCM, spends its time in once AES itself is fast?
 hasGHASHAcceleration :: Bool
 hasGHASHAcceleration =
-    PCLMUL `elem` processorOptions || ARMPMULL `elem` processorOptions
+    any
+        (`elem` processorOptions)
+        [PCLMUL, ARMPMULL, PPCVPMSUM]
 
 hasRDRand :: IO Bool
 #ifdef SUPPORT_RDRAND
