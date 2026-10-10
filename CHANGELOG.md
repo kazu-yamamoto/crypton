@@ -9,6 +9,10 @@
 * feat(dsa): sign and verify over a digest
 * feat(elgamal): sign and verify over a digest
 * feat(rabin): Rabin-Williams and Modified Rabin sign and verify over a digest
+* build: ask the processor for AES-NI on every x86 system, not four of them
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+* fix: ask one place which ARMv8 instruction sets the machine has
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
 
 ## 2.1.8
 
