@@ -28,6 +28,9 @@ x86Options =
 armOptions :: [ProcessorOption]
 armOptions = [NEON, ARMAES, ARMPMULL, ARMSHA1, ARMSHA2, ARMSHA512]
 
+ppcOptions :: [ProcessorOption]
+ppcOptions = [PPCAES, PPCVPMSUM]
+
 spec :: Spec
 spec = describe "processorOptions" $ do
     it "CPU" $ putStrLn (show processorOptions)
@@ -35,13 +38,13 @@ spec = describe "processorOptions" $ do
     it "gives every name a number of its own" $
         -- two patterns sharing a number would make one of them unreachable
         -- and the other print under the wrong name
-        length (nub (x86Options ++ armOptions))
-            `shouldBe` length (x86Options ++ armOptions)
+        length (nub (x86Options ++ armOptions ++ ppcOptions))
+            `shouldBe` length (x86Options ++ armOptions ++ ppcOptions)
 
     it "has a name for every option it names" $
         -- Show falls back to "ProcessorOption n" for what it does not know,
         -- which is for values from a newer release, not for these
-        filter (startsWith "ProcessorOption " . show) (x86Options ++ armOptions)
+        filter (startsWith "ProcessorOption " . show) (x86Options ++ armOptions ++ ppcOptions)
             `shouldBe` []
 
     it "reports each option at most once, in order" $ do
@@ -49,11 +52,11 @@ spec = describe "processorOptions" $ do
         nub processorOptions `shouldBe` processorOptions
 
     it "does not mix one architecture's names with another's" $ do
-        let anyX86 = any (`elem` x86Options) processorOptions
-            anyARM = any (`elem` armOptions) processorOptions
-        -- RDRAND is x86's and is in that list, so a machine reporting both
-        -- groups is the AArch64-says-AESNI fault this replaced
-        (anyX86 && anyARM) `shouldBe` False
+        let reported g = any (`elem` g) processorOptions
+        -- a machine reporting two of these groups is the
+        -- AArch64-says-AESNI fault this replaced
+        length (filter reported [x86Options, armOptions, ppcOptions])
+            `shouldSatisfy` (<= 1)
 
     -- Half a check, and which half depends on the machine: where the
     -- processor has AES this fails if the answer is broken to False and
@@ -61,9 +64,9 @@ spec = describe "processorOptions" $ do
     -- without it.  Both were tried.
     it "answers the architecture-free questions from the same list" $ do
         hasAESAcceleration
-            `shouldBe` (AESNI `elem` processorOptions || ARMAES `elem` processorOptions)
+            `shouldBe` any (`elem` processorOptions) [AESNI, ARMAES, PPCAES]
         hasGHASHAcceleration
-            `shouldBe` (PCLMUL `elem` processorOptions || ARMPMULL `elem` processorOptions)
+            `shouldBe` any (`elem` processorOptions) [PCLMUL, ARMPMULL, PPCVPMSUM]
 
 startsWith :: String -> String -> Bool
 startsWith p s = take (length p) s == p

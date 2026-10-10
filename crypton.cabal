@@ -48,6 +48,9 @@ extra-source-files:
     cbits/asm/README.md
     cbits/asm/aesni-gcm-x86_64.pl
     cbits/asm/arm-xlate.pl
+    cbits/asm/aesp8-ppc.pl
+    cbits/asm/ghashp8-ppc.pl
+    cbits/asm/ppc-xlate.pl
     cbits/asm/arm_arch.h
     cbits/asm/chacha-armv8.pl
     cbits/asm/chacha-x86_64.pl
@@ -779,6 +782,28 @@ library
             cbits/aes/armv8.c
             cbits/crypton_aes.c
 
+    -- POWER8's vector AES and vector carry-less multiply, through the
+    -- CRYPTOGAMS assembly in cbits/asm.  No cc-options beyond the define:
+    -- cbits/aes/ppc8.c calls that assembly rather than using intrinsics of
+    -- its own, and the assembly says .machine "any", so the assembler takes
+    -- the instructions without being told about the processor.
+    --
+    -- Little-endian only.  The generator emits a big-endian flavour from the
+    -- same source, and it is not checked in: nothing here has been able to
+    -- run it, and an AES path that has never been executed is not one to
+    -- ship.  cbits/asm/generate.sh says what adding it would take.
+    if (flag(support_aesni) && arch(ppc64le))
+        cc-options: -DWITH_PPC8_CRYPTO
+        c-sources:
+            cbits/aes/generic.c
+            cbits/aes/gf.c
+            cbits/aes/ppc8.c
+            cbits/crypton_aes.c
+
+        asm-sources:
+            cbits/asm/aesp8-ppc-linux64le.S
+            cbits/asm/ghashp8-ppc-linux64le.S
+
     if arch(aarch64)
         cc-options:
             -DWITH_ARMV8_SHA1 -DWITH_ARMV8_SHA2 -DWITH_ARMV8_SHA3
@@ -904,7 +929,7 @@ library
     -- branch had already named every file it names.  Cabal drops the repeats,
     -- so nothing was built twice, but the line read as the fallback for a
     -- platform with no AES instructions and was not one.
-    if !((flag(support_aesni) && (arch(aarch64) || arch(arm))) || (flag(support_aesni) && (arch(i386) || arch(x86_64))))
+    if !((flag(support_aesni) && (arch(aarch64) || arch(arm))) || (flag(support_aesni) && (arch(i386) || arch(x86_64))) || (flag(support_aesni) && arch(ppc64le)))
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c
