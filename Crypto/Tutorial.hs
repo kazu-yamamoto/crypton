@@ -1,4 +1,7 @@
 -- | Examples of how to use @crypton@.
+--
+-- Every code block here is extracted and compiled against this version of
+-- the library by @tests\/tutorial\/run.sh@, so what is written below builds.
 module Crypto.Tutorial (
     -- * API design
     -- $api_design
@@ -6,8 +9,20 @@ module Crypto.Tutorial (
     -- * Hash algorithms
     -- $hash_algorithms
 
-    -- * Symmetric block ciphers
-    -- $symmetric_block_ciphers
+    -- * Authenticated encryption
+    -- $authenticated_encryption
+
+    -- * Comparing secrets
+    -- $comparing_secrets
+
+    -- * Password storage
+    -- $password_storage
+
+    -- * Key derivation
+    -- $key_derivation
+
+    -- * Digital signatures
+    -- $digital_signatures
 
     -- * Combining primitives
     -- $combining_primitives
@@ -31,6 +46,14 @@ module Crypto.Tutorial (
 -- Error conditions are returned with data type 'Crypto.Error.CryptoFailable'.
 -- Functions in module "Crypto.Error" can convert those values to runtime
 -- exceptions, 'Maybe' or 'Either' values.
+--
+-- Types that hold a secret do not print it.  A private key's 'Show' renders
+-- whatever is public and @\<secret\>@ or @\<scrubbed-bytes\>@ for the rest,
+-- because 'Show' is what @print@, @error@, an exception and a failing test
+-- all reach for, and a key arriving in a log that way is an accident nobody
+-- asked for.  "Crypto.Debug" is how one is printed when printing it is what
+-- was meant.  Several of those types keep their bytes in
+-- 'Data.ByteArray.ScrubbedBytes', which is wiped when it is collected.
 
 -- $hash_algorithms
 --
@@ -90,71 +113,257 @@ module Crypto.Tutorial (
 -- >     hashMutableUpdate ctx ("dog"    :: ByteString)
 -- >     hashMutableFinalize ctx >>= print
 
--- $symmetric_block_ciphers
+-- $authenticated_encryption
+--
+-- Encrypting hides a message; it does not stop anyone changing it.  Under a
+-- counter or stream mode, flipping a bit of the ciphertext flips the same
+-- bit of the plaintext, and the receiver has no way to tell.  An AEAD mode
+-- binds the message, and anything else named as associated data, to a short
+-- authentication tag, and decrypting something that does not match that tag
+-- returns nothing at all.
+--
+-- That is the mode to use.  The unauthenticated ones are in this library
+-- for protocols that authenticate separately, not as a starting point.
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > {-# LANGUAGE ScopedTypeVariables #-}
--- > {-# LANGUAGE GADTs #-}
 -- >
 -- > import           Crypto.Cipher.AES (AES256)
--- > import           Crypto.Cipher.Types (BlockCipher(..), Cipher(..), nullIV, KeySizeSpecifier(..), IV, makeIV)
--- > import           Crypto.Error (CryptoFailable(..), CryptoError(..))
--- >
+-- > import           Crypto.Cipher.Types
+-- >                      ( AEADMode (AEAD_GCM)
+-- >                      , AuthTag
+-- >                      , BlockCipher (aeadInit)
+-- >                      , Cipher (cipherInit, cipherKeySize)
+-- >                      , KeySizeSpecifier (..)
+-- >                      , aeadSimpleDecrypt
+-- >                      , aeadSimpleEncrypt
+-- >                      )
+-- > import           Crypto.Error (CryptoError, eitherCryptoError)
 -- > import qualified Crypto.Random.Types as CRT
 -- >
--- > import           Data.ByteArray (ByteArray)
+-- > import           Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
 -- > import           Data.ByteString (ByteString)
 -- >
--- > -- | Not required, but most general implementation
--- > data Key c a where
--- >   Key :: (BlockCipher c, ByteArray a) => a -> Key c a
+-- > -- | A key of the length the cipher asks for, rather than a length
+-- > -- written out here.  ScrubbedBytes rather than ByteString, so that it
+-- > -- is wiped when it is collected and does not print.
+-- > genSecretKey :: (Cipher c, CRT.MonadRandom m) => c -> m ScrubbedBytes
+-- > genSecretKey c = CRT.getRandomBytes (longest (cipherKeySize c))
+-- >   where
+-- >     longest (KeySizeFixed n)   = n
+-- >     longest (KeySizeRange _ n) = n
+-- >     longest (KeySizeEnum ns)   = maximum ns
 -- >
--- > -- | Generates a string of bytes (key) of a specific length for a given block cipher
--- > genSecretKey :: forall m c a. (CRT.MonadRandom m, BlockCipher c, ByteArray a) => c -> Int -> m (Key c a)
--- > genSecretKey _ = fmap Key . CRT.getRandomBytes
+-- > -- | A fresh nonce for every message.  GCM must never see one twice
+-- > -- under the same key: a repeat does not just expose those two messages,
+-- > -- it hands over the key that authenticates all of them.  Twelve random
+-- > -- bytes, sent along with the ciphertext.
+-- > genNonce :: CRT.MonadRandom m => m ByteString
+-- > genNonce = CRT.getRandomBytes 12
 -- >
--- > -- | Generate a random initialization vector for a given block cipher
--- > genRandomIV :: forall m c. (CRT.MonadRandom m, BlockCipher c) => c -> m (Maybe (IV c))
--- > genRandomIV _ = do
--- >   bytes :: ByteString <- CRT.getRandomBytes $ blockSize (undefined :: c)
--- >   return $ makeIV bytes
+-- > -- | Encrypt and authenticate.  The associated data is authenticated but
+-- > -- not encrypted: it is for what the receiver can already see and must
+-- > -- not have had altered, such as a header or an address.
+-- > encrypt
+-- >     :: (ByteArray key, ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
+-- >     => key -> nonce -> aad -> ba -> Either CryptoError (AuthTag, ba)
+-- > encrypt key nonce aad plaintext = do
+-- >     cipher <- eitherCryptoError (cipherInit key) :: Either CryptoError AES256
+-- >     aead <- eitherCryptoError (aeadInit AEAD_GCM cipher nonce)
+-- >     return (aeadSimpleEncrypt aead aad plaintext 16)
 -- >
--- > -- | Initialize a block cipher
--- > initCipher :: (BlockCipher c, ByteArray a) => Key c a -> Either CryptoError c
--- > initCipher (Key k) = case cipherInit k of
--- >   CryptoFailed e -> Left e
--- >   CryptoPassed a -> Right a
+-- > -- | And back, with two different failures.  Left is this code used
+-- > -- wrongly -- a key of the wrong length, a mode the cipher has not got.
+-- > -- Nothing is a message that is not the one that was sent; it carries no
+-- > -- plaintext and says nothing about which byte was wrong, both of which
+-- > -- are the point.
+-- > decrypt
+-- >     :: (ByteArray key, ByteArrayAccess nonce, ByteArrayAccess aad, ByteArray ba)
+-- >     => key -> nonce -> aad -> AuthTag -> ba -> Either CryptoError (Maybe ba)
+-- > decrypt key nonce aad tag ciphertext = do
+-- >     cipher <- eitherCryptoError (cipherInit key) :: Either CryptoError AES256
+-- >     aead <- eitherCryptoError (aeadInit AEAD_GCM cipher nonce)
+-- >     return (aeadSimpleDecrypt aead aad ciphertext tag)
 -- >
--- > encrypt :: (BlockCipher c, ByteArray a) => Key c a -> IV c -> a -> Either CryptoError a
--- > encrypt secretKey initIV msg =
--- >   case initCipher secretKey of
--- >     Left e -> Left e
--- >     Right c -> Right $ ctrCombine c initIV msg
+-- > exampleAES256GCM :: ByteString -> IO ()
+-- > exampleAES256GCM msg = do
+-- >     key <- genSecretKey (undefined :: AES256)
+-- >     nonce <- genNonce
+-- >     let aad = "to: alice" :: ByteString
+-- >     case encrypt key nonce aad msg of
+-- >         Left err -> error (show err)
+-- >         Right (tag, ciphertext) -> do
+-- >             putStrLn $ "ciphertext: " ++ show ciphertext
+-- >             putStrLn $ "       tag: " ++ show tag
+-- >             putStrLn $ " recovered: "
+-- >                 ++ show (decrypt key nonce aad tag ciphertext)
+-- >             -- The same bytes and the same tag, with one thing changed
+-- >             -- that was never encrypted: Right Nothing.
+-- >             putStrLn $ "redirected: "
+-- >                 ++ show (decrypt key nonce ("to: eve" :: ByteString) tag ciphertext)
+--
+-- The two functions above work for any cipher that has an AEAD mode; what
+-- changes is the mode given to 'Crypto.Cipher.Types.aeadInit'.
+-- "Crypto.Cipher.ChaChaPoly1305" is the one to prefer on a machine with no
+-- AES instructions, and "Crypto.Cipher.AESGCMSIV" is the one that survives
+-- a repeated nonce, at the price of needing the whole message before it can
+-- begin.
+
+-- $comparing_secrets
+--
+-- Comparing two byte strings with '==' stops at the first byte that
+-- differs, so how long it takes says where that byte was.  Against an
+-- authentication tag that is the whole secret: someone who can send a guess
+-- and time the answer finds the first byte in a few hundred tries, then the
+-- second, and has a tag that was supposed to cost 2^128 in a few thousand.
+--
+-- crypton's own authentication types already compare in constant time, so
+-- for those there is nothing to do: 'Crypto.MAC.HMAC.HMAC',
+-- 'Crypto.MAC.CMAC.CMAC', 'Crypto.MAC.Poly1305.Auth' and
+-- 'Crypto.Cipher.Types.AuthTag' have an 'Eq' that looks at every byte
+-- whatever it finds.  What needs care is a tag that arrives as bytes, and
+-- 'Data.ByteArray.constEq' is the comparison for it.
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
 -- >
--- > decrypt :: (BlockCipher c, ByteArray a) => Key c a -> IV c -> a -> Either CryptoError a
--- > decrypt = encrypt
+-- > import           Crypto.Hash.Algorithms (SHA256)
+-- > import           Crypto.MAC.HMAC (HMAC, hmac)
 -- >
--- > exampleAES256 :: ByteString -> IO ()
--- > exampleAES256 msg = do
--- >   -- secret key needs 256 bits (32 * 8)
--- >   secretKey <- genSecretKey (undefined :: AES256) 32
--- >   mInitIV <- genRandomIV (undefined :: AES256)
--- >   case mInitIV of
--- >     Nothing -> error "Failed to generate and initialization vector."
--- >     Just initIV -> do
--- >       let encryptedMsg = encrypt secretKey initIV msg
--- >           decryptedMsg = decrypt secretKey initIV =<< encryptedMsg
--- >       case (,) <$> encryptedMsg <*> decryptedMsg of
--- >         Left err -> error $ show err
--- >         Right (eMsg, dMsg) -> do
--- >           putStrLn $ "Original Message: " ++ show msg
--- >           putStrLn $ "Message after encryption: " ++ show eMsg
--- >           putStrLn $ "Message after decryption: " ++ show dMsg
+-- > import qualified Data.ByteArray as BA
+-- > import           Data.ByteString (ByteString)
+-- >
+-- > -- | The tag came off the wire as bytes, so it is compared as bytes.
+-- > authentic :: ByteString -> ByteString -> ByteString -> Bool
+-- > authentic key message tag =
+-- >     BA.constEq tag (hmac key message :: HMAC SHA256)
+-- >
+-- > -- | Once it has been parsed into the library's own type, (==) is
+-- > -- already the constant-time comparison.
+-- > authentic' :: ByteString -> ByteString -> HMAC SHA256 -> Bool
+-- > authentic' key message tag = tag == hmac key message
+
+-- $password_storage
+--
+-- A password is not a key.  It is short and it is guessable, and whoever
+-- takes the database can try every likely one without being watched.  What
+-- answers that is a function that is deliberately expensive to compute, and
+-- crypton has four: "Crypto.KDF.BCrypt", "Crypto.KDF.Scrypt",
+-- "Crypto.KDF.Argon2" and "Crypto.KDF.PBKDF2".  A plain hash is not one of
+-- them, however many times it is applied by hand.
+--
+-- bcrypt leaves the least to get wrong, because the record it returns
+-- carries the salt and the cost inside it:
+--
+-- > import Crypto.KDF.BCrypt (hashPassword, validatePassword)
+-- >
+-- > import Data.ByteString (ByteString)
+-- >
+-- > -- | What goes in the database.  The salt is drawn inside and ends up in
+-- > -- the result, so two accounts with the same password do not look alike.
+-- > register :: ByteString -> IO ByteString
+-- > register password = hashPassword 12 password
+-- >
+-- > -- | And what is checked against it.  The cost comes out of the stored
+-- > -- record, so raising it for new accounts leaves the old ones working.
+-- > login :: ByteString -> ByteString -> Bool
+-- > login password stored = validatePassword password stored
+--
+-- Argon2 is the stronger choice and the one to pick for something new: it
+-- asks for memory as well as time, which is what takes the advantage away
+-- from the hardware that bcrypt's small working set leaves room for.
+-- Nothing is encoded for the caller, though -- the salt and the options are
+-- theirs to store, and without all three the hash cannot be recomputed when
+-- the user comes back.
+--
+-- > import           Crypto.Error (CryptoFailable)
+-- > import qualified Crypto.KDF.Argon2 as Argon2
+-- > import qualified Crypto.Random.Types as CRT
+-- >
+-- > import           Data.ByteString (ByteString)
+-- >
+-- > -- | Argon2id, which is the variant to prefer: it resists both a machine
+-- > -- built to guess and a process watching the cache.
+-- > options :: Argon2.Options
+-- > options = Argon2.defaultOptions{Argon2.variant = Argon2.Argon2id}
+-- >
+-- > newSalt :: CRT.MonadRandom m => m ByteString
+-- > newSalt = CRT.getRandomBytes 16
+-- >
+-- > derive :: ByteString -> ByteString -> CryptoFailable ByteString
+-- > derive salt password = Argon2.hash options password salt 32
+
+-- $key_derivation
+--
+-- HKDF turns one secret into as many keys as a protocol needs.  It is for
+-- material that is already unguessable -- what comes out of a
+-- Diffie-Hellman, or a key already agreed -- and it is deliberately cheap,
+-- which is exactly what makes it the wrong thing for a password.  Those go
+-- to the section above.
+--
+-- The info string is what keeps the outputs independent: the same secret
+-- with a different info gives an unrelated key, so each use of a secret
+-- names itself there.
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import           Crypto.Hash.Algorithms (SHA256)
+-- > import qualified Crypto.KDF.HKDF as HKDF
+-- >
+-- > import           Data.ByteArray (ScrubbedBytes)
+-- > import           Data.ByteString (ByteString)
+-- >
+-- > -- | One shared secret in, two unrelated keys out.
+-- > directionKeys :: ByteString -> ByteString -> (ScrubbedBytes, ScrubbedBytes)
+-- > directionKeys salt shared = (keyFor "client write", keyFor "server write")
+-- >   where
+-- >     prk = HKDF.extract salt shared :: HKDF.PRK SHA256
+-- >     keyFor info = HKDF.expand prk (info :: ByteString) 32
+
+-- $digital_signatures
+--
+-- Ed25519 is the one to reach for.  The keys are thirty-two bytes, there is
+-- nothing to choose and nothing to encode, and signing needs no randomness,
+-- so it cannot be ruined by a bad source of it.  "Crypto.PubKey.Ed448" is
+-- the same shape at a larger size, "Crypto.PubKey.ECDSA" and
+-- "Crypto.PubKey.RSA.PSS" are there for protocols that ask for them, and
+-- "Crypto.PubKey.MLDSA" is the post-quantum one.
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import           Crypto.Error (throwCryptoError)
+-- > import qualified Crypto.PubKey.Ed25519 as Ed25519
+-- >
+-- > import qualified Data.ByteArray as BA
+-- > import           Data.ByteString (ByteString)
+-- >
+-- > exampleEd25519 :: ByteString -> IO ()
+-- > exampleEd25519 msg = do
+-- >     sk <- Ed25519.generateSecretKey
+-- >     let pk = Ed25519.toPublic sk
+-- >         sig = Ed25519.sign sk pk msg
+-- >     print (Ed25519.verify pk msg sig)
+-- >     -- The same signature against a message one byte longer: False.
+-- >     print (Ed25519.verify pk (msg <> "!") sig)
+-- >
+-- > -- | A secret key on its way to storage.  Printing one does not reveal
+-- > -- it -- see the first section -- so this is the way out.
+-- > store :: Ed25519.SecretKey -> ByteString
+-- > store = BA.convert
+-- >
+-- > -- | And the way back in, which is checked, because the bytes read from
+-- > -- a file may be anything at all.
+-- > load :: ByteString -> Ed25519.SecretKey
+-- > load = throwCryptoError . Ed25519.secretKey
 
 -- $combining_primitives
 --
 -- This example shows how to use Curve25519, XSalsa and Poly1305 primitives to
 -- emulate NaCl's @crypto_box@ construct.
+--
+-- It is here to show how the pieces fit together, not as something to
+-- deploy.  An authenticated encryption scheme assembled by hand is the kind
+-- of code that is wrong in ways no test notices; for actual use,
+-- "Crypto.Cipher.ChaChaPoly1305" does this job with the mistakes already
+-- made.
 --
 -- > import qualified Data.ByteArray as BA
 -- > import           Data.ByteString (ByteString)
@@ -167,6 +376,9 @@ module Crypto.Tutorial (
 -- >
 -- > -- | Build a @crypto_box@ packet encrypting the specified content with a
 -- > -- 192-bit nonce, receiver public key and sender private key.
+-- > crypto_box
+-- >     :: ByteString -> ByteString -> X25519.PublicKey -> X25519.SecretKey
+-- >     -> ByteString
 -- > crypto_box content nonce pk sk = BA.convert tag `B.append` c
 -- >   where
 -- >     zero         = B.replicate 16 0
@@ -181,6 +393,9 @@ module Crypto.Tutorial (
 -- >
 -- > -- | Try to open a @crypto_box@ packet and recover the content using the
 -- > -- 192-bit nonce, sender public key and receiver private key.
+-- > crypto_box_open
+-- >     :: ByteString -> ByteString -> X25519.PublicKey -> X25519.SecretKey
+-- >     -> Maybe ByteString
 -- > crypto_box_open packet nonce pk sk
 -- >     | B.length packet < 16 = Nothing
 -- >     | BA.constEq tag' tag  = Just content

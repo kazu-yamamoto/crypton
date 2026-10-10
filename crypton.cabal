@@ -180,6 +180,8 @@ extra-source-files:
     cbits/tests/width/*.c
     cbits/tests/width/run.sh
     tests/*.hs
+    tests/tutorial/extract.awk
+    tests/tutorial/run.sh
 
 extra-doc-files:
     CHANGELOG.md

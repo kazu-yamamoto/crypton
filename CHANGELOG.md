@@ -18,6 +18,8 @@
   [#311](https://github.com/kazu-yamamoto/crypton/pull/311)
 * test: the big-endian harness now asks about AES
   [#312](https://github.com/kazu-yamamoto/crypton/pull/312)
+* doc(tutorial): compile the examples, and teach the things people come for
+  [#313](https://github.com/kazu-yamamoto/crypton/pull/313)
 
 ## 2.1.10
 
