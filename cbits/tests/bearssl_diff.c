@@ -1,12 +1,22 @@
 /*
- * Does the vendored BearSSL agree with the implementation it would replace?
+ * crypton's portable AES and GHASH against the BearSSL they are written on.
  *
- * Two anchors.  FIPS-197's own vectors say the new code computes AES, and
- * not merely something both sides compute the same way.  Then a long run of
- * random keys and blocks says the two agree everywhere the vectors do not
- * reach, which is what a replacement has to show before the old code goes.
+ * This began as the migration check: for one commit, cbits/aes/generic.c and
+ * cbits/aes/gf.c were still the table-driven implementations, and this said
+ * the vendored code computed what they computed before they were replaced.
  *
- * Run with an argument to corrupt one byte on purpose and see the comparison
+ * Since the replacement the two sides are no longer independent, and what is
+ * left is still worth checking: everything in generic.c and gf.c is now
+ * crypton's own glue -- a schedule kept compressed and carried through
+ * memcpy, the interleave-and-ortho idiom around a single block, three of four
+ * lanes left idle, and a GHASH entry that reaches the same multiply by handing
+ * it a block of zeros.  Each of those is somewhere a mistake would live, and
+ * each is compared here against calling BearSSL directly.
+ *
+ * FIPS-197's own vectors come first either way, so that agreement means AES
+ * rather than two callers agreeing on something that is not.
+ *
+ * Run with an argument to corrupt results on purpose and see the comparison
  * notice: a differential test that cannot fail has said nothing.
  */
 #include <stdio.h>
@@ -143,7 +153,7 @@ int main(int argc, char **argv)
 		same("bearssl decrypt vs plaintext", b, pt, 16);
 	}
 
-	printf("== bearssl vs crypton's generic, 2000 random keys and blocks ==\n");
+	printf("== crypton's glue vs BearSSL direct, 2000 random keys and blocks ==\n");
 	for (round = 0; round < 2000; round++) {
 		uint8_t key[32], in[16], e1[16], e2[16], d1[16], d2[16];
 		size_t kl = klens[round % 3];
@@ -166,7 +176,7 @@ int main(int argc, char **argv)
 		same("decrypt", d1, d2, 16);
 	}
 
-	printf("== GHASH: ghash_ctmul64 vs the 4-bit table, 500 messages ==\n");
+	printf("== GHASH: crypton's entries vs br_ghash_ctmul64, 500 messages ==\n");
 	for (round = 0; round < 500; round++) {
 		uint8_t h[16], data[256], y1[16], y2[16];
 		size_t len = 16u * (size_t)(1 + (round % 16));
@@ -179,6 +189,25 @@ int main(int argc, char **argv)
 		crypton_ghash(y2, h, data, len);
 		if (sabotage && round == 3) y1[15] ^= 0x80;
 		same("ghash", y1, y2, 16);
+	}
+
+	printf("== gf_mul4: the four-block entry against the same four blocks ==\n");
+	for (round = 0; round < 500; round++) {
+		uint8_t h[16], data[64], y1[16];
+		table_4bit ht;
+		block128 acc;
+
+		rnd_fill(h, 16);
+		rnd_fill(data, sizeof data);
+
+		memset(y1, 0, 16);
+		br_ghash_ctmul64(y1, h, data, sizeof data);
+
+		crypton_aes_generic_hinit(ht, (const block128 *) h);
+		block128_zero(&acc);
+		crypton_aes_generic_gf_mul4(&acc, (const block128 *) data, ht);
+		if (sabotage && round == 11) y1[0] ^= 0x40;
+		same("gf_mul4", y1, (const uint8_t *) &acc, 16);
 	}
 
 	printf("%s: %d mismatch(es)%s\n",
