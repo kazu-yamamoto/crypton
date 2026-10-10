@@ -14,8 +14,12 @@ bindings, structuring them in a way that makes them easy to use.
 Side channels
 -------------
 
+### AES
+
 AES is where this matters most, and which implementation runs is decided at
-runtime from what the processor has.
+runtime from what the processor has.  What this subsection says is 2.1.10,
+the released version; 2.2 changes it, and the next subsection is what it
+changes.
 
 On x86-64 with AES-NI and carry-less multiply, and on AArch64 with the ARMv8
 cryptographic extension, AES and GHASH are instructions rather than tables.
@@ -34,12 +38,43 @@ that matters.
 
 `Crypto.System.CPU.processorOptions` says which is in use.  `AESNI` in that
 list means the instruction path, and `PCLMUL` that GHASH has its instruction
-too; without `AESNI` it is the tables.  The list also reports `RDRAND`, which
-is unrelated to this.
+too; without `AESNI` it is the tables.  On AArch64 the same two names are
+reported, since the list has no names of its own for that architecture.  The
+list also reports `RDRAND`, which is unrelated to this.
 
     ghci> import Crypto.System.CPU
     ghci> processorOptions
     [AESNI,PCLMUL]
+
+### What 2.2 changes about AES
+
+The paragraph that matters most is the one about the fallback.
+
+**There are no tables any more.**  The portable AES and GHASH are bitsliced:
+the S-box is computed as boolean algebra over four blocks held across eight
+64-bit words, and the GF(2^128) multiply is built from shifts, masks and
+integer multiplies.  Neither looks anything up, so neither derives an address
+from a secret, and **the portable path is constant time** on every machine
+that runs it.  The code is BearSSL's, under MIT, in `cbits/bearssl`.
+
+**Two more architectures reach the instructions.**  A 32-bit ARM in AArch32
+state has the same AES and PMULL instructions AArch64 has, and ppc64le has
+the vector AES and carry-less multiply that came with PowerISA 2.07 and
+POWER8.  crypton asked for neither before 2.2; it asks for both now.  The
+SHA instructions on AArch32 are still unused, and the ppc64le work is
+little-endian only.
+
+**The question has a better form.**  `hasAESAcceleration` and
+`hasGHASHAcceleration` answer without naming an architecture, and
+`processorOptions` reports each architecture in its own names -- `ARMAES` and
+`ARMPMULL` on AArch64 and 32-bit ARM, `PPCAES` and `PPCVPMSUM` on ppc64le --
+rather than calling everything `AESNI`.
+
+The constant-time harness in `cbits/tests/ct` runs the same driver against
+the portable implementation and against each architecture's instructions, and
+every one of them is required to report nothing at all.
+
+### RSA
 
 RSA is the other place to know about, and there the choice is the caller's.
 The private key operations in `Crypto.PubKey.RSA.PKCS15`, `.OAEP` and `.PSS`
@@ -252,3 +287,8 @@ SHA-1 is in the tables because a number of protocols and file formats still
 ask for it, not because it is a good choice for anything new.  The algorithms
 that nothing should ask for any more -- MD5, 3DES, RC4, CBC mode -- are left
 out.
+
+ML-KEM and ML-DSA are left out too, though 2.1.8 brought both and they are
+fast -- `mlkem-native` and `mldsa-native`, from the PQ Code Package.  No
+comparison is reported here: the implementations to measure against are
+still developing.
