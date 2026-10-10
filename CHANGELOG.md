@@ -21,6 +21,8 @@
   [#310](https://github.com/kazu-yamamoto/crypton/pull/310)
 * feat: use the POWER8 AES and GHASH instructions on ppc64le
   [#311](https://github.com/kazu-yamamoto/crypton/pull/311)
+* test: the big-endian harness now asks about AES
+  [#312](https://github.com/kazu-yamamoto/crypton/pull/312)
 
 ## 2.1.8
 
