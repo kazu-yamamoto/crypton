@@ -344,9 +344,9 @@ extern int crypton_sha512_armv8_available(void);
 #endif
 
 /* Keep in step with Crypto/System/CPU.hs, which is where these are named.
- * 2 is RDRAND, which Haskell answers for itself: it opens the instruction
- * and draws from it rather than trusting what cpuid says, and an AMD erratum
- * is the reason that is worth doing. */
+ * 2 is missing: it was RDRAND, which crypton no longer dispatches on.  The
+ * number is left out rather than reused, so that the rest keep the values
+ * they had. */
 #define OPT_AESNI      0
 #define OPT_PCLMUL     1
 #define OPT_SSSE3      3

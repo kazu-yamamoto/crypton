@@ -23,7 +23,7 @@ import Crypto.System.CPU (
 -- cover.
 x86Options :: [ProcessorOption]
 x86Options =
-    [AESNI, PCLMUL, RDRAND, SSSE3, AVX, AVX2, SHANI, MOVBE, ADX, VAES, VAES512]
+    [AESNI, PCLMUL, SSSE3, AVX, AVX2, SHANI, MOVBE, ADX, VAES, VAES512]
 
 armOptions :: [ProcessorOption]
 armOptions = [NEON, ARMAES, ARMPMULL, ARMSHA1, ARMSHA2, ARMSHA512]
@@ -51,7 +51,7 @@ spec = describe "processorOptions" $ do
     it "does not mix one architecture's names with another's" $ do
         let anyX86 = any (`elem` x86Options) processorOptions
             anyARM = any (`elem` armOptions) processorOptions
-        -- RDRAND is x86's and is in that list, so a machine reporting both
+        -- AESNI is x86's and is in that list, so a machine reporting both
         -- groups is the AArch64-says-AESNI fault this replaced
         (anyX86 && anyARM) `shouldBe` False
 

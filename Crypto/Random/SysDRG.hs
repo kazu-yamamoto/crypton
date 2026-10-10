@@ -10,8 +10,8 @@
 -- The generator behind the 'Crypto.Random.MonadRandom' instance for 'IO'.
 --
 -- A ChaCha20 generator per operating system thread, seeded from a
--- process-wide generator, seeded in turn from the system entropy pool with
--- RDRAND mixed in where there is one.  The state and the reseeding live in
+-- process-wide generator, seeded in turn from the system entropy pool.
+-- The state and the reseeding live in
 -- @cbits\/crypton_sysdrg.c@, because a @forkIO@ thread is not an operating
 -- system thread -- it moves between capabilities -- so state held against
 -- one would be shared by threads running at the same time.
@@ -29,8 +29,8 @@
 -- fixed were chosen here instead:
 --
 -- * ChaCha20, rather than AES in counter mode.
--- * SHA-512 to combine the system's bytes with RDRAND's, rather than a
---   derivation function a standard would have named.
+-- * SHA-512 over the system's bytes, rather than a derivation function a
+--   standard would have named.
 -- * A mebibyte per thread, and a mebibyte of issued seed for the process
 --   generator, as the points at which to reseed.  Those numbers are a
 --   choice, not a result.
