@@ -23,6 +23,12 @@
 # import is three words a reader will paste into their own file.  Only the
 # extracted modules are held to it, not the library loaded beside them.
 #
+# $GHC names a compiler other than the one on the path, and $BUILDDIR a
+# build directory to keep that compiler's products out of the usual one.
+# CI has one compiler per job and sets neither; locally they are how an
+# example is asked whether it also builds on the oldest GHC the package
+# supports, which is the reader this is most likely to have failed.
+#
 # The first module is wrong on purpose and has to be reported, or the run
 # proves nothing: a repl that failed to start, a ghci whose message format
 # changed, or an extractor that produced no modules would otherwise all look
@@ -65,7 +71,8 @@ HS
 
 # Not cabal's -v0: that reaches ghci too and takes the "Ok, N modules
 # loaded." line with it, which is what is read below.
-cabal repl crypton --repl-options=-i"$work" --repl-options=-fno-code \
+cabal repl crypton ${GHC:+-w "$GHC"} ${BUILDDIR:+--builddir="$BUILDDIR"} \
+    --repl-options=-i"$work" --repl-options=-fno-code \
     --repl-options=-Wall --repl-options=-Wno-missing-home-modules \
     < "$work/script" > "$work/log" 2>&1 || true
 
