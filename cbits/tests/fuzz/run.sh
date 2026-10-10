@@ -31,7 +31,10 @@ sources_for() {
 	canary)  echo "" ;;
 	ed25519) echo "cbits/ed25519/ed25519.c cbits/crypton_sha512.c" ;;
 	p256)    echo "cbits/p256/p256.c cbits/p256/p256_ec.c" ;;
-	aead)    echo "cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c" ;;
+	aead)    echo "cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c
+	               cbits/bearssl/aes_ct64.c cbits/bearssl/aes_ct64_enc.c
+	               cbits/bearssl/aes_ct64_dec.c cbits/bearssl/ghash_ctmul64.c
+	               cbits/bearssl/dec32le.c" ;;
 	decaf)   echo "$D/ed448goldilocks/decaf_all.c $D/ed448goldilocks/eddsa.c
 	               $D/ed448goldilocks/scalar.c $D/p448/f_arithmetic.c
 	               $D/p448/f_generic.c $D/utils.c
