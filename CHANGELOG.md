@@ -1,5 +1,12 @@
 # CHANGELOG for crypton
 
+## 2.1.10
+
+* build: ask the processor for AES-NI on every x86 system, not four of them
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+* fix: ask one place which ARMv8 instruction sets the machine has
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+
 ## 2.1.9
 
 * feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
