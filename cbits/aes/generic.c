@@ -45,6 +45,7 @@
 #include <string.h>
 #include <crypton_aes.h>
 #include "bearssl/inner.h"
+#include "aes/block128.h"
 #include "aes/generic.h"
 
 /*
@@ -59,58 +60,86 @@
  * happens to give it.
  */
 #define COMP_SKEY_WORDS 30
-#define SKEY_WORDS      120
 
-static void expand(uint64_t *sk_exp, const aes_key *key)
+void crypton_aes_generic_schedule(aes_sched *sched, const aes_key *key)
 {
 	uint64_t comp_skey[COMP_SKEY_WORDS];
 
 	memcpy(comp_skey, key->data, sizeof comp_skey);
-	br_aes_ct64_skey_expand(sk_exp, key->nbr, comp_skey);
+	sched->nbr = key->nbr;
+	br_aes_ct64_skey_expand(sched->sk_exp, sched->nbr, comp_skey);
 }
 
-static void one_block(aes_block *output, aes_key *key, aes_block *input,
-                      int decrypt)
+/*
+ * Up to four blocks through the bitsliced core at once.  Fewer than four is
+ * the same work as four -- the lanes are there whether anything is in them
+ * -- so a caller with four to offer gets them for what one used to cost.
+ */
+static void pass(uint8_t *output, const uint8_t *input, unsigned n,
+                 const aes_sched *sched, int decrypt)
 {
-	uint64_t sk_exp[SKEY_WORDS];
-	const uint8_t *in = (const uint8_t *) input;
-	uint8_t *out = (uint8_t *) output;
-	uint32_t w[4];
+	uint32_t w[16];
 	uint64_t q[8];
+	unsigned i;
 
-	expand(sk_exp, key);
+	memset(w, 0, sizeof w);
+	for (i = 0; i < n; i++) {
+		w[4 * i]     = br_dec32le(input + 16 * i);
+		w[4 * i + 1] = br_dec32le(input + 16 * i + 4);
+		w[4 * i + 2] = br_dec32le(input + 16 * i + 8);
+		w[4 * i + 3] = br_dec32le(input + 16 * i + 12);
+	}
 
-	w[0] = br_dec32le(in);
-	w[1] = br_dec32le(in + 4);
-	w[2] = br_dec32le(in + 8);
-	w[3] = br_dec32le(in + 12);
-
-	/* three of the four lanes go unused: a caller with four blocks to
-	 * offer reaches the wide entry points instead */
-	memset(q, 0, sizeof q);
-	br_aes_ct64_interleave_in(&q[0], &q[4], w);
+	for (i = 0; i < 4; i++)
+		br_aes_ct64_interleave_in(&q[i], &q[i + 4], w + 4 * i);
 	br_aes_ct64_ortho(q);
 	if (decrypt)
-		br_aes_ct64_bitslice_decrypt(key->nbr, sk_exp, q);
+		br_aes_ct64_bitslice_decrypt(sched->nbr, sched->sk_exp, q);
 	else
-		br_aes_ct64_bitslice_encrypt(key->nbr, sk_exp, q);
+		br_aes_ct64_bitslice_encrypt(sched->nbr, sched->sk_exp, q);
 	br_aes_ct64_ortho(q);
-	br_aes_ct64_interleave_out(w, q[0], q[4]);
+	for (i = 0; i < 4; i++)
+		br_aes_ct64_interleave_out(w + 4 * i, q[i], q[i + 4]);
 
-	br_enc32le(out, w[0]);
-	br_enc32le(out + 4, w[1]);
-	br_enc32le(out + 8, w[2]);
-	br_enc32le(out + 12, w[3]);
+	for (i = 0; i < n; i++) {
+		br_enc32le(output + 16 * i,      w[4 * i]);
+		br_enc32le(output + 16 * i + 4,  w[4 * i + 1]);
+		br_enc32le(output + 16 * i + 8,  w[4 * i + 2]);
+		br_enc32le(output + 16 * i + 12, w[4 * i + 3]);
+	}
+}
+
+void crypton_aes_generic_blocks(uint8_t *output, const uint8_t *input,
+                                uint32_t nb_blocks, const aes_sched *sched,
+                                int decrypt)
+{
+	while (nb_blocks >= 4) {
+		pass(output, input, 4, sched, decrypt);
+		output += 64;
+		input += 64;
+		nb_blocks -= 4;
+	}
+	if (nb_blocks > 0)
+		pass(output, input, (unsigned) nb_blocks, sched, decrypt);
+}
+
+static void one(aes_block *output, aes_key *key, aes_block *input, int decrypt)
+{
+	aes_sched sched;
+
+	crypton_aes_generic_schedule(&sched, key);
+	crypton_aes_generic_blocks((uint8_t *) output, (const uint8_t *) input,
+	                           1, &sched, decrypt);
 }
 
 void crypton_aes_generic_encrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
-	one_block(output, key, input, 0);
+	one(output, key, input, 0);
 }
 
 void crypton_aes_generic_decrypt_block(aes_block *output, aes_key *key, aes_block *input)
 {
-	one_block(output, key, input, 1);
+	one(output, key, input, 1);
 }
 
 void crypton_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size)
@@ -126,4 +155,63 @@ void crypton_aes_generic_init(aes_key *key, uint8_t *origkey, uint8_t size)
 
 	key->nbr = (uint8_t) nbr;
 	memcpy(key->data, comp_skey, sizeof comp_skey);
+}
+
+/*
+ * CTR, four counter blocks at a time.  The counter itself is serial, but
+ * nothing about it depends on the keystream, so the four blocks it will
+ * reach next can be written down before any of them is encrypted.
+ */
+static void ctr(uint8_t *output, aes_key *key, aes_block *iv,
+                uint8_t *input, uint32_t len, int c32)
+{
+	aes_sched sched;
+	aes_block counter;
+	uint8_t ks[64];
+	uint32_t nb_blocks = len / 16;
+	uint32_t tail = len % 16;
+	uint32_t i;
+
+	crypton_aes_generic_schedule(&sched, key);
+	block128_copy(&counter, iv);
+
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+
+		for (i = 0; i < n; i++) {
+			block128_copy((block128 *) (ks + 16 * i), &counter);
+			if (c32)
+				block128_inc32_le(&counter);
+			else
+				block128_inc_be(&counter);
+		}
+		crypton_aes_generic_blocks(ks, ks, n, &sched, 0);
+		for (i = 0; i < n * 16; i++)
+			output[i] = ks[i] ^ input[i];
+
+		output += n * 16;
+		input += n * 16;
+		nb_blocks -= n;
+	}
+
+	if (tail != 0) {
+		block128_copy((block128 *) ks, &counter);
+		crypton_aes_generic_blocks(ks, ks, 1, &sched, 0);
+		for (i = 0; i < tail; i++)
+			output[i] = ks[i] ^ input[i];
+	}
+}
+
+void crypton_aes_bitsliced_encrypt_ctr(uint8_t *output, aes_key *key,
+                                       aes_block *iv, uint8_t *input,
+                                       uint32_t len)
+{
+	ctr(output, key, iv, input, len, 0);
+}
+
+void crypton_aes_bitsliced_encrypt_c32(uint8_t *output, aes_key *key,
+                                       aes_block *iv, uint8_t *input,
+                                       uint32_t len)
+{
+	ctr(output, key, iv, input, len, 1);
 }

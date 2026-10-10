@@ -28,6 +28,15 @@
 #include "crypton_aes.h"
 #include "aes/generic.h"
 #include "aes/gf.h"
+#include "aes/block128.h"
+
+/*
+ * crypton_aes.c's table, which is a global, and the three key sizes of the
+ * two CTR entries this looks for in it.  Searching rather than indexing
+ * because the index is an enum private to that file.
+ */
+#define BRANCH_TABLE_SEARCH 64
+extern void *crypton_aes_branch_table[];
 
 /* ---- the vendored code, one block at a time, as aes_ct64_cbcenc.c does ---- */
 
@@ -208,6 +217,109 @@ int main(int argc, char **argv)
 		crypton_aes_generic_gf_mul4(&acc, (const block128 *) data, ht);
 		if (sabotage && round == 11) y1[0] ^= 0x40;
 		same("gf_mul4", y1, (const uint8_t *) &acc, 16);
+	}
+
+	/*
+	 * And that the wide entries are the ones installed.  Nothing else
+	 * here would notice if they were not: the entries they replace are
+	 * correct too, just a block at a time, so every answer above would
+	 * be the same and only the speed would be gone.
+	 */
+	/*
+	 * The Haskell suite reaches the four-block pass, but thinly: its
+	 * vectors are mostly a block or three long, and breaking that pass
+	 * alone fails sixteen of its examples where breaking every pass
+	 * fails seven hundred.  So the lane logic and the counter are
+	 * covered here instead, where the lengths can be chosen.
+	 */
+	printf("== many blocks at a pass against one at a time ==\n");
+	for (round = 0; round < 200; round++) {
+		uint8_t key[32], in[16 * 9], wide[16 * 9], single[16 * 9];
+		size_t kl = klens[round % 3];
+		uint32_t nb = 1 + (round % 9);
+		aes_sched sched;
+		aes_key ck;
+		uint32_t i;
+		int dec = round & 1;
+
+		rnd_fill(key, kl);
+		rnd_fill(in, nb * 16);
+		crypton_aes_generic_init(&ck, key, (uint8_t) kl);
+
+		crypton_aes_generic_schedule(&sched, &ck);
+		crypton_aes_generic_blocks(wide, in, nb, &sched, dec);
+
+		for (i = 0; i < nb; i++) {
+			if (dec)
+				crypton_aes_generic_decrypt_block(
+				    (aes_block *) (single + 16 * i), &ck,
+				    (aes_block *) (in + 16 * i));
+			else
+				crypton_aes_generic_encrypt_block(
+				    (aes_block *) (single + 16 * i), &ck,
+				    (aes_block *) (in + 16 * i));
+		}
+		if (sabotage && round == 5) wide[16] ^= 2;
+		same("wide pass", wide, single, nb * 16);
+	}
+
+	printf("== the four-block CTR against one block at a time ==\n");
+	for (round = 0; round < 200; round++) {
+		uint8_t key[32], iv[16], in[200], got[200], want[200];
+		size_t kl = klens[round % 3];
+		/* lengths that land on, before and after a group of four */
+		uint32_t len = 1 + (round % 200);
+		aes_key ck;
+		aes_block counter, ks;
+		uint32_t done, n, i;
+		int c32 = round & 1;
+
+		rnd_fill(key, kl);
+		rnd_fill(iv, 16);
+		rnd_fill(in, len);
+		crypton_aes_generic_init(&ck, key, (uint8_t) kl);
+
+		if (c32)
+			crypton_aes_bitsliced_encrypt_c32(got, &ck,
+			    (aes_block *) iv, in, len);
+		else
+			crypton_aes_bitsliced_encrypt_ctr(got, &ck,
+			    (aes_block *) iv, in, len);
+
+		block128_copy(&counter, (block128 *) iv);
+		for (done = 0; done < len; done += 16) {
+			crypton_aes_generic_encrypt_block(&ks, &ck, &counter);
+			n = len - done < 16 ? len - done : 16;
+			for (i = 0; i < n; i++)
+				want[done + i] = ((uint8_t *) &ks)[i]
+				               ^ in[done + i];
+			if (c32)
+				block128_inc32_le(&counter);
+			else
+				block128_inc_be(&counter);
+		}
+		if (sabotage && round == 9) got[len - 1] ^= 4;
+		same("ctr", got, want, len);
+	}
+
+	printf("== the branch table took the four-block CTR ==\n");
+	{
+		int i, ctr = 0, c32 = 0;
+
+		for (i = 0; i < BRANCH_TABLE_SEARCH; i++) {
+			if (crypton_aes_branch_table[i] ==
+			    (void *) crypton_aes_bitsliced_encrypt_ctr)
+				ctr++;
+			if (crypton_aes_branch_table[i] ==
+			    (void *) crypton_aes_bitsliced_encrypt_c32)
+				c32++;
+		}
+		printf("  CTR entries %d, C32 entries %d\n", ctr, c32);
+		if (sabotage) { ctr = 0; }
+		if (ctr != 3 || c32 != 3) {
+			printf("  MISMATCH the portable CTR entries were not installed\n");
+			failures++;
+		}
 	}
 
 	printf("%s: %d mismatch(es)%s\n",

@@ -436,6 +436,27 @@ static void initialize_table_armv8(void)
  * A constructor runs while there is one thread, which is the cheapest way to
  * have no race at all: no flag to test, no lock to take, and one less thing
  * for crypton_aes_initkey to do per key. */
+/*
+ * The two CTR entries, where the portable implementation is the one that
+ * will run.
+ *
+ * They cannot be the defaults.  crypton_aes_generic_encrypt_c32 is not
+ * overridden on AArch64 -- the ARMv8 table has no C32 of its own -- and
+ * neither CCM nor OCB is overridden anywhere, so those reach the block
+ * function through the branch table and work whatever is installed.  A CTR
+ * that read the portable schedule directly would be wrong on exactly those
+ * machines.  So these go in only once nothing has claimed AES.
+ */
+static void initialize_table_bitsliced(void)
+{
+	crypton_aes_branch_table[ENCRYPT_CTR_128] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_CTR_192] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_CTR_256] = crypton_aes_bitsliced_encrypt_ctr;
+	crypton_aes_branch_table[ENCRYPT_C32_128] = crypton_aes_bitsliced_encrypt_c32;
+	crypton_aes_branch_table[ENCRYPT_C32_192] = crypton_aes_bitsliced_encrypt_c32;
+	crypton_aes_branch_table[ENCRYPT_C32_256] = crypton_aes_bitsliced_encrypt_c32;
+}
+
 static void crypton_aes_cpu_setup(void)
 {
 #if defined(ARCH_X86) && defined(WITH_AESNI)
@@ -444,6 +465,8 @@ static void crypton_aes_cpu_setup(void)
 #ifdef WITH_ARMV8_CRYPTO
 	initialize_table_armv8();
 #endif
+	if (crypton_aes_cpu_options[CPU_AESNI] == 0)
+		initialize_table_bitsliced();
 }
 
 __attribute__((constructor))
@@ -1132,18 +1155,30 @@ void crypton_aes_ocb_finish(uint8_t *tag, aes_ocb *ocb, aes_key *key)
 	block128_xor((block128 *) tag, &ocb->sum_aad);
 }
 
+/*
+ * These three reach cbits/aes/generic.c directly rather than through the
+ * branch table, so they run only where the portable implementation was the
+ * one installed -- which is what lets them read its schedule and hand its
+ * core four blocks at a time.  The CTR entries below cannot do the same:
+ * they go through the branch table for the block, and so run on accelerated
+ * machines too.
+ */
 void crypton_aes_generic_encrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		crypton_aes_generic_encrypt_block(output, key, input);
-	}
+	aes_sched sched;
+
+	crypton_aes_generic_schedule(&sched, key);
+	crypton_aes_generic_blocks((uint8_t *) output, (const uint8_t *) input,
+	                           nb_blocks, &sched, 0);
 }
 
 void crypton_aes_generic_decrypt_ecb(aes_block *output, aes_key *key, aes_block *input, uint32_t nb_blocks)
 {
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		crypton_aes_generic_decrypt_block(output, key, input);
-	}
+	aes_sched sched;
+
+	crypton_aes_generic_schedule(&sched, key);
+	crypton_aes_generic_blocks((uint8_t *) output, (const uint8_t *) input,
+	                           nb_blocks, &sched, 1);
 }
 
 void crypton_aes_generic_encrypt_cbc(aes_block *output, aes_key *key, aes_block *iv, aes_block *input, uint32_t nb_blocks)
@@ -1159,18 +1194,35 @@ void crypton_aes_generic_encrypt_cbc(aes_block *output, aes_key *key, aes_block 
 	}
 }
 
+/*
+ * Decryption, unlike encryption, does not wait for the block before it:
+ * every ciphertext block is ready at once and the chaining is a XOR
+ * afterwards.  So four at a pass, with the ciphertext copied aside first,
+ * since the caller is allowed to decrypt in place and the next group's IV
+ * is the last ciphertext block of this one.
+ */
 void crypton_aes_generic_decrypt_cbc(aes_block *output, aes_key *key, aes_block *ivini, aes_block *input, uint32_t nb_blocks)
 {
-	aes_block block, blocko;
+	aes_sched sched;
 	aes_block iv;
+	uint8_t ct[64], plain[64];
 
-	/* preload IV in block */
+	crypton_aes_generic_schedule(&sched, key);
 	block128_copy(&iv, ivini);
-	for ( ; nb_blocks-- > 0; input++, output++) {
-		block128_copy(&block, (block128 *) input);
-		crypton_aes_generic_decrypt_block(&blocko, key, &block);
-		block128_vxor((block128 *) output, &blocko, &iv);
-		block128_copy(&iv, &block);
+	while (nb_blocks > 0) {
+		uint32_t n = nb_blocks < 4 ? nb_blocks : 4;
+		uint32_t i;
+
+		memcpy(ct, input, n * 16);
+		crypton_aes_generic_blocks(plain, ct, n, &sched, 1);
+		for (i = 0; i < n; i++) {
+			block128_vxor((block128 *) (output + i),
+			              (block128 *) (plain + 16 * i), &iv);
+			block128_copy(&iv, (block128 *) (ct + 16 * i));
+		}
+		input += n;
+		output += n;
+		nb_blocks -= n;
 	}
 }
 
