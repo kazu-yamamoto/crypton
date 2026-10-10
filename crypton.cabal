@@ -177,6 +177,8 @@ extra-source-files:
     cbits/tests/scrub/README
     cbits/tests/scrub/known.txt
     cbits/tests/scrub/run.sh
+    cbits/tests/sysdrg/*.c
+    cbits/tests/sysdrg/run.sh
     cbits/tests/width/*.c
     cbits/tests/width/run.sh
     tests/*.hs
