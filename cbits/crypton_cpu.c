@@ -60,7 +60,7 @@ CRYPTON_HIDDEN unsigned int crypton_armcap_P =
     CRYPTON_ARMCAP_NEON;
 #endif
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__arm__)
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #elif defined(__linux__)
@@ -71,14 +71,19 @@ CRYPTON_HIDDEN unsigned int crypton_armcap_P =
 #endif
 
 /*
- * The HWCAP bit positions are the ARM ELF ABI's, so every system that
- * reports through the auxiliary vector agrees on them.  What differs is
- * AT_HWCAP itself -- 16 on Linux, 25 on FreeBSD -- and that comes from each
- * system's own header, which is why the tag is never written out here.
- * Defined only where the system's headers did not define them, the way
- * compiler-rt does it, so that a system which reports through the auxiliary
- * vector without shipping the ARM names still compiles.
+ * The bit positions are the ARM ELF ABI's, so every system that reports
+ * through the auxiliary vector agrees on them.  What differs is the tag --
+ * AT_HWCAP is 16 on Linux and 25 on FreeBSD -- and that comes from each
+ * system's own header, which is why no tag is written out here.  Defined
+ * only where the system's headers did not define them, the way compiler-rt
+ * does it, so that a system which reports through the auxiliary vector
+ * without shipping the ARM names still compiles.
+ *
+ * The two execution states do not share a word or an order.  AArch64 puts
+ * these in AT_HWCAP; AArch32 has filled that word with older features and
+ * puts the cryptographic ones in AT_HWCAP2, starting again from bit zero.
  */
+#if defined(__aarch64__)
 #ifndef HWCAP_AES
 #define HWCAP_AES    (1 << 3)
 #endif
@@ -96,6 +101,20 @@ CRYPTON_HIDDEN unsigned int crypton_armcap_P =
 #endif
 #ifndef HWCAP_SHA512
 #define HWCAP_SHA512 (1 << 21)
+#endif
+#else
+#ifndef HWCAP2_AES
+#define HWCAP2_AES   (1 << 0)
+#endif
+#ifndef HWCAP2_PMULL
+#define HWCAP2_PMULL (1 << 1)
+#endif
+#ifndef HWCAP2_SHA1
+#define HWCAP2_SHA1  (1 << 2)
+#endif
+#ifndef HWCAP2_SHA2
+#define HWCAP2_SHA2  (1 << 3)
+#endif
 #endif
 
 #if defined(__APPLE__)
@@ -145,7 +164,7 @@ unsigned int crypton_arm_features(void)
 			f |= CRYPTON_ARM_SHA512;
 		if (apple_has("hw.optional.arm.FEAT_SHA3"))
 			f |= CRYPTON_ARM_SHA3;
-#else
+#elif defined(__aarch64__)
 		unsigned long cap = 0;
 
 #if defined(__linux__)
@@ -160,13 +179,28 @@ unsigned int crypton_arm_features(void)
 		if (cap & HWCAP_SHA2)   f |= CRYPTON_ARM_SHA2;
 		if (cap & HWCAP_SHA512) f |= CRYPTON_ARM_SHA512;
 		if (cap & HWCAP_SHA3)   f |= CRYPTON_ARM_SHA3;
+#else
+		/* AArch32: the second word, and nothing later than SHA-256 to
+		 * ask about */
+		unsigned long cap = 0;
+
+#if defined(__linux__)
+		cap = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+		if (elf_aux_info(AT_HWCAP2, &cap, sizeof(cap)) != 0)
+			cap = 0;
+#endif
+		if (cap & HWCAP2_AES)   f |= CRYPTON_ARM_AES;
+		if (cap & HWCAP2_PMULL) f |= CRYPTON_ARM_PMULL;
+		if (cap & HWCAP2_SHA1)  f |= CRYPTON_ARM_SHA1;
+		if (cap & HWCAP2_SHA2)  f |= CRYPTON_ARM_SHA2;
 #endif
 		features = f;
 		resolved = 1;
 	}
 	return features;
 }
-#endif /* __aarch64__ */
+#endif /* __aarch64__ || __arm__ */
 
 #ifdef ARCH_X86
 static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)

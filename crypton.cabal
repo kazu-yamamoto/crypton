@@ -755,6 +755,30 @@ library
         if !flag(use_target_attributes)
             cc-options: -march=armv8-a+crypto
 
+    -- The same instructions, reached from AArch32.  cbits/aes/armv8.c needs
+    -- nothing changed to compile here: every intrinsic it uses exists in both
+    -- execution states, including the PMULL2 it takes through
+    -- vmull_high_p64, which the compiler lowers to a pair of VMULL.P64.  What
+    -- differs is how the operating system reports the instructions --
+    -- AArch32 has filled AT_HWCAP with older features and puts these in
+    -- AT_HWCAP2 -- which cbits/crypton_cpu.c now asks for.
+    --
+    -- -mfpu is passed whatever use_target_attributes says, unlike the branch
+    -- above.  AArch32 names an FPU rather than an architecture extension and
+    -- the two compilers spell the function attribute for it differently; a
+    -- global option is safe here, since a compiler emits these instructions
+    -- where an intrinsic asks for them and nowhere else.
+    --
+    -- A soft-float ARM that cannot take -mfpu fails loudly at the first C
+    -- file rather than quietly, and -f-support_aesni is the way out.
+    if (flag(support_aesni) && arch(arm))
+        cc-options: -DWITH_ARMV8_CRYPTO -mfpu=crypto-neon-fp-armv8
+        c-sources:
+            cbits/aes/generic.c
+            cbits/aes/gf.c
+            cbits/aes/armv8.c
+            cbits/crypton_aes.c
+
     if arch(aarch64)
         cc-options:
             -DWITH_ARMV8_SHA1 -DWITH_ARMV8_SHA2 -DWITH_ARMV8_SHA3
@@ -880,7 +904,7 @@ library
     -- branch had already named every file it names.  Cabal drops the repeats,
     -- so nothing was built twice, but the line read as the fallback for a
     -- platform with no AES instructions and was not one.
-    if !((flag(support_aesni) && arch(aarch64)) || (flag(support_aesni) && (arch(i386) || arch(x86_64))))
+    if !((flag(support_aesni) && (arch(aarch64) || arch(arm))) || (flag(support_aesni) && (arch(i386) || arch(x86_64))))
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c

@@ -15,6 +15,8 @@
   [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
 * fix: compute the portable AES and GHASH without a table
   [#308](https://github.com/kazu-yamamoto/crypton/pull/308)
+* feat: use the AES instructions on 32-bit ARM
+  [#309](https://github.com/kazu-yamamoto/crypton/pull/309)
 
 ## 2.1.8
 

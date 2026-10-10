@@ -107,8 +107,13 @@ extern unsigned int crypton_armcap_P;
  * which systems someone had thought of.  It is what left FreeBSD running
  * the table-driven AES and the C SHA on hardware that has the
  * instructions.  In one place the next system is added once.
+ *
+ * AArch32 answers here too.  It has the same AES, PMULL, SHA-1 and SHA-256
+ * instructions, reports them in a different word of the auxiliary vector,
+ * and has no SHA-512 or SHA-3 to report at all -- those two are AArch64's
+ * alone, so the bits exist and are never set.
  */
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__arm__)
 #define CRYPTON_ARM_AES    (1u << 0)
 #define CRYPTON_ARM_PMULL  (1u << 1)
 #define CRYPTON_ARM_SHA1   (1u << 2)
