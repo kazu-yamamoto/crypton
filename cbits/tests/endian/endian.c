@@ -25,6 +25,9 @@
 #include "crypton_chacha.h"
 #include "crypton_salsa.h"
 #include "crypton_poly1305.h"
+#include "crypton_aes.h"
+#include "aes/gf.h"
+#include "aes/block128.h"
 
 /* The skein headers spell the prefix "cryponite", which nothing defines. */
 void crypton_skein256_init(struct skein256_ctx *ctx, uint32_t hashlen);
@@ -91,6 +94,131 @@ static void fill(void) {
             answer(nmbuf, out, outlen);                                     \
         }                                                                   \
     } while (0)
+
+/*
+ * AES, which reaches further into the byte order than the hashes above do.
+ *
+ * The portable implementation keeps its schedule as 64-bit words and reads
+ * its input through br_dec32le; the GHASH beside it reads H and the
+ * accumulator as big-endian words; the counter modes carry a counter that is
+ * incremented big-endian and stored little-endian in one case and the other
+ * way round in another; and XTS doubles its tweak in GF(2^128) through
+ * cpu_to_le64.  Every one of those is a place where a big-endian machine can
+ * differ, and none of them was asked about here until now.
+ *
+ * The entries called are the public ones, so this is whichever
+ * implementation the build installed -- which, for the build this harness
+ * makes, is the portable one.  That is the one a big-endian machine runs:
+ * crypton has no AES instructions for s390x, and the POWER8 ones are
+ * little-endian only.
+ */
+static void aes_answers(void) {
+    static const uint8_t keylens[] = {16, 24, 32};
+    /* multiples of the block, for the modes that take whole blocks */
+    static const uint32_t blocks[] = {1, 2, 4, 7};
+    /* and byte counts, including a partial block, for the ones that do not */
+    static const uint32_t bytes[] = {0, 1, 15, 16, 17, 64, 100};
+    uint8_t key[32], key2[32], iv[16], out[128], tmp[128];
+    char nm[128];
+    size_t ki, li;
+    uint32_t i;
+
+    for (i = 0; i < 32; i++) { key[i] = (uint8_t)(i * 3 + 1);
+                               key2[i] = (uint8_t)(i * 5 + 2); }
+    for (i = 0; i < 16; i++) iv[i] = (uint8_t)(i * 11 + 7);
+
+    for (ki = 0; ki < sizeof keylens / sizeof *keylens; ki++) {
+        uint8_t kl = keylens[ki];
+        aes_key k, k2;
+        aes_gcm_key gk;
+
+        crypton_aes_initkey(&k, key, kl);
+        crypton_aes_initkey(&k2, key2, kl);
+        crypton_aes_gcm_key_init(&gk, &k);
+
+        for (li = 0; li < sizeof blocks / sizeof *blocks; li++) {
+            uint32_t nb = blocks[li];
+            aes_block ivb;
+
+            crypton_aes_encrypt_ecb((aes_block *)out, &k, (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-ecb/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            crypton_aes_decrypt_ecb((aes_block *)out, &k, (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-ecbd/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            memcpy(&ivb, iv, 16);
+            crypton_aes_encrypt_cbc((aes_block *)out, &k, &ivb, (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-cbc/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            memcpy(&ivb, iv, 16);
+            crypton_aes_decrypt_cbc((aes_block *)out, &k, &ivb, (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-cbcd/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            memcpy(&ivb, iv, 16);
+            crypton_aes_encrypt_xts((aes_block *)out, &k, &k2, &ivb, 0,
+                                    (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-xts/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            memcpy(&ivb, iv, 16);
+            crypton_aes_decrypt_xts((aes_block *)out, &k, &k2, &ivb, 0,
+                                    (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-xtsd/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+
+            /* a starting point too, since that is extra tweak doubling */
+            memcpy(&ivb, iv, 16);
+            crypton_aes_encrypt_xts((aes_block *)out, &k, &k2, &ivb, 3,
+                                    (aes_block *)buf, nb);
+            snprintf(nm, sizeof nm, "aes%u-xts-sp3/%u", kl * 8, nb);
+            answer(nm, out, nb * 16);
+        }
+
+        for (li = 0; li < sizeof bytes / sizeof *bytes; li++) {
+            uint32_t n = bytes[li];
+            aes_block ivb;
+
+            memcpy(&ivb, iv, 16);
+            crypton_aes_encrypt_ctr(out, &k, &ivb, buf, n);
+            snprintf(nm, sizeof nm, "aes%u-ctr/%u", kl * 8, n);
+            answer(nm, out, n);
+
+            /* the tag goes after the ciphertext, so this answers for both */
+            crypton_aes_gcm_full_encrypt(out, &gk, &k, iv, 12, buf, 13,
+                                         buf, n, 16);
+            snprintf(nm, sizeof nm, "aes%u-gcm/%u", kl * 8, n);
+            answer(nm, out, n + 16);
+        }
+    }
+
+    /* GHASH and POLYVAL on their own, which the modes above reach only
+     * through whatever length they were given */
+    {
+        table_4bit ht;
+        block128 acc;
+        aes_polyval pv;
+
+        crypton_aes_generic_hinit(ht, (const block128 *)buf);
+        memcpy(&acc, buf + 16, 16);
+        crypton_aes_generic_gf_mul(&acc, ht);
+        answer("ghash-mul", (const uint8_t *)&acc, 16);
+
+        crypton_aes_generic_hinit(ht, (const block128 *)buf);
+        memcpy(&acc, buf + 16, 16);
+        crypton_aes_generic_gf_mul4(&acc, (const block128 *)(buf + 32), ht);
+        answer("ghash-mul4", (const uint8_t *)&acc, 16);
+
+        memcpy(tmp, buf, 16);
+        crypton_aes_polyval_init(&pv, (const aes_block *)tmp);
+        crypton_aes_polyval_update(&pv, buf + 16, 64);
+        crypton_aes_polyval_finalize(&pv, (aes_block *)out);
+        answer("polyval", out, 16);
+    }
+}
 
 int main(int argc, char **argv) {
     generating = (argc > 1 && strcmp(argv[1], "generate") == 0);
@@ -182,6 +310,8 @@ int main(int argc, char **argv) {
             answer(nmbuf, mac, sizeof mac);
         }
     }
+
+    aes_answers();
 
     if (!generating && failures == 0)
         printf("ok   %d answers match the little-endian ones\n", checked);

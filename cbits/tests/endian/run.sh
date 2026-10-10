@@ -6,6 +6,14 @@
 # loaders in crypton_align.h -- rewritten from word-typed casts to memcpy in
 # #256 -- and eight more decide something from the byte order themselves.
 #
+# AES is here as well, and it reaches further into the byte order than the
+# hashes do: a schedule kept as 64-bit words, a GHASH that reads H and its
+# accumulator as big-endian words, counters incremented one way and stored
+# the other, and an XTS tweak doubled through cpu_to_le64.  It is the
+# portable implementation that answers, which is what a big-endian machine
+# runs: crypton has no AES instructions for s390x, and the POWER8 ones are
+# little-endian only.
+#
 # The two sides cannot be compared in one run the way the 32-bit harness
 # compares two builds, because the machine doing the comparing has only one
 # byte order.  So the answers are frozen: vectors.txt is what this code gives
@@ -26,7 +34,11 @@ srcs="cbits/crypton_md4.c cbits/crypton_md5.c cbits/crypton_sha1.c
       cbits/crypton_sha256.c cbits/crypton_sha512.c cbits/crypton_sha3.c
       cbits/crypton_ripemd.c cbits/crypton_skein256.c cbits/crypton_skein512.c
       cbits/crypton_tiger.c cbits/crypton_whirlpool.c
-      cbits/crypton_chacha.c cbits/crypton_salsa.c cbits/crypton_poly1305.c"
+      cbits/crypton_chacha.c cbits/crypton_salsa.c cbits/crypton_poly1305.c
+      cbits/crypton_aes.c cbits/aes/generic.c cbits/aes/gf.c
+      cbits/bearssl/aes_ct64.c cbits/bearssl/aes_ct64_enc.c
+      cbits/bearssl/aes_ct64_dec.c cbits/bearssl/ghash_ctmul64.c
+      cbits/bearssl/dec32le.c"
 
 # Generating is done under the sanitizers, since a driver that writes out of
 # bounds would otherwise freeze whatever it happened to leave behind.  That
@@ -38,7 +50,7 @@ if [ "$mode" = generate ]; then
 fi
 
 # shellcheck disable=SC2086
-$cc -O2 -g $san -Icbits -Icbits/include64 -o "$out/endian" \
+$cc -O2 -g $san -Icbits -Icbits/aes -Icbits/include64 -o "$out/endian" \
 	cbits/tests/endian/endian.c $srcs
 
 if [ "$mode" = generate ]; then
