@@ -3,16 +3,11 @@
 ## 2.2.0
 
 * feat: name every processor feature crypton dispatches on, not three of them
+  [#302](https://github.com/kazu-yamamoto/crypton/pull/302)
 * fix: an AArch64 machine no longer reports AESNI and PCLMUL
-* feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
+  [#302](https://github.com/kazu-yamamoto/crypton/pull/302)
 * chore(rsa): deprecate `sign`, `signSafer` and `verify` in favour of them
-* feat(dsa): sign and verify over a digest
-* feat(elgamal): sign and verify over a digest
-* feat(rabin): Rabin-Williams and Modified Rabin sign and verify over a digest
-* build: ask the processor for AES-NI on every x86 system, not four of them
-  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
-* fix: ask one place which ARMv8 instruction sets the machine has
-  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
 * fix: compute the portable AES and GHASH without a table
   [#308](https://github.com/kazu-yamamoto/crypton/pull/308)
 * feat: use the AES instructions on 32-bit ARM
@@ -23,6 +18,24 @@
   [#311](https://github.com/kazu-yamamoto/crypton/pull/311)
 * test: the big-endian harness now asks about AES
   [#312](https://github.com/kazu-yamamoto/crypton/pull/312)
+
+## 2.1.10
+
+* build: ask the processor for AES-NI on every x86 system, not four of them
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+* fix: ask one place which ARMv8 instruction sets the machine has
+  [#307](https://github.com/kazu-yamamoto/crypton/pull/307)
+
+## 2.1.9
+
+* feat(rsa): PKCS#1 v1.5 operations that take a digest, and ones that take a DigestInfo
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
+* feat(dsa): sign and verify over a digest
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
+* feat(elgamal): sign and verify over a digest
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
+* feat(rabin): Rabin-Williams and Modified Rabin sign and verify over a digest
+  [#305](https://github.com/kazu-yamamoto/crypton/pull/305)
 
 ## 2.1.8
 
