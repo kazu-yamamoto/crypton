@@ -197,6 +197,23 @@ jobs:
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
 
+    # Crypto/Tutorial.hs is the one module in the package whose code the
+    # compiler never sees: every example in it is a Haddock block, so an API
+    # change leaves it saying something the library no longer agrees with
+    # and nothing here says so.  That has happened -- taking a checked key
+    # in Poly1305 stopped the tutorial's crypto_box type-checking, and it
+    # was caught by reading the module rather than by any job above.  The
+    # blocks are extracted and type-checked against this tree, and the first
+    # one is wrong on purpose and has to be reported, since an extractor
+    # that produced nothing would otherwise look like a tutorial that
+    # compiles.
+    #
+    # On the oldest compiler in the matrix, because the reader who finds out
+    # otherwise is the one on the oldest GHC this package supports.
+    - name: The examples nobody compiles
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.2'
+      run: tests/tutorial/run.sh
+
     # The vendored assembly is x86-64 and AArch64 only, and every other
     # architecture -- i386, armv7, riscv64, ppc64le, s390x, loongarch64,
     # sparc64 -- takes the C beside it: crypton's own P-256 comb and window,
