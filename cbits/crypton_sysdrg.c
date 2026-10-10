@@ -2,9 +2,9 @@
  * The generator behind MonadRandom IO.
  *
  * A ChaCha20 DRBG per operating system thread, seeded from a process-wide
- * DRBG, which is itself seeded from the system entropy pool with RDRAND
- * mixed in where there is one.  This is the shape RFC 9180's neighbours and
- * the other libraries have settled on, and it was asked for in #298.
+ * DRBG, which is itself seeded from the system entropy pool.  This is the
+ * shape RFC 9180's neighbours and the other libraries have settled on, and
+ * it was asked for in #298.
  *
  * Per operating system thread and not per Haskell thread: a forkIO thread
  * moves between capabilities, so state kept against it would be shared by
@@ -37,13 +37,9 @@
 #include <unistd.h>
 #endif
 
-/* from crypton_sysrandom.c and crypton_rdrand.c */
+/* from crypton_sysrandom.c */
 int crypton_sysrandom_available(void);
 int crypton_sysrandom_bytes(uint8_t *buf, int len);
-#ifdef SUPPORT_RDRAND
-int crypton_cpu_has_rdrand(void);
-int crypton_get_rand_bytes(uint8_t *buffer, size_t len);
-#endif
 
 #define CHACHA_ROUNDS      20
 #define SEED_KEY           32
@@ -85,9 +81,10 @@ static void scrub(void *p, size_t n)
 /*
  * Seed material for the process DRBG.
  *
- * Every source goes through SHA-512 rather than into the key directly, so
- * that a source which turns out to be weak cannot determine the result on
- * its own.  That is what #298 asks of RDRAND: mixed in, never alone.
+ * What the system gives goes through SHA-512 rather than into the key
+ * directly, so that the key is a fixed size whatever the call returns, and
+ * so that a second source could be added without any of this changing shape.
+ * There is one source today and the note below says why.
  */
 static int seed_from_system(uint8_t out[SEED_LEN])
 {
@@ -98,10 +95,28 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 
 	crypton_sha512_init(&h);
 
-	/* The system call only.  Where there is none -- an old kernel, a BSD
+	/*
+	 * The system call only.  Where there is none -- an old kernel, a BSD
 	 * this does not know -- seeding fails and the caller keeps the path
 	 * it has, rather than this file growing a second copy of the device
-	 * reading that Crypto.Random.Entropy.Unix already does. */
+	 * reading that Crypto.Random.Entropy.Unix already does.
+	 *
+	 * And RDRAND is not mixed in beside it, which it was until
+	 * @vdukhovni pointed out that it cannot add anything: every system
+	 * this code runs on already feeds RDRAND into the pool the call below
+	 * draws from.  Linux does that whatever random.trust_cpu says -- that
+	 * setting decides whether the contribution is *credited*, not whether
+	 * it is mixed -- so the instruction's output is in this buffer
+	 * already.
+	 *
+	 * The argument for keeping it was defence in depth against that pool
+	 * having gone wrong.  It does not survive the above: a pool that has
+	 * gone wrong has gone wrong with RDRAND already in it, so asking the
+	 * instruction a second time covers only the case where the kernel's
+	 * mixing is broken and the instruction is not.  That is not worth a
+	 * second code path, a flag, and the standing invitation to read this
+	 * as a second source when it is the same one twice.
+	 */
 	got = crypton_sysrandom_available() ? crypton_sysrandom_bytes(buf, 64) : 0;
 	if (got <= 0) {
 		/* Nothing else here is a seed on its own, so there is nothing to
@@ -113,18 +128,6 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	}
 	crypton_sha512_update(&h, buf, (uint32_t) got);
 
-#ifdef SUPPORT_RDRAND
-	/* Defence in depth rather than a second source.  On Linux the kernel
-	 * already feeds RDRAND and RDSEED into the pool the call above draws
-	 * from, so this is not independent of it; what it covers is that pool
-	 * having gone wrong.  It is never asked alone -- the return above saw
-	 * to that -- and it is not counted anywhere as entropy obtained. */
-	if (crypton_cpu_has_rdrand()) {
-		got = crypton_get_rand_bytes(buf, 32);
-		if (got > 0)
-			crypton_sha512_update(&h, buf, (uint32_t) got);
-	}
-#endif
 
 	crypton_sha512_finalize(&h, digest);
 	memcpy(out, digest, SEED_LEN);

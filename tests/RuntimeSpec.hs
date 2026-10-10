@@ -23,7 +23,7 @@ import Crypto.System.CPU (
 -- cover.
 x86Options :: [ProcessorOption]
 x86Options =
-    [AESNI, PCLMUL, RDRAND, SSSE3, AVX, AVX2, SHANI, MOVBE, ADX, VAES, VAES512]
+    [AESNI, PCLMUL, SSSE3, AVX, AVX2, SHANI, MOVBE, ADX, VAES, VAES512]
 
 armOptions :: [ProcessorOption]
 armOptions = [NEON, ARMAES, ARMPMULL, ARMSHA1, ARMSHA2, ARMSHA512]

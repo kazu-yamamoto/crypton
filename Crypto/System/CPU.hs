@@ -18,7 +18,6 @@ module Crypto.System.CPU (
         -- x86
         AESNI,
         PCLMUL,
-        RDRAND,
         SSSE3,
         AVX,
         AVX2,
@@ -49,16 +48,7 @@ import Control.Monad (filterM)
 import Data.List (sort)
 import Data.Word (Word16)
 import Foreign.C.Types (CInt (..), CUInt (..))
-#ifdef SUPPORT_RDRAND
-import Data.Maybe (isJust)
-#endif
-
 import Crypto.Internal.Compat
-
-#ifdef SUPPORT_RDRAND
-import Crypto.Random.Entropy.RDRand
-import Crypto.Random.Entropy.Source
-#endif
 
 -- | A processor feature crypton looked for, and dispatches on where it
 -- finds it.
@@ -89,10 +79,6 @@ pattern AESNI = ProcessorOption 0
 -- | Support for CLMUL instructions, with flag @support_pclmuldq@.
 pattern PCLMUL :: ProcessorOption
 pattern PCLMUL = ProcessorOption 1
-
--- | Support for the RDRAND instruction, with flag @support_rdrand@.
-pattern RDRAND :: ProcessorOption
-pattern RDRAND = ProcessorOption 2
 
 -- | Supplemental SSE3.
 pattern SSSE3 :: ProcessorOption
@@ -167,7 +153,6 @@ pattern PPCVPMSUM = ProcessorOption 18
 instance Show ProcessorOption where
     show AESNI = "AESNI"
     show PCLMUL = "PCLMUL"
-    show RDRAND = "RDRAND"
     show SSSE3 = "SSSE3"
     show AVX = "AVX"
     show AVX2 = "AVX2"
@@ -193,14 +178,12 @@ instance Show ProcessorOption where
 -- architecture only: an AArch64 processor with AES says 'ARMAES', not
 -- 'AESNI', which it does not have.
 processorOptions :: [ProcessorOption]
-processorOptions = unsafeDoIO $ do
-    fromCPU <- filterM askC allOptions
-    rdrand <- hasRDRand
-    return (sort (fromCPU ++ [RDRAND | rdrand]))
+processorOptions = unsafeDoIO (sort <$> filterM askC allOptions)
   where
-    -- RDRAND is not asked of C: the answer below opens the instruction and
-    -- draws from it rather than trusting what cpuid says.
-    allOptions = filter (/= RDRAND) [ProcessorOption n | n <- [0 .. 18]]
+    -- 2 is not asked for and has no name: it was RDRAND, which crypton no
+    -- longer dispatches on.  The number is left out rather than reused, so
+    -- that the others keep the values they had.
+    allOptions = [ProcessorOption n | n <- [0 .. 18], n /= 2]
     askC (ProcessorOption n) =
         (/= 0) <$> crypton_cpu_option (fromIntegral n)
 {-# NOINLINE processorOptions #-}
@@ -223,15 +206,6 @@ hasGHASHAcceleration =
     any
         (`elem` processorOptions)
         [PCLMUL, ARMPMULL, PPCVPMSUM]
-
-hasRDRand :: IO Bool
-#ifdef SUPPORT_RDRAND
-hasRDRand = fmap isJust getRDRand
-  where
-    getRDRand = entropyOpen :: IO (Maybe RDRand)
-#else
-hasRDRand = return False
-#endif
 
 foreign import ccall unsafe "crypton_cpu_option"
     crypton_cpu_option :: CUInt -> IO CInt

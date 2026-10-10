@@ -35,9 +35,10 @@ import Crypto.Random.Entropy.Unix
 -- RDRAND is deliberately not here, though it used to be first on x86.  A
 -- list like this one is a list of alternatives, and whichever answers
 -- first decides the bytes on its own -- which is the one thing #298 says
--- RDRAND should not do.  It still contributes, as one input among others
--- to the seed in @cbits\/crypton_sysdrg.c@, where it goes through SHA-512
--- with the system call's bytes and cannot determine the result by itself.
+-- RDRAND should not do.  Nor does it contribute anywhere else: every
+-- system this builds for already feeds the instruction into the pool the
+-- call above draws from, so asking it again adds nothing.  See the note in
+-- @cbits\/crypton_sysdrg.c@.
 supportedBackends :: [IO (Maybe EntropyBackend)]
 supportedBackends =
     [
