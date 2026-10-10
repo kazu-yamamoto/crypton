@@ -25,12 +25,7 @@
 
 #include <stdint.h>
 #include <arm_neon.h>
-#if defined(__APPLE__)
-#include <sys/sysctl.h>
-#elif defined(__linux__)
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#endif
+#include "crypton_cpu.h"
 
 /*
  * The SHA-3 instructions are an ARMv8.2 extension, so a translation unit
@@ -157,16 +152,5 @@ void crypton_sha3_armv8_permute(uint64_t state[25])
  */
 int crypton_sha3_armv8_available(void)
 {
-#if defined(__APPLE__)
-	int v = 0;
-	size_t n = sizeof(v);
-
-	if (sysctlbyname("hw.optional.arm.FEAT_SHA3", &v, &n, NULL, 0) != 0)
-		return 0;
-	return v != 0;
-#elif defined(__linux__)
-	return (getauxval(AT_HWCAP) & HWCAP_SHA3) != 0;
-#else
-	return 0;
-#endif
+	return (crypton_arm_features() & CRYPTON_ARM_SHA3) != 0;
 }

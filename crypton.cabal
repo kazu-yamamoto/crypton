@@ -792,7 +792,18 @@ library
                     cbits/asm/sha1-armv8-linux64.S
                     cbits/asm/sha256-armv8-linux64.S
 
-    if ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64)))
+    -- No operating system condition.  The processor is asked with cpuid,
+    -- which no kernel is involved in, and crypton_cpu.h turns USE_AESNI on
+    -- from __i386__ or __x86_64__ alone -- so nothing here was ever decided
+    -- by which system it is.  The list that used to stand here named linux,
+    -- freebsd and osx when it arrived from cipher-aes in 2014 and gained
+    -- windows later, each time because someone wanted that one system; it
+    -- was never a statement that the rest could not do this.  What it did
+    -- instead was send OpenBSD, NetBSD, DragonFly, Solaris and illumos down
+    -- the table-driven fallback on processors that have had AES-NI since
+    -- 2010.  The object format still has a say further down, where the GCM
+    -- assembly is chosen, and there ELF is the default.
+    if (flag(support_aesni) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
         c-sources:
             cbits/aes/generic.c
@@ -853,7 +864,7 @@ library
     -- branch had already named every file it names.  Cabal drops the repeats,
     -- so nothing was built twice, but the line read as the fallback for a
     -- platform with no AES instructions and was not one.
-    if !((flag(support_aesni) && arch(aarch64)) || ((flag(support_aesni) && (((os(linux) || os(freebsd)) || os(osx)) || os(windows))) && (arch(i386) || arch(x86_64))))
+    if !((flag(support_aesni) && arch(aarch64)) || (flag(support_aesni) && (arch(i386) || arch(x86_64))))
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c

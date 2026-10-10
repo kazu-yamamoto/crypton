@@ -12,10 +12,7 @@
 
 #include <stdint.h>
 #include <arm_neon.h>
-#if defined(__linux__)
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#endif
+#include "crypton_cpu.h"
 
 /*
  * The SHA-2 instructions are an extension, so a translation unit compiled for
@@ -131,11 +128,5 @@ void crypton_sha256_armv8_do_chunk(uint32_t state[8], const uint8_t buf[64])
  */
 int crypton_sha256_armv8_available(void)
 {
-#if defined(__APPLE__)
-	return 1;
-#elif defined(__linux__)
-	return (getauxval(AT_HWCAP) & HWCAP_SHA2) != 0;
-#else
-	return 0;
-#endif
+	return (crypton_arm_features() & CRYPTON_ARM_SHA2) != 0;
 }

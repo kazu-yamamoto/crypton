@@ -20,12 +20,9 @@
 #include <stdint.h>
 #include <string.h>
 #include <arm_neon.h>
-#if defined(__linux__)
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#endif
 #include "crypton_aes.h"
 #include "crypton_bitfn.h"
+#include "crypton_cpu.h"
 
 /*
  * The AES and PMULL instructions are extensions, so a translation unit
@@ -123,21 +120,13 @@ void crypton_aes_armv8_init(aes_key *key, uint8_t *origkey, uint8_t size)
 }
 
 /*
- * Whether the extensions are actually present.
- *
- * They are mandatory on Apple silicon, and on other AArch64 systems the
- * kernel reports them through the auxiliary vector.  A system without them
- * keeps the generic implementation.
+ * Whether the extensions are actually present.  crypton_cpu.c asks the
+ * system once, in the one place that knows how each system answers; a
+ * processor without them keeps the generic implementation.
  */
 int crypton_aes_armv8_available(void)
 {
-#if defined(__APPLE__)
-	return 1;
-#elif defined(__linux__)
-	return (getauxval(AT_HWCAP) & HWCAP_AES) != 0;
-#else
-	return 0;
-#endif
+	return (crypton_arm_features() & CRYPTON_ARM_AES) != 0;
 }
 
 /*
@@ -358,13 +347,7 @@ void crypton_aes_armv8_gf_mul4_pmull(block128 *a, const block128 *blocks,
 
 int crypton_aes_armv8_pmull_available(void)
 {
-#if defined(__APPLE__)
-	return 1;
-#elif defined(__linux__)
-	return (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
-#else
-	return 0;
-#endif
+	return (crypton_arm_features() & CRYPTON_ARM_PMULL) != 0;
 }
 
 /*
