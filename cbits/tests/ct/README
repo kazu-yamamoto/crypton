@@ -26,29 +26,33 @@ public again before anything looks at it.
   chapoly  the ChaCha20 key, the plaintext, and the Poly1305 key
   aes      the AES key and the plaintext, through ECB and GCM
   aes_armv8  the same driver again, on AArch64, against the instructions
+  aes_x86ni  the same driver again, on x86-64, against AES-NI
 
-The aes driver is built against cbits/aes/generic.c and cbits/aes/gf.c on
-purpose, rather than whatever the machine offers.  AES-NI and the ARMv8
-instructions do not look anything up and would report nothing, which would say
-nothing about the table-driven code every other machine runs.  That code is
-variable-time by construction -- a table index is a byte of the state -- and
-so is the table-driven GHASH beside it.  A report from the aes driver is
-therefore expected and is a property of those implementations, not a defect
-found in them; it is here so that the size of it is written down rather than
-assumed.  Everything else is expected to be silent.
+One driver, built three times, against the portable C and against each of
+the two instruction sets.  All three must report nothing at all -- not
+"nothing outside known.txt", nothing.  The portable AES and GHASH are
+bitsliced and table-free; AESE, AESMC, PMULL, AESENC and PCLMULQDQ look
+nothing up.  None of the three has anywhere for a secret to decide a branch
+or an address.
 
-On AArch64 the same driver is then built a second time, as aes_armv8, against
-cbits/aes/armv8.c with the crypto extension turned on.  AESE, AESMC and PMULL
-look nothing up and branch on nothing, so that run must report nothing at all
--- not "nothing outside known.txt", nothing; a table site appearing there
-would mean the dispatch had not picked the instructions.  The two runs keep
-each other honest: the table-driven one has to report and the instruction one
-has to be silent, and either going the wrong way says the run is not
-measuring what it claims to.
+This entry used to read the other way round.  The portable implementation
+was table-driven -- an S-box indexed by a byte of the state, and Shoup's
+4-bit table for the GHASH -- so the aes driver was *required* to report, and
+known.txt carried four entries saying so.  That requirement was also what
+kept the pair honest: if the portable build had quietly taken an accelerated
+path it would have fallen silent, and the silence would have failed it.
 
-Until that was added the harness ran only on x86-64, so crypton's AArch64 AES
-and GHASH had never been put to it -- which was noticed when the GHASH was
-rewritten.
+With the tables gone that check goes too, so the question is now asked
+outright rather than read off a leak.  Each build of the driver prints which
+implementation its dispatch took, and run.sh requires the answer it expects
+before it looks at anything else.  A build that takes the wrong path fails
+on that line rather than passing by saying nothing.
+
+The x86-64 build is new with the rewrite.  Before it, AES-NI and PCLMULQDQ
+had never been put to this harness at all: their being constant time was an
+inference from the instruction specifications rather than a measurement of
+crypton's code.  The AArch64 build came earlier, when the GHASH was
+rewritten and it was noticed that the harness had only ever run on x86-64.
 
 What round eight found
 ----------------------

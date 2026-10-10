@@ -374,14 +374,19 @@ jobs:
     # reaches a conditional or an index.  The first driver is deliberately
     # leaky and has to report, or the rest of the run proves nothing.
     #
-    # See cbits/tests/ct/README for what is marked and for why the AES
-    # driver is expected to report.
+    # See cbits/tests/ct/README for what is marked and for what each
+    # driver's verdict means.
     #
     # On both architectures: the drivers are the same C either way, but the
-    # AES one is not -- it is run twice on AArch64, once against the tables
-    # and once against the instructions, and the second must be silent.  That
-    # arm did not exist until crypton's AArch64 AES and GHASH were rewritten
-    # and it became clear this harness had never seen them.
+    # AES one is built twice on each -- once against the portable C and once
+    # against that architecture's instructions -- and both must be silent.
+    # Each build says which implementation its dispatch took, and the run
+    # requires the expected answer before reading a report, because with the
+    # tables gone a build that took the wrong path would otherwise pass by
+    # saying nothing.  The AArch64 arm did not exist until crypton's AArch64
+    # AES and GHASH were rewritten and it became clear this harness had never
+    # seen them; the x86-64 arm came with the rewrite that removed the
+    # tables.
     - name: What the secrets decide
       if: >-
         (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm')

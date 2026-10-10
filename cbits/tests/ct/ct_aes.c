@@ -5,13 +5,24 @@
  * is table-driven and is variable-time by construction, which is a property
  * of that code rather than a defect in it.  See cbits/tests/ct/README. */
 #include "tests/ct/ct.h"
+#include <stdio.h>
 #include <string.h>
 #include "crypton_aes.h"
+#include "crypton_cpu.h"
+
+/* crypton_aes.c fills this; run.sh reads the line below to tell the three
+ * builds of this driver apart.  They are all silent now, so which one took
+ * which implementation cannot be read off a leak any more. */
+uint8_t *crypton_aes_cpu_init(void);
 
 int main(void) {
     aes_key k;
     aes_gcm_key gk;
     uint8_t key[32], pt[256], ct[256 + 16], iv[12];
+
+    printf("dispatch aes=%d pclmul=%d\n",
+           crypton_aes_cpu_init()[CPU_AESNI] != 0,
+           crypton_aes_cpu_init()[CPU_PCLMUL] != 0);
 
     ct_fill(key, sizeof key);
     ct_fill(pt, sizeof pt);
