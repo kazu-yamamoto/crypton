@@ -23,7 +23,19 @@
 #define CRYPTON_ARMV8_TARGET_H
 
 #ifdef WITH_TARGET_ATTRIBUTES
-#if defined(__clang__)
+#if defined(__arm__)
+/*
+ * AArch32 asks for an FPU rather than an architecture extension, and the
+ * spelling differs between the compilers in ways that cannot be checked from
+ * here.  Rather than guess, the cabal file passes -mfpu=crypto-neon-fp-armv8
+ * for the whole component on this architecture whatever this flag says, and
+ * these expand to nothing.  A global target option is safe because a
+ * compiler emits these instructions where an intrinsic asks for them and
+ * nowhere else.
+ */
+#define CRYPTON_TARGET_ARMV8_CRYPTO
+#define CRYPTON_TARGET_ARMV8_SHA3
+#elif defined(__clang__)
 #define CRYPTON_TARGET_ARMV8_CRYPTO __attribute__((target("+crypto")))
 #define CRYPTON_TARGET_ARMV8_SHA3 __attribute__((target("+sha3")))
 #else
