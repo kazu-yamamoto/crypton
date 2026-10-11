@@ -4,14 +4,21 @@ machine, crypton and OpenSSL alternated so neither gets the quieter moment,
 best of K for every cell.
 
 Expects $BENCH_BIN to hold bulk-<version> and pk-bin-<version> for each
-version in VERS.
+version in $BENCH_VERS, which is a comma-separated list, oldest first.
 
     table.py <openssl-apps-binary> [K]
+
+This prints one architecture's pair of tables; which architecture it is comes
+from the machine it is run on, so the heading above them is written by hand.
 """
 import os, re, subprocess, sys
 
 SP = os.environ.get("BENCH_BIN", "/tmp/bench")
-VERS = ["1.1.5", "2.1.5"]
+# The versions the table compares, oldest first; the last one is the release
+# the ratio column is about.  $BENCH_VERS so that the next re-measurement
+# changes a variable rather than this file.
+VERS = os.environ.get("BENCH_VERS", "1.1.5,2.2.0").split(",")
+NEW = VERS[-1]
 
 BULK = [("AES-128-GCM", "aes128gcm", "aes-128-gcm"),
         ("AES-256-GCM", "aes256gcm", "aes-256-gcm"),
@@ -94,7 +101,7 @@ def race(fs, higher):
 
 print("Throughput in MB/s, **higher is better**:\n")
 head = " | ".join("crypton " + v for v in VERS)
-print(f"| | {head} | OpenSSL | 2.1.5 / OpenSSL |")
+print(f"| | {head} | OpenSSL | {NEW} / OpenSSL |")
 print("| --- | " + "---: | " * (len(VERS) + 1) + "---: |")
 for label, op, oname in BULK:
     *ours_v, t = race([lambda b=f"{SP}/bulk-{v}", o=op: ours(b, o) for v in VERS]
@@ -103,7 +110,7 @@ for label, op, oname in BULK:
     print(f"| {label} | {cells} | {t:.0f} | {ours_v[-1]/t:.2f} |")
 
 print("\nTime per operation in microseconds, **lower is better**:\n")
-print(f"| | {head} | OpenSSL | OpenSSL / 2.1.5 |")
+print(f"| | {head} | OpenSSL | OpenSSL / {NEW} |")
 print("| --- | " + "---: | " * (len(VERS) + 1) + "---: |")
 for label, op, (sub, rx, field) in PK:
     *ours_v, t = race([lambda b=f"{SP}/pk-bin-{v}", o=op: ours(b, o) for v in VERS]

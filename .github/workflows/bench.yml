@@ -16,6 +16,9 @@ on:
       reps:
         description: best of how many
         default: '5'
+      vers:
+        description: which crypton versions, oldest first
+        default: '1.1.5,2.2.0'
 
 jobs:
   bench:
@@ -52,34 +55,20 @@ jobs:
         LD_LIBRARY_PATH=$PWD ./apps/openssl version
 
     # Both columns, each by cabal, so that the C is configured as the package
-    # ships it rather than as a hand-written compile line guesses.
+    # ships it rather than as a hand-written compile line guesses.  The same
+    # script builds them on the machine the AArch64 table is measured on, so
+    # the two tables cannot come to be built differently.
     - name: The harnesses, for each version
-      run: |
-        set -eu
-        mkdir -p /tmp/bench
-        cabal update
-        for v in 1.1.5 2.1.5; do
-          if [ "$v" = 2.1.5 ]; then tree=$PWD; else
-            (cd /tmp && cabal get crypton-$v); tree=/tmp/crypton-$v
-          fi
-          (cd "$tree" && cabal build lib:crypton --builddir=/tmp/db-$v -v0)
-          a=$(find /tmp/db-$v -name "libHScrypton-$v-inplace.a" | head -1)
-          cc -O3 -I"$tree/cbits" -I"$tree/cbits/include64" \
-            -o /tmp/bench/bulk-$v bench/bulk.c "$a"
-          d=/tmp/pk-$v
-          mkdir -p "$d"
-          cp bench/PK.hs "$d/"
-          sed "s/crypton\$/crypton == $v/" bench/pk.cabal > "$d/pk.cabal"
-          printf 'packages: . %s\n' "$tree" > "$d/cabal.project"
-          (cd "$d" && cabal build -v0)
-          cp "$(cd "$d" && cabal list-bin pkbench)" /tmp/bench/pk-bin-$v
-        done
-        ls /tmp/bench
+      env:
+        BENCH_VERS: ${{ github.event.inputs.vers }}
+        BENCH_BIN: /tmp/bench
+      run: bench/build.sh
 
     # Every figure in one run on this machine, both sides alternated.
     - name: The table
       env:
         BENCH_BIN: /tmp/bench
+        BENCH_VERS: ${{ github.event.inputs.vers }}
       run: |
         grep -m1 'model name' /proc/cpuinfo
         python3 bench/table.py /tmp/openssl-4.0.3/apps/openssl \
