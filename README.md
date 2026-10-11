@@ -70,6 +70,13 @@ little-endian only.
 `ARMPMULL` on AArch64 and 32-bit ARM, `PPCAES` and `PPCVPMSUM` on ppc64le --
 rather than calling everything `AESNI`.
 
+**`RDRAND` has left the list.**  The subsection above notes it as something
+`processorOptions` reports although it has nothing to do with any of this;
+2.2 does not report it, because crypton no longer uses the instruction at
+all.  Every system this code runs on already feeds `RDRAND` into the kernel
+pool that seeds crypton's own generator, so drawing on it a second time added
+nothing -- and the list names the features crypton dispatches on.
+
 The constant-time harness in `cbits/tests/ct` runs the same driver against
 the portable implementation and against each architecture's instructions, and
 every one of them is required to report nothing at all.
