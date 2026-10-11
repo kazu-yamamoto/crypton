@@ -17,69 +17,43 @@ Side channels
 ### AES
 
 AES is where this matters most, and which implementation runs is decided at
-runtime from what the processor has.  What this subsection says is 2.1.10,
-the released version; 2.2 changes it, and the next subsection is what it
-changes.
+runtime from what the processor has.
 
-On x86-64 with AES-NI and carry-less multiply, and on AArch64 with the ARMv8
-cryptographic extension, AES and GHASH are instructions rather than tables.
-crypton's AES and AES-GCM then make no branch and no memory access that
-depends on the key or on the data: the secrets stay in vector registers and
-never reach one a branch can test, which the generated code is checked
-against.  Every x86-64 part since about 2010 and every AArch64 part in
-ordinary use has these.
+On x86-64 with AES-NI and carry-less multiply, on AArch64 and on 32-bit ARM
+with the ARMv8 cryptographic extension, and on ppc64le with the vector
+instructions PowerISA 2.07 brought to POWER8, AES and GHASH are instructions
+rather than software.  crypton's AES and AES-GCM then make no branch and no
+memory access that depends on the key or on the data: the secrets stay in
+vector registers and never reach one a branch can test.  Every x86-64 part
+since about 2010 and every AArch64 part in ordinary use has these, and the
+ppc64le path is little-endian only.
 
-Where neither is present crypton falls back to a table-driven AES, which
-indexes a 256-byte substitution table with data derived from the key and the
-input.  **That is not constant time**, and on a machine where an attacker can
-observe the cache it is open to a timing attack.  The fallback exists so that
-the library builds and runs everywhere; it is not meant for a setting where
-that matters.
-
-`Crypto.System.CPU.processorOptions` says which is in use.  `AESNI` in that
-list means the instruction path, and `PCLMUL` that GHASH has its instruction
-too; without `AESNI` it is the tables.  On AArch64 the same two names are
-reported, since the list has no names of its own for that architecture.  The
-list also reports `RDRAND`, which is unrelated to this.
-
-    ghci> import Crypto.System.CPU
-    ghci> processorOptions
-    [AESNI,PCLMUL]
-
-### What 2.2 changes about AES
-
-The paragraph that matters most is the one about the fallback.
-
-**There are no tables any more.**  The portable AES and GHASH are bitsliced:
-the S-box is computed as boolean algebra over four blocks held across eight
-64-bit words, and the GF(2^128) multiply is built from shifts, masks and
-integer multiplies.  Neither looks anything up, so neither derives an address
-from a secret, and **the portable path is constant time** on every machine
-that runs it.  The code is BearSSL's, under MIT, in `cbits/bearssl`.
-
-**Two more architectures reach the instructions.**  A 32-bit ARM in AArch32
-state has the same AES and PMULL instructions AArch64 has, and ppc64le has
-the vector AES and carry-less multiply that came with PowerISA 2.07 and
-POWER8.  crypton asked for neither before 2.2; it asks for both now.  The
-SHA instructions on AArch32 are still unused, and the ppc64le work is
-little-endian only.
-
-**The question has a better form.**  `hasAESAcceleration` and
-`hasGHASHAcceleration` answer without naming an architecture, and
-`processorOptions` reports each architecture in its own names -- `ARMAES` and
-`ARMPMULL` on AArch64 and 32-bit ARM, `PPCAES` and `PPCVPMSUM` on ppc64le --
-rather than calling everything `AESNI`.
-
-**`RDRAND` has left the list.**  The subsection above notes it as something
-`processorOptions` reports although it has nothing to do with any of this;
-2.2 does not report it, because crypton no longer uses the instruction at
-all.  Every system this code runs on already feeds `RDRAND` into the kernel
-pool that seeds crypton's own generator, so drawing on it a second time added
-nothing -- and the list names the features crypton dispatches on.
+Where none of them is there, crypton computes AES and GHASH without a table.
+The portable AES is bitsliced -- the S-box is boolean algebra over four
+blocks held across eight 64-bit words -- and the GF(2^128) multiply is built
+from shifts, masks and integer multiplies.  Neither looks anything up, so
+neither derives an address from a secret, and **the portable path is constant
+time as well**.  The code is BearSSL's, under MIT, in `cbits/bearssl`.
 
 The constant-time harness in `cbits/tests/ct` runs the same driver against
 the portable implementation and against each architecture's instructions, and
 every one of them is required to report nothing at all.
+
+So the answer does not depend on the machine any more, and what is left to
+ask is whether AES is fast on it.  `hasAESAcceleration` and
+`hasGHASHAcceleration` answer that without naming an architecture.
+`processorOptions` says what was found, in the processor's own names --
+`AESNI` and `PCLMUL` on x86, `ARMAES` and `ARMPMULL` on AArch64 and 32-bit
+ARM, `PPCAES` and `PPCVPMSUM` on ppc64le -- along with everything else it was
+asked about, which is unrelated to this.
+
+    ghci> import Crypto.System.CPU
+    ghci> hasAESAcceleration
+    True
+    ghci> processorOptions           -- on an x86-64 machine
+    [AESNI,PCLMUL,SSSE3,AVX,AVX2,SHANI,MOVBE,ADX,VAES]
+    ghci> processorOptions           -- and on an AArch64 one
+    [NEON,ARMAES,ARMPMULL,ARMSHA1,ARMSHA2,ARMSHA512]
 
 ### RSA
 
