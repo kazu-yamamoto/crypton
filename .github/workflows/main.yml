@@ -133,8 +133,6 @@ jobs:
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
-    # Which implementation the C actually picked is invisible to the test
-    # suite: when a runtime check answers no, everything still passes on the
     # Which of the instructions a job exercises depends on the machine it
     # landed on, and for the SHA extensions that differs between x86 runners
     # of the same label: nothing else in the log says which one this was.
@@ -152,6 +150,8 @@ jobs:
           sysctl -n machdep.cpu.brand_string || true
         fi
 
+    # Which implementation the C actually picked is invisible to the test
+    # suite: when a runtime check answers no, everything still passes on the
     # generic code, just slower.  So ask, and insist on the answer.
     #
     # Every image in the matrix is hardware that has AES and carry-less
@@ -363,6 +363,24 @@ jobs:
     - name: What the secrets leave behind
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
       run: cbits/tests/scrub/run.sh
+
+    # The generator behind MonadRandom IO, asked from C the questions no
+    # Haskell can ask it.  tests/SysDRGSpec.hs covers many Haskell threads
+    # drawing at once and tests/forkprocess covers forkProcess, but neither
+    # can see inside the generator: whether a draw replaces the key that made
+    # it, whether a new operating system thread starts its own stream rather
+    # than carrying on another's, and whether a child forked while a second
+    # thread held the generator's lock can draw at all rather than waiting
+    # for ever on a mutex nobody will release.  Those need the accessors
+    # cbits/crypton_sysdrg.c compiles under CRYPTON_SYSDRG_TESTING, which the
+    # library itself is never built with.  Dropping the rekey at the end of a
+    # draw fails the first of them here and is invisible everywhere else.
+    #
+    # One Linux job is the whole of it: this is C, and nothing in it depends
+    # on the compiler the job was given.  Not Windows, because it forks.
+    - name: The generator across threads and forks
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      run: cbits/tests/sysdrg/run.sh
 
     # The same answers on a machine whose bytes go the other way.  s390x and
     # ppc64 are among the architectures the cabal file builds for and neither
