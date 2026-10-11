@@ -457,10 +457,10 @@ library
         Crypto.PubKey.Internal
         Crypto.Random.ChaChaDRG
         Crypto.Random.Entropy.Backend
-        Crypto.Random.SysDRG
         Crypto.Random.Entropy.Source
         Crypto.Random.HmacDRG
         Crypto.Random.Probabilistic
+        Crypto.Random.SysDRG
         Crypto.Random.SystemDRG
 
     default-language: Haskell2010
