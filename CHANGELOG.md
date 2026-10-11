@@ -2,6 +2,17 @@
 
 ## 2.2.0
 
+`ProcessorOption` is no longer a sum of constructors.  It is a number with
+pattern synonyms for the names it knows, so it has `Ord` now and has lost
+`Enum` and `Data`, and a `case` over the names needs a catch-all.  `RDRAND`
+is gone from it, and with it the `support_rdrand` flag.  An AArch64 machine
+reports `ARMAES` and `ARMPMULL` where it used to report `AESNI` and `PCLMUL`.
+
+Two more things change under a caller without the type checker saying so:
+`MonadRandom IO` draws from a per-thread generator rather than reading the
+system on every call, and a missing or failing entropy source raises
+`EntropyError` rather than an `ErrorCall` or an `IOException`.
+
 * feat: take entropy from the kernel without a file descriptor
   [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
 * feat: a ChaCha20 generator per operating system thread
@@ -9,6 +20,8 @@
 * feat: MonadRandom IO goes through the per-thread generator
   [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
 * fix: say that the system gave no entropy, rather than error
+  [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
+* fix: stop using RDRAND at all, since it cannot add anything
   [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
 * feat: name every processor feature crypton dispatches on, not three of them
   [#302](https://github.com/kazu-yamamoto/crypton/pull/302)
