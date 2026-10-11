@@ -2,6 +2,14 @@
 
 ## 2.2.0
 
+* feat: take entropy from the kernel without a file descriptor
+  [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
+* feat: a ChaCha20 generator per operating system thread
+  [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
+* feat: MonadRandom IO goes through the per-thread generator
+  [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
+* fix: say that the system gave no entropy, rather than error
+  [#300](https://github.com/kazu-yamamoto/crypton/pull/300)
 * feat: name every processor feature crypton dispatches on, not three of them
   [#302](https://github.com/kazu-yamamoto/crypton/pull/302)
 * fix: an AArch64 machine no longer reports AESNI and PCLMUL

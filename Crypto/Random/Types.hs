@@ -13,6 +13,7 @@ module Crypto.Random.Types (
 
 import Crypto.Internal.ByteArray
 import Crypto.Random.Entropy
+import Crypto.Random.SysDRG (sysDRGBytes)
 
 -- | A monad constraint that allows to generate random bytes
 --
@@ -35,8 +36,13 @@ class DRG gen where
     -- | Generate N bytes of randomness from a DRG
     randomBytesGenerate :: ByteArray byteArray => Int -> gen -> (byteArray, gen)
 
+-- | Through the generator of 'Crypto.Random.SysDRG': a ChaCha20 generator
+-- per operating system thread, reseeded from the system.  Where that
+-- cannot be seeded -- a system with no @getrandom(2)@ or @getentropy(3)@,
+-- which includes Windows for now -- this is the system entropy source
+-- directly, as it was before the generator existed.
 instance MonadRandom IO where
-    getRandomBytes = getEntropy
+    getRandomBytes n = sysDRGBytes n >>= maybe (getEntropy n) return
 
 -- | A simple Monad class very similar to a State Monad
 -- with the state being a DRG.

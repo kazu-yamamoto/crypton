@@ -11,27 +11,39 @@ module Crypto.Random.Entropy.Backend
     ( EntropyBackend
     , supportedBackends
     , gatherBackend
+    , EntropyError(..)
     ) where
 
 import Foreign.Ptr
 import Data.Proxy
 import Data.Word (Word8)
 import Crypto.Random.Entropy.Source
-#ifdef SUPPORT_RDRAND
-import Crypto.Random.Entropy.RDRand
-#endif
 #ifdef WINDOWS
 import Crypto.Random.Entropy.Windows
 #else
+import Crypto.Random.Entropy.SysRandom
 import Crypto.Random.Entropy.Unix
 #endif
 
--- | All supported backends 
+-- | All supported backends, best first.
+--
+-- The system call comes before everything else: it is the kernel's own
+-- generator, it needs no descriptor, and it is what the rest of the world
+-- reaches for now.  The device files are what is left when the system has
+-- no such call.
+--
+-- RDRAND is deliberately not here, though it used to be first on x86.  A
+-- list like this one is a list of alternatives, and whichever answers
+-- first decides the bytes on its own -- which is the one thing #298 says
+-- RDRAND should not do.  Nor does it contribute anywhere else: every
+-- system this builds for already feeds the instruction into the pool the
+-- call above draws from, so asking it again adds nothing.  See the note in
+-- @cbits\/crypton_sysdrg.c@.
 supportedBackends :: [IO (Maybe EntropyBackend)]
 supportedBackends =
     [
-#ifdef SUPPORT_RDRAND
-    openBackend (Proxy :: Proxy RDRand),
+#ifndef WINDOWS
+    openBackend (Proxy :: Proxy SysRandom),
 #endif
 #ifdef WINDOWS
     openBackend (Proxy :: Proxy WinCryptoAPI)
