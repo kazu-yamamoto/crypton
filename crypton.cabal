@@ -736,11 +736,15 @@ library
             cbits/mldsa/crypton_mldsa_asm.S
 
         -- What the two packages' own build systems pass for the x86-64
-        -- backend; without them the AVX2 sources do not assemble.  AArch64
-        -- needs nothing beyond the baseline for the arithmetic, and takes
-        -- the armv8.4 Keccak from the -march the block below already sets.
+        -- backend, and only for the assembly: cc-options in a conditional
+        -- are the component's, not the block's, so -mavx2 here would raise
+        -- the baseline of every C file in the library -- Ed25519, Argon2,
+        -- P-256 and the rest -- and gcc would vectorise code that asks for
+        -- no such thing, with nothing to check at runtime.  The backends'
+        -- own AVX2 is all in the .S.  AArch64 needs nothing beyond the
+        -- baseline for the arithmetic, and takes the armv8.4 Keccak from
+        -- the -march the block below already sets.
         if arch(x86_64)
-            cc-options:  -mavx2 -mbmi2
             asm-options: -mavx2 -mbmi2
 
     if (flag(support_aesni) && arch(aarch64))
