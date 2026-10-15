@@ -1,5 +1,12 @@
 # CHANGELOG for crypton
 
+## 2.2.1
+
+* fix: stop raising the x86-64 baseline for the whole library
+  [#317](https://github.com/kazu-yamamoto/crypton/pull/317)
+* fix: ask the processor before using the ML-KEM and ML-DSA backends
+  [#317](https://github.com/kazu-yamamoto/crypton/pull/317)
+
 ## 2.2.0
 
 `ProcessorOption` is no longer a sum of constructors.  It is a number with
