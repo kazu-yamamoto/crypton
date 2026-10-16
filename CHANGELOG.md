@@ -2,9 +2,28 @@
 
 ## 2.2.1
 
+**A binary built on one x86-64 machine runs on another again.**  Since
+2.1.8 the `-mavx2 -mbmi2` written for the ML-KEM and ML-DSA backends have
+been compiling every C file in the library -- `cc-options` in a conditional
+block belong to the component, not to the block -- so the compiler put AVX2
+and BMI2 into ordinary code that has no dispatch and asks nothing at
+runtime: Ed25519, Argon2, Curve25519, P-256, Ed448, and the older hashes
+among them.  A binary built where AVX2 exists then died with `SIGILL` where
+it does not, in Ed25519 rather than in anything post-quantum.
+
+The two backends also chose their implementation when the library was
+compiled and called it unchecked.  They ask the processor now, as everything
+else in crypton that uses an instruction beyond the baseline already did,
+and fall back to the portable C where the answer is no.  AArch64 asks about
+the ARMv8.4 Keccak instructions for the same reason.
+
+Nothing in the API changes.
+
 * fix: stop raising the x86-64 baseline for the whole library
   [#317](https://github.com/kazu-yamamoto/crypton/pull/317)
 * fix: ask the processor before using the ML-KEM and ML-DSA backends
+  [#317](https://github.com/kazu-yamamoto/crypton/pull/317)
+* test(ct): link the processor check into the ML-KEM backend build
   [#317](https://github.com/kazu-yamamoto/crypton/pull/317)
 
 ## 2.2.0
