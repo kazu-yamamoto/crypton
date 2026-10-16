@@ -163,18 +163,28 @@ run_one() {
 	# on anything.  Nor is the "at" line under "Uninitialised value was
 	# created by", which --track-origins prints to say where the value came
 	# from: that frame is a stack allocation, not a branch, and taking it
-	# for one put a function's opening brace on the list.  A site is
-	# "file:line", and the ones listed in known.txt are understood.
+	# for one put a function's opening brace on the list.
+	#
+	# A site is kept as "function@file:line", and known.txt may name any of
+	# the three widths: that exact line, the function, or the whole file.
+	# The function is there because the line is the compiler's choice and
+	# not the code's: gcc 14 names no line of addM's loop at all, gcc 11.5
+	# on x86-64 names three, and clang on AArch64 named two of those three.
+	# What the disassembly establishes is a property of the function, so
+	# that is what an entry should be able to say.
 	sites=$(awk '
 		/^==[0-9]*== (Conditional jump|Use of uninitialised)/ { want = 1; next }
 		want && /^==[0-9]*==    at 0x/ { print; want = 0 }
 	' "$out/$name.log" |
-		sed -n 's/^==[0-9]*==    at 0x[0-9A-Fa-f]*: [A-Za-z_0-9]* (\([^)]*\))$/\1/p' |
-		grep -v '^ct_' | sort -u)
+		sed -n 's/^==[0-9]*==    at 0x[0-9A-Fa-f]*: \([A-Za-z_0-9.]*\) (\([^)]*\))$/\1@\2/p' |
+		grep -v '@ct_' | sort -u)
 	unknown=
 	for site in $sites; do
-		file=${site%%:*}
-		if grep -q "^$site[[:space:]]" cbits/tests/ct/known.txt ||
+		funcfile=${site%%:*}
+		fileline=${site#*@}
+		file=${fileline%%:*}
+		if grep -q "^$fileline[[:space:]]" cbits/tests/ct/known.txt ||
+		   grep -q "^$funcfile[[:space:]]" cbits/tests/ct/known.txt ||
 		   grep -q "^$file[[:space:]]" cbits/tests/ct/known.txt; then
 			continue
 		fi
