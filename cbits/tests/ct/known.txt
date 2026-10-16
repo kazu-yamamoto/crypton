@@ -42,18 +42,11 @@ decaf.c:136       assert(ret) in crypton_gf_invert
 #   404c70  b.ne 404c30             <- what memcheck names
 addM@p256.c       the carry of addM's loop, which is taken without a
 #                 branch.  Named by function rather than by line because
-#                 the line is the compiler's choice: AArch64 named 147 and
-#                 149, gcc 11.5 on x86-64 names 147, 148 and 149, and gcc
-#                 14 names none of them.
-#
-#                 The two line entries below are the AArch64 spelling, kept
-#                 until that arm of the CI has been seen to name the
-#                 function.  If it does, they are redundant and can go; if
-#                 it names the caller addM was inlined into instead, they
-#                 are what covers it, and removing them here would have
-#                 been found only by a red build.
-p256.c:147        addM's loop, as AArch64 names it
-p256.c:149        the same
+#                 the line is the compiler's choice and the function is
+#                 not.  Three compilers were asked: AArch64 names 147 and
+#                 149, gcc 11.5 on x86-64 names 147, 148 and 149, and the
+#                 gcc 14 the CI uses names none of them -- and all three
+#                 name addM.
 #
 #                 On AArch64 the only instructions consuming the secret's
 #                 flags are cset and cinc, which do not branch.  On x86-64,
