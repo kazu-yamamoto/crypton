@@ -264,17 +264,23 @@ costs a second scalar multiplication, which OpenSSL's signing does not pay --
 and the row is still 1.66 on AArch64 and 1.81 on x86-64, so the safety is had
 for nothing here rather than paid for.
 
-Ed25519 verification wants one too, for a less happy reason.  On x86-64 the
-row is about eight per cent slower than it was, and the step is at 2.1.8:
-2.1.5, 2.1.6 and 2.1.7 all measure near 48 microseconds there, and
-2.1.8, 2.1.10 and 2.2.0 all measure near 52.  Nothing in Ed25519 changed
-across that step.  No commit touches `cbits/ed25519` between those releases,
-the compiled `ed25519.o` is byte for byte the same object either side of it,
-and AArch64 did not move at all.  What 2.1.8 did was vendor ML-KEM and
-ML-DSA, some seventy thousand lines of C that Ed25519 never calls.  The same
-instructions, put somewhere else; signing, which is the same file and a
-different routine, is where it was.  The row is still better than twice
-OpenSSL's, and there is nothing in Ed25519 to fix.
+Ed25519 verification wanted one too, for an unhappier reason, and 2.2.1
+settles it.  On x86-64 the row was about eight per cent slower from 2.1.8
+onwards: 2.1.5, 2.1.6 and 2.1.7 all measure near 48 microseconds there,
+2.1.8, 2.1.10 and 2.2.0 all measure near 52, and 2.2.1 is back under 48.
+Nothing in Ed25519 ever changed -- no commit touches `cbits/ed25519` across
+any of it, and AArch64 never moved, the compiled `ed25519.o` there being
+byte for byte the same object either side of 2.1.8.  What moved was a line
+in this package's cabal file.  The ML-KEM and ML-DSA backends that 2.1.8
+vendored want `-mavx2 -mbmi2`, and they were given as `cc-options` inside an
+`if arch(x86_64)` block -- but cc-options in a conditional belong to the
+component and not to the block, so every C file in the library was compiled
+with AVX2 allowed, `cbits/ed25519` among them, and what the compiler made of
+it that way is slower on this machine than what it replaced.  Signing, which
+is the same file and a different routine, is where it always was.  2.2.1
+narrowed the flags to the assembly that asked for them, which is also what
+stopped a binary built on one x86-64 machine from dying on another, and the
+row came back.
 
 SHA-1 is in the tables because a number of protocols and file formats still
 ask for it, not because it is a good choice for anything new.  The algorithms
