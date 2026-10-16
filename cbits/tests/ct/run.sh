@@ -71,7 +71,13 @@ mlkem_inc="-Icbits/mlkem${ct_define:+ -DMLK_CONFIG_CT_TESTING_ENABLED}"
 # And the hand-written backend, where the architecture has one.  Both builds
 # have to be silent: unlike the AES pair below there is no variable-time
 # implementation here for one of them to expose.
-mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S"
+#
+# crypton_cpu.c because the backend asks it whether this processor has the
+# instructions before using them; without it the link fails on the
+# capability function in cbits/mlkem/crypton_mlkem.h.  cpu_stub.c is the one
+# symbol that file needs from the AES build, which is not wanted here.
+mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S cbits/crypton_cpu.c \
+                  cbits/tests/ct/cpu_stub.c"
 mlkem_native_inc="$mlkem_inc -DCRYPTON_MLKEM_NATIVE_BACKEND"
 
 
@@ -246,12 +252,22 @@ esac
 
 # The ML-KEM backend, on both architectures that have one.  x86-64 wants the
 # flags its own build system passes, or the AVX2 sources do not assemble.
+#
+# The backend now asks the processor before it runs, so on x86-64 without
+# AVX2 this build measures the portable C under a name that says otherwise.
+# Say so and skip, rather than pass while checking the thing the plain
+# mlkem build above has already checked.
 case $(uname -m) in
 aarch64 | arm64)
 	run_one mlkem_native "$mlkem_native_src" "$mlkem_native_inc" mlkem
 	;;
 x86_64 | amd64)
-	run_one mlkem_native "$mlkem_native_src" "$mlkem_native_inc -mavx2 -mbmi2" mlkem
+	if grep -qw avx2 "${CRYPTON_CT_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
+		run_one mlkem_native "$mlkem_native_src" "$mlkem_native_inc -mavx2 -mbmi2" mlkem
+	else
+		echo "skip mlkem_native: this processor has no AVX2, so the backend"
+		echo "     would fall back to the C the mlkem build above measured"
+	fi
 	;;
 esac
 
