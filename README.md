@@ -111,31 +111,31 @@ and the SHA extensions, against OpenSSL 4.0.3.
 
 Throughput in MB/s, **higher is better**:
 
-| | crypton 1.1.5 | crypton 2.2.0 | OpenSSL | 2.2.0 / OpenSSL |
+| | crypton 1.1.5 | crypton 2.2.1 | OpenSSL | 2.2.1 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 1335 | **6034** | 4050 | 1.49 |
-| AES-256-GCM | 1093 | **5484** | 3783 | 1.45 |
-| ChaCha20-Poly1305 | 399 | 2198 | 2213 | 0.99 |
-| SHA-1 | 729 | 1695 | 1673 | 1.01 |
-| SHA-256 | 290 | 1585 | 1571 | 1.01 |
-| SHA-512 | 449 | 770 | 752 | 1.02 |
-| SHA3-256 | 109 | 422 | 425 | 0.99 |
+| AES-128-GCM | 1335 | **6037** | 4053 | 1.49 |
+| AES-256-GCM | 1093 | **5487** | 3786 | 1.45 |
+| ChaCha20-Poly1305 | 399 | 2196 | 2214 | 0.99 |
+| SHA-1 | 729 | 1681 | 1679 | 1.00 |
+| SHA-256 | 290 | 1586 | 1578 | 1.00 |
+| SHA-512 | 448 | 770 | 749 | 1.03 |
+| SHA3-256 | 109 | 422 | 427 | 0.99 |
 
 Time per operation in microseconds, **lower is better**:
 
-| | crypton 1.1.5 | crypton 2.2.0 | OpenSSL | OpenSSL / 2.2.0 |
+| | crypton 1.1.5 | crypton 2.2.1 | OpenSSL | OpenSSL / 2.2.1 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 44.63 | 28.29 | 36.52 | 1.29 |
-| ECDH P-256 | 164.8 | 50.85 | 51.63 | 1.02 |
-| ECDH P-384 | 2255 | **164.8** | 835.4 | 5.07 |
-| Ed25519 sign | 29.27 | 18.54 | 33.63 | 1.81 |
-| Ed25519 verify | 48.44 | 51.80 | 109.8 | 2.12 |
-| ECDSA P-256 sign | 81.91 | 18.81 | 21.81 | 1.16 |
-| ECDSA P-256 verify | 233.1 | 70.00 | 67.57 | 0.97 |
-| ECDSA P-384 sign | 2287 | **300.0** | 878.7 | 2.93 |
-| ECDSA P-384 verify | 2673 | **468.3** | 723.3 | 1.54 |
-| RSA-2048 sign/decrypt | 759.2 | 617.8 | 659.8 | 1.07 |
-| RSA-2048 verify/encrypt | 33.07 | 30.08 | 18.87 | 0.63 |
+| X25519 | 44.27 | 28.55 | 36.49 | 1.28 |
+| ECDH P-256 | 164.8 | 50.57 | 51.50 | 1.02 |
+| ECDH P-384 | 2242 | **163.8** | 850.3 | 5.19 |
+| Ed25519 sign | 29.61 | 18.62 | 33.70 | 1.81 |
+| Ed25519 verify | 48.47 | 48.01 | 109.9 | 2.29 |
+| ECDSA P-256 sign | 81.23 | 18.90 | 21.93 | 1.16 |
+| ECDSA P-256 verify | 233.5 | 70.52 | 67.76 | 0.96 |
+| ECDSA P-384 sign | 2262 | **303.6** | 895.7 | 2.95 |
+| ECDSA P-384 verify | 2682 | **471.5** | 725.4 | 1.54 |
+| RSA-2048 sign/decrypt | 758.2 | 616.2 | 658.3 | 1.07 |
+| RSA-2048 verify/encrypt | 33.01 | 30.12 | 18.86 | 0.63 |
 
 ### AArch64
 
@@ -144,35 +144,35 @@ instructions, against OpenSSL 4.0.3.
 
 Throughput in MB/s, **higher is better**:
 
-| | crypton 1.1.5 | crypton 2.2.0 | OpenSSL | 2.2.0 / OpenSSL |
+| | crypton 1.1.5 | crypton 2.2.1 | OpenSSL | 2.2.1 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 129 | **11847** | 10770 | 1.10 |
-| AES-256-GCM | 98 | **9770** | 9187 | 1.06 |
-| ChaCha20-Poly1305 | 778 | 2312 | 2257 | 1.02 |
-| SHA-1 | 1237 | 3393 | 3368 | 1.01 |
-| SHA-256 | 485 | 3398 | 3370 | 1.01 |
-| SHA-512 | 740 | 1882 | 1878 | 1.00 |
-| SHA3-256 | 552 | 1081 | 1079 | 1.00 |
+| AES-128-GCM | 127 | **11753** | 10748 | 1.09 |
+| AES-256-GCM | 98 | **9834** | 9130 | 1.08 |
+| ChaCha20-Poly1305 | 755 | 2232 | 2235 | 1.00 |
+| SHA-1 | 1200 | 3382 | 3339 | 1.01 |
+| SHA-256 | 473 | 3395 | 3309 | 1.03 |
+| SHA-512 | 727 | 1854 | 1816 | 1.02 |
+| SHA3-256 | 550 | 1076 | 1075 | 1.00 |
 
 Time per operation in microseconds, **lower is better**:
 
-| | crypton 1.1.5 | crypton 2.2.0 | OpenSSL | OpenSSL / 2.2.0 |
+| | crypton 1.1.5 | crypton 2.2.1 | OpenSSL | OpenSSL / 2.2.1 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 17.62 | **11.92** | 15.35 | 1.29 |
-| ECDH P-256 | 66.93 | **20.32** | 24.53 | 1.21 |
-| ECDH P-384 | 3308 | **73.17** | 371.1 | 5.07 |
-| Ed25519 sign | 13.67 | **7.967** | 13.25 | 1.66 |
-| Ed25519 verify | 18.25 | 18.22 | 35.18 | 1.93 |
-| ECDSA P-256 sign | 32.33 | **7.00** | 10.82 | 1.55 |
-| ECDSA P-256 verify | 95.78 | **27.42** | 32.69 | 1.19 |
-| ECDSA P-384 sign | 3244 | **124.3** | 394.6 | 3.17 |
-| ECDSA P-384 verify | 3900 | **203.2** | 327.4 | 1.61 |
-| RSA-2048 sign/decrypt | 447.6 | 458.1 | 322.0 | 0.70 |
-| RSA-2048 verify/encrypt | 18.20 | 15.15 | 8.450 | 0.56 |
+| X25519 | 18.15 | **11.65** | 15.38 | 1.32 |
+| ECDH P-256 | 69.23 | **19.62** | 24.47 | 1.25 |
+| ECDH P-384 | 3322 | **73.42** | 370.9 | 5.05 |
+| Ed25519 sign | 13.27 | **7.983** | 13.24 | 1.66 |
+| Ed25519 verify | 18.32 | 18.20 | 34.05 | 1.87 |
+| ECDSA P-256 sign | 32.02 | **6.983** | 10.73 | 1.54 |
+| ECDSA P-256 verify | 94.30 | **27.10** | 32.46 | 1.20 |
+| ECDSA P-384 sign | 3256 | **124.7** | 392.4 | 3.15 |
+| ECDSA P-384 verify | 3896 | **203.5** | 329.4 | 1.62 |
+| RSA-2048 sign/decrypt | 448.6 | 458.6 | 320.1 | 0.70 |
+| RSA-2048 verify/encrypt | 18.27 | 15.20 | 8.421 | 0.55 |
 
 ### What the numbers say
 
-There are two changes behind the 1.1.5 column and the 2.2.0 one, not a
+There are two changes behind the 1.1.5 column and the 2.2.1 one, not a
 single steady improvement.
 
 The first, in 2.0.0, was a rewrite: the bulk algorithms moved into C, the
@@ -210,7 +210,7 @@ exponentiation stopped indexing a table with the bits of the exponent, and
 hiding the exponent is what the difference bought.  On x86-64 that cost is
 more than repaid -- s2n-bignum's Montgomery multiplication is twice the C's,
 because the C cannot form the two carry chains `ADCX` and `ADOX` give, and
-2.2.0 signs in less than 1.1.5 took while keeping what 2.0.0 gained.  On
+2.2.1 signs in less than 1.1.5 took while keeping what 2.0.0 gained.  On
 AArch64 there is nothing to use: s2n-bignum has no generic routine for it,
 and the same five that help on x86-64 measure level with the C there, so the
 C stays and the gap with it.  No portable C closes that gap either -- the
@@ -236,7 +236,7 @@ there is not one `ymm` in the file -- or `aes-gcm-avx512.pl`, which wants
 takes a block at a time where crypton takes two.  The same idea as theirs,
 one step further down the feature ladder; not a better one.
 
-The 512-bit path arrived after 2.1.2, so it is in the 2.2.0 column -- but
+The 512-bit path arrived after 2.1.2, so it is in the 2.2.1 column -- but
 neither machine in the tables above has AVX-512, so neither column shows it.
 On the runners that do, measured over 16 KiB in MB/s: an EPYC 9V45 (Zen 5)
 goes from 9616 to 14268 with it, a Xeon 6973P-C from 8095 to 9848, a Xeon
@@ -267,7 +267,7 @@ for nothing here rather than paid for.
 Ed25519 verification wanted one too, for an unhappier reason, and 2.2.1
 settles it.  On x86-64 the row was about eight per cent slower from 2.1.8
 onwards: 2.1.5, 2.1.6 and 2.1.7 all measure near 48 microseconds there,
-2.1.8, 2.1.10 and 2.2.0 all measure near 52, and 2.2.1 is back under 48.
+2.1.8, 2.1.10 and 2.2.0 all measure near 52, and 2.2.1 is near 48 again.
 Nothing in Ed25519 ever changed -- no commit touches `cbits/ed25519` across
 any of it, and AArch64 never moved, the compiled `ed25519.o` there being
 byte for byte the same object either side of 2.1.8.  What moved was a line
