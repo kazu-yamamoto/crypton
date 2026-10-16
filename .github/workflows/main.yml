@@ -37,11 +37,27 @@ jobs:
       # Windows is two compilers for the same reason the other two are: the
       # Haskell it exercises is the same Haskell Linux runs seven times, and
       # what is particular to it is C that does not change with the compiler.
+      #
+      # macOS is one compiler, and not the oldest.  9.2 is out of
+      # maintenance, and the Haskell it compiles here is the Haskell Linux
+      # and Windows compile at 9.2 already; what is particular to Apple is
+      # C, and macOS 9.14 and ubuntu-24.04-arm both compile that.  So this
+      # is the job the matrix can best do without.
+      #
+      # Not a fix for the macOS failures of October 2026, which are the
+      # runner image's: it pairs the macOS 27 SDK, whose .tbd files name an
+      # architecture called arm64e.x1, with a linker from before that name,
+      # and one unknown name makes the linker reject libSystem whole.  No
+      # GHC is at fault -- 9.14 fails the same way on that image, and 9.12
+      # links against the same SDK without trouble where the Command Line
+      # Tools are current -- so nothing here can mend it and nothing here
+      # should pretend to.  The image rolled out part-way, so the job
+      # answers by which machine it lands on.
       matrix:
         include: >-
           ${{ fromJSON(github.ref == 'refs/heads/ci'
               && '[{"os":"ubuntu-latest","ghc":"9.12"},{"os":"ubuntu-latest","ghc":"9.14"},{"os":"ubuntu-24.04-arm","ghc":"9.14"}]'
-              || '[{"os":"ubuntu-latest","ghc":"9.2"},{"os":"ubuntu-latest","ghc":"9.4"},{"os":"ubuntu-latest","ghc":"9.6"},{"os":"ubuntu-latest","ghc":"9.8"},{"os":"ubuntu-latest","ghc":"9.10"},{"os":"ubuntu-latest","ghc":"9.12"},{"os":"ubuntu-latest","ghc":"9.14"},{"os":"windows-latest","ghc":"9.2"},{"os":"windows-latest","ghc":"9.14"},{"os":"macOS-latest","ghc":"9.2"},{"os":"macOS-latest","ghc":"9.14"},{"os":"ubuntu-24.04-arm","ghc":"9.12"},{"os":"ubuntu-24.04-arm","ghc":"9.14"}]') }}
+              || '[{"os":"ubuntu-latest","ghc":"9.2"},{"os":"ubuntu-latest","ghc":"9.4"},{"os":"ubuntu-latest","ghc":"9.6"},{"os":"ubuntu-latest","ghc":"9.8"},{"os":"ubuntu-latest","ghc":"9.10"},{"os":"ubuntu-latest","ghc":"9.12"},{"os":"ubuntu-latest","ghc":"9.14"},{"os":"windows-latest","ghc":"9.2"},{"os":"windows-latest","ghc":"9.14"},{"os":"macOS-latest","ghc":"9.14"},{"os":"ubuntu-24.04-arm","ghc":"9.12"},{"os":"ubuntu-24.04-arm","ghc":"9.14"}]') }}
 
     env:
       cache-name: cabal-ghc
