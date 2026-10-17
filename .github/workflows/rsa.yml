@@ -7,10 +7,7 @@
 # warm machine reaches all of them alike.
 #
 #   base      main as it stands, which is GMP for verification
-#   pubm      crypton's own exponentiation for a public exponent, with
-#             s2n-bignum's bignum_montifier for the R^2 constant
-#   pubc      the same with R^2 computed in C, which is the build that lost
-#             when this was tried before
+#   pub       crypton's own exponentiation where the exponent is public
 #
 # The machine is pinned for the same reason bench.yml pins it.
 name: rsa
@@ -41,7 +38,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        ref: perf/montifier
+        ref: perf/rsa-public-exponent
 
     - uses: haskell-actions/setup@v2
       with:
@@ -66,8 +63,7 @@ jobs:
         }
 
         build base /tmp/base ''
-        build pubm "$PWD"    ''
-        build pubc "$PWD"    '--ghc-options=-optc-DCRYPTON_NO_MONTIFIER'
+        build pub  "$PWD"    ''
 
         # the three must not be the same binary
         md5sum /tmp/bin/*
@@ -86,9 +82,12 @@ jobs:
         # own, with and without the assembly that computes R^2.  pubc is
         # the build that lost before, so pubm against pubc is what the
         # montifier is worth and base against pubm is the question.
-        ROWS = [("rsa-verify", ["base", "pubm", "pubc"]),
-                ("rsa-sign",   ["base", "pubm", "pubc"]),
-                ("ecdsa-p256-sign", ["base", "pubm", "pubc"])]
+        # main now carries the assembly Montgomery constant, so base and
+        # pub differ in one thing only: which exponentiation verification
+        # takes.  Signing and ECDSA are rows neither of them touches.
+        ROWS = [("rsa-verify", ["base", "pub"]),
+                ("rsa-sign",   ["base", "pub"]),
+                ("ecdsa-p256-sign", ["base", "pub"])]
 
         def one(v, op):
             out = subprocess.run([f"{BIN}/pk-{v}", op],
