@@ -6,11 +6,11 @@
 # variant is built here and they are run alternately, so a quiet moment or a
 # warm machine reaches all of them alike.
 #
-#   base      main as it stands
-#   pub       the public-exponent exponentiation, which only verification
-#             reaches
-#   w5        the same, with the secure exponentiation's window at five
-#             bits, which only signing reaches
+#   base      main as it stands, which is GMP for verification
+#   pubm      crypton's own exponentiation for a public exponent, with
+#             s2n-bignum's bignum_montifier for the R^2 constant
+#   pubc      the same with R^2 computed in C, which is the build that lost
+#             when this was tried before
 #
 # The machine is pinned for the same reason bench.yml pins it.
 name: rsa
@@ -41,7 +41,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        ref: test/powm-window
+        ref: perf/montifier
 
     - uses: haskell-actions/setup@v2
       with:
@@ -66,8 +66,8 @@ jobs:
         }
 
         build base /tmp/base ''
-        build pub  "$PWD"    ''
-        build w5   "$PWD"    '--ghc-options=-optc-DPOWM_WINDOW_BITS=5'
+        build pubm "$PWD"    ''
+        build pubc "$PWD"    '--ghc-options=-optc-DCRYPTON_NO_MONTIFIER'
 
         # the three must not be the same binary
         md5sum /tmp/bin/*
@@ -82,9 +82,13 @@ jobs:
         BIN = "/tmp/bin"
         # which variants can differ on which operation, and which cannot:
         # a row where nothing differs is this machine's noise floor
-        ROWS = [("rsa-verify", ["base", "pub"]),
-                ("rsa-sign",   ["base", "pub", "w5"]),
-                ("ecdsa-p256-sign", ["base", "pub", "w5"])]
+        # base is GMP for verification; pubm and pubc both take crypton's
+        # own, with and without the assembly that computes R^2.  pubc is
+        # the build that lost before, so pubm against pubc is what the
+        # montifier is worth and base against pubm is the question.
+        ROWS = [("rsa-verify", ["base", "pubm", "pubc"]),
+                ("rsa-sign",   ["base", "pubm", "pubc"]),
+                ("ecdsa-p256-sign", ["base", "pubm", "pubc"])]
 
         def one(v, op):
             out = subprocess.run([f"{BIN}/pk-{v}", op],
