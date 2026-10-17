@@ -141,6 +141,20 @@ expSec b e m = unsafeDoIO $
     -- what GMP's own secure exponentiation lets slip
     !eLen = 8 * ((numBytes e + 7) `div` 8)
 
+-- safe, as the secure one below is: the call is tens of microseconds at RSA
+-- sizes, and the hundred nanoseconds this costs over an unsafe call is
+-- nothing beside holding a capability for that long in a server
+foreign import ccall safe "crypton_powm_pub"
+    c_powm_pub
+        :: Ptr Word8
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> Ptr Word8
+        -> Word32
+        -> IO CInt
+
 foreign import ccall safe "crypton_powm_sec"
     c_powm_sec
         :: Ptr Word8
@@ -158,6 +172,14 @@ foreign import ccall safe "crypton_powm_sec"
 --
 -- Use this function when all the parameters are public,
 -- otherwise 'expSafe' should be preferred.
+--
+-- A short exponent on an odd modulus -- RSA verification, where the exponent
+-- is 65537 and comes out of the public key -- is walked a bit at a time in
+-- C, squaring at each step and multiplying where a bit is set, which reads
+-- the exponent and branches on it and is why this is not 'expSafe'.  That
+-- path is taken only where it is the faster of the two, which the C decides;
+-- everywhere else, and for every longer exponent, this is GMP's windowed
+-- exponentiation as it has always been.
 expFast
     :: Integer
     -- ^ base
@@ -167,7 +189,45 @@ expFast
     -- ^ modulo
     -> Integer
     -- ^ result
-expFast b e m = gmpPowModInteger b e m `onGmpUnsupported` exponentiation b e m
+expFast b e m
+    | odd m && m > 1 && e > 0 = case expPub (b `mod` m) e m of
+        Just r -> r
+        Nothing -> slow
+    | otherwise = slow
+  where
+    slow = gmpPowModInteger b e m `onGmpUnsupported` exponentiation b e m
+
+-- | The windowless exponentiation in C, for an exponent that is not a
+--   secret.  'Nothing' when the C declines, which it does on every machine
+--   where what the caller already has is faster -- so this is an
+--   optimisation and never the only path.  The base has to be reduced and
+--   the exponent positive, which the guard above sees to.
+expPub :: Integer -> Integer -> Integer -> Maybe Integer
+expPub b e m = unsafeDoIO $
+    allocaBytes (sum widths) $ \start -> case scanl plusPtr start widths of
+        (out : base : expo : modu : _) -> do
+            _ <- Internal.i2ospOf b base mLen
+            _ <- Internal.i2ospOf e expo eLen
+            _ <- Internal.i2ospOf m modu mLen
+            r <-
+                c_powm_pub
+                    out
+                    base
+                    (fromIntegral mLen)
+                    expo
+                    (fromIntegral eLen)
+                    modu
+                    (fromIntegral mLen)
+            if r == 0
+                then do
+                    !v <- Internal.os2ip out mLen
+                    return (Just v)
+                else return Nothing
+        _ -> return Nothing
+  where
+    !mLen = numBytes m
+    !eLen = numBytes e
+    widths = [mLen, mLen, eLen, mLen]
 
 -- | @exponentiation@ computes modular exponentiation as /b^e mod m/
 -- using repetitive squaring.

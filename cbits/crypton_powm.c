@@ -244,9 +244,133 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
 }
 #endif
 
+/* Modular exponentiation for an exponent that is not a secret.
+ *
+ * RSA verification raises a signature to the public exponent, which is in
+ * the public key and is usually 65537.  crypton_powm_sec below hides the
+ * exponent and pays for it twice: a table of sixteen powers built before the
+ * walk begins, and every entry of that table read at every window.  For a
+ * seventeen-bit exponent the table alone costs more than the exponentiation.
+ *
+ * So this one reads the exponent's bits and branches on them, squaring at
+ * every step and multiplying where a bit is set.  It is for public exponents
+ * only, and nothing in this library may call it with a secret.
+ *
+ * It declines -- returning 1 without touching out -- in two cases, so a
+ * caller must have something to fall back to.
+ *
+ * The first is a long exponent.  Walking it a bit at a time costs about one
+ * and a half multiplications per bit where a windowed walk costs a quarter
+ * less, and the table that buys the difference pays for itself after some
+ * sixty-odd bits.  Past that the caller's own exponentiation is the better
+ * algorithm and this one would have to grow a table to compete, which is
+ * the thing it exists not to have.  RSA public exponents are seventeen
+ * bits; the bound is set well above them and well below where a Diffie-
+ * Hellman or DSA exponent starts.
+ *
+ * The second is a machine where s2n-bignum's Montgomery multiplication does
+ * not run.  There the multiplication here is the C one, which is not faster
+ * than what the caller already has, so there is nothing to take over.
+ * Define CRYPTON_POWM_PUB_ALWAYS to make it accept anyway: the differential
+ * test builds that way, so that this arithmetic is exercised on the
+ * machines the assembly never reaches.
+ */
+#define POWM_PUB_MAX_EXP_BYTES 8
+
+static int powm_pub_wanted(uint32_t n)
+{
+#if defined(CRYPTON_POWM_PUB_ALWAYS)
+	return n > 0;
+#elif defined(CRYPTON_POWM_S2N)
+	return powm_s2n_usable(n);
+#else
+	(void) n;
+	return 0;
+#endif
+}
+
 int crypton_powm_window_bits(void)
 {
 	return WINDOW_BITS;
+}
+
+int crypton_powm_pub(uint8_t *out,
+                     const uint8_t *base, uint32_t baselen,
+                     const uint8_t *exp, uint32_t explen,
+                     const uint8_t *mod, uint32_t modlen)
+{
+	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
+	uint32_t words = (6 + 2 + POWM_S2N_SCRATCH) * n;
+	limb_t *space, *m, *r2, *acc, *tmp, *bm, *one, *t, *scratch, n0;
+	uint32_t top, i;
+	int s2n = 0;
+
+	if (modlen == 0 || n == 0 || (mod[modlen - 1] & 1) == 0)
+		return 1;
+	if (explen > POWM_PUB_MAX_EXP_BYTES)
+		return 1;
+	if (!powm_pub_wanted(n))
+		return 1;
+#ifdef CRYPTON_POWM_S2N
+	s2n = powm_s2n_usable(n);
+#endif
+
+	/* the exponent's top set bit, counted from the bottom.  An exponent of
+	 * zero is left to the caller, whose answer for it is already right. */
+	top = explen * 8;
+	while (top > 0 &&
+	       ((exp[explen - 1 - (top - 1) / 8] >> ((top - 1) % 8)) & 1) == 0)
+		top--;
+	if (top == 0)
+		return 1;
+
+	space = calloc(words, sizeof(limb_t));
+	if (space == NULL)
+		return 1;
+	m = space;
+	r2 = m + n;
+	acc = r2 + n;
+	tmp = acc + n;
+	bm = tmp + n;
+	one = bm + n;
+	t = one + n;
+	scratch = t + 2 * n;
+
+	if (from_be(m, n, mod, modlen) != 0)
+		goto fail;
+	n0 = mont_n0(m[0]);
+	mont_r2(r2, m, n0, n, t);
+
+	/* the base into Montgomery form.  The accumulator starts there rather
+	 * than at one, because the exponent's top bit is a one by
+	 * construction and the first squaring would be of one. */
+	if (from_be(tmp, n, base, baselen) != 0)
+		goto fail;
+	powm_mul(bm, tmp, r2, m, n0, n, t, scratch, s2n);
+	memcpy(acc, bm, n * sizeof(limb_t));
+
+	for (i = top - 1; i > 0; i--) {
+		limb_t *swap;
+
+		powm_sqr(tmp, acc, m, n0, n, t, scratch, s2n);
+		swap = acc; acc = tmp; tmp = swap;
+		if ((exp[explen - 1 - (i - 1) / 8] >> ((i - 1) % 8)) & 1) {
+			powm_mul(tmp, acc, bm, m, n0, n, t, scratch, s2n);
+			swap = acc; acc = tmp; tmp = swap;
+		}
+	}
+
+	/* out of Montgomery form */
+	one[0] = 1;
+	powm_mul(tmp, acc, one, m, n0, n, t, scratch, s2n);
+	to_be(out, modlen, tmp, n);
+
+	free(space);
+	return 0;
+
+fail:
+	free(space);
+	return 1;
 }
 
 int crypton_powm_sec(uint8_t *out,

@@ -27,7 +27,11 @@ mkdir -p "$out"
 cd "$root"
 
 src="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
-inc="-Icbits -Icbits/include64 -Icbits/s2n/include"
+# The public-exponent exponentiation declines on every machine where what the
+# caller already has is faster, which is most of them and all of the ones
+# this can be developed on.  CRYPTON_POWM_PUB_ALWAYS makes it accept, so its
+# arithmetic is exercised wherever this runs rather than only where it ships.
+inc="-Icbits -Icbits/include64 -Icbits/s2n/include -DCRYPTON_POWM_PUB_ALWAYS"
 
 # The assembly that computes R^2 is built in where the library would build
 # it, so that the two ways of computing that constant can be compared.  The
