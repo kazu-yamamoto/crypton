@@ -15,11 +15,14 @@
 # The machine is pinned for the same reason bench.yml pins it.
 name: rsa
 
-# A dispatch would have to be answered from the default branch, which this
-# is deliberately not on, so it runs when this branch is pushed.
+# A dispatch would have to be answered from the default branch, which this is
+# deliberately not on, so it runs on a push -- but only one that touches this
+# file, or every push to this branch would set three builds going.  To use
+# it, point the checkout below at the branch to measure and push that change.
 on:
   push:
     branches: [ci]
+    paths: ['.github/workflows/rsa.yml']
 
 jobs:
   rsa:
@@ -38,7 +41,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        ref: perf/rsa-public-exponent
+        ref: test/powm-window
 
     - uses: haskell-actions/setup@v2
       with:
