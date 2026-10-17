@@ -15,15 +15,11 @@
 # The machine is pinned for the same reason bench.yml pins it.
 name: rsa
 
+# A dispatch would have to be answered from the default branch, which this
+# is deliberately not on, so it runs when this branch is pushed.
 on:
-  workflow_dispatch:
-    inputs:
-      reps:
-        description: best of how many
-        default: '7'
-      branch:
-        description: the branch to measure against main
-        default: 'perf/rsa-public-exponent'
+  push:
+    branches: [ci]
 
 jobs:
   rsa:
@@ -42,7 +38,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        ref: ${{ github.event.inputs.branch }}
+        ref: perf/rsa-public-exponent
 
     - uses: haskell-actions/setup@v2
       with:
@@ -75,7 +71,7 @@ jobs:
 
     - name: The race
       env:
-        REPS: ${{ github.event.inputs.reps }}
+        REPS: '7'
       run: |
         python3 - <<'PY'
         import os, subprocess
