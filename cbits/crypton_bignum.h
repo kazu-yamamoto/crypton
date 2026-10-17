@@ -439,7 +439,20 @@ static inline void dbl_mod(limb_t *a, const limb_t *m, uint32_t n, limb_t *tmp)
  * What the trip counts depend on is the modulus' length, which is what the
  * doubling loop showed as well, and nothing else about it.
  */
-static inline void mont_r2(limb_t *r2, const limb_t *m, limb_t n0, uint32_t n,
+/* s2n-bignum's bignum_montifier computes the same constant in assembly, on
+ * both architectures, and is the faster of the two by a good margin -- the
+ * C cannot form the carry chains it does.  It is used where it is built,
+ * and the C below is what everywhere else gets and what it is checked
+ * against.  It needs a scratch buffer of n limbs, which every caller
+ * already passes. */
+#if defined(CRYPTON_S2N_BIGNUM) && !defined(CRYPTON_NO_MONTIFIER) \
+    && (defined(__x86_64__) || defined(__aarch64__)) && LIMB_BITS == 64
+#define CRYPTON_MONTIFIER 1
+extern void bignum_montifier(uint64_t k, uint64_t *z, const uint64_t *m,
+                             uint64_t *t);
+#endif
+
+static inline void mont_r2_c(limb_t *r2, const limb_t *m, limb_t n0, uint32_t n,
                     limb_t *t)
 {
 	uint32_t lgr = n * LIMB_BITS;
@@ -470,6 +483,17 @@ static inline void mont_r2(limb_t *r2, const limb_t *m, limb_t n0, uint32_t n,
 		if ((lgr >> (i - 1)) & 1)
 			dbl_mod(r2, m, n, t);
 	}
+}
+
+static inline void mont_r2(limb_t *r2, const limb_t *m, limb_t n0, uint32_t n,
+                    limb_t *t)
+{
+#ifdef CRYPTON_MONTIFIER
+	(void) n0;
+	bignum_montifier(n, r2, m, t);
+#else
+	mont_r2_c(r2, m, n0, n, t);
+#endif
 }
 
 /* big-endian bytes into limbs, least significant limb first; anything above

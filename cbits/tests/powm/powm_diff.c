@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdint.h>
 #include "crypton_powm.h"
+#include "crypton_bignum.h"
 
 static uint64_t rng_state = 0x9e3779b97f4a7c15ULL;
 
@@ -99,6 +100,55 @@ static void dump(void)
 	}
 }
 
+/* R^2 mod m two ways: crypton's ladder of Montgomery squarings, and
+ * s2n-bignum's bignum_montifier where it is built.  Every exponentiation and
+ * every s2n ECC operation starts with this constant, so a disagreement is
+ * not a slow path but a wrong answer everywhere. */
+static int montifier_agrees(void)
+{
+#ifdef CRYPTON_MONTIFIER
+	static const uint32_t sizes[] = {4, 6, 8, 16, 17, 32};
+	uint32_t s, k, i, bad = 0, cases = 0;
+
+	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
+		uint32_t n = sizes[s];
+		limb_t *m = calloc(n, sizeof(limb_t));
+		limb_t *a = calloc(n, sizeof(limb_t));
+		limb_t *b = calloc(n, sizeof(limb_t));
+		limb_t *t = calloc(2 * n + 8, sizeof(limb_t));
+
+		for (k = 0; k < 50; k++) {
+			for (i = 0; i < n; i++)
+				m[i] = (limb_t) rng();
+			/* both a modulus that fills its limbs and one that
+			 * does not, since the ladder starts at the top bit */
+			if (k & 1)
+				m[n - 1] |= (limb_t) 1 << (LIMB_BITS - 1);
+			else
+				m[n - 1] >>= 1 + (k % (LIMB_BITS - 1));
+			m[0] |= 1;
+			if (n == 1 && m[0] == 1)
+				continue;
+			cases++;
+			mont_r2_c(a, m, mont_n0(m[0]), n, t);
+			mont_r2(b, m, mont_n0(m[0]), n, t);
+			if (memcmp(a, b, n * sizeof(limb_t)) != 0) {
+				printf("FAIL montifier: %u limbs disagree\n", n);
+				bad++;
+				break;
+			}
+		}
+		free(m); free(a); free(b); free(t);
+	}
+	if (bad == 0)
+		printf("ok   %u moduli: the assembly R^2 is the C's R^2\n", cases);
+	return bad == 0;
+#else
+	printf("skip R^2: this build has no assembly montifier to compare\n");
+	return 1;
+#endif
+}
+
 int main(int argc, char **argv)
 {
 	int failures = 0, cases = 0;
@@ -108,6 +158,9 @@ int main(int argc, char **argv)
 		dump();
 		return 0;
 	}
+
+	if (!montifier_agrees())
+		failures++;
 
 	for (k = 0; k < 2000; k++) {
 		uint32_t m = (uint32_t)(rng() % 60000) | 1;
