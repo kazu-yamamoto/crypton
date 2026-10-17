@@ -20,4 +20,9 @@ int crypton_powm_sec(uint8_t *out,
                      const uint8_t *exp, uint32_t explen,
                      const uint8_t *mod, uint32_t modlen);
 
+/* The window the secure exponentiation walks the exponent in, so that a
+ * build which did not take -DPOWM_WINDOW_BITS cannot pass for one that
+ * did. */
+int crypton_powm_window_bits(void);
+
 #endif

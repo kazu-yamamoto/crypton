@@ -29,11 +29,6 @@ typedef uint64_t dlimb_t;
 
 #define LIMB_BYTES (LIMB_BITS / 8)
 
-/* four bits of exponent per window, so a table of sixteen and no leftover
- * bits: a byte holds exactly two windows */
-#define WINDOW_BITS 4
-#define TABLE_SIZE (1 << WINDOW_BITS)
-
 /* r = a - b, returning the borrow out of the top */
 static inline limb_t sub_n(limb_t *r, const limb_t *a, const limb_t *b, uint32_t n)
 {

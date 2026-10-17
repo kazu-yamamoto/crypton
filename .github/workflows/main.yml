@@ -398,6 +398,19 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
       run: cbits/tests/sysdrg/run.sh
 
+    # The window the exponentiation walks the exponent in, built at four,
+    # five and six bits.  Only four divides a byte; the other two read across
+    # one, and all three have to give the same answers.  Three definitions of
+    # WINDOW_BITS used to shadow each other at the same value, so a build
+    # asking for five silently got four and said so nowhere.
+    #
+    # The widths cannot catch a fault they all share, so a modulus small
+    # enough to raise to a power by repeated multiplication is answered that
+    # way too.
+    - name: The window the exponentiation walks in
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
+      run: cbits/tests/powm/run.sh
+
     # The same answers on a machine whose bytes go the other way.  s390x and
     # ppc64 are among the architectures the cabal file builds for and neither
     # is in this matrix, so the eighteen files that read their input through
