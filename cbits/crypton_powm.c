@@ -126,20 +126,59 @@ static void powm_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
 	mont_sqr(r, a, m, n0, n, t);
 }
 
-/* Four bits of exponent per window, so a table of sixteen and no leftover
- * bits: a byte holds exactly two windows.
+/* Four bits of exponent per window, so a table of sixteen.
  *
- * Five was written and measured, and is not here.  A wider window saves
+ * Five was written and measured and is not here.  A wider window saves
  * multiplications -- 205 of them against 256 at 1024 bits, with the same
  * 1024 squarings -- and pays for it in the masked scan of a table twice as
- * long, and which way that comes out depends on the machine and on which
- * multiplication is running: 3.5% better on an Apple M4, about 1% worse on
- * an older x86-64, and 7% worse anywhere s2n-bignum's multiplication is
- * used, since that makes the scan the expensive half.  Six measured level
- * with five on the M4 and seven worse.  What would make a wider window pay
- * everywhere is a cheaper scan, not a wider window. */
-#define WINDOW_BITS 4
+ * long.  When that was first measured the scan was the scalar one, and five
+ * came out 3.5% better on an Apple M4, about 1% worse on an older x86-64 and
+ * 7% worse where s2n-bignum's multiplication runs, since that makes the scan
+ * the expensive half.  The conclusion written here was that what would make
+ * a wider window pay is a cheaper scan.
+ *
+ * The cheaper scan arrived twenty-one minutes later, in the AVX2 form above,
+ * and nobody measured the window again.  Measured since, on the machine the
+ * x86-64 table is measured on and with both builds raced in one run: five is
+ * 0.6% worse than four, beside 0.5% between two builds that differ in
+ * nothing.  So the cheaper scan did not turn it round -- the window stays at
+ * four, and now for a reason that was checked after the scan rather than
+ * before it.
+ *
+ * The width is POWM_WINDOW_BITS so that it can be measured rather than
+ * argued about.  It had to be renamed to be settable at all: WINDOW_BITS was
+ * defined here, in cbits/crypton_ecc.c and in cbits/crypton_bignum.h, all
+ * three to four, and a redefinition to the same value is silent -- so
+ * -DWINDOW_BITS=5 was overridden by the header and three builds meant to
+ * differ did not.  cbits/tests/powm builds the walk at four, five and six
+ * and requires the same answers of all three. */
+#ifndef POWM_WINDOW_BITS
+#define POWM_WINDOW_BITS 4
+#endif
+#define WINDOW_BITS POWM_WINDOW_BITS
 #define TABLE_SIZE (1 << WINDOW_BITS)
+
+/* Window number k counting from the bottom, where the bottom window holds
+ * the exponent's least significant WINDOW_BITS bits.  The exponent is
+ * big-endian bytes, and a window may straddle a byte boundary once the width
+ * stops dividing eight, so this reads the two bytes it can fall across.
+ *
+ * Which window is being read is the loop counter, not the exponent, so the
+ * shifts and the index here are public.
+ */
+static limb_t exp_window(const uint8_t *exp, uint32_t explen, uint32_t k)
+{
+	uint32_t lo = k * WINDOW_BITS;          /* bit offset from the bottom */
+	uint32_t byte = lo / 8, off = lo % 8;
+	uint32_t v;
+
+	if (byte >= explen)
+		return 0;
+	v = exp[explen - 1 - byte];
+	if (off + WINDOW_BITS > 8 && byte + 1 < explen)
+		v |= (uint32_t) exp[explen - 2 - byte] << 8;
+	return (v >> off) & (TABLE_SIZE - 1);
+}
 
 /* The masked scan of the table: every entry is read and a mask keeps the one
  * wanted, so that the address stream does not follow the exponent.  At
@@ -205,6 +244,11 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
 }
 #endif
 
+int crypton_powm_window_bits(void)
+{
+	return WINDOW_BITS;
+}
+
 int crypton_powm_sec(uint8_t *out,
                      const uint8_t *base, uint32_t baselen,
                      const uint8_t *exp, uint32_t explen,
@@ -259,9 +303,8 @@ int crypton_powm_sec(uint8_t *out,
 
 	memcpy(acc, table, n * sizeof(limb_t));
 
-	for (i = explen * 2; i > 0; i--) {
-		uint32_t nib = i - 1;
-		limb_t w = (exp[explen - 1 - nib / 2] >> (4 * (nib % 2))) & 0xf;
+	for (i = (explen * 8 + WINDOW_BITS - 1) / WINDOW_BITS; i > 0; i--) {
+		limb_t w = exp_window(exp, explen, i - 1);
 
 		/* squaring into the other buffer and swapping the two saves a
 		 * copy of the modulus' width every time; which of the three
