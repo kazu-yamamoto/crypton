@@ -613,6 +613,7 @@ library
         if arch(aarch64)
             asm-sources:
                 cbits/s2n/arm/bignum_deamont_p384.S
+                cbits/s2n/arm/bignum_montifier.S
                 cbits/s2n/arm/bignum_modinv.S
                 cbits/s2n/arm/curve25519_x25519.S
                 cbits/s2n/arm/curve25519_x25519_alt.S
@@ -696,6 +697,7 @@ library
             -- cbits/crypton_powm.c asks about before using any.
             asm-sources:
                 cbits/s2n/x86_att/bignum_emontredc_8n.S
+                cbits/s2n/x86_att/bignum_montifier.S
                 cbits/s2n/x86_att/bignum_kmul_16_32.S
                 cbits/s2n/x86_att/bignum_kmul_32_64.S
                 cbits/s2n/x86_att/bignum_ksqr_16_32.S

@@ -67,7 +67,34 @@ It is twice the C, because the C cannot form the two carry chains `ADCX` and
 | multiplication | 0.4832 us | **0.2479** |
 | square | 0.3984 | **0.1994** |
 
-**Nothing is vendored for AArch64**, where the same five routines measure level
+### The Montgomery constant
+
+`bignum_montifier` is vendored for **both** architectures.  It is the one
+routine here that is not about a particular curve or a particular size: every
+modular exponentiation and every setup in `crypton_ecc.c` starts by computing
+R^2 mod m, and this computes it.  crypton's C climbs to it by a
+binary ladder of Montgomery squarings -- log2 of the modulus' bits of them,
+eleven at 2048 -- and the assembly is between two and three and a half times
+faster, the gap being the carry chains again:
+
+| | C | s2n-bignum |
+| --- | ---: | ---: |
+| M4, 1024 bits | 1.853 us | **0.771** |
+| M4, 2048 bits | 5.835 | **2.407** |
+| an x86-64 without ADX, 1024 bits | 6.145 | **1.995** |
+| an x86-64 without ADX, 2048 bits | 23.332 | **6.852** |
+
+A CRT signature computes it twice, so an RSA-2048 private operation on the
+EPYC 7763 goes from 613.5 to 606.4 microseconds -- a little over one per
+cent, which is all a constant computed twice out of some two and a half
+thousand multiplications can be.  It is worth much more than that to anything
+whose exponent is short, which is why it is here: see `crypton_powm.c`.
+
+The two agree bit for bit; `cbits/tests/powm` requires it at six widths, with
+moduli that fill their limbs and moduli that do not, and a build without the
+assembly (`-DCRYPTON_NO_MONTIFIER`) is what it is checked against.
+
+**None of the five above is vendored for AArch64**, where they measure level
 with the C.  That took three attempts to establish, and the first two were
 wrong in opposite directions: a reading when the x86-64 routines went in put
 the C 5% ahead, and one on 2026-09-26 put the assembly 4% ahead.  Both were
@@ -94,7 +121,19 @@ the window is worth, and why it is four and not five, is in
 ## What is not here
 
 s2n-bignum has only x86-64 and AArch64, so crypton's C stays and is what
-every other architecture uses.  `p384_montjscalarmul` and `p521_jscalarmul`
+every other architecture uses.
+
+Its `generic` directory holds a complete variable-size bignum library on both
+architectures -- `bignum_montmul`, `bignum_montredc`, `bignum_emontredc`,
+`bignum_modinv` and a whole `bignum_modexp` -- and only `bignum_montifier` is
+taken from it.  The rest is not ruled out, only unmeasured: `bignum_modexp` in
+particular would replace `crypton_powm_sec` entirely, and whether its window
+beats crypton's four-bit one is an open question rather than a settled one.
+The README there says every function is written in a constant-time style, with
+one named exception that is not one of these, though it also says that unlike
+functional correctness this is not machine-checked.
+
+`p384_montjscalarmul` and `p521_jscalarmul`
 have no affine wrapper upstream; crypton's is in `cbits/p256/p256_s2n.c`'s
 sibling for those curves.  There is no fixed-base routine for P-384 or
 P-521 at all, so signing on those curves keeps crypton's comb.

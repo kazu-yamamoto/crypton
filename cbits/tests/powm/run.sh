@@ -27,7 +27,28 @@ mkdir -p "$out"
 cd "$root"
 
 src="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
-inc="-Icbits -Icbits/include64"
+inc="-Icbits -Icbits/include64 -Icbits/s2n/include"
+
+# The assembly that computes R^2 is built in where the library would build
+# it, so that the two ways of computing that constant can be compared.  The
+# define is the library's own.
+case $(uname -m) in
+aarch64|arm64)
+	src="$src cbits/s2n/arm/bignum_montifier.S"
+	inc="$inc -DCRYPTON_S2N_BIGNUM" ;;
+x86_64|amd64)
+	# the define also turns on the exponentiation's own s2n path, which
+	# wants the five routines its inner step borrows -- so they are built
+	# in too, and the walk here is the one the library ships.  Whether
+	# they run is a question about ADX the code asks at run time.
+	src="$src cbits/s2n/x86_att/bignum_montifier.S
+	           cbits/s2n/x86_att/bignum_kmul_16_32.S
+	           cbits/s2n/x86_att/bignum_kmul_32_64.S
+	           cbits/s2n/x86_att/bignum_ksqr_16_32.S
+	           cbits/s2n/x86_att/bignum_ksqr_32_64.S
+	           cbits/s2n/x86_att/bignum_emontredc_8n.S"
+	inc="$inc -DCRYPTON_S2N_BIGNUM" ;;
+esac
 
 # On x86-64 the exponentiation asks the processor what it has, which lives in
 # crypton_cpu.c, which in turn wants one symbol out of the AES build that
