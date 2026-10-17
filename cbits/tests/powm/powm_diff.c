@@ -62,8 +62,20 @@ static void dump(void)
 	rng_state = 0x243f6a8885a308d3ULL;
 	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
 		uint32_t ml = sizes[s] / 8;
-		uint8_t *m = malloc(ml), *b = malloc(ml);
-		uint8_t *e = malloc(ml), *r = malloc(ml);
+		uint8_t *m, *b, *e, *r;
+
+		/* every size above is a whole number of bytes and none of them
+		 * is zero, but gcc 13 cannot see that from here and warns
+		 * about the m[ml - 1] below */
+		if (ml == 0)
+			continue;
+		m = malloc(ml); b = malloc(ml);
+		e = malloc(ml); r = malloc(ml);
+		if (m == NULL || b == NULL || e == NULL || r == NULL) {
+			printf("FAIL out of memory\n");
+			free(m); free(b); free(e); free(r);
+			return;
+		}
 
 		for (k = 0; k < 20; k++) {
 			/* every exponent length from one byte up, so that a
