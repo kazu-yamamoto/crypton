@@ -1,0 +1,111 @@
+# Three builds of the same tree, raced against each other in one run.
+#
+# Not a README table: this answers two questions about RSA on x86-64, and
+# both are comparisons between variants of the working tree, which
+# bench/build.sh cannot express -- it takes released versions.  Every
+# variant is built here and they are run alternately, so a quiet moment or a
+# warm machine reaches all of them alike.
+#
+#   base      main as it stands
+#   pub       the public-exponent exponentiation, which only verification
+#             reaches
+#   w5        the same, with the secure exponentiation's window at five
+#             bits, which only signing reaches
+#
+# The machine is pinned for the same reason bench.yml pins it.
+name: rsa
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: best of how many
+        default: '7'
+      branch:
+        description: the branch to measure against main
+        default: 'perf/rsa-public-exponent'
+
+jobs:
+  rsa:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Which machine the draw gave
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        if ! grep -q '7763' /proc/cpuinfo; then
+          echo "::error::not the EPYC 7763; re-run"
+          exit 1
+        fi
+        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' | grep -xE 'adx|avx2' | sort | tr '\n' ' '
+        echo
+
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        ref: ${{ github.event.inputs.branch }}
+
+    - uses: haskell-actions/setup@v2
+      with:
+        ghc-version: '9.12'
+        cabal-version: latest
+
+    - name: The three builds
+      run: |
+        set -eu
+        git worktree add /tmp/base origin/main
+        mkdir -p /tmp/bin
+
+        build () {                      # name, tree, extra ghc-options
+          d=/tmp/proj-$1
+          rm -rf "$d"; mkdir -p "$d"
+          cp bench/PK.hs "$d/"
+          sed 's/crypton$/crypton == 2.2.1/' bench/pk.cabal > "$d/pk.cabal"
+          printf 'packages: . %s\n' "$2" > "$d/cabal.project"
+          ( cd "$d" && cabal build -v0 $3 )
+          cp "$( cd "$d" && cabal list-bin pkbench )" "/tmp/bin/pk-$1"
+          echo "built $1"
+        }
+
+        build base /tmp/base ''
+        build pub  "$PWD"    ''
+        build w5   "$PWD"    '--ghc-options=-optc-DPOWM_WINDOW_BITS=5'
+
+        # the three must not be the same binary
+        md5sum /tmp/bin/*
+
+    - name: The race
+      env:
+        REPS: ${{ github.event.inputs.reps }}
+      run: |
+        python3 - <<'PY'
+        import os, subprocess
+        K = int(os.environ.get("REPS", "7"))
+        BIN = "/tmp/bin"
+        # which variants can differ on which operation, and which cannot:
+        # a row where nothing differs is this machine's noise floor
+        ROWS = [("rsa-verify", ["base", "pub"]),
+                ("rsa-sign",   ["base", "pub", "w5"]),
+                ("ecdsa-p256-sign", ["base", "pub", "w5"])]
+
+        def one(v, op):
+            out = subprocess.run([f"{BIN}/pk-{v}", op],
+                                 capture_output=True, text=True).stdout.strip()
+            try:
+                return float(out)
+            except ValueError:
+                return None
+
+        for op, vs in ROWS:
+            cols = {v: [] for v in vs}
+            for _ in range(K):
+                for v in vs:                 # every column before any repeats
+                    x = one(v, op)
+                    if x:
+                        cols[v].append(x)
+            best = {v: (min(c) if c else None) for v, c in cols.items()}
+            cells = "  ".join(f"{v}={best[v]:.3f}" if best[v] else f"{v}=-"
+                              for v in vs)
+            got = [x for x in best.values() if x]
+            spread = 100 * (max(got) / min(got) - 1) if got else 0
+            print(f"{op:<18} {cells}   spread {spread:.1f}%")
+        PY
