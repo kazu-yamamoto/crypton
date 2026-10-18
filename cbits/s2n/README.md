@@ -126,11 +126,26 @@ every other architecture uses.
 Its `generic` directory holds a complete variable-size bignum library on both
 architectures -- `bignum_montmul`, `bignum_montredc`, `bignum_emontredc`,
 `bignum_modinv` and a whole `bignum_modexp` -- and only `bignum_montifier` is
-taken from it.  The rest is not ruled out, only unmeasured: `bignum_modexp` in
-particular would replace `crypton_powm_sec` entirely, and whether its window
-beats crypton's four-bit one is an open question rather than a settled one.
+taken from it.  **The rest was measured on an M4 and is slower than what is
+here**, which is why it stays out; they agree with crypton's answers in every
+case first, so both were computing the same thing.
+
+| nanoseconds, AArch64 | C | s2n-bignum |
+| --- | ---: | ---: |
+| Montgomery multiply, 1024 bits | **171.7** | 227.9 |
+| Montgomery multiply, 2048 bits | **649.6** | 870.3 |
+| Montgomery square, 1024 bits | **157.3** | 202.6 |
+| Montgomery square, 2048 bits | **539.2** | 870.8 |
+
+That is the inline assembly above doing its job: four limbs to an iteration
+with two carry chains, where a size-parametric routine takes them one at a
+time.  `bignum_modexp`, which would have replaced `crypton_powm_sec` outright,
+loses by more again -- 421.0 microseconds against 246.4 at 1024 bits and 3578
+against 1534 at 2048 -- because it has that multiplication inside it and no
+window, so it pays about twice the multiplications as well.
+
 The README there says every function is written in a constant-time style, with
-one named exception that is not one of these, though it also says that unlike
+one named exception that is none of these, though it also says that unlike
 functional correctness this is not machine-checked.
 
 `p384_montjscalarmul` and `p521_jscalarmul`
