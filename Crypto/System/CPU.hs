@@ -171,8 +171,18 @@ instance Show ProcessorOption where
     show PPCVPMSUM = "PPCVPMSUM"
     show (ProcessorOption n) = "ProcessorOption " ++ show n
 
--- | Options which have been enabled at compile time and are supported by the
--- current CPU.
+-- | Options which have been enabled at compile time and which this machine
+-- says may be used: on x86-64 what the processor declares through CPUID, and
+-- for the vector extensions only where the operating system saves their
+-- state as well; elsewhere what the operating system reports of the
+-- processor.
+--
+-- That is what crypton itself decides by, and it is not always everything
+-- the core underneath executes.  A guest under a hypervisor may be shown an
+-- older processor model than the host's, so that it can be moved to another
+-- host -- and an instruction used because it happens to run would fail
+-- there.  So an option missing here means crypton will not use it, not that
+-- the hardware lacks it.
 --
 -- Sorted, and without repeats.  A machine reports the names of its own
 -- architecture only: an AArch64 processor with AES says 'ARMAES', not
