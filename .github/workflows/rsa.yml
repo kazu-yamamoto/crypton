@@ -15,7 +15,7 @@ on:
     paths: ['.github/workflows/rsa.yml']
 
 env:
-  BRANCH: perf/rsa3072
+  BRANCH: perf/rsa3072-verify
 
 jobs:
   powm:
@@ -35,47 +35,57 @@ jobs:
         fetch-depth: 0
         ref: ${{ env.BRANCH }}
 
-    - name: The two builds
+    - name: GMP's headers
+      run: sudo apt-get install -y -q libgmp-dev > /dev/null && echo "gmp $(dpkg-query -W -f='${Version}' libgmp-dev)"
+
+    - name: Verification's exponentiation, crypton against GMP
       run: |
         set -eu
-        git worktree add /tmp/base origin/main
-        cat > /tmp/pwbench.c <<'C'
+        cat > /tmp/vbench.c <<'C'
+        /* What RSA verification computes, s^65537 mod n: crypton's public-
+         * exponent path against GMP's mpz_powm, which is what expFast calls
+         * whenever crypton declines.  Both see ADX through CPUID here. */
         #include <stdio.h>
         #include <stdlib.h>
         #include <stdint.h>
         #include <time.h>
+        #include <gmp.h>
         #include "crypton_powm.h"
         static uint64_t rs = 0x243f6a8885a308d3ULL;
         static uint8_t rb(void) { rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return (uint8_t) rs; }
         static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec / 1e9; }
         int main(int argc, char **argv) {
           uint32_t bits = (uint32_t) atoi(argv[1]), nb = bits / 8, i; int reps = atoi(argv[2]), k;
-          uint8_t *m = malloc(nb), *b = malloc(nb), *e = malloc(nb), *r = malloc(nb); double t0;
-          for (i = 0; i < nb; i++) { m[i] = rb(); b[i] = rb(); e[i] = rb(); }
-          m[0] |= 0x80; m[nb - 1] |= 1; b[0] &= 0x7f; e[0] |= 0x80;
-          crypton_powm_sec(r, b, nb, e, nb, m, nb);
-          t0 = now(); for (k = 0; k < reps; k++) crypton_powm_sec(r, b, nb, e, nb, m, nb);
-          printf("%.2f\n", (now() - t0) * 1e6 / reps); return 0; }
+          const char *who = argv[3];
+          uint8_t *m = malloc(nb), *b = malloc(nb), *r = malloc(nb), e[3] = {1, 0, 1};
+          mpz_t M, B, E, R; double t0;
+          for (i = 0; i < nb; i++) { m[i] = rb(); b[i] = rb(); }
+          m[0] |= 0x80; m[nb - 1] |= 1; b[0] &= 0x7f;
+          mpz_inits(M, B, E, R, NULL);
+          mpz_import(M, nb, 1, 1, 1, 0, m); mpz_import(B, nb, 1, 1, 1, 0, b); mpz_set_ui(E, 65537);
+          if (who[0] == 'c') {
+            if (crypton_powm_pub(r, b, nb, e, 3, m, nb) != 0) { printf("declined\n"); return 1; }
+            { mpz_t X; mpz_init(X); mpz_import(X, nb, 1, 1, 1, 0, r); mpz_powm(R, B, E, M);
+              if (mpz_cmp(X, R)) { printf("DISAGREE\n"); return 1; } }
+            t0 = now(); for (k = 0; k < reps; k++) crypton_powm_pub(r, b, nb, e, 3, m, nb);
+          } else {
+            t0 = now(); for (k = 0; k < reps; k++) mpz_powm(R, B, E, M);
+          }
+          printf("%.3f\n", (now() - t0) * 1e6 / reps); return 0; }
         C
-        build () {
-          ( cd "$2" && S=cbits/s2n/x86_att && gcc -O2 -Icbits -Icbits/include64 -Icbits/s2n/include \
-              -DCRYPTON_S2N_BIGNUM -o "/tmp/pw-$1" /tmp/pwbench.c cbits/crypton_powm.c \
-              cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c \
-              $S/bignum_montifier.S $S/bignum_kmul_16_32.S $S/bignum_kmul_32_64.S \
-              $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S )
-          echo "built $1"
-        }
-        build main /tmp/base
-        build branch "$PWD"
-
-    - name: The race
-      run: |
-        echo "crypton_powm_sec, full-width exponent, alternated, best of 9, microseconds"
-        for bits in 1024 1536 2048; do
-          bm=999999; bb=999999
+        S=cbits/s2n/x86_att
+        gcc -O2 -Icbits -Icbits/include64 -Icbits/s2n/include -DCRYPTON_S2N_BIGNUM \
+          -o /tmp/vb /tmp/vbench.c cbits/crypton_powm.c cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c \
+          $S/bignum_montifier.S $S/bignum_kmul_16_32.S $S/bignum_kmul_32_64.S \
+          $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S \
+          $S/bignum_mul.S $S/bignum_sqr.S -lgmp
+        echo "s^65537 mod n, alternated, best of 9, microseconds"
+        for bits in 2048 3072 4096; do
+          bc=999999; bg=999999
           for i in 1 2 3 4 5 6 7 8 9; do
-            m=$(/tmp/pw-main $bits 20); b=$(/tmp/pw-branch $bits 20)
-            bm=$(echo "$m $bm" | awk '{print ($1<$2)?$1:$2}'); bb=$(echo "$b $bb" | awk '{print ($1<$2)?$1:$2}')
+            c=$(/tmp/vb $bits 200 c); g=$(/tmp/vb $bits 200 g)
+            case "$c" in *[!0-9.]*) echo "  $bits: crypton said $c"; exit 1;; esac
+            bc=$(echo "$c $bc" | awk '{print ($1<$2)?$1:$2}'); bg=$(echo "$g $bg" | awk '{print ($1<$2)?$1:$2}')
           done
-          echo "  $bits bits: main=$bm  branch=$bb  main/branch=$(echo "$bm $bb" | awk '{printf "%.2f", $1/$2}')"
+          echo "  $bits bits: crypton=$bc  gmp=$bg  gmp/crypton=$(echo "$bg $bc" | awk '{printf "%.2f", $1/$2}')"
         done
