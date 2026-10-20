@@ -26,9 +26,11 @@ int crypton_powm_sec(uint8_t *out,
  *
  * It declines -- returning 1 with out untouched -- whenever it is not the
  * faster of the two things the caller could do: for an exponent of more
- * than eight bytes, where a windowed walk is the better algorithm, and
+ * than eight bytes, where a windowed walk is the better algorithm;
  * everywhere the vendored assembly's Montgomery multiplication does not
- * run.  So a caller must have something to fall back to.
+ * run; and at every modulus size but 2048 bits, where GMP was measured the
+ * faster even with the assembly.  So a caller must have something to fall
+ * back to.
  */
 int crypton_powm_pub(uint8_t *out,
                      const uint8_t *base, uint32_t baselen,

@@ -297,7 +297,7 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
  * every step and multiplying where a bit is set.  It is for public exponents
  * only, and nothing in this library may call it with a secret.
  *
- * It declines -- returning 1 without touching out -- in two cases, so a
+ * It declines -- returning 1 without touching out -- in three cases, so a
  * caller must have something to fall back to.
  *
  * The first is a long exponent.  Walking it a bit at a time costs about one
@@ -315,18 +315,29 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
  * was written as an expectation and has since been measured: on an Apple
  * M4, verification through here and through GMP come out level, the
  * difference no larger than between two rows neither of them touches.
+ * The third is every size but 2048 bits, where the assembly runs and GMP is
+ * faster all the same; see powm_pub_wanted.
+ *
  * Define CRYPTON_POWM_PUB_ALWAYS to make it accept anyway: the differential
  * test builds that way, so that this arithmetic is exercised on the
  * machines the assembly never reaches.
  */
 #define POWM_PUB_MAX_EXP_BYTES 8
 
+/* Which sizes this is worth taking at is not which sizes the assembly runs
+ * at.  Against GMP, which is what the caller has, on an EPYC 7763 with ADX
+ * on both sides: ahead at 2048 bits, and behind everywhere else measured --
+ * slightly at 1024, by more at 1536, and by more again at 3072 and 4096,
+ * which is the size where GMP's own setup and multiplication are the better
+ * pair.  So 2048 alone, which is RSA-2048's modulus and the size nearly
+ * every RSA public key has.  It once took every size the assembly ran at,
+ * on the strength of 2048 alone, and was slower than GMP at 1024. */
 static int powm_pub_wanted(uint32_t n)
 {
 #if defined(CRYPTON_POWM_PUB_ALWAYS)
 	return n > 0;
 #elif defined(CRYPTON_POWM_S2N)
-	return powm_s2n_usable(n);
+	return n == 32 && powm_s2n_usable(n);
 #else
 	(void) n;
 	return 0;
