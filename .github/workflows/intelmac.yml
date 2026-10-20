@@ -1,0 +1,61 @@
+# crypton on an Intel Mac, which no job in main.yml is: macOS-latest is
+# Apple silicon.  Runs on a push to this branch that touches this file;
+# point REF at what to build.
+name: intelmac
+
+on:
+  push:
+    branches: [ci]
+    paths: ['.github/workflows/intelmac.yml']
+
+env:
+  REF: main
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    steps:
+    - name: Which machine
+      run: |
+        uname -m
+        sysctl -n machdep.cpu.brand_string
+        sysctl -n machdep.cpu.leaf7_features 2>/dev/null | tr ' ' '\n' | grep -E '^(ADX|BMI2|AVX2|SHA)$' | tr '\n' ' '; echo
+        clang --version | head -1
+
+    - uses: actions/checkout@v5
+      with:
+        ref: ${{ env.REF }}
+
+    - name: The one file, by the assembler alone
+      run: |
+        set +e
+        clang -c -Icbits/s2n/include cbits/s2n/x86_att/bignum_emontredc_8n.S -o /tmp/e.o 2>&1 | head -12
+        echo "assembler exit: ${PIPESTATUS[0]}"
+        ok=0; bad=""
+        for f in cbits/s2n/x86_att/*.S; do
+          if clang -c -Icbits/s2n/include "$f" -o /tmp/x.o 2>/dev/null; then ok=$((ok+1)); else bad="$bad $(basename $f .S)"; fi
+        done
+        echo "assembled $ok of $(ls cbits/s2n/x86_att/*.S | wc -l | tr -d ' '); failed:$bad"
+
+    - uses: haskell-actions/setup@v2
+      with:
+        ghc-version: '9.12'
+        cabal-version: latest
+
+    - name: The library, as a user would build it
+      run: |
+        set +e
+        cabal update -v0
+        cabal build lib:crypton -v1 > build.log 2>&1
+        status=$?
+        echo "cabal exit: $status"
+        grep -E "error|Error" build.log | head -12
+        exit 0
+
+    - name: And the tests, if it built
+      run: |
+        if [ -d dist-newstyle ] && cabal build lib:crypton -v0 2>/dev/null; then
+          cabal test test-crypton --test-show-details=direct 2>&1 | grep -E "examples, |FAIL" | tail -3
+        else
+          echo "did not build, so nothing to test"
+        fi
