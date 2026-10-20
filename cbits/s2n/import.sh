@@ -107,6 +107,18 @@ take_x86 fastmul bignum_ksqr_16_32
 take_x86 fastmul bignum_kmul_32_64
 take_x86 fastmul bignum_ksqr_32_64
 take_x86 fastmul bignum_emontredc_8n
+# and, for the sizes there is no Karatsuba routine for, the schoolbook
+# multiplication and squaring of any size, which bignum_emontredc_8n then
+# reduces as it reduces the others
+take_x86 generic bignum_mul
+take_x86 generic bignum_sqr
+
+# R^2 mod m, which every exponentiation and every setup in crypton_ecc.c
+# begins with.  Both architectures: the C climbs to it by a ladder of
+# Montgomery squarings and this is faster on both.  Taken from upstream's
+# main when it went in rather than by this script, which is why it was
+# missing here; it is the same file at the COMMIT above.
+take generic bignum_montifier
 
 git -C "$TMP/s2n" rev-parse HEAD > "$HERE/COMMIT"
 echo "imported $(cat "$HERE/COMMIT")"
