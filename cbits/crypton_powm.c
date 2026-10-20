@@ -32,7 +32,9 @@
  * Not on AArch64, where the C measures 5% faster than the assembly.
  * See cbits/s2n/README.md.
  */
-#if defined(CRYPTON_S2N_BIGNUM) && defined(__x86_64__)
+/* Not on macOS, where crypton.cabal leaves these files out: Apple's assembler
+ * cannot assemble bignum_emontredc_8n.  See the note beside them there. */
+#if defined(CRYPTON_S2N_BIGNUM) && defined(__x86_64__) && !defined(__APPLE__)
 #define CRYPTON_POWM_S2N 1
 #include <crypton_cpu.h>
 
