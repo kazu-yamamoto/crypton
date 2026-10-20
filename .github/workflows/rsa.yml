@@ -80,7 +80,7 @@ jobs:
           $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S \
           $S/bignum_mul.S $S/bignum_sqr.S -lgmp
         echo "s^65537 mod n, alternated, best of 9, microseconds"
-        for bits in 2048 3072 4096; do
+        for bits in 1024 1536 2048 3072 4096; do
           bc=999999; bg=999999
           for i in 1 2 3 4 5 6 7 8 9; do
             c=$(/tmp/vb $bits 200 c); g=$(/tmp/vb $bits 200 g)
@@ -88,4 +88,47 @@ jobs:
             bc=$(echo "$c $bc" | awk '{print ($1<$2)?$1:$2}'); bg=$(echo "$g $bg" | awk '{print ($1<$2)?$1:$2}')
           done
           echo "  $bits bits: crypton=$bc  gmp=$bg  gmp/crypton=$(echo "$bg $bc" | awk '{printf "%.2f", $1/$2}')"
+        done
+
+    - name: The secure exponentiation, main against the branch
+      run: |
+        set -eu
+        git worktree add /tmp/base origin/main
+        cat > /tmp/pwbench.c <<'C'
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <stdint.h>
+        #include <time.h>
+        #include "crypton_powm.h"
+        static uint64_t rs = 0x243f6a8885a308d3ULL;
+        static uint8_t rb(void) { rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return (uint8_t) rs; }
+        static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec / 1e9; }
+        int main(int argc, char **argv) {
+          uint32_t bits = (uint32_t) atoi(argv[1]), nb = bits / 8, i; int reps = atoi(argv[2]), k;
+          uint8_t *m = malloc(nb), *b = malloc(nb), *e = malloc(nb), *r = malloc(nb); double t0;
+          for (i = 0; i < nb; i++) { m[i] = rb(); b[i] = rb(); e[i] = rb(); }
+          m[0] |= 0x80; m[nb - 1] |= 1; b[0] &= 0x7f; e[0] |= 0x80;
+          crypton_powm_sec(r, b, nb, e, nb, m, nb);
+          t0 = now(); for (k = 0; k < reps; k++) crypton_powm_sec(r, b, nb, e, nb, m, nb);
+          printf("%.1f\n", (now() - t0) * 1e6 / reps); return 0; }
+        C
+        build () {
+          ( cd "$2" && S=cbits/s2n/x86_att && extra="" && \
+            for f in bignum_mul bignum_sqr; do [ -f $S/$f.S ] && extra="$extra $S/$f.S"; done; \
+            gcc -O2 -Icbits -Icbits/include64 -Icbits/s2n/include -DCRYPTON_S2N_BIGNUM \
+              -o "/tmp/pw-$1" /tmp/pwbench.c cbits/crypton_powm.c \
+              cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c \
+              $S/bignum_montifier.S $S/bignum_kmul_16_32.S $S/bignum_kmul_32_64.S \
+              $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S $extra )
+        }
+        build main /tmp/base
+        build branch "$PWD"
+        echo "crypton_powm_sec, full-width exponent, alternated, best of 7, microseconds"
+        for bits in 2048 3072 4096; do
+          bm=9999999; bb=9999999
+          for i in 1 2 3 4 5 6 7; do
+            m=$(/tmp/pw-main $bits 4); b=$(/tmp/pw-branch $bits 4)
+            bm=$(echo "$m $bm" | awk '{print ($1<$2)?$1:$2}'); bb=$(echo "$b $bb" | awk '{print ($1<$2)?$1:$2}')
+          done
+          echo "  sec $bits bits: main=$bm  branch=$bb  main/branch=$(echo "$bm $bb" | awk '{printf "%.2f", $1/$2}')"
         done
