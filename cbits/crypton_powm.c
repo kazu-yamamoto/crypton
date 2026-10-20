@@ -270,7 +270,10 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
  *
  * The second is a machine where s2n-bignum's Montgomery multiplication does
  * not run.  There the multiplication here is the C one, which is not faster
- * than what the caller already has, so there is nothing to take over.
+ * than what the caller already has, so there is nothing to take over.  That
+ * was written as an expectation and has since been measured: on an Apple
+ * M4, verification through here and through GMP come out level, the
+ * difference no larger than between two rows neither of them touches.
  * Define CRYPTON_POWM_PUB_ALWAYS to make it accept anyway: the differential
  * test builds that way, so that this arithmetic is exercised on the
  * machines the assembly never reaches.
