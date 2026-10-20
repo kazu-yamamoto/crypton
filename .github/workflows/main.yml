@@ -80,6 +80,11 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: latest
 
+    # Xcode's ld cannot read the Command Line Tools' SDK stubs that clang picks.
+    - name: Link with the Command Line Tools
+      if: ${{ runner.os == 'macOS' }}
+      run: sudo xcode-select -s /Library/Developer/CommandLineTools
+
     - name: Cache Key
       id: params
       shell: bash
