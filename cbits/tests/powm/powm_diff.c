@@ -122,7 +122,7 @@ static void be32(uint8_t *p, uint32_t v)
  * difference is the window reader. */
 static void dump(void)
 {
-	static const uint32_t sizes[] = {128, 256, 512, 1024, 2048};
+	static const uint32_t sizes[] = {128, 256, 512, 1024, 1536, 2048};
 	uint32_t s, k, i;
 
 	rng_state = 0x243f6a8885a308d3ULL;
@@ -172,7 +172,7 @@ static void dump(void)
 static int montifier_agrees(void)
 {
 #ifdef CRYPTON_MONTIFIER
-	static const uint32_t sizes[] = {4, 6, 8, 16, 17, 32};
+	static const uint32_t sizes[] = {4, 6, 8, 16, 17, 24, 32, 48};
 	uint32_t s, k, i, bad = 0, cases = 0;
 
 	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
@@ -216,7 +216,14 @@ static int montifier_agrees(void)
 
 int main(int argc, char **argv)
 {
-	static const uint32_t sizes[] = {128, 256, 384, 512};
+	/* in bits.  The first four are small enough that only the C runs; the
+	 * rest are the sizes RSA works in -- 1024, 1536 and 2048 are the
+	 * halves of a CRT exponentiation for RSA-2048, -3072 and -4096, and
+	 * the ones s2n-bignum's multiplication takes where there is ADX.  This
+	 * list once stopped at 512 under a comment calling it RSA sizes, so the
+	 * comparison below never reached the assembly at all. */
+	static const uint32_t sizes[] = {128, 256, 384, 512,
+	                                 1024, 1536, 2048, 3072};
 	uint32_t k, s;
 
 	if (argc > 1 && strcmp(argv[1], "dump") == 0) {
