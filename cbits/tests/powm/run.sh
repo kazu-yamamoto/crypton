@@ -82,6 +82,35 @@ for w in 4 5 6; do
 	"$out/powm_w$w" dump > "$out/dump_w$w.txt"
 done
 
+# The same vectors once more, from the C alone: no CRYPTON_S2N_BIGNUM, so
+# neither the montifier nor, on x86-64, the exponentiation's s2n-bignum
+# multiplication.  Every other comparison here runs both of its sides
+# through the same multiplication.  Most faults in it -- or in the glue that
+# pads a 24-limb operand for it -- still show there, since the two sides call
+# it in different orders and come out wrong differently; but a fault that is
+# wrong the same way on both sides, as computing consistently modulo the
+# wrong number would be, agrees with itself and passes.  Nothing else in the
+# test suite reaches 24 limbs at all.  This comparison does not depend on the
+# multiplication being right to see that it is wrong.  On a machine without
+# ADX the x86-64 build above takes the C as well; -DCRYPTON_CPU_TESTING_ADX,
+# where the instructions are known to run, is what makes it differ.
+csrc="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
+case $(uname -m) in
+x86_64|amd64) csrc="$csrc cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c" ;;
+esac
+# shellcheck disable=SC2086
+$cc -O2 -DCRYPTON_POWM_PUB_ALWAYS -Icbits -Icbits/include64 \
+    -o "$out/powm_c" $csrc
+"$out/powm_c" dump > "$out/dump_c.txt"
+if cmp -s "$out/dump_w4.txt" "$out/dump_c.txt"; then
+	echo "ok   the vendored assembly answers what the C alone answers" \
+	     "($(wc -l < "$out/dump_c.txt" | tr -d ' ') vectors)"
+else
+	echo "FAIL the vendored assembly answers differently from the C"
+	diff "$out/dump_w4.txt" "$out/dump_c.txt" | head -6
+	status=1
+fi
+
 for w in 5 6; do
 	if cmp -s "$out/dump_w4.txt" "$out/dump_w$w.txt"; then
 		echo "ok   a window of $w bits answers what four bits answers" \

@@ -46,17 +46,39 @@ extern uint64_t bignum_emontredc_8n(uint64_t k, uint64_t *z,
                                     const uint64_t *m, uint64_t w);
 
 /* 16 limbs is 1024 bits and 32 is 2048: the halves a CRT exponentiation
- * works in for RSA-2048 and RSA-4096, and the whole thing without CRT.  The
- * reduction wants ADX, so the answer is a run-time one. */
+ * works in for RSA-2048 and RSA-4096, and the whole thing without CRT.  24
+ * is 1536, the half of RSA-3072, which has no Karatsuba routine of its own
+ * and is run through the 32-limb one with its operands padded -- a third
+ * of that routine's work wasted, and still nearly twice the C, since the C
+ * cannot form ADCX and ADOX's two carry chains at any size.  The reduction
+ * wants ADX, so the answer is a run-time one. */
 static int powm_s2n_usable(uint32_t n)
 {
-	return (n == 16 || n == 32)
+	return (n == 16 || n == 24 || n == 32)
 	    && (crypton_x86_simd_features() & CRYPTON_X86_ADX) != 0;
 }
 
-/* The scratch the widest of them asks for, in multiples of n: kmul_32_64
- * wants 96 limbs for n = 32. */
-#define POWM_S2N_SCRATCH 3
+/* The scratch the routines ask for, in limbs.  kmul_16_32 and kmul_32_64
+ * want three times their operand.  A 24-limb operand padded to 32 wants the
+ * 32-limb routine's 64-limb product and its 96 limbs of its own, and the two
+ * padded operands besides. */
+#define POWM_S2N_PAD_Z 0
+#define POWM_S2N_PAD_T 64
+#define POWM_S2N_PAD_X (64 + 96)
+#define POWM_S2N_PAD_Y (64 + 96 + 32)
+static uint32_t powm_s2n_scratch(uint32_t n)
+{
+	return n == 24 ? 64 + 96 + 32 + 32 : 3 * n;
+}
+
+/* a 24-limb operand in the low limbs of 32, the rest zero: zeroed every
+ * time rather than once, so that nothing else writing the scratch can
+ * leave a high limb behind */
+static void powm_s2n_pad(limb_t *to, const limb_t *from)
+{
+	memcpy(to, from, 24 * sizeof(limb_t));
+	memset(to + 24, 0, 8 * sizeof(limb_t));
+}
 
 /* bignum_emontredc_8n leaves the result in the top half of z with one more
  * bit as its return value, and what is there is under twice the modulus --
@@ -74,7 +96,17 @@ static void powm_s2n_mul(limb_t *r, const limb_t *a, const limb_t *b,
                          const limb_t *m, limb_t n0, uint32_t n, limb_t *z,
                          limb_t *scratch)
 {
-	if (n == 16)
+	if (n == 24) {
+		/* the product of two 24-limb numbers is 48 limbs, so the top
+		 * sixteen of the 64 written are zero and the reduction reads
+		 * only what it should */
+		z = scratch + POWM_S2N_PAD_Z;
+		powm_s2n_pad(scratch + POWM_S2N_PAD_X, a);
+		powm_s2n_pad(scratch + POWM_S2N_PAD_Y, b);
+		bignum_kmul_32_64(z, scratch + POWM_S2N_PAD_X,
+		                  scratch + POWM_S2N_PAD_Y,
+		                  scratch + POWM_S2N_PAD_T);
+	} else if (n == 16)
 		bignum_kmul_16_32(z, a, b, scratch);
 	else
 		bignum_kmul_32_64(z, a, b, scratch);
@@ -84,14 +116,23 @@ static void powm_s2n_mul(limb_t *r, const limb_t *a, const limb_t *b,
 static void powm_s2n_sqr(limb_t *r, const limb_t *a, const limb_t *m,
                          limb_t n0, uint32_t n, limb_t *z, limb_t *scratch)
 {
-	if (n == 16)
+	if (n == 24) {
+		z = scratch + POWM_S2N_PAD_Z;
+		powm_s2n_pad(scratch + POWM_S2N_PAD_X, a);
+		bignum_ksqr_32_64(z, scratch + POWM_S2N_PAD_X,
+		                  scratch + POWM_S2N_PAD_T);
+	} else if (n == 16)
 		bignum_ksqr_16_32(z, a, scratch);
 	else
 		bignum_ksqr_32_64(z, a, scratch);
 	powm_s2n_finish(r, z, m, bignum_emontredc_8n(n, z, m, n0), n);
 }
 #else
-#define POWM_S2N_SCRATCH 0
+static uint32_t powm_s2n_scratch(uint32_t n)
+{
+	(void) n;
+	return 0;
+}
 #endif
 
 /* One or the other, decided once per call */
@@ -303,7 +344,7 @@ int crypton_powm_pub(uint8_t *out,
                      const uint8_t *mod, uint32_t modlen)
 {
 	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
-	uint32_t words = (6 + 2 + POWM_S2N_SCRATCH) * n;
+	uint32_t words = (6 + 2) * n + powm_s2n_scratch(n);
 	limb_t *space, *m, *r2, *acc, *tmp, *bm, *one, *t, *scratch, n0;
 	uint32_t top, i;
 	int s2n = 0;
@@ -382,7 +423,7 @@ int crypton_powm_sec(uint8_t *out,
                      const uint8_t *mod, uint32_t modlen)
 {
 	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
-	uint32_t words = (TABLE_SIZE + 7 + POWM_S2N_SCRATCH) * n;
+	uint32_t words = (TABLE_SIZE + 7) * n + powm_s2n_scratch(n);
 	limb_t *space, *m, *r2, *acc, *sel, *prod, *table, *t, *scratch, n0;
 	uint32_t i, j, k;
 	int s2n = 0;
