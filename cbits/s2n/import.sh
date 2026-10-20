@@ -20,7 +20,10 @@ trap 'rm -rf "$TMP"' EXIT
 git clone -q "$REPO" "$TMP/s2n"
 git -C "$TMP/s2n" checkout -q "$REV"
 
-# The headers every vendored file includes.
+# The headers every vendored file includes.  Not x86_att/'s own header of
+# the same name, which is crypton's -- it makes the x86-64 files assemble on
+# Windows and hands on to this one; see README.md.  Nothing here copies into
+# that name, and nothing should.
 for h in _internal_s2n_bignum_arm.h _internal_s2n_bignum_x86_att.h; do
 	cp "$TMP/s2n/include/$h" "$HERE/include/$h"
 done
