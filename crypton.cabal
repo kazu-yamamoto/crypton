@@ -596,11 +596,17 @@ library
     -- unlike OpenSSL's and BoringSSL's ecp_nistz256 it can be used.  Both
     -- variants of each routine are built and chosen between in
     -- cbits/p256/p256_s2n.c -- see cbits/s2n/README.md for why the question
-    -- is a different one on the two architectures.  Windows is left out for
-    -- now: the vendored files carry ELF and Mach-O directives and nothing
-    -- for COFF, the same reason the CRYPTOGAMS AArch64 assembly above skips
-    -- it.  x86-64 there wants -DWINDOWS_ABI=1 as well.
-    if (flag(support_s2n_bignum) && (arch(x86_64) || arch(aarch64)) && !os(windows))
+    -- is a different one on the two architectures.
+    --
+    -- On Windows, x86-64 only.  The vendored files carry the ELF directives
+    -- .type and .size, which neither of Windows' assemblers accepts, and
+    -- assume the System V calling convention unless WINDOWS_ABI is set;
+    -- cbits/s2n/x86_att/_internal_s2n_bignum_x86_att.h, which every one of
+    -- them reaches first, empties the first and sets the second on _WIN32,
+    -- so the vendored files themselves stay as upstream wrote them.  The
+    -- AArch64 files have the same directives and no such header yet, and no
+    -- runner to check one, so Windows on ARM keeps the C.
+    if flag(support_s2n_bignum) && (arch(x86_64) || (arch(aarch64) && !os(windows)))
         cc-options:   -DCRYPTON_S2N_BIGNUM
         include-dirs: cbits/s2n/include
         c-sources:

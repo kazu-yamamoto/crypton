@@ -118,6 +118,35 @@ wants a precomputation this test did not give it, and was slower besides.  What
 the window is worth, and why it is four and not five, is in
 `cbits/crypton_powm.c` beside the constant.
 
+## Windows
+
+x86-64 Windows takes the assembly as every other x86-64 does.  Two things
+stood in the way, and neither is fixed in a vendored file:
+
+* **The ELF directives.**  Each file ends its symbols with `.type` and
+  `.size`, which the COFF assemblers refuse -- mingw's gas says "junk at end
+  of line" after a warning, clang says "expected absolute expression".
+  There is nothing in a PE object for them to say, so on `_WIN32` they are
+  emptied, as upstream already does for Mach-O.
+* **The calling convention.**  Each file carries a prologue that moves
+  Microsoft's argument registers into System V's, under `WINDOWS_ABI`, which
+  upstream leaves to the build to define.  On `_WIN32` it is defined.
+
+Both are done in `x86_att/_internal_s2n_bignum_x86_att.h`, which is crypton's
+and not upstream's.  Every vendored file includes that name in quotes, and a
+quoted include looks first beside the file that asks for it, so this is the
+one each gets; it hands on to upstream's in `include/` by a relative path.
+**It must not be removed as an upstream file that went missing**: without it
+Windows does not assemble.  On Linux and macOS it changes nothing -- the
+objects are byte for byte what they were without it.
+
+Not `#include_next`, which is the obvious way to hand on: clang, finding this
+header beside the file that asked for it, starts that search from the top
+and finds this header again, without end.
+
+Windows on ARM keeps the C.  The AArch64 files have the same directives and
+would want the same header, and there is no runner to check one.
+
 ## What is not here
 
 s2n-bignum has only x86-64 and AArch64, so crypton's C stays and is what
