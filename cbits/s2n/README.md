@@ -81,8 +81,8 @@ faster, the gap being the carry chains again:
 | --- | ---: | ---: |
 | M4, 1024 bits | 1.853 us | **0.771** |
 | M4, 2048 bits | 5.835 | **2.407** |
-| an x86-64 without ADX, 1024 bits | 6.145 | **1.995** |
-| an x86-64 without ADX, 2048 bits | 23.332 | **6.852** |
+| an Intel x86-64, 1024 bits | 6.145 | **1.995** |
+| an Intel x86-64, 2048 bits | 23.332 | **6.852** |
 
 A CRT signature computes it twice, so an RSA-2048 private operation on the
 EPYC 7763 goes from 613.5 to 606.4 microseconds -- a little over one per
