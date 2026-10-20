@@ -1,5 +1,39 @@
 # CHANGELOG for crypton
 
+## 2.2.2
+
+**crypton builds on an Intel Mac again.**  From 2.1.2 onwards, Apple's
+assembler rejected one of the vendored RSA assembly files, so the default
+configuration did not build on x86-64 macOS.  With an older release,
+`-f-support_s2n_bignum` works around it.
+
+* doc: the Ed25519 verify step was the AVX2 flag, and the tables move to 2.2.1
+  [#318](https://github.com/kazu-yamamoto/crypton/pull/318)
+* test: the window the exponentiation walks in, and the macro that hid it
+  [#319](https://github.com/kazu-yamamoto/crypton/pull/319)
+* perf: the Montgomery constant in assembly, on both architectures
+  [#320](https://github.com/kazu-yamamoto/crypton/pull/320)
+* perf: verification need not hide an exponent that is public
+  [#321](https://github.com/kazu-yamamoto/crypton/pull/321)
+* doc: the generic AArch64 routines, measured at last
+  [#322](https://github.com/kazu-yamamoto/crypton/pull/322)
+* doc: a VM's CPUID is not the hardware: two descriptions that said otherwise
+  [#323](https://github.com/kazu-yamamoto/crypton/pull/323)
+* test: switches to assume what CPUID hides, for testing only
+  [#324](https://github.com/kazu-yamamoto/crypton/pull/324)
+* perf: RSA-3072's halves through s2n-bignum on x86-64
+  [#325](https://github.com/kazu-yamamoto/crypton/pull/325)
+* perf: 3072- and 4096-bit secure exponentiation through s2n-bignum
+  [#326](https://github.com/kazu-yamamoto/crypton/pull/326)
+* test: the two AES differential tests, in CI
+  [#327](https://github.com/kazu-yamamoto/crypton/pull/327)
+* perf: s2n-bignum on x86-64 Windows
+  [#328](https://github.com/kazu-yamamoto/crypton/pull/328)
+* fix: crypton builds on an Intel Mac again
+  [#329](https://github.com/kazu-yamamoto/crypton/pull/329)
+* ci: link with the Command Line Tools on macOS
+  [#330](https://github.com/kazu-yamamoto/crypton/pull/330)
+
 ## 2.2.1
 
 **A binary built on one x86-64 machine runs on another again.**  Since
