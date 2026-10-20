@@ -280,7 +280,8 @@ run_one powm    "cbits/crypton_powm.c" ""
 # CRYPTON_S2N_BIGNUM, so from the release the assembly went in until this
 # was added, the path that actually runs was never put through this
 # harness.  Each size is a different routine -- Karatsuba at 1024 and 2048,
-# a padded operand through the 2048-bit one at 1536 -- so each is built.
+# a padded operand through the 2048-bit one at 1536, schoolbook at 3072 and
+# 4096 -- so each is built.
 #
 # ADX is assumed by CRYPTON_CPU_TESTING_ADX, and only where the processor
 # reports it: under valgrind the processor's answers are valgrind's, and
@@ -294,11 +295,12 @@ x86_64 | amd64)
 		powm_s2n_src="cbits/crypton_powm.c cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c
 			$s2n/bignum_montifier.S $s2n/bignum_emontredc_8n.S
 			$s2n/bignum_kmul_16_32.S $s2n/bignum_ksqr_16_32.S
-			$s2n/bignum_kmul_32_64.S $s2n/bignum_ksqr_32_64.S"
+			$s2n/bignum_kmul_32_64.S $s2n/bignum_ksqr_32_64.S
+			$s2n/bignum_mul.S $s2n/bignum_sqr.S"
 		powm_s2n_inc="-Icbits/s2n/include -DCRYPTON_S2N_BIGNUM
 			-DCRYPTON_CPU_TESTING_ADX -DCT_POWM_COUNT_S2N
 			-Wl,--wrap=bignum_emontredc_8n"
-		for bytes in 128 192 256; do
+		for bytes in 128 192 256 384 512; do
 			run_one "powm_s2n_$((bytes * 8))" "$powm_s2n_src" \
 				"$powm_s2n_inc -DCT_POWM_BYTES=$bytes" powm
 		done

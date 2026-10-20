@@ -44,17 +44,28 @@ extern void bignum_kmul_32_64(uint64_t *z, const uint64_t *x,
 extern void bignum_ksqr_32_64(uint64_t *z, const uint64_t *x, uint64_t *t);
 extern uint64_t bignum_emontredc_8n(uint64_t k, uint64_t *z,
                                     const uint64_t *m, uint64_t w);
+extern void bignum_mul(uint64_t k, uint64_t *z, uint64_t m, const uint64_t *x,
+                       uint64_t n, const uint64_t *y);
+extern void bignum_sqr(uint64_t k, uint64_t *z, uint64_t n, const uint64_t *x);
 
 /* 16 limbs is 1024 bits and 32 is 2048: the halves a CRT exponentiation
  * works in for RSA-2048 and RSA-4096, and the whole thing without CRT.  24
  * is 1536, the half of RSA-3072, which has no Karatsuba routine of its own
  * and is run through the 32-limb one with its operands padded -- a third
  * of that routine's work wasted, and still nearly twice the C, since the C
- * cannot form ADCX and ADOX's two carry chains at any size.  The reduction
- * wants ADX, so the answer is a run-time one. */
+ * cannot form ADCX and ADOX's two carry chains at any size.
+ *
+ * 48 and 64 are 3072 and 4096 bits: finite-field Diffie-Hellman over the
+ * RFC 7919 groups of those sizes, and RSA without CRT.  There is no
+ * Karatsuba routine at either, and padding to the next would be wasteful,
+ * so the multiplication is s2n-bignum's schoolbook one of any size --
+ * plain MUL and ADC, no ADX -- and the reduction is the same ADX one.  Not
+ * the gain the Karatsuba sizes have, and still well ahead of the C.
+ *
+ * The reduction wants ADX, so the answer is a run-time one. */
 static int powm_s2n_usable(uint32_t n)
 {
-	return (n == 16 || n == 24 || n == 32)
+	return (n == 16 || n == 24 || n == 32 || n == 48 || n == 64)
 	    && (crypton_x86_simd_features() & CRYPTON_X86_ADX) != 0;
 }
 
@@ -106,7 +117,9 @@ static void powm_s2n_mul(limb_t *r, const limb_t *a, const limb_t *b,
 		bignum_kmul_32_64(z, scratch + POWM_S2N_PAD_X,
 		                  scratch + POWM_S2N_PAD_Y,
 		                  scratch + POWM_S2N_PAD_T);
-	} else if (n == 16)
+	} else if (n == 48 || n == 64)
+		bignum_mul(2 * n, z, n, a, n, b);
+	else if (n == 16)
 		bignum_kmul_16_32(z, a, b, scratch);
 	else
 		bignum_kmul_32_64(z, a, b, scratch);
@@ -121,7 +134,9 @@ static void powm_s2n_sqr(limb_t *r, const limb_t *a, const limb_t *m,
 		powm_s2n_pad(scratch + POWM_S2N_PAD_X, a);
 		bignum_ksqr_32_64(z, scratch + POWM_S2N_PAD_X,
 		                  scratch + POWM_S2N_PAD_T);
-	} else if (n == 16)
+	} else if (n == 48 || n == 64)
+		bignum_sqr(2 * n, z, n, a);
+	else if (n == 16)
 		bignum_ksqr_16_32(z, a, scratch);
 	else
 		bignum_ksqr_32_64(z, a, scratch);

@@ -122,7 +122,8 @@ static void be32(uint8_t *p, uint32_t v)
  * difference is the window reader. */
 static void dump(void)
 {
-	static const uint32_t sizes[] = {128, 256, 512, 1024, 1536, 2048};
+	static const uint32_t sizes[] = {128, 256, 512, 1024, 1536, 2048,
+	                                 3072, 4096};
 	uint32_t s, k, i;
 
 	rng_state = 0x243f6a8885a308d3ULL;
