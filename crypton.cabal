@@ -697,23 +697,28 @@ library
                 cbits/s2n/x86_att/p256_scalarmulbase.S
                 cbits/s2n/x86_att/p256_scalarmulbase_alt.S
 
-            -- Modular exponentiation at RSA sizes, x86-64 only: on AArch64
-            -- crypton's C measures faster than these, so nothing is taken
-            -- for it.  All of them want ADX, which the run-time check in
-            -- cbits/crypton_powm.c asks about before using any.
             asm-sources:
-                cbits/s2n/x86_att/bignum_emontredc_8n.S
-                cbits/s2n/x86_att/bignum_mul.S
-                cbits/s2n/x86_att/bignum_sqr.S
                 cbits/s2n/x86_att/bignum_montifier.S
-                cbits/s2n/x86_att/bignum_kmul_16_32.S
-                cbits/s2n/x86_att/bignum_kmul_32_64.S
-                cbits/s2n/x86_att/bignum_ksqr_16_32.S
-                cbits/s2n/x86_att/bignum_ksqr_32_64.S
                 cbits/s2n/x86_att/p384_montjscalarmul.S
                 cbits/s2n/x86_att/p384_montjscalarmul_alt.S
                 cbits/s2n/x86_att/p521_jscalarmul.S
                 cbits/s2n/x86_att/p521_jscalarmul_alt.S
+
+            -- Modular exponentiation at RSA sizes, x86-64 only: on AArch64
+            -- crypton's C measures faster than these, so nothing is taken
+            -- for it.  All of them want ADX, which the run-time check in
+            -- cbits/crypton_powm.c asks about before using any.
+            -- Not on macOS: Apple's assembler reads $0 in bignum_emontredc_8n's
+            -- macros as a macro argument and rejects the file.
+            if !os(osx)
+                asm-sources:
+                    cbits/s2n/x86_att/bignum_emontredc_8n.S
+                    cbits/s2n/x86_att/bignum_mul.S
+                    cbits/s2n/x86_att/bignum_sqr.S
+                    cbits/s2n/x86_att/bignum_kmul_16_32.S
+                    cbits/s2n/x86_att/bignum_kmul_32_64.S
+                    cbits/s2n/x86_att/bignum_ksqr_16_32.S
+                    cbits/s2n/x86_att/bignum_ksqr_32_64.S
 
     -- The PQ Code Package's mlkem-native and mldsa-native, vendored under
     -- cbits/mlkem and cbits/mldsa.  Apache-2.0 OR ISC OR MIT, the same
