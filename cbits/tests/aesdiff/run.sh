@@ -27,6 +27,12 @@ cd "$root"
 
 status=0
 
+# A function called without a declaration is an error here, not a warning.
+# The POWER8 test was found calling four that way, its declarations having
+# left a header while nothing built it; a warning in a log nobody reads is
+# how that lasted.
+strict=-Werror=implicit-function-declaration
+
 # both ways: clean has to pass and sabotaged has to fail
 judge() {
 	name=$1; shift
@@ -48,7 +54,7 @@ judge() {
 bearssl_src="cbits/tests/bearssl_diff.c cbits/crypton_aes.c cbits/aes/generic.c
              cbits/aes/gf.c $(ls cbits/bearssl/*.c)"
 # shellcheck disable=SC2086
-$cc -O2 -Icbits -Icbits/aes -o "$out/bearssl_diff" $bearssl_src
+$cc -O2 $strict -Icbits -Icbits/aes -o "$out/bearssl_diff" $bearssl_src
 judge bearssl_diff "$out/bearssl_diff"
 
 ppc_cc=powerpc64le-linux-gnu-gcc
@@ -60,7 +66,7 @@ if command -v "$ppc_cc" > /dev/null 2>&1 && command -v "$qemu" > /dev/null 2>&1;
 	         cbits/asm/aesp8-ppc-linux64le.S cbits/asm/ghashp8-ppc-linux64le.S
 	         $(ls cbits/bearssl/*.c)"
 	# shellcheck disable=SC2086
-	"$ppc_cc" -O2 -static -Icbits -Icbits/aes -DWITH_PPC8_CRYPTO \
+	"$ppc_cc" -O2 -static $strict -Icbits -Icbits/aes -DWITH_PPC8_CRYPTO \
 	    -o "$out/ppc8_diff" $ppc_src
 	judge ppc8_diff "$qemu" "$out/ppc8_diff"
 else
