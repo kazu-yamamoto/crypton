@@ -207,6 +207,7 @@ unsigned int crypton_arm_features(void)
 #include <sys/auxv.h>
 #elif defined(__FreeBSD__)
 #include <sys/auxv.h>
+
 #endif
 
 /*
@@ -239,6 +240,41 @@ unsigned int crypton_ppc_features(void)
 	return features;
 }
 #endif /* __powerpc64__ */
+
+/*
+ * For testing on a machine whose CPUID says less than its core executes, and
+ * for nothing else: each of these makes the detection below report a
+ * feature it did not find.
+ *
+ *   CRYPTON_CPU_TESTING_ADX     BMI2 and ADX
+ *   CRYPTON_CPU_TESTING_SHA_NI  the SHA extensions
+ *   CRYPTON_CPU_TESTING_VAES    VAES and VPCLMULQDQ, 256-bit
+ *
+ * A hypervisor may show a guest an older processor model than the host's so
+ * that the guest can be moved to another host, and the instructions it hides
+ * then still run.  That is the only place this is for: forcing a path that
+ * CPUID would not choose, to measure it or to test it, on a machine where the
+ * instructions have been seen to execute.  Anywhere they do not, the first
+ * use is a SIGILL -- which is the bug #317 fixed, made on purpose.
+ *
+ * What the operating system has to agree to is still asked.  VAES works in
+ * the wide registers, so it is assumed only where AVX2 was found, which
+ * means XCR0 says those are saved; the SHA extensions still want SSSE3 and
+ * SSE4.1 to have been found, as the detection asks.  Nothing 512-bit can be
+ * assumed: whether the operating system saves that state is not something a
+ * build can promise.
+ *
+ * The library is never built with these, and a build that has one says so.
+ */
+#if defined(CRYPTON_CPU_TESTING_ADX) || defined(CRYPTON_CPU_TESTING_SHA_NI) \
+    || defined(CRYPTON_CPU_TESTING_VAES)
+/* The code below asks for each switch by its own name, which comes from the
+ * command line and so is seen everywhere in the file.  It once asked for one
+ * umbrella name defined beside the first function that read it -- and the
+ * capability vector the assembly reads is filled earlier in the file than
+ * that, so the SHA bit never reached it, without a word from the compiler. */
+#warning "CRYPTON_CPU_TESTING_*: features assumed, not detected"
+#endif
 
 #ifdef ARCH_X86
 static void cpuid(uint32_t info, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
@@ -366,6 +402,16 @@ void crypton_x86_ia32cap_resolve(void)
 		}
 		if (!(f & CRYPTON_X86_AVX2))
 			leaf7_ebx &= ~(1u << 5);
+		/* what the testing switches assumed, told to the assembly as
+		 * well: its SHA-256 reads the SHA bit here, not the word */
+#ifdef CRYPTON_CPU_TESTING_SHA_NI
+		if (f & CRYPTON_X86_SHA_NI)
+			leaf7_ebx |= 1u << 29;
+#endif
+#ifdef CRYPTON_CPU_TESTING_ADX
+		if (f & CRYPTON_X86_ADX)
+			leaf7_ebx |= (1u << 8) | (1u << 19);
+#endif
 		crypton_ia32cap_P[2] = leaf7_ebx & ~IA32CAP_AVX512;
 
 		resolved = 1;
@@ -467,6 +513,17 @@ uint32_t crypton_x86_simd_features(void)
 			    && !(amd && family == 0x19))
 				f |= CRYPTON_X86_VAES512;
 		}
+#ifdef CRYPTON_CPU_TESTING_ADX
+		f |= CRYPTON_X86_ADX;
+#endif
+#ifdef CRYPTON_CPU_TESTING_SHA_NI
+		if ((leaf1 & (1 << 9)) && (leaf1 & (1 << 19)))
+			f |= CRYPTON_X86_SHA_NI;
+#endif
+#ifdef CRYPTON_CPU_TESTING_VAES
+		if (f & CRYPTON_X86_AVX2)
+			f |= CRYPTON_X86_VAES;
+#endif
 		features = f;
 		resolved = 1;
 	}
