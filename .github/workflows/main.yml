@@ -460,6 +460,20 @@ jobs:
         sudo apt-get install -y -qq valgrind
         cbits/tests/ct/run.sh
 
+    # AES and GHASH against their references: the portable code against the
+    # BearSSL it is written on, and the POWER8 path against the portable one
+    # under qemu-ppc64le, where there is no POWER8 runner.  Both were
+    # documented as tests to run by hand -- after re-importing BearSSL, after
+    # touching the POWER8 code -- and nothing recorded whether anyone had.
+    # Each is run once more told to corrupt its results, and that run has to
+    # fail: a comparison that cannot fail has checked nothing.
+    - name: AES against what it is checked against
+      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq gcc-powerpc64le-linux-gnu qemu-user-static
+        cbits/tests/aesdiff/run.sh
+
     # The three implementations that only a 32-bit architecture receives: the
     # P-256 field and its comb table under cbits/include32, the 32-bit donna,
     # and the 32-bit p448.  Nothing in this matrix is 32-bit, so none of them
