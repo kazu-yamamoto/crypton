@@ -36,6 +36,22 @@
 #include "aes/block128.h"
 #include "aes/ppc8.h"
 
+/* The portable mode loops this compares against.  crypton_aes.c defines
+ * them and declares them only to itself, at the top of that file, so they
+ * are declared again here.  They were once in a header; when they left it,
+ * this file -- built by hand and by nobody since -- went on calling them
+ * undeclared, which C has not allowed since C99 and gcc 14 refuses. */
+void crypton_aes_generic_encrypt_ecb(aes_block *output, aes_key *key,
+                                     aes_block *input, uint32_t nb_blocks);
+void crypton_aes_generic_decrypt_ecb(aes_block *output, aes_key *key,
+                                     aes_block *input, uint32_t nb_blocks);
+void crypton_aes_generic_encrypt_cbc(aes_block *output, aes_key *key,
+                                     aes_block *iv, aes_block *input,
+                                     uint32_t nb_blocks);
+void crypton_aes_generic_decrypt_cbc(aes_block *output, aes_key *key,
+                                     aes_block *iv, aes_block *input,
+                                     uint32_t nb_blocks);
+
 /* the portable CTR, which reaches generic.c rather than the branch table */
 void crypton_aes_bitsliced_encrypt_ctr(uint8_t *output, aes_key *key,
                                        aes_block *iv, uint8_t *input,
