@@ -148,14 +148,47 @@ run_one() {
 			return
 		fi
 		;;
+	powm_s2n_*)
+		got=$("$out/$name" 2>/dev/null | sed -n 's/^dispatch powm_s2n=\([0-9]*\).*/\1/p')
+		if [ -z "$got" ]; then
+			echo "FAIL $name: it did not run to the end on this processor"
+			status=1
+			return
+		elif [ "$got" -eq 0 ]; then
+			echo "FAIL $name: the s2n-bignum reduction ran 0 times --"
+			echo "     this build checked the C again, not the path it is named for"
+			status=1
+			return
+		fi
+		;;
 	esac
 	if [ "$have_valgrind" = no ]; then
 		"$out/$name" > /dev/null 2>&1 && echo "built $name (no valgrind here; nothing checked)" \
 			|| { echo "FAIL $name did not run"; status=1; }
 		return
 	fi
-	valgrind --error-exitcode=0 --track-origins=yes --num-callers=20 \
-		--log-file="$out/$name.log" "$out/$name" > /dev/null 2>&1 || true
+	# in a subshell, so that a driver valgrind kills is not announced by
+	# this shell as well -- the log says what happened
+	( valgrind --error-exitcode=0 --track-origins=yes --num-callers=20 \
+		--log-file="$out/$name.log" "$out/$name" > /dev/null 2>&1 ) \
+		2> /dev/null || true
+	# A driver valgrind could not run to the end reports nothing, and nothing
+	# used to read as a pass.  An instruction valgrind cannot decode is the
+	# likely one: the vendored ADX assembly needs a valgrind that knows it.
+	if grep -q "unhandled instruction\|Illegal instruction\|SIGILL" "$out/$name.log"; then
+		case $name in
+		powm_s2n_*)
+			echo "skip $name: this valgrind cannot decode the vendored assembly's"
+			echo "     instructions, so it cannot run the path this build is for"
+			;;
+		*)
+			echo "FAIL $name: valgrind could not run it to the end"
+			grep -m3 "unhandled instruction\|Illegal instruction\|SIGILL" "$out/$name.log" | sed 's/^/    /'
+			status=1
+			;;
+		esac
+		return
+	fi
 	n=$(grep -c "^==[0-9]*== \(Conditional jump\|Use of uninitialised\)" "$out/$name.log" || true)
 	# Which places did it name?  Only the frame the report is against -- the
 	# first "at" line under the complaint -- is the place; the "by" lines
@@ -241,6 +274,40 @@ run_one() {
 run_one canary  "" ""
 
 run_one powm    "cbits/crypton_powm.c" ""
+
+# The same exponentiation through s2n-bignum, which is what RSA signing runs
+# on x86-64 with ADX.  The build above is the C: it does not define
+# CRYPTON_S2N_BIGNUM, so from the release the assembly went in until this
+# was added, the path that actually runs was never put through this
+# harness.  Each size is a different routine -- Karatsuba at 1024 and 2048,
+# a padded operand through the 2048-bit one at 1536 -- so each is built.
+#
+# ADX is assumed by CRYPTON_CPU_TESTING_ADX, and only where the processor
+# reports it: under valgrind the processor's answers are valgrind's, and
+# what this is for is the assembly, not valgrind's opinion of the
+# processor.  The driver counts the reductions it did through the assembly,
+# and a count of nothing fails the build rather than passing it.
+case $(uname -m) in
+x86_64 | amd64)
+	if grep -qw adx "${CRYPTON_CT_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
+		s2n=cbits/s2n/x86_att
+		powm_s2n_src="cbits/crypton_powm.c cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c
+			$s2n/bignum_montifier.S $s2n/bignum_emontredc_8n.S
+			$s2n/bignum_kmul_16_32.S $s2n/bignum_ksqr_16_32.S
+			$s2n/bignum_kmul_32_64.S $s2n/bignum_ksqr_32_64.S"
+		powm_s2n_inc="-Icbits/s2n/include -DCRYPTON_S2N_BIGNUM
+			-DCRYPTON_CPU_TESTING_ADX -DCT_POWM_COUNT_S2N
+			-Wl,--wrap=bignum_emontredc_8n"
+		for bytes in 128 192 256; do
+			run_one "powm_s2n_$((bytes * 8))" "$powm_s2n_src" \
+				"$powm_s2n_inc -DCT_POWM_BYTES=$bytes" powm
+		done
+	else
+		echo "skip powm_s2n: this processor reports no ADX, so the vendored"
+		echo "     multiplication cannot run here"
+	fi
+	;;
+esac
 run_one p256    "cbits/p256/p256.c cbits/p256/p256_ec.c" ""
 run_one x25519  "cbits/curve25519/curve25519-donna-c64.c" ""
 run_one ed25519 "cbits/ed25519/ed25519.c cbits/crypton_sha512.c" "-Icbits/ed25519"
