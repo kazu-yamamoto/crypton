@@ -1,28 +1,24 @@
-# Three builds of the same tree, raced against each other in one run.
+# The exponentiation alone, main against a branch, raced in one run.
 #
-# Not a README table: this answers two questions about RSA on x86-64, and
-# both are comparisons between variants of the working tree, which
-# bench/build.sh cannot express -- it takes released versions.  Every
-# variant is built here and they are run alternately, so a quiet moment or a
-# warm machine reaches all of them alike.
+# C only, no GHC: crypton_powm_sec is built from each tree with the vendored
+# assembly it would use and timed at the CRT sizes of RSA-2048, -3072 and
+# -4096 with a full-width exponent -- half of an RSA signature.  Whatever the
+# branch changes shows in its row; the rows it does not touch are the floor.
 #
-#   base      main as it stands, which is GMP for verification
-#   pub       crypton's own exponentiation where the exponent is public
-#
-# The machine is pinned for the same reason bench.yml pins it.
+# It runs on a push to this branch that touches this file.  To use it, point
+# BRANCH below at the branch to measure and push that change.
 name: rsa
 
-# A dispatch would have to be answered from the default branch, which this is
-# deliberately not on, so it runs on a push -- but only one that touches this
-# file, or every push to this branch would set three builds going.  To use
-# it, point the checkout below at the branch to measure and push that change.
 on:
   push:
     branches: [ci]
     paths: ['.github/workflows/rsa.yml']
 
+env:
+  BRANCH: perf/rsa3072
+
 jobs:
-  rsa:
+  powm:
     runs-on: ubuntu-latest
     steps:
     - name: Which machine the draw gave
@@ -32,82 +28,54 @@ jobs:
           echo "::error::not the EPYC 7763; re-run"
           exit 1
         fi
-        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' | grep -xE 'adx|avx2' | sort | tr '\n' ' '
-        echo
+        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' | grep -xE 'adx|bmi2' | tr '\n' ' '; echo
 
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
-        ref: main
+        ref: ${{ env.BRANCH }}
 
-    - uses: haskell-actions/setup@v2
-      with:
-        ghc-version: '9.12'
-        cabal-version: latest
-
-    - name: The three builds
+    - name: The two builds
       run: |
         set -eu
         git worktree add /tmp/base origin/main
-        mkdir -p /tmp/bin
-
-        build () {                      # name, tree, extra ghc-options
-          d=/tmp/proj-$1
-          rm -rf "$d"; mkdir -p "$d"
-          cp bench/PK.hs "$d/"
-          sed 's/crypton$/crypton == 2.2.1/' bench/pk.cabal > "$d/pk.cabal"
-          printf 'packages: . %s\n' "$2" > "$d/cabal.project"
-          ( cd "$d" && cabal build -v0 $3 )
-          cp "$( cd "$d" && cabal list-bin pkbench )" "/tmp/bin/pk-$1"
+        cat > /tmp/pwbench.c <<'C'
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <stdint.h>
+        #include <time.h>
+        #include "crypton_powm.h"
+        static uint64_t rs = 0x243f6a8885a308d3ULL;
+        static uint8_t rb(void) { rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return (uint8_t) rs; }
+        static double now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec / 1e9; }
+        int main(int argc, char **argv) {
+          uint32_t bits = (uint32_t) atoi(argv[1]), nb = bits / 8, i; int reps = atoi(argv[2]), k;
+          uint8_t *m = malloc(nb), *b = malloc(nb), *e = malloc(nb), *r = malloc(nb); double t0;
+          for (i = 0; i < nb; i++) { m[i] = rb(); b[i] = rb(); e[i] = rb(); }
+          m[0] |= 0x80; m[nb - 1] |= 1; b[0] &= 0x7f; e[0] |= 0x80;
+          crypton_powm_sec(r, b, nb, e, nb, m, nb);
+          t0 = now(); for (k = 0; k < reps; k++) crypton_powm_sec(r, b, nb, e, nb, m, nb);
+          printf("%.2f\n", (now() - t0) * 1e6 / reps); return 0; }
+        C
+        build () {
+          ( cd "$2" && S=cbits/s2n/x86_att && gcc -O2 -Icbits -Icbits/include64 -Icbits/s2n/include \
+              -DCRYPTON_S2N_BIGNUM -o "/tmp/pw-$1" /tmp/pwbench.c cbits/crypton_powm.c \
+              cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c \
+              $S/bignum_montifier.S $S/bignum_kmul_16_32.S $S/bignum_kmul_32_64.S \
+              $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S )
           echo "built $1"
         }
-
-        build base /tmp/base ''
-        build pub  "$PWD"    ''
-
-        # the three must not be the same binary
-        md5sum /tmp/bin/*
+        build main /tmp/base
+        build branch "$PWD"
 
     - name: The race
-      env:
-        REPS: '7'
       run: |
-        python3 - <<'PY'
-        import os, subprocess
-        K = int(os.environ.get("REPS", "7"))
-        BIN = "/tmp/bin"
-        # which variants can differ on which operation, and which cannot:
-        # a row where nothing differs is this machine's noise floor
-        # base is GMP for verification; pubm and pubc both take crypton's
-        # own, with and without the assembly that computes R^2.  pubc is
-        # the build that lost before, so pubm against pubc is what the
-        # montifier is worth and base against pubm is the question.
-        # main now carries the assembly Montgomery constant, so base and
-        # pub differ in one thing only: which exponentiation verification
-        # takes.  Signing and ECDSA are rows neither of them touches.
-        ROWS = [("rsa-verify", ["base", "pub"]),
-                ("rsa-sign",   ["base", "pub"]),
-                ("ecdsa-p256-sign", ["base", "pub"])]
-
-        def one(v, op):
-            out = subprocess.run([f"{BIN}/pk-{v}", op],
-                                 capture_output=True, text=True).stdout.strip()
-            try:
-                return float(out)
-            except ValueError:
-                return None
-
-        for op, vs in ROWS:
-            cols = {v: [] for v in vs}
-            for _ in range(K):
-                for v in vs:                 # every column before any repeats
-                    x = one(v, op)
-                    if x:
-                        cols[v].append(x)
-            best = {v: (min(c) if c else None) for v, c in cols.items()}
-            cells = "  ".join(f"{v}={best[v]:.3f}" if best[v] else f"{v}=-"
-                              for v in vs)
-            got = [x for x in best.values() if x]
-            spread = 100 * (max(got) / min(got) - 1) if got else 0
-            print(f"{op:<18} {cells}   spread {spread:.1f}%")
-        PY
+        echo "crypton_powm_sec, full-width exponent, alternated, best of 9, microseconds"
+        for bits in 1024 1536 2048; do
+          bm=999999; bb=999999
+          for i in 1 2 3 4 5 6 7 8 9; do
+            m=$(/tmp/pw-main $bits 20); b=$(/tmp/pw-branch $bits 20)
+            bm=$(echo "$m $bm" | awk '{print ($1<$2)?$1:$2}'); bb=$(echo "$b $bb" | awk '{print ($1<$2)?$1:$2}')
+          done
+          echo "  $bits bits: main=$bm  branch=$bb  main/branch=$(echo "$bm $bb" | awk '{printf "%.2f", $1/$2}')"
+        done
