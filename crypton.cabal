@@ -708,18 +708,8 @@ library
             -- crypton's C measures faster than these, so nothing is taken
             -- for it.  All of them want ADX, which the run-time check in
             -- cbits/crypton_powm.c asks about before using any.
-            --
-            -- Not on macOS.  bignum_emontredc_8n defines two assembler
-            -- macros without parameters whose bodies use immediates like
-            -- $0 and $4, and Apple's assembler reads $N inside such a macro
-            -- as its Nth argument: adcq $0, %r8 becomes adcq , %r8 and the
-            -- file does not assemble.  Linux's and Windows' assemblers do
-            -- not do this, Apple silicon never builds these files, and no
-            -- runner here is an Intel Mac -- so from the release that
-            -- vendored it, crypton did not build on an Intel Mac at all.
-            -- The others below assemble there but have no use without the
-            -- reduction, so the RSA exponentiation keeps the C on macOS,
-            -- as it did before.
+            -- Not on macOS: Apple's assembler reads $0 in bignum_emontredc_8n's
+            -- macros as a macro argument and rejects the file.
             if !os(osx)
                 asm-sources:
                     cbits/s2n/x86_att/bignum_emontredc_8n.S
