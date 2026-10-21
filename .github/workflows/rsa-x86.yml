@@ -50,7 +50,9 @@ jobs:
     - name: OpenSSL's RSA, as it chooses and with AVX-512 masked off
       run: |
         O=/tmp/openssl-4.0.3
-        for cap in "" ":~0x10000"; do
-          echo "OPENSSL_ia32cap='$cap'"
-          OPENSSL_ia32cap="$cap" LD_LIBRARY_PATH=$O $O/apps/openssl speed -seconds 3 rsa2048 rsa3072 2>/dev/null | grep -E '^ *rsa(2048|3072).* +[0-9.]+ +[0-9.]+ +[0-9.]+$' | tail -2
+        for r in 1 2 3; do
+          for cap in "" ":~0x10000"; do
+            echo "round $r OPENSSL_ia32cap='$cap'"
+            OPENSSL_ia32cap="$cap" LD_LIBRARY_PATH=$O $O/apps/openssl speed -seconds 2 rsa2048 rsa3072 2>/dev/null | grep -E '^ *rsa(2048|3072).* +[0-9.]+ +[0-9.]+ +[0-9.]+$' | awk 'NR%2==0'
+          done
         done
