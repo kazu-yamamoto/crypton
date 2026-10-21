@@ -1,5 +1,18 @@
 # CHANGELOG for crypton
 
+## 2.2.3
+
+**crypton builds on Windows again.**  2.2.2's tarball lacked a header that
+only Windows includes, so it built from git but not from Hackage.  With
+2.2.2, `-f-support_s2n_bignum` works around it.
+
+* bench: RSA-3072 in the tables
+  [#331](https://github.com/kazu-yamamoto/crypton/pull/331)
+* perf(rsa): a generated Montgomery squaring for AArch64
+  [#333](https://github.com/kazu-yamamoto/crypton/pull/333)
+* fix: ship the Windows wrapper for s2n-bignum
+  [#334](https://github.com/kazu-yamamoto/crypton/pull/334)
+
 ## 2.2.2
 
 **crypton builds on an Intel Mac again.**  From 2.1.2 onwards, Apple's
