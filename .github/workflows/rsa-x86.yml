@@ -1,0 +1,56 @@
+# RSA on whatever x86-64 the draw gives: crypton's exponentiation against
+# OpenSSL 4.0.3's, and OpenSSL's RSA with and without AVX-512.  Runs on a
+# push to this branch that touches this file.
+name: rsa-x86
+
+on:
+  push:
+    branches: [ci]
+    paths: ['.github/workflows/rsa-x86.yml']
+
+jobs:
+  rsa:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Which machine
+      run: |
+        grep -m1 'model name' /proc/cpuinfo
+        grep -m1 flags /proc/cpuinfo | tr ' ' '\n' | grep -xE 'adx|bmi2|avx512f|avx512ifma|avx_ifma' | tr '\n' ' '; echo
+
+    - uses: actions/checkout@v5
+      with:
+        ref: main
+        path: crypton
+
+    - uses: actions/checkout@v5
+      with:
+        path: ci
+
+    - name: OpenSSL 4.0.3
+      run: |
+        cd /tmp
+        curl -sL -o o.tar.gz https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz
+        tar xzf o.tar.gz && cd openssl-4.0.3
+        ./Configure no-docs no-tests > /dev/null 2>&1
+        make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
+
+    - name: The exponentiation, crypton against OpenSSL
+      run: |
+        set -eu
+        O=/tmp/openssl-4.0.3
+        cd crypton
+        S=cbits/s2n/x86_att
+        gcc -O3 -Icbits -Icbits/include64 -Icbits/s2n/include -I$O/include -DCRYPTON_S2N_BIGNUM \
+          -o /tmp/rvo ../ci/bench/rsa_vs_ossl.c cbits/crypton_powm.c cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c \
+          $S/bignum_montifier.S $S/bignum_kmul_16_32.S $S/bignum_kmul_32_64.S \
+          $S/bignum_ksqr_16_32.S $S/bignum_ksqr_32_64.S $S/bignum_emontredc_8n.S \
+          $S/bignum_mul.S $S/bignum_sqr.S $O/libcrypto.a -lpthread -ldl
+        for b in 1024 1536 2048; do /tmp/rvo $b 7 | grep -v mont; done
+
+    - name: OpenSSL's RSA, as it chooses and with AVX-512 masked off
+      run: |
+        O=/tmp/openssl-4.0.3
+        for cap in "" ":~0x10000"; do
+          echo "OPENSSL_ia32cap='$cap'"
+          OPENSSL_ia32cap="$cap" LD_LIBRARY_PATH=$O $O/apps/openssl speed -seconds 3 rsa2048 rsa3072 2>/dev/null | grep -E '^ *rsa(2048|3072).* +[0-9.]+ +[0-9.]+ +[0-9.]+$' | tail -2
+        done
