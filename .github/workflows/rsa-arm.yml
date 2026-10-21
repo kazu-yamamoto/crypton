@@ -1,0 +1,59 @@
+# The product-scanning squaring on an Arm server core: the generated routines
+# against crypton's, and the exponentiation with and without them, beside
+# OpenSSL 4.0.3's.  Runs on a push to this branch that touches this file.
+name: rsa-arm
+
+on:
+  push:
+    branches: [ci]
+    paths: ['.github/workflows/rsa-arm.yml']
+
+jobs:
+  rsa:
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - name: Which machine
+      run: |
+        lscpu | grep -E 'Model name|Vendor ID' || true
+        grep -m1 -E 'CPU part' /proc/cpuinfo || true
+
+    - uses: actions/checkout@v5
+      with:
+        ref: main
+        path: crypton
+
+    - uses: actions/checkout@v5
+      with:
+        path: ci
+
+    - name: OpenSSL 4.0.3
+      run: |
+        cd /tmp
+        curl -sL -o o.tar.gz https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz
+        tar xzf o.tar.gz && cd openssl-4.0.3
+        ./Configure no-docs no-tests > /dev/null 2>&1
+        make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
+
+    - name: The routines alone
+      run: |
+        cd crypton
+        python3 ../ci/bench/gen_fips.py 16 24 32 > /tmp/fips_gen.h
+        gcc -O2 -Icbits -Icbits/include64 -I/tmp -o /tmp/fips_test ../ci/bench/fips_test.c
+        /tmp/fips_test
+
+    - name: The exponentiation, now and with the squaring, against OpenSSL
+      run: |
+        set -eu
+        O=/tmp/openssl-4.0.3
+        cd crypton
+        for v in now fips; do
+          if [ $v = now ]; then src=cbits/crypton_powm.c; def=; else src=../ci/bench/crypton_powm_fips.c; def=-DFIPS_SQR; fi
+          gcc -O3 $def -Icbits -Icbits/include64 -Icbits/s2n/include -I$O/include -I/tmp -DCRYPTON_S2N_BIGNUM \
+            -o /tmp/bvo-$v ../ci/bench/rsa_vs_ossl.c $src cbits/s2n/arm/bignum_montifier.S $O/libcrypto.a -lpthread -ldl
+        done
+        for b in 1024 1536 2048; do
+          for r in 1 2; do
+            echo "now  $(/tmp/bvo-now $b 5 | grep expon)"
+            echo "fips $(/tmp/bvo-fips $b 5 | grep expon)"
+          done
+        done
