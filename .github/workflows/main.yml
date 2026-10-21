@@ -325,8 +325,10 @@ jobs:
     #
     # Listing the tarball is not enough -- I did that before releasing and
     # saw nothing wrong.  It has to be unpacked somewhere else and built.
+    # On every OS: 2.2.2 lacked a header only Windows includes.
     - name: What is published, built from the tarball
-      if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
+      if: matrix.ghc == '9.14'
+      shell: bash
       run: |
         set -o pipefail
         cabal check
