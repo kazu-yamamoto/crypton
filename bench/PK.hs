@@ -99,22 +99,30 @@ main = do
                 case PKCS15.sign (Just b) (Just SHA256) priv m of
                     Left _ -> 0
                     Right s' -> sinkOf s'
-        "rsa-sign" -> do
-            let (pub, priv) = gen (RSA.generate 256 65537)
-            _ <- evaluate pub
-            timeIt msgs $ \m ->
-                case PKCS15.sign Nothing (Just SHA256) priv m of
-                    Left _ -> 0
-                    Right s -> sinkOf s
-        "rsa-verify" -> do
-            let (pub, priv) = gen (RSA.generate 256 65537)
-                sigs = [ (m, s)
-                       | m <- msgs
-                       , Right s <- [PKCS15.sign Nothing (Just SHA256) priv m]
-                       ]
-            timeIt sigs (\(m, s) -> if PKCS15.verify (Just SHA256) pub m s then 1 else 0)
+        "rsa-sign" -> rsaSign 256
+        "rsa-verify" -> rsaVerify 256
+        "rsa3072-sign" -> rsaSign 384
+        "rsa3072-verify" -> rsaVerify 384
         _ -> hPutStrLn stderr ("unknown operation " ++ show what) >> exitFailure
     putStrLn (show us)
+
+rsaSign :: Int -> IO Double
+rsaSign bytes = do
+    let (pub, priv) = gen (RSA.generate bytes 65537)
+    _ <- evaluate pub
+    timeIt msgs $ \m ->
+        case PKCS15.sign Nothing (Just SHA256) priv m of
+            Left _ -> 0
+            Right s -> sinkOf s
+
+rsaVerify :: Int -> IO Double
+rsaVerify bytes = do
+    let (pub, priv) = gen (RSA.generate bytes 65537)
+        sigs = [ (m, s)
+               | m <- msgs
+               , Right s <- [PKCS15.sign Nothing (Just SHA256) priv m]
+               ]
+    timeIt sigs (\(m, s) -> if PKCS15.verify (Just SHA256) pub m s then 1 else 0)
 
 ecdhBench :: EllipticCurveDH c => Proxy c -> IO Double
 ecdhBench prx = do

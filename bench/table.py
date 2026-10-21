@@ -38,7 +38,9 @@ PK = [("X25519", "x25519", ("ecdhx25519", r"ecdh \(X25519\)", 1)),
       ("ECDSA P-384 sign", "ecdsa-p384-sign", ("ecdsap384", r"(EC \(secp384r1\)|ecdsa \(nistp384\))", 2)),
       ("ECDSA P-384 verify", "ecdsa-p384-verify", ("ecdsap384", r"(EC \(secp384r1\)|ecdsa \(nistp384\))", 1)),
       ("RSA-2048 sign/decrypt", "rsa-sign", ("rsa2048", r"rsa2048.*s +[0-9.]+ +[0-9.]+ +[0-9.]+$", 2)),
-      ("RSA-2048 verify/encrypt", "rsa-verify", ("rsa2048", r"rsa2048.*s +[0-9.]+ +[0-9.]+ +[0-9.]+$", 1))]
+      ("RSA-2048 verify/encrypt", "rsa-verify", ("rsa2048", r"rsa2048.*s +[0-9.]+ +[0-9.]+ +[0-9.]+$", 1)),
+      ("RSA-3072 sign/decrypt", "rsa3072-sign", ("rsa3072", r"rsa3072.*s +[0-9.]+ +[0-9.]+ +[0-9.]+$", 2)),
+      ("RSA-3072 verify/encrypt", "rsa3072-verify", ("rsa3072", r"rsa3072.*s +[0-9.]+ +[0-9.]+ +[0-9.]+$", 1))]
 
 ossl = sys.argv[1]
 K = int(sys.argv[2]) if len(sys.argv) > 2 else 5
