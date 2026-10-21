@@ -18,13 +18,14 @@ module Crypto.PubKey.RSA.OAEP (
     -- * OAEP decryption
     decrypt,
     decryptSafer,
+    decryptBlinded,
 ) where
 
 import Crypto.Hash
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.Internal (and')
 import Crypto.PubKey.MaskGenFunction
-import Crypto.PubKey.RSA (generateBlinder)
+import Crypto.PubKey.RSA.Blinded.Internal
 import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
@@ -212,7 +213,8 @@ decrypt blinder oaep pk cipher
     k = private_size pk
     hashLen = hashDigestSize (oaepHash oaep)
 
--- | Decrypt a ciphertext using OAEP and by automatically generating a blinder.
+-- | Decrypt a ciphertext using OAEP, blinded with the pair kept for this key;
+-- see "Crypto.PubKey.RSA.Blinded".
 decryptSafer
     :: (HashAlgorithm hash, MonadRandom m)
     => OAEPParams hash ByteString ByteString
@@ -222,6 +224,34 @@ decryptSafer
     -> ByteString
     -- ^ Cipher text
     -> m (Either Error ByteString)
-decryptSafer oaep pk cipher = do
-    blinder <- generateBlinder (private_n pk)
-    return (decrypt (Just blinder) oaep pk cipher)
+decryptSafer oaep pk cipher
+    | B.length cipher /= k = return (Left MessageSizeIncorrect)
+    | os2ip cipher >= private_n pk = return (Left MessageSizeIncorrect)
+    | k < 2 * hashLen + 2 = return (Left InvalidParameters)
+    | otherwise = do
+        d <- drawFor pk
+        return $ withBlindingFor pk d $ \pair -> unpad oaep k (dpWithPair pair pk cipher)
+  where
+    k = private_size pk
+    hashLen = hashDigestSize (oaepHash oaep)
+
+-- | 'decrypt' with the blinding a t'BlindedKey' keeps, and the key for the
+-- next operation.
+decryptBlinded
+    :: (HashAlgorithm hash, MonadRandom m)
+    => OAEPParams hash ByteString ByteString
+    -> BlindedKey
+    -> ByteString
+    -- ^ Cipher text
+    -> m (Either Error ByteString, BlindedKey)
+decryptBlinded oaep bk cipher
+    | B.length cipher /= k = return (Left MessageSizeIncorrect, bk)
+    | os2ip cipher >= private_n pk = return (Left MessageSizeIncorrect, bk)
+    | k < 2 * hashLen + 2 = return (Left InvalidParameters, bk)
+    | otherwise = do
+        (m, bk') <- dpBlinded bk cipher
+        return (unpad oaep k m, bk')
+  where
+    pk = blindedPrivateKey bk
+    k = private_size pk
+    hashLen = hashDigestSize (oaepHash oaep)

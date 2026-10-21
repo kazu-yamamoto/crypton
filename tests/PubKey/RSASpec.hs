@@ -7,11 +7,16 @@
 
 module PubKey.RSASpec (spec) where
 
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar
 import Crypto.Hash
 import Crypto.Number.ModArithmetic (inverse)
 import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.PubKey.RSA as RSA
+import qualified Crypto.PubKey.RSA.Blinded as RSA
+import qualified Crypto.PubKey.RSA.OAEP as OAEP
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import qualified Crypto.PubKey.RSA.PSS as PSS
 import Crypto.PubKey.RSA.Prim (ep)
 import qualified Crypto.PubKey.RSA.Prim as Prim
 import qualified Data.ByteString as B
@@ -427,6 +432,110 @@ digestOperationTests = describe "operations taking a digest" $ do
     key = vectorToPrivate vector
     pub = vectorToPublic vector
 
+-- | A 'RSA.BlindedKey' carries one blinding pair, each operation returning
+-- the key with it squared and a new one drawn every 32 uses; the @Safer@
+-- functions keep one per key for the last few keys.  None of it may change
+-- an answer, so every answer is held against the unblinded one, over more
+-- uses than one pair lasts.
+blindedKeyTests :: Spec
+blindedKeyTests = describe "BlindedKey" $ do
+    it "signs what signDigest Nothing signs, across refreshes" $
+        threaded 100 $ \bk i -> do
+            let dg = hashWith SHA256 (B.replicate i 0x61)
+            (got, bk') <- RSA.signDigestBlinded bk dg
+            got `shouldBe` RSA.signDigest Nothing key dg
+            return bk'
+
+    it "signs a DigestInfo as signDigestInfo Nothing does" $
+        threaded 40 $ \bk i -> do
+            let di = B.replicate (20 + i `mod` 10) (fromIntegral i)
+            (got, bk') <- RSA.signDigestInfoBlinded bk di
+            got `shouldBe` RSA.signDigestInfo Nothing key di
+            return bk'
+
+    it "decrypts what it was given" $
+        threaded 40 $ \bk i -> do
+            let m = B.replicate i 0x5a
+            c <- either (error . show) id <$> RSA.encrypt pub m
+            (got, bk') <- RSA.decryptBlinded bk c
+            got `shouldBe` (Right m :: Either RSA.Error ByteString)
+            return bk'
+
+    it "refuses what decrypt refuses" $ do
+        let c = B.replicate (RSA.public_size pub + 1) 1
+        (got, _) <- RSA.decryptBlinded (RSA.blindedKey key) c
+        got `shouldBe` (Left RSA.MessageSizeIncorrect :: Either RSA.Error ByteString)
+
+    it "makes PSS signatures that verify" $
+        threaded 40 $ \bk i -> do
+            let m = B.replicate i 0x33
+                params = PSS.defaultPSSParams SHA256
+            (s, bk') <- PSS.signBlinded params bk m
+            either (error . show) (PSS.verify params pub m) s `shouldBe` True
+            return bk'
+
+    it "decrypts OAEP" $
+        threaded 40 $ \bk i -> do
+            let m = B.replicate i 0x77
+                params = OAEP.defaultOAEPParams SHA256
+            c <- either (error . show) id <$> OAEP.encrypt params pub m
+            (got, bk') <- OAEP.decryptBlinded params bk c
+            got `shouldBe` Right m
+            return bk'
+
+    it "works for a key without its CRT values" $ do
+        let bare = key {RSA.private_p = 0, RSA.private_q = 0}
+            go _ 41 = return ()
+            go bk i = do
+                let dg = hashWith SHA256 (B.replicate i 0x62)
+                (got, bk') <- RSA.signDigestBlinded bk dg
+                got `shouldBe` RSA.signDigest Nothing key dg
+                go bk' (i + 1)
+        go (RSA.blindedKey bare) (1 :: Int)
+
+    -- The randomness comes from the monad, so a pure generator will do.
+    prop "runs in a pure generator" $ \testDRG ->
+        let go bk i acc
+                | i > (40 :: Int) = return (reverse acc)
+                | otherwise = do
+                    (s, bk') <- RSA.signDigestBlinded bk (hashWith SHA256 (B.replicate i 0x64))
+                    go bk' (i + 1) (s : acc)
+            sigs = withTestDRG testDRG (go (RSA.blindedKey key) 1 [])
+         in sigs === [RSA.signDigest Nothing key (hashWith SHA256 (B.replicate i 0x64)) | i <- [1 .. 40]]
+
+    it "gives every thread a right answer through the Safer functions" $ do
+        dones <- forM [1 .. 8 :: Int] $ \t -> do
+            done <- newEmptyMVar
+            _ <- forkIO $ do
+                oks <- forM [1 .. 30 :: Int] $ \i -> do
+                    let dg = hashWith SHA256 (B.pack [fromIntegral t, fromIntegral i])
+                    got <- RSA.signSaferDigest key dg
+                    return $! got == RSA.signDigest Nothing key dg
+                putMVar done (and oks)
+            return done
+        results <- mapM takeMVar dones
+        results `shouldBe` replicate 8 True
+
+    -- More keys than the Safer functions remember, interleaved, so that the
+    -- table both hits and evicts.
+    it "keeps the Safer functions right across more keys than it remembers" $ do
+        let keys = key : [snd (withTestDRG (TestDRG (s', 2, 3, 4, 5)) (RSA.generate 64 65537)) | s' <- [1 .. 5]]
+        forM_ [1 .. 12 :: Int] $ \i ->
+            forM_ keys $ \k -> do
+                let dg = hashWith SHA256 (B.replicate i 0x63)
+                got <- RSA.signSaferDigest k dg
+                got `shouldBe` RSA.signDigest Nothing k dg
+  where
+    vector = firstVector vectorsSHA1
+    key = vectorToPrivate vector
+    pub = vectorToPublic vector
+    -- run count operations, each handed the key the one before returned
+    threaded count op = go (RSA.blindedKey key) (1 :: Int)
+      where
+        go bk i
+            | i > count = return ()
+            | otherwise = op bk i >>= \bk' -> go bk' (i + 1)
+
 spec :: Spec
 spec = do
     keyGenerationTests
@@ -443,5 +552,6 @@ spec = do
                 zipWith doMalleabilityTest [katZero ..] $
                     filter vectorHasSignature vectorsSHA1
     digestOperationTests
+    blindedKeyTests
     unpadTests
     ciphertextRangeTests

@@ -20,6 +20,11 @@ module Crypto.PubKey.RSA.PKCS15 (
     signDigestInfo,
     signSaferDigestInfo,
 
+    -- * Private key operations with a kept blinding
+    decryptBlinded,
+    signDigestBlinded,
+    signDigestInfoBlinded,
+
     -- * Public key operations
     encrypt,
     verify,
@@ -33,7 +38,7 @@ module Crypto.PubKey.RSA.PKCS15 (
 import Crypto.Hash
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.Internal (and')
-import Crypto.PubKey.RSA (generateBlinder)
+import Crypto.PubKey.RSA.Blinded.Internal
 import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
@@ -486,7 +491,8 @@ decrypt blinder pk c
     -- "convert" must be apply to "c".
     | otherwise = unpad $ dp blinder pk $ B.convert c
 
--- | decrypt message using the private key and by automatically generating a blinder.
+-- | decrypt message using the private key, blinded with the pair kept for
+-- this key; see "Crypto.PubKey.RSA.Blinded".
 decryptSafer
     :: (MonadRandom m, ByteArray ba)
     => PrivateKey
@@ -494,9 +500,29 @@ decryptSafer
     -> ByteString
     -- ^ cipher text
     -> m (Either Error ba)
-decryptSafer pk b = do
-    blinder <- generateBlinder (private_n pk)
-    return (decrypt (Just blinder) pk b)
+decryptSafer pk b
+    | B.length b /= private_size pk = return (Left MessageSizeIncorrect)
+    | os2ip b >= private_n pk = return (Left MessageSizeIncorrect)
+    | otherwise = do
+        d <- drawFor pk
+        return $ withBlindingFor pk d $ \pair -> unpad (dpWithPair pair pk (B.convert b))
+
+-- | 'decrypt' with the blinding a t'BlindedKey' keeps, and the key for the
+-- next operation.
+decryptBlinded
+    :: (MonadRandom m, ByteArray ba)
+    => BlindedKey
+    -> ByteString
+    -- ^ cipher text
+    -> m (Either Error ba, BlindedKey)
+decryptBlinded bk c
+    | B.length c /= private_size pk = return (Left MessageSizeIncorrect, bk)
+    | os2ip c >= private_n pk = return (Left MessageSizeIncorrect, bk)
+    | otherwise = do
+        (m, bk') <- dpBlinded bk (B.convert c)
+        return (unpad m, bk')
+  where
+    pk = blindedPrivateKey bk
 
 -- | encrypt a bytestring using the public key.
 --
@@ -538,7 +564,8 @@ sign blinder hashDescr pk m = dp blinder pk `fmap` makeSignature hashDescr (priv
     "Use signDigest, or signDigestInfo when the message is already a DigestInfo"
     #-}
 
--- | sign message using the private key and by automatically generating a blinder.
+-- | sign message using the private key, blinded with the pair kept for this
+-- key; see "Crypto.PubKey.RSA.Blinded".
 --
 -- __Deprecated.__  Use 'signSaferDigest', or 'signSaferDigestInfo'.
 signSafer
@@ -551,8 +578,8 @@ signSafer
     -- ^ message to sign
     -> m (Either Error ByteString)
 signSafer hashAlg pk m = do
-    blinder <- generateBlinder (private_n pk)
-    return (sign (Just blinder) hashAlg pk m)
+    d <- drawFor pk
+    return $ signWithBlindingFor pk d (makeSignature hashAlg (private_size pk) m)
 {-# DEPRECATED
     signSafer
     "Use signSaferDigest, or signSaferDigestInfo when the message is already a DigestInfo"
@@ -632,8 +659,8 @@ signDigest
 signDigest blinder pk digest =
     dp blinder pk `fmap` padSignature (private_size pk) (hashDigestASN1 digest)
 
--- | 'signDigest' with a blinder generated for the occasion, as 'signSafer'
--- is to 'sign'.
+-- | 'signDigest' blinded with the pair kept for this key, as 'signSafer' is
+-- to 'sign'; see "Crypto.PubKey.RSA.Blinded".
 signSaferDigest
     :: (HashAlgorithmASN1 hashAlg, MonadRandom m)
     => PrivateKey
@@ -642,8 +669,21 @@ signSaferDigest
     -- ^ digest of the message to sign
     -> m (Either Error ByteString)
 signSaferDigest pk digest = do
-    blinder <- generateBlinder (private_n pk)
-    return (signDigest (Just blinder) pk digest)
+    d <- drawFor pk
+    return $
+        signWithBlindingFor pk d (padSignature (private_size pk) (hashDigestASN1 digest))
+
+-- | 'signDigest' with the blinding a t'BlindedKey' keeps, and the key for the
+-- next operation.
+signDigestBlinded
+    :: (HashAlgorithmASN1 hashAlg, MonadRandom m)
+    => BlindedKey
+    -> Digest hashAlg
+    -- ^ digest of the message to sign
+    -> m (Either Error ByteString, BlindedKey)
+signDigestBlinded bk digest =
+    signBlindedEncoded bk $
+        padSignature (private_size (blindedPrivateKey bk)) (hashDigestASN1 digest)
 
 -- | Sign something that is already a DigestInfo, the ASN.1 structure
 -- naming a hash algorithm and carrying a digest under it.
@@ -666,7 +706,7 @@ signDigestInfo
 signDigestInfo blinder pk di =
     dp blinder pk `fmap` padSignature (private_size pk) di
 
--- | 'signDigestInfo' with a blinder generated for the occasion.
+-- | 'signDigestInfo' blinded with the pair kept for this key.
 signSaferDigestInfo
     :: MonadRandom m
     => PrivateKey
@@ -675,8 +715,37 @@ signSaferDigestInfo
     -- ^ a DigestInfo, encoded
     -> m (Either Error ByteString)
 signSaferDigestInfo pk di = do
-    blinder <- generateBlinder (private_n pk)
-    return (signDigestInfo (Just blinder) pk di)
+    d <- drawFor pk
+    return $ signWithBlindingFor pk d (padSignature (private_size pk) di)
+
+-- | 'signDigestInfo' with the blinding a t'BlindedKey' keeps, and the key for
+-- the next operation.
+signDigestInfoBlinded
+    :: MonadRandom m
+    => BlindedKey
+    -> ByteString
+    -- ^ a DigestInfo, encoded
+    -> m (Either Error ByteString, BlindedKey)
+signDigestInfoBlinded bk di =
+    signBlindedEncoded bk $ padSignature (private_size (blindedPrivateKey bk)) di
+
+-- | The private-key operation on an encoded signature, if there is one; the
+-- key is used up only if there is.
+signBlindedEncoded
+    :: MonadRandom m
+    => BlindedKey
+    -> Either Error ByteString
+    -> m (Either Error ByteString, BlindedKey)
+signBlindedEncoded bk (Left err) = return (Left err, bk)
+signBlindedEncoded bk (Right em) = do
+    (s, bk') <- dpBlinded bk em
+    return (Right s, bk')
+
+-- | The same, with the pair the @Safer@ functions keep for this key.
+signWithBlindingFor
+    :: PrivateKey -> Draw -> Either Error ByteString -> Either Error ByteString
+signWithBlindingFor _ _ (Left err) = Left err
+signWithBlindingFor pk d (Right em) = Right (withBlindingFor pk d (\pair -> dpWithPair pair pk em))
 
 -- | Verify a signature over a digest.  The checks are 'verify's.
 verifyDigest
