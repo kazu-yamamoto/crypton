@@ -22,6 +22,15 @@
 #include <crypton_powm.h>
 #include <crypton_bzero.h>
 
+/* On AArch64, squaring at the RSA half sizes goes through generated code
+ * that scans a column at a time with the reduction folded in; see
+ * cbits/crypton_mont_sqr.py.  CRYPTON_NO_MONT_SQR keeps mont_sqr, to compare. */
+#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_SQR) \
+    && (defined(__GNUC__) || defined(__clang__))
+#define CRYPTON_MONT_SQR 1
+#include <crypton_mont_sqr.h>
+#endif
+
 /*
  * At RSA sizes on x86-64, the Montgomery multiplication below is the whole
  * cost, and s2n-bignum's is twice as fast because the C cannot form the two
@@ -180,6 +189,13 @@ static void powm_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
 #else
 	(void)scratch;
 	(void)s2n;
+#endif
+#ifdef CRYPTON_MONT_SQR
+	switch (n) {
+	case 16: crypton_mont_sqr16(r, a, m, n0, t); return;
+	case 24: crypton_mont_sqr24(r, a, m, n0, t); return;
+	case 32: crypton_mont_sqr32(r, a, m, n0, t); return;
+	}
 #endif
 	mont_sqr(r, a, m, n0, n, t);
 }

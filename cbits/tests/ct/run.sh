@@ -309,6 +309,13 @@ x86_64 | amd64)
 		echo "     multiplication cannot run here"
 	fi
 	;;
+aarch64 | arm64)
+	# the generated squaring is separate code at each size; 2048 is above
+	for bytes in 128 192; do
+		run_one "powm_$((bytes * 8))" "cbits/crypton_powm.c" \
+			"-DCT_POWM_BYTES=$bytes" powm
+	done
+	;;
 esac
 run_one p256    "cbits/p256/p256.c cbits/p256/p256_ec.c" ""
 run_one x25519  "cbits/curve25519/curve25519-donna-c64.c" ""

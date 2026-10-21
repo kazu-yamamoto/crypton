@@ -215,6 +215,67 @@ static int montifier_agrees(void)
 #endif
 }
 
+/* The generated squaring against mont_sqr, at the sizes it is generated for,
+ * on random operands and on the ones at the edges of what it accepts. */
+#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_SQR) \
+    && (defined(__GNUC__) || defined(__clang__))
+#include "crypton_mont_sqr.h"
+#define HAVE_MONT_SQR 1
+#endif
+
+static int mont_sqr_agrees(void)
+{
+#ifdef HAVE_MONT_SQR
+	static const uint32_t sizes[] = {16, 24, 32};
+	limb_t m[32], a[32], r1[32], r2[32], t[64], n0;
+	uint32_t s, k, i, bad = 0, cases = 0;
+
+	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
+		uint32_t n = sizes[s];
+
+		for (k = 0; k < 600; k++) {
+			for (i = 0; i < n; i++) {
+				m[i] = (limb_t) rng();
+				a[i] = (limb_t) rng();
+			}
+			if (k % 4 == 0)
+				m[n - 1] |= (limb_t) 1 << (LIMB_BITS - 1);
+			if (k % 10 == 1)
+				memset(m, 0xff, n * sizeof(limb_t));
+			m[0] |= 1;
+			if (m[n - 1] == 0)
+				m[n - 1] = 1;
+			a[n - 1] %= m[n - 1];
+			switch (k % 10) {
+			case 2: memset(a, 0, sizeof a); break;
+			case 3: memset(a, 0, sizeof a); a[0] = 1; break;
+			case 4: memcpy(a, m, n * sizeof(limb_t)); a[0] -= 1; break;
+			}
+			n0 = mont_n0(m[0]);
+			mont_sqr(r1, a, m, n0, n, t);
+			switch (n) {
+			case 16: crypton_mont_sqr16(r2, a, m, n0, t); break;
+			case 24: crypton_mont_sqr24(r2, a, m, n0, t); break;
+			default: crypton_mont_sqr32(r2, a, m, n0, t); break;
+			}
+			cases++;
+			if (memcmp(r1, r2, n * sizeof(limb_t)) != 0) {
+				printf("FAIL mont_sqr%u: case %u disagrees\n", n, k);
+				bad++;
+				break;
+			}
+		}
+	}
+	if (bad == 0)
+		printf("ok   %u operands: the generated squaring is mont_sqr's\n",
+		       cases);
+	return bad == 0;
+#else
+	printf("skip squaring: this build has no generated squaring to compare\n");
+	return 1;
+#endif
+}
+
 int main(int argc, char **argv)
 {
 	/* in bits.  The first four are small enough that only the C runs; the
@@ -233,6 +294,8 @@ int main(int argc, char **argv)
 	}
 
 	if (!montifier_agrees())
+		failures++;
+	if (!mont_sqr_agrees())
 		failures++;
 
 	for (k = 0; k < 2000; k++) {

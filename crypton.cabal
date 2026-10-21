@@ -69,6 +69,7 @@ extra-source-files:
     cbits/blake2/ref/*.h
     cbits/blake2/sse/*.h
     cbits/crypton_hash_prefix.c
+    cbits/crypton_mont_sqr.py
     cbits/mlkem/*.S
     cbits/mlkem/*.c
     cbits/mlkem/*.h
