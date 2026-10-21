@@ -1,0 +1,45 @@
+# The ct harness on AArch64 against a branch, as it is and with a branch on
+# a secret planted in the generated squaring, which must be reported.  Runs
+# on a push to this branch that touches this file.
+name: ct-arm
+
+on:
+  push:
+    branches: [ci]
+    paths: ['.github/workflows/ct-arm.yml']
+
+env:
+  BRANCH: perf/mont-sqr-fips
+
+jobs:
+  ct:
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        ref: ${{ env.BRANCH }}
+
+    - name: valgrind
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind && valgrind --version
+
+    - name: The harness as the branch has it
+      run: cbits/tests/ct/run.sh 2>&1 | grep -E '^(ok|FAIL|skip)' | grep -E 'powm|leak|FAIL' ; exit ${PIPESTATUS[0]}
+
+    - name: With a branch on u[3] planted in each generated squaring, which must fail
+      run: |
+        python3 - <<'PY'
+        p = 'cbits/crypton_mont_sqr.h'
+        s = open(p).read()
+        n = s.count('\tu[3] = t0 * n0;\n')
+        s = s.replace('\tu[3] = t0 * n0;\n',
+                      '\tu[3] = t0 * n0;\n\tif (u[3] & 1) __asm__ volatile("nop");\n')
+        open(p, 'w').write(s)
+        print("planted", n)
+        PY
+        set +e
+        cbits/tests/ct/run.sh > /tmp/sab.log 2>&1
+        st=$?
+        grep -E '^(ok|FAIL)' /tmp/sab.log | grep -E 'powm'
+        grep -m3 -E 'crypton_mont_sqr' /tmp/sab.log
+        if [ $st -eq 0 ]; then echo "::error::the planted branch was not reported"; exit 1; fi
+        echo "the planted branch was reported, as it must be"
