@@ -37,6 +37,20 @@ int crypton_powm_pub(uint8_t *out,
                      const uint8_t *exp, uint32_t explen,
                      const uint8_t *mod, uint32_t modlen);
 
+/* Two secure exponentiations at once, as the halves of an RSA private-key
+ * operation by CRT are: each as crypton_powm_sec, with the same contract.
+ *
+ * Only on x86-64 with AVX-512 IFMA, for two moduli of 128, 192 or 256 bytes
+ * and two exponents of the same length.  It declines everywhere else --
+ * returning nonzero with both outputs untouched -- so a caller must have
+ * crypton_powm_sec to fall back to. */
+int crypton_powm_sec_x2(uint8_t *out1, const uint8_t *base1, uint32_t baselen1,
+                        const uint8_t *exp1, uint32_t explen1,
+                        const uint8_t *mod1, uint32_t modlen1,
+                        uint8_t *out2, const uint8_t *base2, uint32_t baselen2,
+                        const uint8_t *exp2, uint32_t explen2,
+                        const uint8_t *mod2, uint32_t modlen2);
+
 /* The window the secure exponentiation walks the exponent in, so that a
  * build which did not take -DPOWM_WINDOW_BITS cannot pass for one that
  * did. */

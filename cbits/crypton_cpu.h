@@ -65,6 +65,9 @@
  * bits of XCR0 than AVX2 wants: the mask registers and the two upper halves
  * of the vector registers. */
 #define CRYPTON_X86_VAES512 256
+/* AVX-512 IFMA, the 52-bit multiply-adds, with F and VL for the 256-bit form
+ * RSA uses them in: EVEX-encoded, so they want the AVX-512 state saved too. */
+#define CRYPTON_X86_IFMA   512
 #ifdef ARCH_X86
 uint32_t crypton_x86_simd_features(void);
 #endif

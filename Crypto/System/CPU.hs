@@ -26,6 +26,7 @@ module Crypto.System.CPU (
         ADX,
         VAES,
         VAES512,
+        AVX512IFMA,
         -- AArch64
         NEON,
         ARMAES,
@@ -112,6 +113,11 @@ pattern VAES = ProcessorOption 9
 pattern VAES512 :: ProcessorOption
 pattern VAES512 = ProcessorOption 10
 
+-- | The AVX-512 52-bit integer multiply-adds, with AVX-512 F and VL, and the
+-- operating system saving their state: RSA's private-key operation uses them.
+pattern AVX512IFMA :: ProcessorOption
+pattern AVX512IFMA = ProcessorOption 19
+
 -- | Advanced SIMD, which is not optional on AArch64.
 pattern NEON :: ProcessorOption
 pattern NEON = ProcessorOption 11
@@ -161,6 +167,7 @@ instance Show ProcessorOption where
     show ADX = "ADX"
     show VAES = "VAES"
     show VAES512 = "VAES512"
+    show AVX512IFMA = "AVX512IFMA"
     show NEON = "NEON"
     show ARMAES = "ARMAES"
     show ARMPMULL = "ARMPMULL"
@@ -193,7 +200,7 @@ processorOptions = unsafeDoIO (sort <$> filterM askC allOptions)
     -- 2 is not asked for and has no name: it was RDRAND, which crypton no
     -- longer dispatches on.  The number is left out rather than reused, so
     -- that the others keep the values they had.
-    allOptions = [ProcessorOption n | n <- [0 .. 18], n /= 2]
+    allOptions = [ProcessorOption n | n <- [0 .. 19], n /= 2]
     askC (ProcessorOption n) =
         (/= 0) <$> crypton_cpu_option (fromIntegral n)
 {-# NOINLINE processorOptions #-}

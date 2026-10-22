@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 -- |
 -- Module      : Crypto.PubKey.RSA.Prim
 -- License     : BSD-style
@@ -12,9 +14,18 @@ module Crypto.PubKey.RSA.Prim (
     ep,
 ) where
 
+import Data.Memory.PtrMethods (memSet)
+import Data.Word (Word32, Word8)
+import Foreign.C.Types (CInt (..))
+import Foreign.Marshal.Alloc (allocaBytes)
+import Foreign.Ptr (Ptr, plusPtr)
+
 import Crypto.Internal.ByteArray (ByteArray)
+import Crypto.Internal.Compat (unsafeDoIO)
+import Crypto.Number.Basic (numBytes)
 import Crypto.Number.ModArithmetic (expFast, expSafe)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
+import qualified Crypto.Number.Serialize.Internal as Internal
 import Crypto.PubKey.RSA.Types
 
 {- dpSlow computes the decrypted message not using any precomputed cache value.
@@ -33,17 +44,62 @@ dpFast (Blinder r rm1) pk c =
   where
     re = expFast r (public_e $ private_pub pk) (private_n pk)
     iC = multiplication re (os2ip c) (private_n pk)
-    m1 = expSafe iC (private_dP pk) (private_p pk)
-    m2 = expSafe iC (private_dQ pk) (private_q pk)
+    (m1, m2) = crtHalves iC pk
     h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
 
 dpFastNoBlinder :: ByteArray ba => PrivateKey -> ba -> ba
 dpFastNoBlinder pk c = i2ospOf_ (private_size pk) (m2 + h * (private_q pk))
   where
     iC = os2ip c
-    m1 = expSafe iC (private_dP pk) (private_p pk)
-    m2 = expSafe iC (private_dQ pk) (private_q pk)
+    (m1, m2) = crtHalves iC pk
     h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
+
+-- | c^dP mod p and c^dQ mod q, the halves of the private-key operation: both
+-- at once where the C can (AVX-512 IFMA, and the sizes of RSA-2048, -3072 and
+-- -4096), one after the other where it declines.
+crtHalves :: Integer -> PrivateKey -> (Integer, Integer)
+crtHalves c pk = case expSafeX2 (c `mod` p) dP p (c `mod` q) dQ q of
+    Just r -> r
+    Nothing -> (expSafe c dP p, expSafe c dQ q)
+  where
+    p = private_p pk
+    q = private_q pk
+    dP = private_dP pk
+    dQ = private_dQ pk
+
+-- | Two secure exponentiations in one call.  The bases are reduced already
+-- and the moduli are the same length; both exponents go in at that length,
+-- so the length the C sees is the modulus', as 'expSafe' pads to whole words.
+expSafeX2 :: Integer -> Integer -> Integer -> Integer -> Integer -> Integer -> Maybe (Integer, Integer)
+expSafeX2 b1 e1 m1 b2 e2 m2
+    | numBytes m2 /= len || not (odd m1 && odd m2) = Nothing
+    | e1 < 0 || e2 < 0 || numBytes e1 > len || numBytes e2 > len = Nothing
+    | otherwise = unsafeDoIO $
+        allocaBytes (8 * len) $ \start -> case take 8 (iterate (`plusPtr` len) start) of
+            [o1, pb1, pe1, pm1, o2, pb2, pe2, pm2] -> do
+                mapM_
+                    (\(v, ptr) -> Internal.i2ospOf v ptr len)
+                    [(b1, pb1), (e1, pe1), (m1, pm1), (b2, pb2), (e2, pe2), (m2, pm2)]
+                r <- c_powm_sec_x2 o1 pb1 l pe1 l pm1 l o2 pb2 l pe2 l pm2 l
+                -- the exponents are the caller's secrets
+                memSet pe1 0 len
+                memSet pe2 0 len
+                if r /= 0
+                    then return Nothing
+                    else do
+                        !v1 <- Internal.os2ip o1 len
+                        !v2 <- Internal.os2ip o2 len
+                        return (Just (v1, v2))
+            _ -> return Nothing
+  where
+    !len = numBytes m1
+    l = fromIntegral len :: Word32
+
+foreign import ccall safe "crypton_powm_sec_x2"
+    c_powm_sec_x2
+        :: Ptr Word8 -> Ptr Word8 -> Word32 -> Ptr Word8 -> Word32 -> Ptr Word8 -> Word32
+        -> Ptr Word8 -> Ptr Word8 -> Word32 -> Ptr Word8 -> Word32 -> Ptr Word8 -> Word32
+        -> IO CInt
 
 -- | Compute the RSA decrypt primitive.
 -- if the p and q numbers are available, then dpFast is used

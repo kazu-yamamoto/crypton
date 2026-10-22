@@ -26,7 +26,7 @@ cc=${CC:-cc}
 mkdir -p "$out"
 cd "$root"
 
-src="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
+src="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c cbits/crypton_powm_ifma.c"
 # The public-exponent exponentiation declines on every machine where what the
 # caller already has is faster, which is most of them and all of the ones
 # this can be developed on.  CRYPTON_POWM_PUB_ALWAYS makes it accept, so its
@@ -97,7 +97,7 @@ done
 # ADX the x86-64 build above takes the C as well; -DCRYPTON_CPU_TESTING_ADX,
 # where the instructions are known to run, is what makes it differ.  On
 # AArch64, -DCRYPTON_NO_MONT_FIXED keeps the generated code out of it too.
-csrc="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
+csrc="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c cbits/crypton_powm_ifma.c"
 case $(uname -m) in
 x86_64|amd64) csrc="$csrc cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c" ;;
 esac
