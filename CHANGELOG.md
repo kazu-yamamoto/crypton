@@ -1,5 +1,23 @@
 # CHANGELOG for crypton
 
+## 2.2.4
+
+**New module `Crypto.PubKey.RSA.Blinded`.**  A `BlindedKey` carries RSA
+blinding from one signature or decryption to the next.  The existing
+`*Safer` functions use it through a small process-wide table, and
+verification keeps R^2 per modulus in another.
+
+* perf(rsa): keep the blinding between operations
+  [#335](https://github.com/kazu-yamamoto/crypton/pull/335)
+* perf(rsa): a generated Montgomery multiplication for AArch64
+  [#336](https://github.com/kazu-yamamoto/crypton/pull/336)
+* fix: the C warnings CI reports
+  [#337](https://github.com/kazu-yamamoto/crypton/pull/337)
+* perf(rsa): both CRT halves at once with AVX-512 IFMA
+  [#338](https://github.com/kazu-yamamoto/crypton/pull/338)
+* perf(rsa): keep R^2 per modulus for verification
+  [#339](https://github.com/kazu-yamamoto/crypton/pull/339)
+
 ## 2.2.3
 
 **crypton builds on Windows again.**  2.2.2's tarball lacked a header that
