@@ -1,6 +1,6 @@
-# RSA verification from Haskell, main against a branch, on the Arm and the
-# x86-64 runner: whether GHC's GMP there is the fast one decides which wins.
-# Runs on a push to this branch that touches this file.  (round 2)
+# Verification's exponentiation, GMP against the C, on the Arm runner: with
+# a generated 48-limb squaring, does the C win at 3072 bits on a Neoverse
+# too?  Runs on a push to this branch that touches this file.  (round 3)
 name: verify
 
 on:
@@ -9,21 +9,15 @@ on:
     paths: ['.github/workflows/verify.yml']
 
 env:
-  BRANCH: perf/rsa-verify-arm
+  BRANCH: perf/mont-48-64
 
 jobs:
   verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04-arm, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04-arm
     steps:
     - name: Which machine
       run: lscpu | grep -E 'Model name' || true
 
-    - uses: actions/checkout@v5
-      with: { ref: main, path: main }
     - uses: actions/checkout@v5
       with: { ref: '${{ env.BRANCH }}', path: branch }
     - uses: actions/checkout@v5
@@ -34,20 +28,22 @@ jobs:
         ghc-version: '9.12'
         cabal-version: latest
 
-    - name: Build the harness against each tree
+    # the same tree twice: as it ships, and with the C taking every size
+    - name: Build both
       run: |
         cabal update -v0
-        for v in main branch; do
-          mkdir -p pk-$v && cp ci/bench/verify/PK.hs ci/bench/verify/pk.cabal pk-$v/
-          printf 'packages: . %s\n' "$PWD/$v" > pk-$v/cabal.project
-          (cd pk-$v && cabal build -v0 && cp "$(cabal list-bin pkbench)" ../pk-bin-$v)
-        done
-        ldd pk-bin-main | grep -i gmp || echo "gmp linked statically"
+        mkdir pub && cp ci/bench/verify/Pub.hs ci/bench/verify/pub.cabal pub/
+        cd pub
+        printf 'packages: . %s\n' "$GITHUB_WORKSPACE/branch" > def.project
+        printf 'packages: . %s\npackage crypton\n  ghc-options: -optc-DCRYPTON_POWM_PUB_ALWAYS\n' "$GITHUB_WORKSPACE/branch" > always.project
+        cabal build -v0 --project-file=def.project --builddir=dist-def
+        cabal build -v0 --project-file=always.project --builddir=dist-always
+        cp "$(cabal list-bin pubbench --project-file=def.project --builddir=dist-def)" ../pub-def
+        cp "$(cabal list-bin pubbench --project-file=always.project --builddir=dist-always)" ../pub-always
+        ! cmp -s "$(find dist-def -name crypton_powm.o)" "$(find dist-always -name crypton_powm.o)"
+        ldd ../pub-def | grep -i gmp
 
     - name: Race them
       run: |
-        for r in 1 2 3 4 5; do
-          for op in rsa-verify rsa3072-verify rsa4096-verify; do
-            for v in main branch; do echo "$op $v $(./pk-bin-$v $op)"; done
-          done
-        done | awk '{k=$1" "$2; if(!(k in m)||$3<m[k])m[k]=$3} END{for(k in m)print k, m[k]}' | sort
+        for r in 1 2 3 4 5; do ./pub-def | sed 's/^/gmp /'; ./pub-always | sed 's/^/c /'; done |
+          awk '{k=$2" "$1; if(!(k in m)||$3<m[k])m[k]=$3} END{for(k in m)print k, m[k]}' | sort -n

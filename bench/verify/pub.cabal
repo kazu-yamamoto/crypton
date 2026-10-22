@@ -1,0 +1,10 @@
+cabal-version: 2.4
+name: pubbench
+version: 0
+build-type: Simple
+
+executable pubbench
+    main-is: Pub.hs
+    build-depends: base, crypton
+    default-language: Haskell2010
+    ghc-options: -O2
