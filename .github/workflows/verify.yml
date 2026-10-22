@@ -1,0 +1,53 @@
+# RSA verification from Haskell, main against a branch, on the Arm and the
+# x86-64 runner: whether GHC's GMP there is the fast one decides which wins.
+# Runs on a push to this branch that touches this file.
+name: verify
+
+on:
+  push:
+    branches: [ci]
+    paths: ['.github/workflows/verify.yml']
+
+env:
+  BRANCH: perf/rsa-verify-arm
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Which machine
+      run: lscpu | grep -E 'Model name' || true
+
+    - uses: actions/checkout@v5
+      with: { ref: main, path: main }
+    - uses: actions/checkout@v5
+      with: { ref: '${{ env.BRANCH }}', path: branch }
+    - uses: actions/checkout@v5
+      with: { path: ci }
+
+    - uses: haskell-actions/setup@v2
+      with:
+        ghc-version: '9.12'
+        cabal-version: latest
+
+    - name: Build the harness against each tree
+      run: |
+        cabal update -v0
+        for v in main branch; do
+          mkdir -p pk-$v && cp ci/bench/verify/PK.hs ci/bench/verify/pk.cabal pk-$v/
+          printf 'packages: . %s\n' "$PWD/$v" > pk-$v/cabal.project
+          (cd pk-$v && cabal build -v0 && cp "$(cabal list-bin pkbench)" ../pk-bin-$v)
+        done
+        ldd pk-bin-main | grep -i gmp || echo "gmp linked statically"
+
+    - name: Race them
+      run: |
+        for r in 1 2 3 4 5; do
+          for op in rsa-verify rsa3072-verify rsa4096-verify; do
+            for v in main branch; do echo "$op $v $(./pk-bin-$v $op)"; done
+          done
+        done | awk '{k=$1" "$2; if(!(k in m)||$3<m[k])m[k]=$3} END{for(k in m)print k, m[k]}' | sort
