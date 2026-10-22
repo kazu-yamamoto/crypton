@@ -203,6 +203,7 @@ static void powm_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
 	case 16: crypton_mont_sqr16(r, a, m, n0, t); return;
 	case 24: crypton_mont_sqr24(r, a, m, n0, t); return;
 	case 32: crypton_mont_sqr32(r, a, m, n0, t); return;
+	case 48: crypton_mont_sqr48(r, a, m, n0, t); return;
 	}
 #endif
 	mont_sqr(r, a, m, n0, n, t);

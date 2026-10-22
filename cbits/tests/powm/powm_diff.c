@@ -227,8 +227,8 @@ static int montifier_agrees(void)
 static int mont_fixed_agrees(void)
 {
 #ifdef HAVE_MONT_FIXED
-	static const uint32_t sizes[] = {16, 24, 32};
-	limb_t m[32], a[32], b[32], r1[32], r2[32], t[64], n0;
+	static const uint32_t sizes[] = {16, 24, 32, 48};
+	limb_t m[48], a[48], b[48], r1[48], r2[48], t[96], n0;
 	uint32_t s, k, i, bad = 0, cases = 0;
 
 	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
@@ -259,11 +259,13 @@ static int mont_fixed_agrees(void)
 			n0 = mont_n0(m[0]);
 			cases++;
 
+			/* 48 limbs has a squaring only */
 			mont_mul(r1, a, b, m, n0, n, t);
 			switch (n) {
 			case 16: crypton_mont_mul16(r2, a, b, m, n0, t); break;
 			case 24: crypton_mont_mul24(r2, a, b, m, n0, t); break;
-			default: crypton_mont_mul32(r2, a, b, m, n0, t); break;
+			case 32: crypton_mont_mul32(r2, a, b, m, n0, t); break;
+			default: memcpy(r2, r1, n * sizeof(limb_t)); break;
 			}
 			if (memcmp(r1, r2, n * sizeof(limb_t)) != 0) {
 				printf("FAIL mont_mul%u: case %u disagrees\n", n, k);
@@ -275,7 +277,8 @@ static int mont_fixed_agrees(void)
 			switch (n) {
 			case 16: crypton_mont_sqr16(r2, a, m, n0, t); break;
 			case 24: crypton_mont_sqr24(r2, a, m, n0, t); break;
-			default: crypton_mont_sqr32(r2, a, m, n0, t); break;
+			case 32: crypton_mont_sqr32(r2, a, m, n0, t); break;
+			default: crypton_mont_sqr48(r2, a, m, n0, t); break;
 			}
 			if (memcmp(r1, r2, n * sizeof(limb_t)) != 0) {
 				printf("FAIL mont_sqr%u: case %u disagrees\n", n, k);
