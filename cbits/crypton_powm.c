@@ -22,13 +22,14 @@
 #include <crypton_powm.h>
 #include <crypton_bzero.h>
 
-/* On AArch64, squaring at the RSA half sizes goes through generated code
- * that scans a column at a time with the reduction folded in; see
- * cbits/crypton_mont_sqr.py.  CRYPTON_NO_MONT_SQR keeps mont_sqr, to compare. */
-#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_SQR) \
+/* On AArch64, multiplication and squaring at the RSA half sizes go through
+ * generated code that scans a column at a time with the reduction folded in;
+ * see cbits/crypton_mont.py.  CRYPTON_NO_MONT_FIXED keeps mont_mul and
+ * mont_sqr, to compare. */
+#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_FIXED) \
     && (defined(__GNUC__) || defined(__clang__))
-#define CRYPTON_MONT_SQR 1
-#include <crypton_mont_sqr.h>
+#define CRYPTON_MONT_FIXED 1
+#include <crypton_mont.h>
 #endif
 
 /*
@@ -175,6 +176,13 @@ static void powm_mul(limb_t *r, const limb_t *a, const limb_t *b,
 	(void)scratch;
 	(void)s2n;
 #endif
+#ifdef CRYPTON_MONT_FIXED
+	switch (n) {
+	case 16: crypton_mont_mul16(r, a, b, m, n0, t); return;
+	case 24: crypton_mont_mul24(r, a, b, m, n0, t); return;
+	case 32: crypton_mont_mul32(r, a, b, m, n0, t); return;
+	}
+#endif
 	mont_mul(r, a, b, m, n0, n, t);
 }
 
@@ -190,7 +198,7 @@ static void powm_sqr(limb_t *r, const limb_t *a, const limb_t *m, limb_t n0,
 	(void)scratch;
 	(void)s2n;
 #endif
-#ifdef CRYPTON_MONT_SQR
+#ifdef CRYPTON_MONT_FIXED
 	switch (n) {
 	case 16: crypton_mont_sqr16(r, a, m, n0, t); return;
 	case 24: crypton_mont_sqr24(r, a, m, n0, t); return;

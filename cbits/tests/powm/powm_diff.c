@@ -215,19 +215,20 @@ static int montifier_agrees(void)
 #endif
 }
 
-/* The generated squaring against mont_sqr, at the sizes it is generated for,
- * on random operands and on the ones at the edges of what it accepts. */
-#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_SQR) \
+/* The generated multiplication and squaring against mont_mul and mont_sqr,
+ * at the sizes they are generated for, on random operands and on the ones at
+ * the edges of what they accept. */
+#if defined(__aarch64__) && LIMB_BITS == 64 && !defined(CRYPTON_NO_MONT_FIXED) \
     && (defined(__GNUC__) || defined(__clang__))
-#include "crypton_mont_sqr.h"
-#define HAVE_MONT_SQR 1
+#include "crypton_mont.h"
+#define HAVE_MONT_FIXED 1
 #endif
 
-static int mont_sqr_agrees(void)
+static int mont_fixed_agrees(void)
 {
-#ifdef HAVE_MONT_SQR
+#ifdef HAVE_MONT_FIXED
 	static const uint32_t sizes[] = {16, 24, 32};
-	limb_t m[32], a[32], r1[32], r2[32], t[64], n0;
+	limb_t m[32], a[32], b[32], r1[32], r2[32], t[64], n0;
 	uint32_t s, k, i, bad = 0, cases = 0;
 
 	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
@@ -237,6 +238,7 @@ static int mont_sqr_agrees(void)
 			for (i = 0; i < n; i++) {
 				m[i] = (limb_t) rng();
 				a[i] = (limb_t) rng();
+				b[i] = (limb_t) rng();
 			}
 			if (k % 4 == 0)
 				m[n - 1] |= (limb_t) 1 << (LIMB_BITS - 1);
@@ -246,19 +248,35 @@ static int mont_sqr_agrees(void)
 			if (m[n - 1] == 0)
 				m[n - 1] = 1;
 			a[n - 1] %= m[n - 1];
+			b[n - 1] %= m[n - 1];
 			switch (k % 10) {
 			case 2: memset(a, 0, sizeof a); break;
 			case 3: memset(a, 0, sizeof a); a[0] = 1; break;
 			case 4: memcpy(a, m, n * sizeof(limb_t)); a[0] -= 1; break;
+			case 5: memcpy(a, m, n * sizeof(limb_t)); a[0] -= 1;
+			        memcpy(b, a, n * sizeof(limb_t)); break;
 			}
 			n0 = mont_n0(m[0]);
+			cases++;
+
+			mont_mul(r1, a, b, m, n0, n, t);
+			switch (n) {
+			case 16: crypton_mont_mul16(r2, a, b, m, n0, t); break;
+			case 24: crypton_mont_mul24(r2, a, b, m, n0, t); break;
+			default: crypton_mont_mul32(r2, a, b, m, n0, t); break;
+			}
+			if (memcmp(r1, r2, n * sizeof(limb_t)) != 0) {
+				printf("FAIL mont_mul%u: case %u disagrees\n", n, k);
+				bad++;
+				break;
+			}
+
 			mont_sqr(r1, a, m, n0, n, t);
 			switch (n) {
 			case 16: crypton_mont_sqr16(r2, a, m, n0, t); break;
 			case 24: crypton_mont_sqr24(r2, a, m, n0, t); break;
 			default: crypton_mont_sqr32(r2, a, m, n0, t); break;
 			}
-			cases++;
 			if (memcmp(r1, r2, n * sizeof(limb_t)) != 0) {
 				printf("FAIL mont_sqr%u: case %u disagrees\n", n, k);
 				bad++;
@@ -267,11 +285,11 @@ static int mont_sqr_agrees(void)
 		}
 	}
 	if (bad == 0)
-		printf("ok   %u operands: the generated squaring is mont_sqr's\n",
-		       cases);
+		printf("ok   %u operand pairs: the generated multiplication and squaring"
+		       " are mont_mul's and mont_sqr's\n", cases);
 	return bad == 0;
 #else
-	printf("skip squaring: this build has no generated squaring to compare\n");
+	printf("skip generated code: this build has none to compare\n");
 	return 1;
 #endif
 }
@@ -295,7 +313,7 @@ int main(int argc, char **argv)
 
 	if (!montifier_agrees())
 		failures++;
-	if (!mont_sqr_agrees())
+	if (!mont_fixed_agrees())
 		failures++;
 
 	for (k = 0; k < 2000; k++) {

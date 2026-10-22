@@ -96,13 +96,13 @@ done
 # multiplication being right to see that it is wrong.  On a machine without
 # ADX the x86-64 build above takes the C as well; -DCRYPTON_CPU_TESTING_ADX,
 # where the instructions are known to run, is what makes it differ.  On
-# AArch64, -DCRYPTON_NO_MONT_SQR keeps the generated squaring out of it too.
+# AArch64, -DCRYPTON_NO_MONT_FIXED keeps the generated code out of it too.
 csrc="cbits/tests/powm/powm_diff.c cbits/crypton_powm.c"
 case $(uname -m) in
 x86_64|amd64) csrc="$csrc cbits/crypton_cpu.c cbits/tests/ct/cpu_stub.c" ;;
 esac
 # shellcheck disable=SC2086
-$cc -O2 -DCRYPTON_POWM_PUB_ALWAYS -DCRYPTON_NO_MONT_SQR -Icbits -Icbits/include64 \
+$cc -O2 -DCRYPTON_POWM_PUB_ALWAYS -DCRYPTON_NO_MONT_FIXED -Icbits -Icbits/include64 \
     -o "$out/powm_c" $csrc
 "$out/powm_c" dump > "$out/dump_c.txt"
 if cmp -s "$out/dump_w4.txt" "$out/dump_c.txt"; then
