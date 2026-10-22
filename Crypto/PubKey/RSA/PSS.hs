@@ -16,6 +16,8 @@ module Crypto.PubKey.RSA.PSS (
     signDigest,
     signSafer,
     signDigestSafer,
+    signBlinded,
+    signDigestBlinded,
     verify,
     verifyDigest,
 ) where
@@ -24,7 +26,7 @@ import Crypto.Hash
 import Crypto.Number.Basic (numBits)
 import Crypto.Number.Serialize (os2ip)
 import Crypto.PubKey.MaskGenFunction
-import Crypto.PubKey.RSA (generateBlinder)
+import Crypto.PubKey.RSA.Blinded.Internal
 import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
@@ -85,9 +87,20 @@ signDigestWithSalt
     -> Digest hash
     -- ^ Message digest
     -> Either Error ByteString
-signDigestWithSalt salt blinder params pk digest
+signDigestWithSalt salt blinder params pk digest =
+    dp blinder pk <$> encodeDigest salt params pk digest
+
+-- | The encoded message the private-key operation is applied to.
+encodeDigest
+    :: HashAlgorithm hash
+    => ByteString
+    -> PSSParams hash ByteString ByteString
+    -> PrivateKey
+    -> Digest hash
+    -> Either Error ByteString
+encodeDigest salt params pk digest
     | emLen < hashLen + saltLen + 2 = Left InvalidParameters
-    | otherwise = Right $ dp blinder pk em
+    | otherwise = Right em
   where
     k = private_size pk
     emLen = if emTruncate pubBits then k - 1 else k
@@ -164,7 +177,8 @@ signDigest blinder params pk digest = do
     salt <- getRandomBytes (pssSaltLength params)
     return (signDigestWithSalt salt blinder params pk digest)
 
--- | Sign using the PSS Parameters and an automatically generated blinder.
+-- | Sign using the PSS Parameters, blinded with the pair kept for this key;
+-- see "Crypto.PubKey.RSA.Blinded".
 signSafer
     :: (HashAlgorithm hash, MonadRandom m)
     => PSSParams hash ByteString ByteString
@@ -174,11 +188,10 @@ signSafer
     -> ByteString
     -- ^ message to sign
     -> m (Either Error ByteString)
-signSafer params pk m = do
-    blinder <- generateBlinder (private_n pk)
-    sign (Just blinder) params pk m
+signSafer params pk m = signDigestSafer params pk (hashWith (pssHash params) m)
 
--- | Sign using the PSS Parameters and an automatically generated blinder.
+-- | Sign using the PSS Parameters, blinded with the pair kept for this key;
+-- see "Crypto.PubKey.RSA.Blinded".
 signDigestSafer
     :: (HashAlgorithm hash, MonadRandom m)
     => PSSParams hash ByteString ByteString
@@ -189,8 +202,39 @@ signDigestSafer
     -- ^ message digst
     -> m (Either Error ByteString)
 signDigestSafer params pk digest = do
-    blinder <- generateBlinder (private_n pk)
-    signDigest (Just blinder) params pk digest
+    salt <- getRandomBytes (pssSaltLength params)
+    d <- drawFor pk
+    return $ case encodeDigest salt params pk digest of
+        Left err -> Left err
+        Right em -> Right (withBlindingFor pk d (\pair -> dpWithPair pair pk em))
+
+-- | 'signSafer' with the blinding a t'BlindedKey' keeps, and the key for the
+-- next operation.
+signBlinded
+    :: (HashAlgorithm hash, MonadRandom m)
+    => PSSParams hash ByteString ByteString
+    -> BlindedKey
+    -> ByteString
+    -- ^ message to sign
+    -> m (Either Error ByteString, BlindedKey)
+signBlinded params bk m = signDigestBlinded params bk (hashWith (pssHash params) m)
+
+-- | 'signDigestSafer' with the blinding a t'BlindedKey' keeps, and the key
+-- for the next operation.
+signDigestBlinded
+    :: (HashAlgorithm hash, MonadRandom m)
+    => PSSParams hash ByteString ByteString
+    -> BlindedKey
+    -> Digest hash
+    -- ^ message digest
+    -> m (Either Error ByteString, BlindedKey)
+signDigestBlinded params bk digest = do
+    salt <- getRandomBytes (pssSaltLength params)
+    case encodeDigest salt params (blindedPrivateKey bk) digest of
+        Left err -> return (Left err, bk)
+        Right em -> do
+            (s, bk') <- dpBlinded bk em
+            return (Right s, bk')
 
 -- | Verify a signature using the PSS Parameters
 verify

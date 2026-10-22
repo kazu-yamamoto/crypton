@@ -329,6 +329,7 @@ library
         Crypto.PubKey.Rabin.RW
         Crypto.PubKey.Rabin.Types
         Crypto.PubKey.RSA
+        Crypto.PubKey.RSA.Blinded
         Crypto.PubKey.RSA.OAEP
         Crypto.PubKey.RSA.PKCS15
         Crypto.PubKey.RSA.Prim
@@ -405,6 +406,7 @@ library
         cbits/p256/p256_ec.c
 
     other-modules:
+        Crypto.PubKey.RSA.Blinded.Internal
         Crypto.Cipher.AES.Primitive
         Crypto.Cipher.Blowfish.Primitive
         Crypto.Cipher.Camellia.Primitive
