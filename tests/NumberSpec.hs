@@ -202,6 +202,14 @@ exponentiationTests = describe "exponentiation" $ do
             forAll (wideOf bytes) $ \e ->
                 forAll (wideOf 128) $ \b ->
                     expSafe b e modulus1024 === expFast b e modulus1024
+    -- the C takes RSA's exponent at these sizes on some machines; plain
+    -- squaring shares no multiplication with it
+    prop "agrees with plain squaring on RSA's exponent at every key size" $
+        forAll (elements [128, 192, 256, 384, 512]) $ \bytes ->
+            forAll (wideOf bytes) $ \m' ->
+                forAll (wideOf bytes) $ \b ->
+                    let m = m' .|. bit (8 * bytes - 1) .|. 1
+                     in expFast b 65537 m === naivePow (b `mod` m) 65537 m
     -- the fast one keeps R^2 for the last few moduli; asking under more of
     -- them than it keeps, round and round, would show one used for another
     it "keeps each modulus' constant to that modulus" $ do

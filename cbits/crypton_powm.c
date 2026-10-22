@@ -350,14 +350,8 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
  * bits; the bound is set well above them and well below where a Diffie-
  * Hellman or DSA exponent starts.
  *
- * The second is a machine where s2n-bignum's Montgomery multiplication does
- * not run.  There the multiplication here is the C one, which is not faster
- * than what the caller already has, so there is nothing to take over.  That
- * was written as an expectation and has since been measured: on an Apple
- * M4, verification through here and through GMP come out level, the
- * difference no larger than between two rows neither of them touches.
- * The third is every size but 2048 bits, where the assembly runs and GMP is
- * faster all the same; see powm_pub_wanted.
+ * The second and third are a machine and a size where GMP, which the
+ * caller has, was measured the faster; see powm_pub_wanted.
  *
  * Define CRYPTON_POWM_PUB_ALWAYS to make it accept anyway: the differential
  * test builds that way, so that this arithmetic is exercised on the
@@ -380,9 +374,14 @@ static int powm_pub_wanted(uint32_t n)
 #elif defined(CRYPTON_POWM_S2N)
 	return n == 32 && powm_s2n_usable(n);
 #elif defined(CRYPTON_MONT_FIXED)
-	/* AArch64: the generated code is ahead of GMP at 2048 bits, and the
-	 * Linux GMP is ahead of the C at 3072 and 4096 */
+	/* AArch64: the generated code is ahead of GMP at 2048 bits.  At the
+	 * other RSA sizes GMP was ahead of the C on a Neoverse N2 under Linux,
+	 * and behind it from 1024 to 4096 bits on an M4 under macOS */
+#if defined(__APPLE__)
+	return n >= 16 && n <= 64;
+#else
 	return n == 32;
+#endif
 #else
 	(void) n;
 	return 0;
