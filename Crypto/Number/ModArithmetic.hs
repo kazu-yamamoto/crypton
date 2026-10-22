@@ -43,15 +43,13 @@ import qualified Control.Exception as E
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic
 import Crypto.Number.Compat
+import Crypto.Number.ModArithmetic.Pub (expPub)
 import qualified Crypto.Number.Serialize.Internal as Internal
 import Data.Memory.PtrMethods (memSet)
 import Data.Word (Word32, Word8)
 import Foreign.C.Types (CInt (..))
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Ptr (Ptr, plusPtr)
-import Data.IORef (IORef, atomicModifyIORef', newIORef)
-import System.IO.Unsafe (unsafePerformIO)
-import Crypto.Internal.ByteArray (Bytes, allocRet, withByteArray)
 
 -- | Raised when two numbers are supposed to be coprimes but are not.
 data CoprimesAssertionError = CoprimesAssertionError
@@ -186,87 +184,6 @@ expFast b e m
     | otherwise = slow
   where
     slow = gmpPowModInteger b e m `onGmpUnsupported` exponentiation b e m
-
--- | The windowless exponentiation in C, for an exponent that is not a
---   secret.  'Nothing' when the C declines, which it does on every machine
---   where what the caller already has is faster -- so this is an
---   optimisation and never the only path.  The base has to be reduced and
---   the exponent positive, which the guard above sees to.
-expPub :: Integer -> Integer -> Integer -> Maybe Integer
-expPub b e m = unsafeDoIO $ do
-    known <- r2For m
-    case known of
-        Nothing -> return Nothing
-        Just r2 ->
-            allocaBytes (sum widths) $ \start -> case scanl plusPtr start widths of
-                (out : base : expo : modu : _) -> do
-                    _ <- Internal.i2ospOf b base mLen
-                    _ <- Internal.i2ospOf e expo eLen
-                    _ <- Internal.i2ospOf m modu mLen
-                    r <- withByteArray r2 $ \pr2 ->
-                        c_powm_pub_r2
-                            out
-                            base
-                            (fromIntegral mLen)
-                            expo
-                            (fromIntegral eLen)
-                            modu
-                            (fromIntegral mLen)
-                            pr2
-                    if r == 0
-                        then do
-                            !v <- Internal.os2ip out mLen
-                            return (Just v)
-                        else return Nothing
-                _ -> return Nothing
-  where
-    !mLen = numBytes m
-    !eLen = numBytes e
-    widths = [mLen, mLen, eLen, mLen]
-
--- | R^2 mod m for the public path, kept for the last few moduli, since a
--- program verifies under the same keys again and again.  'Nothing' is kept
--- too: it means the C declines this modulus, which is then not asked again.
-r2For :: Integer -> IO (Maybe Bytes)
-r2For m = do
-    found <- atomicModifyIORef' r2Table $ \ks -> case break ((== m) . fst) ks of
-        (before, hit : after) -> (hit : before ++ after, Just (snd hit))
-        _ -> (ks, Nothing)
-    case found of
-        Just r2 -> return r2
-        Nothing -> do
-            let mLen = numBytes m
-            r2 <- allocaBytes mLen $ \modu -> do
-                _ <- Internal.i2ospOf m modu mLen
-                (r, out) <- allocRet mLen $ \pout -> c_powm_r2 pout modu (fromIntegral mLen)
-                return (if r == 0 then Just out else Nothing)
-            atomicModifyIORef' r2Table $ \ks -> (take r2TableSize ((m, r2) : ks), ())
-            return r2
-
-r2TableSize :: Int
-r2TableSize = 8
-
-r2Table :: IORef [(Integer, Maybe Bytes)]
-r2Table = unsafePerformIO (newIORef [])
-{-# NOINLINE r2Table #-}
-
--- safe, as the secure one below is: the call is tens of microseconds at RSA
--- sizes, and the hundred nanoseconds this costs over an unsafe call is
--- nothing beside holding a capability for that long in a server
-foreign import ccall safe "crypton_powm_pub_r2"
-    c_powm_pub_r2
-        :: Ptr Word8
-        -> Ptr Word8
-        -> Word32
-        -> Ptr Word8
-        -> Word32
-        -> Ptr Word8
-        -> Word32
-        -> Ptr Word8
-        -> IO CInt
-
-foreign import ccall unsafe "crypton_powm_r2"
-    c_powm_r2 :: Ptr Word8 -> Ptr Word8 -> Word32 -> IO CInt
 
 -- | @exponentiation@ computes modular exponentiation as /b^e mod m/
 -- using repetitive squaring.

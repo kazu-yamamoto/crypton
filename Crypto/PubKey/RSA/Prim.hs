@@ -24,6 +24,7 @@ import Crypto.Internal.ByteArray (ByteArray)
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic (numBytes)
 import Crypto.Number.ModArithmetic (expFast, expSafe)
+import Crypto.Number.ModArithmetic.Pub (expPubBytes)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import qualified Crypto.Number.Serialize.Internal as Internal
 import Crypto.PubKey.RSA.Types
@@ -112,7 +113,9 @@ dp blinder pk
 
 -- | Compute the RSA encrypt primitive
 ep :: ByteArray ba => PublicKey -> ba -> ba
-ep pk m = i2ospOf_ (public_size pk) $ expFast (os2ip m) (public_e pk) (public_n pk)
+ep pk m = case expPubBytes (public_e pk) (public_n pk) m of
+    Just r -> r
+    Nothing -> i2ospOf_ (public_size pk) $ expFast (os2ip m) (public_e pk) (public_n pk)
 
 -- | multiply 2 integers in Zm only performing the modulo operation if necessary
 multiplication :: Integer -> Integer -> Integer -> Integer
