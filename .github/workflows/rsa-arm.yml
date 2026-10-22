@@ -34,26 +34,19 @@ jobs:
         ./Configure no-docs no-tests > /dev/null 2>&1
         make -j$(nproc) > /tmp/ossl.log 2>&1 || { tail -20 /tmp/ossl.log; exit 1; }
 
-    - name: The routines alone
-      run: |
-        cd crypton
-        python3 ../ci/bench/gen_fips.py 16 24 32 > /tmp/fips_gen.h
-        gcc -O2 -Icbits -Icbits/include64 -I/tmp -o /tmp/fips_test ../ci/bench/fips_test.c
-        /tmp/fips_test
-
-    - name: The exponentiation, now and with the squaring, against OpenSSL
+    - name: The exponentiation, main and the branch, against OpenSSL
       run: |
         set -eu
         O=/tmp/openssl-4.0.3
         cd crypton
-        for v in now fips; do
-          if [ $v = now ]; then src=cbits/crypton_powm.c; def=; else src=../ci/bench/crypton_powm_fips.c; def=-DFIPS_SQR; fi
-          gcc -O3 $def -Icbits -Icbits/include64 -Icbits/s2n/include -I$O/include -I/tmp -DCRYPTON_S2N_BIGNUM \
+        for v in main branch; do
+          if [ $v = main ]; then src=cbits/crypton_powm.c; inc=; else src=../ci/bench/mont/crypton_powm.c; inc=-I../ci/bench/mont; fi
+          gcc -O3 $inc -Icbits -Icbits/include64 -Icbits/s2n/include -I$O/include -DCRYPTON_S2N_BIGNUM \
             -o /tmp/bvo-$v ../ci/bench/rsa_vs_ossl.c $src cbits/s2n/arm/bignum_montifier.S $O/libcrypto.a -lpthread -ldl
         done
         for b in 1024 1536 2048; do
           for r in 1 2; do
-            echo "now  $(/tmp/bvo-now $b 5 | grep expon)"
-            echo "fips $(/tmp/bvo-fips $b 5 | grep expon)"
+            echo "main   $(/tmp/bvo-main $b 5 | grep expon)"
+            echo "branch $(/tmp/bvo-branch $b 5 | grep expon)"
           done
         done
