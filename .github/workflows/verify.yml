@@ -1,6 +1,6 @@
 # RSA verification from Haskell, main against a branch, on the Arm and the
 # x86-64 runner: whether GHC's GMP there is the fast one decides which wins.
-# Runs on a push to this branch that touches this file.
+# Runs on a push to this branch that touches this file.  (round 2)
 name: verify
 
 on:
