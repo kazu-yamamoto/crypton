@@ -294,6 +294,139 @@ static int mont_fixed_agrees(void)
 #endif
 }
 
+/* The normalization at the end of each IFMA multiplication, on lanes made to
+ * need its second step: a run of lanes at exactly 2^52 - 1 that one carry has
+ * to pass all the way through.  The exponentiations above almost never reach
+ * that step -- it wants a lane within 2^12 of the top -- so it is driven here
+ * directly, against carries moved one lane at a time. */
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#include "crypton_cpu.h"
+#include "crypton_powm_ifma.h"
+#define HAVE_IFMA_NORM 1
+
+IFMA_TARGET static void norm_by(uint32_t R, uint64_t *r, const uint64_t *x)
+{
+#define V(j) _mm256_loadu_si256((const __m256i *)(x + 4 * (j)))
+	if (R == 5) ifma_norm5(r, V(0), V(1), V(2), V(3), V(4));
+	else if (R == 8) ifma_norm8(r, V(0), V(1), V(2), V(3), V(4), V(5), V(6), V(7));
+	else ifma_norm10(r, V(0), V(1), V(2), V(3), V(4), V(5), V(6), V(7), V(8), V(9));
+#undef V
+}
+#endif
+
+static int ifma_norm_agrees(void)
+{
+#ifdef HAVE_IFMA_NORM
+	static const uint32_t rs[] = {5, 8, 10};
+	uint64_t x[40], got[40], want[40];
+	uint32_t s, k, i, cases = 0;
+
+	if ((crypton_x86_simd_features() & CRYPTON_X86_IFMA) == 0) {
+		printf("skip IFMA normalization: this processor has no AVX-512 IFMA\n");
+		return 1;
+	}
+	for (s = 0; s < 3; s++) {
+		uint32_t R = rs[s], n = 4 * R;
+		for (k = 0; k < 300; k++) {
+			uint64_t carry = 0;
+			for (i = 0; i < n; i++)
+				x[i] = rng() >> (k % 3 == 0 ? 4 : 12);
+			x[n - 1] = 0;
+			if (k % 3 == 1) {
+				/* a run of saturated lanes, and a lane below them whose
+				 * excess makes the lane under the run overflow */
+				uint32_t at = (uint32_t) (rng() % (n - 6)), len = 1 + (uint32_t) (rng() % 4);
+				for (i = 0; i < n; i++)
+					x[i] &= ((uint64_t) 1 << 52) - 1;
+				for (i = at + 1; i <= at + len; i++)
+					x[i] = ((uint64_t) 1 << 52) - 1;
+				x[at] = (((uint64_t) 1 << 52) - 1) + ((uint64_t) 1 << 52);
+				x[n - 1] = 0;
+			}
+			norm_by(R, got, x);
+			for (i = 0; i < n; i++) {
+				uint64_t v = (x[i] & (((uint64_t) 1 << 52) - 1)) + carry;
+				carry = (x[i] >> 52) + (v >> 52);
+				want[i] = v & (((uint64_t) 1 << 52) - 1);
+			}
+			cases++;
+			if (memcmp(got, want, n * sizeof(uint64_t)) != 0) {
+				printf("FAIL IFMA normalization: %u lanes, case %u\n", n, k);
+				return 0;
+			}
+		}
+	}
+	printf("ok   %u lane sets: the IFMA normalization moves every carry\n", cases);
+	return 1;
+#else
+	printf("skip IFMA normalization: not x86-64\n");
+	return 1;
+#endif
+}
+
+/* The two-at-once exponentiation against crypton_powm_sec run twice, at the
+ * sizes it takes, where the processor has what it needs.  Where it does not
+ * the function has to decline, and that is checked instead. */
+static int x2_agrees(void)
+{
+	static const uint32_t lens[] = {128, 192, 256};
+	uint32_t s, k, bad = 0, ran = 0, declined = 0;
+
+	for (s = 0; s < sizeof lens / sizeof lens[0]; s++) {
+		uint32_t ml = lens[s];
+		uint8_t *m1 = malloc(ml), *m2 = malloc(ml), *b1 = malloc(ml), *b2 = malloc(ml);
+		uint8_t *e1 = malloc(ml), *e2 = malloc(ml);
+		uint8_t *o1 = malloc(ml), *o2 = malloc(ml), *w1 = malloc(ml), *w2 = malloc(ml);
+
+		for (k = 0; k < 40; k++) {
+			fill(m1, ml); fill(m2, ml); fill(b1, ml); fill(b2, ml);
+			fill(e1, ml); fill(e2, ml);
+			m1[ml - 1] |= 1; m2[ml - 1] |= 1;
+			if (k % 5 != 4) { m1[0] |= 0x80; m2[0] |= 0x80; }
+			else { m1[0] &= 0x3f; m1[0] |= 0x20; m2[0] |= 0x01; }
+			b1[0] = 0; b2[0] = 0;           /* under the modulus */
+			switch (k % 8) {
+			case 1: memset(b1, 0, ml); break;
+			case 2: memset(b2, 0, ml); b2[ml - 1] = 1; break;
+			case 3: memcpy(b1, m1, ml); b1[ml - 1] -= 1; break;
+			case 5: memset(e1, 0, ml); break;
+			case 6: memset(e2, 0xff, ml); break;
+			case 7: memset(e1, 0, ml); e1[ml - 1] = 1; break;
+			}
+			if (crypton_powm_sec_x2(o1, b1, ml, e1, ml, m1, ml, o2, b2, ml, e2, ml, m2, ml) != 0) {
+				declined++;
+				continue;
+			}
+			ran++;
+			crypton_powm_sec(w1, b1, ml, e1, ml, m1, ml);
+			crypton_powm_sec(w2, b2, ml, e2, ml, m2, ml);
+			if (memcmp(o1, w1, ml) != 0 || memcmp(o2, w2, ml) != 0) {
+				printf("FAIL x2: %u-bit case %u disagrees with crypton_powm_sec\n", 8 * ml, k);
+				bad++;
+				break;
+			}
+		}
+		free(m1); free(m2); free(b1); free(b2); free(e1); free(e2);
+		free(o1); free(o2); free(w1); free(w2);
+	}
+	{
+		/* sizes it does not take, and a pair that does not match */
+		uint8_t m[96] = {0x80}, b[96] = {0}, e[96] = {1}, o[96];
+		m[95] = 1;
+		if (crypton_powm_sec_x2(o, b, 96, e, 96, m, 96, o, b, 96, e, 96, m, 96) == 0) {
+			printf("FAIL x2: it took a 768-bit modulus\n");
+			bad++;
+		}
+	}
+	if (bad)
+		return 0;
+	if (ran == 0)
+		printf("skip x2: this processor has no AVX-512 IFMA, and it declined all %u\n", declined);
+	else
+		printf("ok   %u pairs: two at once is crypton_powm_sec twice\n", ran);
+	return 1;
+}
+
 int main(int argc, char **argv)
 {
 	/* in bits.  The first four are small enough that only the C runs; the
@@ -314,6 +447,10 @@ int main(int argc, char **argv)
 	if (!montifier_agrees())
 		failures++;
 	if (!mont_fixed_agrees())
+		failures++;
+	if (!x2_agrees())
+		failures++;
+	if (!ifma_norm_agrees())
 		failures++;
 
 	for (k = 0; k < 2000; k++) {

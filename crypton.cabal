@@ -70,6 +70,7 @@ extra-source-files:
     cbits/blake2/sse/*.h
     cbits/crypton_hash_prefix.c
     cbits/crypton_mont.py
+    cbits/crypton_powm_ifma.py
     cbits/mlkem/*.S
     cbits/mlkem/*.c
     cbits/mlkem/*.h
@@ -387,6 +388,7 @@ library
         cbits/crypton_pbkdf2.c
         cbits/crypton_poly1305.c
         cbits/crypton_powm.c
+        cbits/crypton_powm_ifma.c
         cbits/crypton_rc4.c
         cbits/crypton_ripemd.c
         cbits/crypton_salsa.c

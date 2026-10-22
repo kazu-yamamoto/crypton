@@ -512,6 +512,14 @@ uint32_t crypton_x86_simd_features(void)
 			     * AVX-512 at all and never reaches here. */
 			    && !(amd && family == 0x19))
 				f |= CRYPTON_X86_VAES512;
+			/* IFMA (bit 21) with F (16) and VL (31), and the same
+			 * AVX-512 state.  Zen 4 is not left out here: RSA's
+			 * multiplication uses the 256-bit form. */
+			if ((f & CRYPTON_X86_AVX2)
+			    && (ebx & (1 << 16)) && (ebx & (1 << 21))
+			    && (ebx & (1u << 31))
+			    && ((xcr0() & 0xe6) == 0xe6))
+				f |= CRYPTON_X86_IFMA;
 		}
 #ifdef CRYPTON_CPU_TESTING_ADX
 		f |= CRYPTON_X86_ADX;
@@ -602,6 +610,7 @@ extern int crypton_sha512_armv8_available(void);
 #define OPT_ARMSHA512 16
 #define OPT_PPCAES    17
 #define OPT_PPCVPMSUM 18
+#define OPT_IFMA      19
 
 int crypton_cpu_option(unsigned int option)
 {
@@ -619,6 +628,7 @@ int crypton_cpu_option(unsigned int option)
 	case OPT_ADX:      return (f & CRYPTON_X86_ADX)     != 0;
 	case OPT_VAES:     return (f & CRYPTON_X86_VAES)    != 0;
 	case OPT_VAES512:  return (f & CRYPTON_X86_VAES512) != 0;
+	case OPT_IFMA:     return (f & CRYPTON_X86_IFMA)    != 0;
 	default:           return 0;
 	}
 #else
