@@ -375,8 +375,9 @@ static int powm_pub_wanted(uint32_t n)
 	return n == 32 && powm_s2n_usable(n);
 #elif defined(CRYPTON_MONT_FIXED)
 	/* AArch64: the generated code is ahead of GMP at 2048 bits.  At the
-	 * other RSA sizes GMP was ahead of the C on a Neoverse N2 under Linux,
-	 * and behind it from 1024 to 4096 bits on an M4 under macOS */
+	 * other RSA sizes Linux's GMP is level with the C or ahead of it.  The
+	 * GMP GHC builds into itself on macOS is compiled without -O, and is
+	 * behind the C from 1024 to 4096 bits on the same M4 */
 #if defined(__APPLE__)
 	return n >= 16 && n <= 64;
 #else
