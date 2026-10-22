@@ -379,6 +379,10 @@ static int powm_pub_wanted(uint32_t n)
 	return n > 0;
 #elif defined(CRYPTON_POWM_S2N)
 	return n == 32 && powm_s2n_usable(n);
+#elif defined(CRYPTON_MONT_FIXED)
+	/* AArch64: the generated code is ahead of GMP at 2048 bits, and the
+	 * Linux GMP is ahead of the C at 3072 and 4096 */
+	return n == 32;
 #else
 	(void) n;
 	return 0;
@@ -394,6 +398,38 @@ int crypton_powm_pub(uint8_t *out,
                      const uint8_t *base, uint32_t baselen,
                      const uint8_t *exp, uint32_t explen,
                      const uint8_t *mod, uint32_t modlen)
+{
+	return crypton_powm_pub_r2(out, base, baselen, exp, explen, mod, modlen, NULL);
+}
+
+int crypton_powm_r2(uint8_t *out, const uint8_t *mod, uint32_t modlen)
+{
+	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
+	limb_t *space, *m, *r2, *t;
+
+	if (modlen == 0 || n == 0 || (mod[modlen - 1] & 1) == 0 || !powm_pub_wanted(n))
+		return 1;
+	space = calloc(5 * n, sizeof(limb_t));
+	if (space == NULL)
+		return 1;
+	m = space;
+	r2 = m + n;
+	t = r2 + n;
+	if (from_be(m, n, mod, modlen) != 0) {
+		free(space);
+		return 1;
+	}
+	mont_r2(r2, m, mont_n0(m[0]), n, t);
+	to_be(out, modlen, r2, n);
+	free(space);
+	return 0;
+}
+
+int crypton_powm_pub_r2(uint8_t *out,
+                        const uint8_t *base, uint32_t baselen,
+                        const uint8_t *exp, uint32_t explen,
+                        const uint8_t *mod, uint32_t modlen,
+                        const uint8_t *r2be)
 {
 	uint32_t n = (modlen + LIMB_BYTES - 1) / LIMB_BYTES;
 	uint32_t words = (6 + 2) * n + powm_s2n_scratch(n);
@@ -435,7 +471,10 @@ int crypton_powm_pub(uint8_t *out,
 	if (from_be(m, n, mod, modlen) != 0)
 		goto fail;
 	n0 = mont_n0(m[0]);
-	mont_r2(r2, m, n0, n, t);
+	if (r2be == NULL)
+		mont_r2(r2, m, n0, n, t);
+	else if (from_be(r2, n, r2be, modlen) != 0)
+		goto fail;
 
 	/* the base into Montgomery form.  The accumulator starts there rather
 	 * than at one, because the exponent's top bit is a one by

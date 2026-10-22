@@ -202,6 +202,13 @@ exponentiationTests = describe "exponentiation" $ do
             forAll (wideOf bytes) $ \e ->
                 forAll (wideOf 128) $ \b ->
                     expSafe b e modulus1024 === expFast b e modulus1024
+    -- the fast one keeps R^2 for the last few moduli; asking under more of
+    -- them than it keeps, round and round, would show one used for another
+    it "keeps each modulus' constant to that modulus" $ do
+        let ms = [modulus2048 - 2 * 0x10001 * fromIntegral k | k <- [0 .. 11 :: Int]]
+            bs = [modulus2048 `div` (3 + fromIntegral k) | k <- [0 .. 11 :: Int]]
+            asked = concat (replicate 3 (zip bs ms))
+        [(b, m) | (b, m) <- asked, expFast b 65537 m /= expSafe b 65537 m] `shouldBe` []
   where
     safely (b, e, m) = expSafe b e m
     fastly (b, e, m) = expFast b e m

@@ -37,6 +37,19 @@ int crypton_powm_pub(uint8_t *out,
                      const uint8_t *exp, uint32_t explen,
                      const uint8_t *mod, uint32_t modlen);
 
+/* crypton_powm_pub with R^2 mod m given, big-endian in modlen bytes, as
+ * crypton_powm_r2 computes it; NULL computes it here as crypton_powm_pub does.
+ * A caller verifying under one key many times keeps it. */
+int crypton_powm_pub_r2(uint8_t *out,
+                        const uint8_t *base, uint32_t baselen,
+                        const uint8_t *exp, uint32_t explen,
+                        const uint8_t *mod, uint32_t modlen,
+                        const uint8_t *r2be);
+
+/* R^2 mod m for crypton_powm_pub_r2, or nonzero where crypton_powm_pub would
+ * decline this modulus, so that nothing is kept for it. */
+int crypton_powm_r2(uint8_t *out, const uint8_t *mod, uint32_t modlen);
+
 /* Two secure exponentiations at once, as the halves of an RSA private-key
  * operation by CRT are: each as crypton_powm_sec, with the same contract.
  *
