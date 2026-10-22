@@ -109,8 +109,9 @@ static int chacha_asm_state(const crypton_chacha_state *st)
 #define ALIGNED64(PTR) \
 	(((uintptr_t)(const void *)(PTR)) % 8 == 0)
 
-static const uint8_t sigma[16] = "expand 32-byte k";
-static const uint8_t tau[16] = "expand 16-byte k";
+/* sixteen bytes are read; the seventeenth is the string's terminator */
+static const uint8_t sigma[17] = "expand 32-byte k";
+static const uint8_t tau[17] = "expand 16-byte k";
 
 static void chacha_core(int rounds, crypton_chacha_block *out, const crypton_chacha_state *in)
 {
@@ -384,7 +385,7 @@ void crypton_chacha_combine(uint8_t *dst, crypton_chacha_context *ctx, const uin
 		}
 
 		/* xor as much as needed */
-		for (i = 0; i < bytes; i++)
+		for (i = 0; i < (int) bytes; i++)
 			dst[i] = src[i] ^ out.b[i];
 
 		/* copy the left over in the buffer */
@@ -510,7 +511,7 @@ void crypton_chacha_generate(uint8_t *dst, crypton_chacha_context *ctx, uint32_t
 		}
 
 		/* xor as much as needed */
-		for (i = 0; i < bytes; i++)
+		for (i = 0; i < (int) bytes; i++)
 			dst[i] = out.b[i];
 
 		/* copy the left over in the buffer */

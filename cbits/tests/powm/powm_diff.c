@@ -345,8 +345,13 @@ int main(int argc, char **argv)
 	/* RSA sizes, the exponents that turn up and the ones that do not */
 	for (s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
 		uint32_t ml = sizes[s] / 8;
-		uint8_t *m = malloc(ml), *b = malloc(ml);
+		uint8_t *m, *b;
 		uint32_t i;
+
+		if (ml == 0)    /* never, but gcc cannot see that */
+			continue;
+		m = malloc(ml);
+		b = malloc(ml);
 
 		for (i = 0; i < 40; i++) {
 			uint8_t e1[1], e3[3], e8[8], *el = malloc(ml);
