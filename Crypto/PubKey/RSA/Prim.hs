@@ -41,7 +41,7 @@ dpFast :: ByteArray ba => Blinder -> PrivateKey -> ba -> ba
 dpFast (Blinder r rm1) pk c =
     i2ospOf_
         (private_size pk)
-        (multiplication rm1 (m2 + h * (private_q pk)) (private_n pk))
+        (multiplication rm1 (crtChecked pk iC (m2 + h * (private_q pk))) (private_n pk))
   where
     re = expFast r (public_e $ private_pub pk) (private_n pk)
     iC = multiplication re (os2ip c) (private_n pk)
@@ -49,11 +49,22 @@ dpFast (Blinder r rm1) pk c =
     h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
 
 dpFastNoBlinder :: ByteArray ba => PrivateKey -> ba -> ba
-dpFastNoBlinder pk c = i2ospOf_ (private_size pk) (m2 + h * (private_q pk))
+dpFastNoBlinder pk c = i2ospOf_ (private_size pk) (crtChecked pk iC (m2 + h * (private_q pk)))
   where
     iC = os2ip c
     (m1, m2) = crtHalves iC pk
     h = ((private_qinv pk) * (m1 - m2)) `mod` (private_p pk)
+
+-- | The CRT answer m for c, raised back to e before it is let out: a fault
+-- in one half gives an m whose gcd with n is the other prime (Boneh, DeMillo
+-- and Lipton).  On a mismatch it is computed again without CRT, as OpenSSL does.
+crtChecked :: PrivateKey -> Integer -> Integer -> Integer
+crtChecked pk c m
+    | expFast m (public_e (private_pub pk)) n == c `mod` n = m
+    | private_d pk > 0 = expSafe c (private_d pk) n
+    | otherwise = m
+  where
+    n = private_n pk
 
 -- | c^dP mod p and c^dQ mod q, the halves of the private-key operation: both
 -- at once where the C can (AVX-512 IFMA, and the sizes of RSA-2048, -3072 and
