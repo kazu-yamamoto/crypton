@@ -1,5 +1,27 @@
 # CHANGELOG for crypton
 
+## 2.2.5
+
+**RSA private-key operations check their CRT result.**  A fault in one
+half of the computation could hand out a signature that reveals a prime of
+the key; the result is now raised back to the public exponent first, as
+OpenSSL does, at a cost of two or three per cent on signing.
+
+* perf(rsa): verification in C at every RSA size on Apple AArch64
+  [#340](https://github.com/kazu-yamamoto/crypton/pull/340)
+* perf(rsa): a generated squaring at 48 limbs on AArch64
+  [#341](https://github.com/kazu-yamamoto/crypton/pull/341)
+* perf(rsa): verification without lists or Integer round trips
+  [#342](https://github.com/kazu-yamamoto/crypton/pull/342)
+* ci: time out instead of waiting on a stalled package mirror
+  [#343](https://github.com/kazu-yamamoto/crypton/pull/343)
+* fix(rsa): check the CRT result before letting it out
+  [#344](https://github.com/kazu-yamamoto/crypton/pull/344)
+* perf(hash): one context for a one-shot hash and for MGF1
+  [#345](https://github.com/kazu-yamamoto/crypton/pull/345)
+* perf(rsa): RSA-3072's 24-limb square from 8-limb pieces on x86-64
+  [#346](https://github.com/kazu-yamamoto/crypton/pull/346)
+
 ## 2.2.4
 
 **New module `Crypto.PubKey.RSA.Blinded`.**  A `BlindedKey` carries RSA
