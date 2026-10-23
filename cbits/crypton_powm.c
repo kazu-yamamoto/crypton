@@ -70,12 +70,12 @@ extern void bignum_mul_8_16(uint64_t *z, const uint64_t *x, const uint64_t *y);
  * exponentiation than the padded square.  Both are still nearly twice the
  * C, since the C cannot form ADCX and ADOX's two carry chains at any size.
  *
- * 48 and 64 are 3072 and 4096 bits: finite-field Diffie-Hellman over the
- * RFC 7919 groups of those sizes, and RSA without CRT.  There is no
- * Karatsuba routine at either, and padding to the next would be wasteful,
- * so the multiplication is s2n-bignum's schoolbook one of any size --
- * plain MUL and ADC, no ADX -- and the reduction is the same ADX one.  Not
- * the gain the Karatsuba sizes have, and still well ahead of the C.
+ * 48 and 64 are 3072 and 4096 bits: RSA-3072 and RSA-4096 verification,
+ * finite-field Diffie-Hellman over the RFC 7919 groups of those sizes, and
+ * RSA without CRT.  There is no Karatsuba routine at either.  The square is
+ * built from the 16- and the 32-limb ones, three pieces and two; the
+ * multiplication is s2n-bignum's schoolbook one of any size -- plain MUL and
+ * ADC, no ADX -- and the reduction is the same ADX one.
  *
  * The reduction wants ADX, so the answer is a run-time one. */
 static int powm_s2n_usable(uint32_t n)
@@ -141,30 +141,70 @@ static void powm_s2n_mul(limb_t *r, const limb_t *a, const limb_t *b,
 	powm_s2n_finish(r, z, m, bignum_emontredc_8n(n, z, m, n0), n);
 }
 
-/* a^2 for a of 24 limbs, from three 8-limb squares and three 8-limb
- * products: a = a0 + a1 X + a2 X^2 with X = 2^512, and the cross terms, at
- * X to X^3 in c, go in doubled.  c is 48 limbs of scratch. */
-static void powm_s2n_sqr24(limb_t *z, const limb_t *a, limb_t *c)
+/* One piece of a three-piece square: k limbs, 8 or 16, squared or
+ * multiplied into 2k.  The 16-limb routines want t, 32 limbs of scratch. */
+static void powm_s2n_piece_sqr(limb_t *z, const limb_t *x, limb_t *t, uint32_t k)
 {
-	limb_t k;
+	if (k == 8)
+		bignum_sqr_8_16(z, x);
+	else
+		bignum_ksqr_16_32(z, x, t);
+}
+
+static void powm_s2n_piece_mul(limb_t *z, const limb_t *x, const limb_t *y,
+                               limb_t *t, uint32_t k)
+{
+	if (k == 8)
+		bignum_mul_8_16(z, x, y);
+	else
+		bignum_kmul_16_32(z, x, y, t);
+}
+
+/* a^2 for a of 3k limbs, from three k-limb squares and three k-limb
+ * products: a = a0 + a1 X + a2 X^2 with X = 2^(64k), and the cross terms,
+ * at X to X^3 in c, go in doubled.  c is 6k limbs of scratch.  RSA-3072's
+ * CRT half is k = 8, and its modulus k = 16. */
+static void powm_s2n_sqr3(limb_t *z, const limb_t *a, limb_t *c, limb_t *t,
+                          uint32_t k)
+{
+	limb_t carry;
 	uint32_t i;
 
-	bignum_sqr_8_16(z, a);
-	bignum_sqr_8_16(z + 16, a + 8);
-	bignum_sqr_8_16(z + 32, a + 16);
-	bignum_mul_8_16(c, a, a + 8);
-	bignum_mul_8_16(c + 16, a + 8, a + 16);
-	bignum_mul_8_16(c + 32, a, a + 16);
-	k = add_n(c + 8, c + 8, c + 32, 16);
-	for (i = 24; i < 32; i++) {
-		c[i] += k;
-		k = c[i] < k;
+	powm_s2n_piece_sqr(z, a, t, k);
+	powm_s2n_piece_sqr(z + 2 * k, a + k, t, k);
+	powm_s2n_piece_sqr(z + 4 * k, a + 2 * k, t, k);
+	powm_s2n_piece_mul(c, a, a + k, t, k);
+	powm_s2n_piece_mul(c + 2 * k, a + k, a + 2 * k, t, k);
+	powm_s2n_piece_mul(c + 4 * k, a, a + 2 * k, t, k);
+	carry = add_n(c + k, c + k, c + 4 * k, 2 * k);
+	for (i = 3 * k; i < 4 * k; i++) {
+		c[i] += carry;
+		carry = c[i] < carry;
 	}
-	k = shl1(c, 32);
-	k += add_n(z + 8, z + 8, c, 32);
-	for (i = 40; i < 48; i++) {
-		z[i] += k;
-		k = z[i] < k;
+	carry = shl1(c, 4 * k);
+	carry += add_n(z + k, z + k, c, 4 * k);
+	for (i = 5 * k; i < 6 * k; i++) {
+		z[i] += carry;
+		carry = z[i] < carry;
+	}
+}
+
+/* a^2 for a of 64 limbs, RSA-4096's modulus, from two 32-limb squares and
+ * one product: a = a0 + a1 X with X = 2^2048, and the cross term goes in
+ * doubled at X.  c is 64 limbs and t 96, scratch for the 32-limb routines. */
+static void powm_s2n_sqr64(limb_t *z, const limb_t *a, limb_t *c, limb_t *t)
+{
+	limb_t carry;
+	uint32_t i;
+
+	bignum_ksqr_32_64(z, a, t);
+	bignum_ksqr_32_64(z + 64, a + 32, t);
+	bignum_kmul_32_64(c, a, a + 32, t);
+	carry = shl1(c, 64);
+	carry += add_n(z + 32, z + 32, c, 64);
+	for (i = 96; i < 128; i++) {
+		z[i] += carry;
+		carry = z[i] < carry;
 	}
 }
 
@@ -173,9 +213,11 @@ static void powm_s2n_sqr(limb_t *r, const limb_t *a, const limb_t *m,
 {
 	if (n == 24) {
 		z = scratch + POWM_S2N_PAD_Z;
-		powm_s2n_sqr24(z, a, scratch + POWM_S2N_PAD_T);
-	} else if (n == 48 || n == 64)
-		bignum_sqr(2 * n, z, n, a);
+		powm_s2n_sqr3(z, a, scratch + POWM_S2N_PAD_T, NULL, 8);
+	} else if (n == 48)
+		powm_s2n_sqr3(z, a, scratch, scratch + 96, 16);
+	else if (n == 64)
+		powm_s2n_sqr64(z, a, scratch, scratch + 64);
 	else if (n == 16)
 		bignum_ksqr_16_32(z, a, scratch);
 	else
@@ -389,24 +431,25 @@ static void scan_table_avx2(limb_t *sel, const limb_t *table, uint32_t n,
 #define POWM_PUB_MAX_EXP_BYTES 8
 
 /* Which sizes this is worth taking at is not which sizes the assembly runs
- * at.  Against GMP, which is what the caller has, on an EPYC 7763 with ADX
- * on both sides: ahead at 2048 bits, and behind everywhere else measured --
- * slightly at 1024, by more at 1536, and by more again at 3072 and 4096,
- * which is the size where GMP's own setup and multiplication are the better
- * pair.  So 2048 alone, which is RSA-2048's modulus and the size nearly
- * every RSA public key has.  It once took every size the assembly ran at,
- * on the strength of 2048 alone, and was slower than GMP at 1024. */
+ * at.  Against GMP, which is what the caller has, with ADX on both sides:
+ * ahead at 2048 bits, and at 3072 and 4096 since their squares are built
+ * from s2n-bignum's 16- and 32-limb Karatsuba routines -- level with GMP on
+ * an Intel core, well ahead on Zen 4.  Through the schoolbook routine they
+ * were behind on both.  1024 and 1536, behind once on an EPYC 7763, are left
+ * to GMP.  It once took every size the assembly ran at, on the strength of
+ * 2048 alone, and was slower than GMP at 1024. */
 static int powm_pub_wanted(uint32_t n)
 {
 #if defined(CRYPTON_POWM_PUB_ALWAYS)
 	return n > 0;
 #elif defined(CRYPTON_POWM_S2N)
-	return n == 32 && powm_s2n_usable(n);
+	return (n == 32 || n == 48 || n == 64) && powm_s2n_usable(n);
 #elif defined(CRYPTON_MONT_FIXED)
 	/* AArch64: the generated code is ahead of GMP at 2048 bits.  At the
 	 * other RSA sizes Linux's GMP is level with the C or ahead of it.  The
-	 * GMP GHC builds into itself on macOS is compiled without -O, and is
-	 * behind the C from 1024 to 4096 bits on the same M4 */
+	 * GMP GHC builds into itself on macOS is compiled without -O
+	 * (ghc/ghc#28030), and is behind the C from 1024 to 4096 bits on the
+	 * same M4 */
 #if defined(__APPLE__)
 	return n >= 16 && n <= 64;
 #else
