@@ -275,6 +275,35 @@ publicOperationTests = describe "public-key operation" $ do
         squared 0 x = x
         squared i x = squared (i - 1) (x * x `mod` nn)
 
+-- | A key whose CRT values are off by one stands in for a fault in one half
+-- of the computation, which would otherwise hand out a signature whose gcd
+-- with n is a prime.  Every private-key path has to answer as the sound key.
+crtFaultTests :: Spec
+crtFaultTests = describe "a fault in one CRT half" $
+    forM_ faults $ \(name, bad) -> describe name $ do
+        it "signs what the sound key signs" $
+            RSA.sign Nothing (Just SHA256) bad m `shouldBe` RSA.sign Nothing (Just SHA256) key m
+        prop "signs with a blinder what the sound key signs" $ \testDRG ->
+            let blinder = withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n pub)
+             in RSA.sign (Just blinder) (Just SHA256) bad m
+                    === RSA.sign Nothing (Just SHA256) key m
+        prop "signs through signSafer what the sound key signs" $ \testDRG ->
+            withTestDRG testDRG (RSA.signSafer (Just SHA256) bad m)
+                === RSA.sign Nothing (Just SHA256) key m
+        it "decrypts what it was given" $ do
+            c <- either (error . show) id <$> RSA.encrypt pub m
+            RSA.decrypt Nothing bad c `shouldBe` (Right m :: Either RSA.Error ByteString)
+  where
+    vector = firstVector vectorsSHA1
+    key = vectorToPrivate vector
+    pub = vectorToPublic vector
+    m = "a message to sign" :: ByteString
+    faults =
+        [ ("dP", key{RSA.private_dP = RSA.private_dP key + 1})
+        , ("dQ", key{RSA.private_dQ = RSA.private_dQ key + 1})
+        , ("qinv", key{RSA.private_qinv = RSA.private_qinv key + 1})
+        ]
+
 -- | Building a key from its two primes has to arrive at the key the vectors
 -- carry -- the private exponent, both of its halves, and the inverse of one
 -- prime modulo the other, which is the part worked out without the extended
@@ -590,3 +619,4 @@ spec = do
     unpadTests
     ciphertextRangeTests
     publicOperationTests
+    crtFaultTests
