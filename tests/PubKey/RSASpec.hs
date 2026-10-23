@@ -20,6 +20,7 @@ import qualified Crypto.PubKey.RSA.PSS as PSS
 import Crypto.PubKey.RSA.Prim (ep)
 import qualified Crypto.PubKey.RSA.Prim as Prim
 import qualified Data.ByteString as B
+import Data.Bits ((.|.))
 import Data.Either
 
 import Imports
@@ -240,6 +241,39 @@ ciphertextRangeTests =
             , let ct = ep (vectorToPublic vector) block
             , os2ip ct + modulus < 2 ^ (8 * k)
             ]
+
+-- | The public-key operation takes bytes to the C and back where it can, and
+-- the 'Integer' path where it cannot: a representative not below the
+-- modulus, or one of another length.  Either way the answer is what plain
+-- squaring gives, which shares nothing with the C.
+publicOperationTests :: Spec
+publicOperationTests = describe "public-key operation" $ do
+    prop "agrees with plain squaring" $
+        forAll (elements [128, 256, 384]) $ \k ->
+            forAll (arbitraryBS k) $ \nb ->
+                forAll (arbitraryBS k) $ \m ->
+                    let pk = keyOf k nb in ep pk m === expected pk m
+    prop "agrees at the edges of the modulus and of the length" $
+        forAll (elements [128, 256, 384]) $ \k ->
+            forAll (arbitraryBS k) $ \nb ->
+                let pk = keyOf k nb
+                    nn = RSA.public_n pk
+                    edges =
+                        [i2ospOf_ k x | x <- [0, 1, nn - 1, nn, nn + 1], x < 2 ^ (8 * k)]
+                            ++ [i2ospOf_ (k - 1) (nn `div` 256), B.cons 0 (i2ospOf_ k (nn - 1))]
+                 in [m | m <- edges, ep pk m /= expected pk m] === []
+  where
+    -- an odd modulus of exactly k bytes, which is all the operation needs
+    keyOf k nb =
+        RSA.PublicKey k (os2ip nb .|. (2 ^ (8 * k - 1)) .|. 1) 0x10001
+    -- b^65537 as b squared sixteen times, times b
+    expected pk m = i2ospOf_ (RSA.public_size pk) (squared 16 b * b `mod` nn) :: ByteString
+      where
+        nn = RSA.public_n pk
+        b = os2ip m `mod` nn
+        squared :: Int -> Integer -> Integer
+        squared 0 x = x
+        squared i x = squared (i - 1) (x * x `mod` nn)
 
 -- | Building a key from its two primes has to arrive at the key the vectors
 -- carry -- the private exponent, both of its halves, and the inverse of one
@@ -555,3 +589,4 @@ spec = do
     blindedKeyTests
     unpadTests
     ciphertextRangeTests
+    publicOperationTests

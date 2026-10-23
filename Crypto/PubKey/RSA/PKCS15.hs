@@ -415,10 +415,10 @@ padSignature
     :: ByteArray signature => Int -> signature -> Either Error signature
 padSignature klen signature
     | klen < siglen + 11 = Left SignatureTooLong
-    | otherwise = Right (B.pack padding `B.append` signature)
+    | otherwise =
+        Right (B.concat [B.pack [0, 1], B.replicate (klen - siglen - 3) 0xff, B.pack [0], signature])
   where
     siglen = B.length signature
-    padding = 0 : 1 : (replicate (klen - siglen - 3) 0xff ++ [0])
 
 -- | Try to remove a standard PKCS1.5 encryption padding.
 --

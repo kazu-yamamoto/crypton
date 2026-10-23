@@ -30,11 +30,11 @@ import Crypto.PubKey.RSA.Blinded.Internal
 import Crypto.PubKey.RSA.Prim
 import Crypto.PubKey.RSA.Types
 import Crypto.Random.Types
-import Data.Bits (complement, shiftR, xor, (.&.))
+import Data.Bits (complement, shiftR, (.&.))
 import Data.Word
 
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
-import qualified Crypto.Internal.ByteArray as B (convert, eq)
+import qualified Crypto.Internal.ByteArray as B (bxor, convert, eq)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -113,7 +113,7 @@ encodeDigest salt params pk digest
     h = B.convert $ hashWith (pssHash params) m'
     db = B.concat [B.replicate (dbLen - saltLen - 1) 0, B.singleton 1, salt]
     dbmask = pssMaskGenAlg params h dbLen
-    maskedDB = B.pack $ normalizeToKeySize pubBits $ B.zipWith xor db dbmask
+    maskedDB = normalizeToKeySize pubBits (B.bxor db dbmask :: ByteString)
     em = B.concat [maskedDB, h, B.singleton (pssTrailerField params)]
 
 -- | Sign using the PSS parameters and the salt explicitely passed as parameters.
@@ -303,7 +303,7 @@ verifyDigest params pk digest s
     maskedDB = B.take dbLen em
     h = B.take hashLen $ B.drop (B.length maskedDB) em
     dbmask = pssMaskGenAlg params h dbLen
-    db = B.pack $ normalizeToKeySize pubBits $ B.zipWith xor maskedDB dbmask
+    db = normalizeToKeySize pubBits (B.bxor maskedDB dbmask :: ByteString)
     (ps0, z) = B.break (== 1) db
     (b1, salt) = B.splitAt 1 z
     m' = B.concat [B.replicate 8 0, mHash, salt]
@@ -313,9 +313,10 @@ verifyDigest params pk digest s
 emTruncate :: Int -> Bool
 emTruncate bits = ((bits - 1) .&. 0x7) == 0
 
-normalizeToKeySize :: Int -> [Word8] -> [Word8]
-normalizeToKeySize _ [] = [] -- very unlikely
-normalizeToKeySize bits (x : xs) = x .&. normalizeMask bits : xs
+normalizeToKeySize :: Int -> ByteString -> ByteString
+normalizeToKeySize bits x = case B.uncons x of
+    Nothing -> x -- very unlikely
+    Just (h, t) -> B.cons (h .&. normalizeMask bits) t
 
 -- | The bits of the leftmost octet that belong to the encoding: the low
 -- @emBits `mod` 8@ of them, or all eight when that is zero.  Its complement

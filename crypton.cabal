@@ -408,6 +408,7 @@ library
         cbits/p256/p256_ec.c
 
     other-modules:
+        Crypto.Number.ModArithmetic.Pub
         Crypto.PubKey.RSA.Blinded.Internal
         Crypto.Cipher.AES.Primitive
         Crypto.Cipher.Blowfish.Primitive
