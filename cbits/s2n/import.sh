@@ -110,6 +110,10 @@ take_x86 fastmul bignum_ksqr_16_32
 take_x86 fastmul bignum_kmul_32_64
 take_x86 fastmul bignum_ksqr_32_64
 take_x86 fastmul bignum_emontredc_8n
+# RSA-3072's 24-limb square, built from these where the 32-limb Karatsuba
+# would take its operands padded
+take_x86 fastmul bignum_sqr_8_16
+take_x86 fastmul bignum_mul_8_16
 # and, for the sizes there is no Karatsuba routine for, the schoolbook
 # multiplication and squaring of any size, which bignum_emontredc_8n then
 # reduces as it reduces the others
