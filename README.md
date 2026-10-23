@@ -80,12 +80,18 @@ controlled and you have decided that it is not.
 
 The RSA rows in the tables below are the unblinded path.  A fresh blinder
 costs one more exponentiation, by the public exponent, which is the cheap
-direction: measured on the M4, signing goes from about 316 to about 331
-microseconds, under five per cent.  `signSafer` and `decryptSafer` pay less
-than that from 2.2.4: they keep the blinder of a key they have seen and
-square it for the next use, as OpenSSL does, drawing a fresh one every 32
-uses.  `Crypto.PubKey.RSA.Blinded` gives a caller the same thing to hold, a
+direction: measured on the M4, signing goes from about 316 to about 335
+microseconds, about six per cent.  `signSafer` and `decryptSafer` pay less
+than that from 2.2.4: they keep the blinder of a key they have seen and square
+it for the next use, as OpenSSL does, drawing a fresh one every 32 uses.
+`Crypto.PubKey.RSA.Blinded` gives a caller the same thing to hold, a
 `BlindedKey` passed along from one operation to the next.
+
+From 2.2.5 every private-key operation also raises its result back to the
+public exponent before letting it out, as OpenSSL does.  A fault in one half
+of a CRT computation would otherwise give an answer that reveals a prime of
+the key; that answer is now computed again without CRT instead.  It costs a
+few per cent of a signature, and the tables below include it.
 
 Performance
 -----------
@@ -115,33 +121,33 @@ and the SHA extensions, against OpenSSL 4.0.3.
 
 Throughput in MB/s, **higher is better**:
 
-| | crypton 1.1.5 | crypton 2.2.4 | OpenSSL | 2.2.4 / OpenSSL |
+| | crypton 1.1.5 | crypton 2.2.5 | OpenSSL | 2.2.5 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 1335 | **6041** | 4066 | 1.49 |
-| AES-256-GCM | 1093 | **5492** | 3766 | 1.46 |
-| ChaCha20-Poly1305 | 399 | 2195 | 2222 | 0.99 |
-| SHA-1 | 727 | 1663 | 1672 | 0.99 |
-| SHA-256 | 289 | 1585 | 1576 | 1.01 |
-| SHA-512 | 448 | 770 | 749 | 1.03 |
-| SHA3-256 | 109 | 421 | 429 | 0.98 |
+| AES-128-GCM | 1335 | **6044** | 4046 | 1.49 |
+| AES-256-GCM | 1093 | **5494** | 3764 | 1.46 |
+| ChaCha20-Poly1305 | 399 | 2197 | 2212 | 0.99 |
+| SHA-1 | 729 | 1663 | 1673 | 0.99 |
+| SHA-256 | 289 | 1585 | 1571 | 1.01 |
+| SHA-512 | 450 | 770 | 749 | 1.03 |
+| SHA3-256 | 109 | 421 | 425 | 0.99 |
 
 Time per operation in microseconds, **lower is better**:
 
-| | crypton 1.1.5 | crypton 2.2.4 | OpenSSL | OpenSSL / 2.2.4 |
+| | crypton 1.1.5 | crypton 2.2.5 | OpenSSL | OpenSSL / 2.2.5 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 44.38 | 28.29 | 36.61 | 1.29 |
-| ECDH P-256 | 164.0 | 51.31 | 51.70 | 1.01 |
-| ECDH P-384 | 2242 | **164.3** | 836.1 | 5.09 |
-| Ed25519 sign | 43.86 | 18.50 | 33.74 | 1.82 |
-| Ed25519 verify | 48.30 | 48.43 | 109.8 | 2.27 |
-| ECDSA P-256 sign | 81.80 | 19.72 | 21.84 | 1.11 |
-| ECDSA P-256 verify | 231.8 | 70.47 | 67.55 | 0.96 |
-| ECDSA P-384 sign | 2267 | **305.2** | 879.5 | 2.88 |
-| ECDSA P-384 verify | 2698 | **473.6** | 725.2 | 1.53 |
-| RSA-2048 sign/decrypt | 760.1 | 612.3 | 659.6 | 1.08 |
-| RSA-2048 verify/encrypt | 33.61 | 23.50 | 18.88 | 0.80 |
-| RSA-3072 sign/decrypt | 2499 | 2324 | 2012 | 0.87 |
-| RSA-3072 verify/encrypt | 66.80 | 61.91 | 40.14 | 0.65 |
+| X25519 | 44.31 | 28.56 | 36.51 | 1.28 |
+| ECDH P-256 | 164.3 | 50.63 | 51.53 | 1.02 |
+| ECDH P-384 | 2241 | **164.4** | 834.7 | 5.08 |
+| Ed25519 sign | 29.33 | 18.57 | 33.68 | 1.81 |
+| Ed25519 verify | 48.48 | 47.59 | 110.7 | 2.33 |
+| ECDSA P-256 sign | 81.70 | 18.08 | 21.88 | 1.21 |
+| ECDSA P-256 verify | 231.8 | 69.63 | 67.60 | 0.97 |
+| ECDSA P-384 sign | 2273 | **303.9** | 877.6 | 2.89 |
+| ECDSA P-384 verify | 2673 | **474.3** | 722.8 | 1.52 |
+| RSA-2048 sign/decrypt | 759.5 | 633.9 | 659.4 | 1.04 |
+| RSA-2048 verify/encrypt | 33.24 | 22.70 | 18.80 | 0.83 |
+| RSA-3072 sign/decrypt | 2500 | 2232 | 2010 | 0.90 |
+| RSA-3072 verify/encrypt | 65.79 | 61.73 | 40.09 | 0.65 |
 
 ### AArch64
 
@@ -150,37 +156,37 @@ instructions, against OpenSSL 4.0.3.
 
 Throughput in MB/s, **higher is better**:
 
-| | crypton 1.1.5 | crypton 2.2.4 | OpenSSL | 2.2.4 / OpenSSL |
+| | crypton 1.1.5 | crypton 2.2.5 | OpenSSL | 2.2.5 / OpenSSL |
 | --- | ---: | ---: | ---: | ---: |
-| AES-128-GCM | 131 | **12052** | 10922 | 1.10 |
-| AES-256-GCM | 99 | **10192** | 9208 | 1.11 |
-| ChaCha20-Poly1305 | 783 | 2342 | 2261 | 1.04 |
-| SHA-1 | 1234 | 3383 | 3347 | 1.01 |
-| SHA-256 | 486 | 3392 | 3354 | 1.01 |
-| SHA-512 | 742 | 1869 | 1860 | 1.00 |
-| SHA3-256 | 552 | 1096 | 1092 | 1.00 |
+| AES-128-GCM | 134 | **12850** | 11215 | 1.15 |
+| AES-256-GCM | 100 | **10356** | 9405 | 1.10 |
+| ChaCha20-Poly1305 | 804 | 2425 | 2302 | 1.05 |
+| SHA-1 | 1286 | 3389 | 3363 | 1.01 |
+| SHA-256 | 500 | 3397 | 3363 | 1.01 |
+| SHA-512 | 762 | 1881 | 1888 | 1.00 |
+| SHA3-256 | 564 | 1125 | 1104 | 1.02 |
 
 Time per operation in microseconds, **lower is better**:
 
-| | crypton 1.1.5 | crypton 2.2.4 | OpenSSL | OpenSSL / 2.2.4 |
+| | crypton 1.1.5 | crypton 2.2.5 | OpenSSL | OpenSSL / 2.2.5 |
 | --- | ---: | ---: | ---: | ---: |
-| X25519 | 17.92 | **12.02** | 15.32 | 1.28 |
-| ECDH P-256 | 67.50 | **19.05** | 24.36 | 1.28 |
-| ECDH P-384 | 3256 | **71.78** | 373.1 | 5.20 |
-| Ed25519 sign | 13.38 | **7.717** | 13.31 | 1.72 |
-| Ed25519 verify | 18.32 | 18.18 | 34.77 | 1.91 |
-| ECDSA P-256 sign | 31.08 | **6.500** | 10.66 | 1.64 |
-| ECDSA P-256 verify | 94.27 | **26.58** | 32.25 | 1.21 |
-| ECDSA P-384 sign | 3225 | **124.0** | 394.2 | 3.18 |
-| ECDSA P-384 verify | 3866 | **203.4** | 332.3 | 1.63 |
-| RSA-2048 sign/decrypt | 451.3 | 318.4 | 321.5 | 1.01 |
-| RSA-2048 verify/encrypt | 18.15 | 11.12 | 8.405 | 0.76 |
-| RSA-3072 sign/decrypt | 1473 | 937.4 | 931.1 | 0.99 |
-| RSA-3072 verify/encrypt | 47.95 | 43.63 | 17.89 | 0.41 |
+| X25519 | 17.43 | **11.10** | 15.29 | 1.38 |
+| ECDH P-256 | 63.98 | **19.70** | 24.14 | 1.23 |
+| ECDH P-384 | 3181 | **68.57** | 371.6 | 5.42 |
+| Ed25519 sign | 12.57 | **7.217** | 13.24 | 1.83 |
+| Ed25519 verify | 17.62 | 17.75 | 34.72 | 1.96 |
+| ECDSA P-256 sign | 30.53 | **6.333** | 10.46 | 1.65 |
+| ECDSA P-256 verify | 91.95 | **26.52** | 31.97 | 1.21 |
+| ECDSA P-384 sign | 3158 | **123.5** | 393.2 | 3.18 |
+| ECDSA P-384 verify | 3790 | **200.5** | 327.0 | 1.63 |
+| RSA-2048 sign/decrypt | 448.6 | 323.6 | 320.5 | 0.99 |
+| RSA-2048 verify/encrypt | 18.12 | 9.683 | 8.366 | 0.86 |
+| RSA-3072 sign/decrypt | 1468 | 952.9 | 925.6 | 0.97 |
+| RSA-3072 verify/encrypt | 48.07 | 20.47 | 17.79 | 0.87 |
 
 ### What the numbers say
 
-There are two changes behind the 1.1.5 column and the 2.2.4 one, not a
+There are two changes behind the 1.1.5 column and the 2.2.5 one, not a
 single steady improvement.
 
 The first, in 2.0.0, was a rewrite: the bulk algorithms moved into C, the
@@ -208,33 +214,39 @@ for is OpenSSL's and BoringSSL's `ecp_nistz256`, and it cannot be used here:
 it is Apache-2.0 only, and Intel and CloudFlare hold copyright in it besides
 OpenSSL, so nobody is in a position to relicense it.
 
-crypton is behind in a few rows now: RSA verification on both architectures,
-and RSA-3072 signing and ECDSA P-256 verification on x86-64.  The AES-GCM rows
-were the other half of this section until 2.1.5; they are ahead on both
-machines now, and what the instructions do is still worth setting out.
+crypton is behind in a few rows now: RSA on both architectures, except
+RSA-2048 signing on x86-64, and ECDSA P-256 verification on x86-64.  The
+AES-GCM rows were the other half of this section until 2.1.5; they are ahead
+on both machines now, and what the instructions do is still worth setting out.
 
 *RSA.*  2.0.0 made signing slower than 1.1.5 on purpose: its modular
 exponentiation stopped indexing a table with the bits of the exponent, and
-hiding the exponent is what the difference bought.  2.2.4 has repaid that
-cost on both machines, by different means.  On x86-64 s2n-bignum's
-Montgomery multiplication is twice the C's, because the C cannot form the two
-carry chains `ADCX` and `ADOX` give, and 2.2.4 signs in less than 1.1.5
-took, at 3072 bits as well as 2048.  On AArch64 s2n-bignum's routines measure
-no better than the C, so the gain there is the C's own: the multiplication
-and squaring for each key size are generated and unrolled, with the
-reduction folded into each column as in Koç, Acar and Kaliski's FIPS method,
-and signing is level with OpenSSL.  The measurements are in
-[#275](https://github.com/kazu-yamamoto/crypton/issues/275).
+hiding the exponent is what the difference bought.  2.2.5 has repaid that cost
+on both machines, by different means.  On x86-64 s2n-bignum's Montgomery
+multiplication is twice the C's, because the C cannot form the two carry
+chains `ADCX` and `ADOX` give, and 2.2.5 signs in less than 1.1.5 took, at
+3072 bits as well as 2048.  On AArch64 s2n-bignum's routines measure no better
+than the C, so the gain there is the C's own: the multiplication and squaring
+for each key size are generated and unrolled, with the reduction folded into
+each column as in Koç, Acar and Kaliski's FIPS method, and signing is within a
+few per cent of OpenSSL, the check of the result included.  The measurements
+are in [#275](https://github.com/kazu-yamamoto/crypton/issues/275).
 
 On processors with AVX-512 IFMA, Intel Xeons from Ice Lake and AMD from Zen 4,
-2.2.4 computes the two halves of the CRT together in 52-bit digits, Gueron and
-Krasnov's method and the one OpenSSL takes there.  Neither machine above has
-IFMA, so neither table shows it.
+crypton computes the two halves of the CRT together in 52-bit digits, Gueron
+and Krasnov's method and the one OpenSSL takes there.  Neither machine above
+has IFMA, so neither table shows it.
 
 Verification's exponent is 65537, seventeen bits, so there is little
-exponentiation to speed up and the work around it counts.  2.2.4 keeps R^2,
-the Montgomery constant of a modulus, for the moduli it has seen, which is
-most of what the RSA-2048 verification rows gained.
+exponentiation to speed up and the work around it counts.  crypton keeps R^2,
+the Montgomery constant of a modulus, for the moduli it has seen, and from
+2.2.5 hands the signature to the C as bytes and builds the padding without a
+list.  On macOS it verifies in its own C at every RSA size: the GMP that GHC
+builds into itself there is compiled without optimisation
+([ghc#28030](https://gitlab.haskell.org/ghc/ghc/-/work_items/28030)), which is
+most of what the RSA-3072 verification row on AArch64 gained.  Elsewhere GMP
+keeps the sizes other than 2048 bits, and on x86-64 it is the reason the
+RSA-3072 verification row is still where it was.
 
 *The wide AES instructions.*  `VAES` and `VPCLMULQDQ` do two blocks where
 `AES-NI` and `PCLMULQDQ` do one, and four in their 512-bit form.  crypton uses
@@ -253,7 +265,7 @@ there is not one `ymm` in the file -- or `aes-gcm-avx512.pl`, which wants
 takes a block at a time where crypton takes two.  The same idea as theirs,
 one step further down the feature ladder; not a better one.
 
-The 512-bit path arrived after 2.1.2, so it is in the 2.2.4 column -- but
+The 512-bit path arrived after 2.1.2, so it is in the 2.2.5 column -- but
 neither machine in the tables above has AVX-512, so neither column shows it.
 On the runners that do, measured over 16 KiB in MB/s: an EPYC 9V45 (Zen 5)
 goes from 9616 to 14268 with it, a Xeon 6973P-C from 8095 to 9848, a Xeon
@@ -278,7 +290,7 @@ One row wants a word of its own: crypton's `Ed25519.sign` derives the public
 key from the secret key every time it signs, so that a caller who passes a
 public key that does not match cannot be made to leak the private one.  That
 costs a second scalar multiplication, which OpenSSL's signing does not pay --
-and the row is still 1.72 on AArch64 and 1.82 on x86-64, so the safety is had
+and the row is still 1.83 on AArch64 and 1.81 on x86-64, so the safety is had
 for nothing here rather than paid for.
 
 Ed25519 verification wanted one too, for an unhappier reason, and 2.2.1
