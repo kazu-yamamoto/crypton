@@ -10,7 +10,11 @@ import qualified Data.ByteString as B
 import Data.ByteString.Char8 ()
 
 import Crypto.Hash
+import qualified Data.ByteArray as BA
+import Crypto.Number.Serialize (i2ospOf_)
 import Crypto.PubKey.MaskGenFunction
+import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (choose, forAll)
 
 import Utils
 
@@ -32,5 +36,26 @@ vectorsMGF =
         }
     ]
 
+-- | RFC 8017's definition through the pure hash API, block by block, which
+-- shares nothing with mgf1's in-place contexts or with the one-shot hash.
+reference :: HashAlgorithm a => a -> ByteString -> Int -> ByteString
+reference alg sd len = B.take len $ B.concat [block c | c <- [0 .. blocks - 1]]
+  where
+    blocks = (len + hashDigestSize alg - 1) `div` hashDigestSize alg
+    block c = BA.convert (hashFinalize (hashUpdates (hashInitWith alg) [sd, i2ospOf_ 4 (fromIntegral c)])) :: ByteString
+
 spec :: Spec
-spec = zipWithM_ doMGFTest [katZero ..] vectorsMGF
+spec = do
+    zipWithM_ doMGFTest [katZero ..] vectorsMGF
+    describe "against the definition" $
+        mapM_ agree
+            [ ("SHA1", \s n -> (mgf1 SHA1 s n, reference SHA1 s n))
+            , ("SHA256", \s n -> (mgf1 SHA256 s n, reference SHA256 s n))
+            , ("SHA512", \s n -> (mgf1 SHA512 s n, reference SHA512 s n))
+            , ("SHA3_256", \s n -> (mgf1 SHA3_256 s n, reference SHA3_256 s n))
+            , ("Blake2b_512", \s n -> (mgf1 Blake2b_512 s n, reference Blake2b_512 s n))
+            ]
+  where
+    agree (name, f) = prop name $
+        forAll (arbitraryBSof 0 100) $ \s -> forAll (choose (0, 300)) $ \n ->
+            let (got, want) = f s n in got == (want :: ByteString)
