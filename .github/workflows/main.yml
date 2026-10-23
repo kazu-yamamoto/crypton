@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # The slowest job takes about a quarter of an hour; one waiting on a package
+    # mirror once sat for half an hour and had to be cancelled by force.
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
@@ -74,6 +77,15 @@ jobs:
     - run: git config --global core.autocrlf false
 
     - uses: actions/checkout@v5
+
+    # apt waits on a stalled mirror indefinitely by default.  Every step that
+    # installs a package below goes through this, except the s390x container,
+    # which is given the same options on its command line.
+    - name: Give apt a timeout
+      if: runner.os == 'Linux'
+      run: |
+        printf 'Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "3";\n' |
+          sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
 
     - uses: haskell-actions/setup@v2
       with:
@@ -264,7 +276,7 @@ jobs:
     - name: The compiler that could not build it
       if: matrix.os == 'ubuntu-24.04-arm' && matrix.ghc == '9.14'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y -qq gcc-12
         gcc-12 --version | head -1
         cat > /tmp/probe.c <<'PROBE'
@@ -359,7 +371,7 @@ jobs:
     - name: The compiler stricter than this one
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.12'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y -qq gcc-14
         gcc-14 --version | head -1
         cabal build crypton --builddir=dist-gcc14 \
@@ -436,7 +448,8 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
       run: |
         docker run --rm --platform linux/s390x -v "$PWD":/w -w /w s390x/ubuntu:24.04 \
-          sh -c 'apt-get update -qq && apt-get install -y -qq gcc >/dev/null &&
+          sh -c 'apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 update -qq &&
+            apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 install -y -qq gcc >/dev/null &&
                  cbits/tests/endian/run.sh'
 
     # Whether a secret ever decides a branch or an address.  valgrind is
@@ -463,7 +476,7 @@ jobs:
         (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm')
         && matrix.ghc == '9.12'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y -qq valgrind
         cbits/tests/ct/run.sh
 
@@ -477,7 +490,7 @@ jobs:
     - name: AES against what it is checked against
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y -qq gcc-powerpc64le-linux-gnu qemu-user-static
         cbits/tests/aesdiff/run.sh
 
@@ -492,7 +505,7 @@ jobs:
     - name: The C only a 32-bit architecture gets
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y -qq gcc-multilib
         cbits/tests/width/run.sh
 
