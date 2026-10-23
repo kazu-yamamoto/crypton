@@ -296,6 +296,7 @@ x86_64 | amd64)
 			$s2n/bignum_montifier.S $s2n/bignum_emontredc_8n.S
 			$s2n/bignum_kmul_16_32.S $s2n/bignum_ksqr_16_32.S
 			$s2n/bignum_kmul_32_64.S $s2n/bignum_ksqr_32_64.S
+			$s2n/bignum_sqr_8_16.S $s2n/bignum_mul_8_16.S
 			$s2n/bignum_mul.S $s2n/bignum_sqr.S"
 		powm_s2n_inc="-Icbits/s2n/include -DCRYPTON_S2N_BIGNUM
 			-DCRYPTON_CPU_TESTING_ADX -DCT_POWM_COUNT_S2N

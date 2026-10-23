@@ -50,6 +50,8 @@ x86_64|amd64)
 	           cbits/s2n/x86_att/bignum_kmul_32_64.S
 	           cbits/s2n/x86_att/bignum_ksqr_16_32.S
 	           cbits/s2n/x86_att/bignum_ksqr_32_64.S
+	           cbits/s2n/x86_att/bignum_sqr_8_16.S
+	           cbits/s2n/x86_att/bignum_mul_8_16.S
 	           cbits/s2n/x86_att/bignum_emontredc_8n.S
 	           cbits/s2n/x86_att/bignum_mul.S
 	           cbits/s2n/x86_att/bignum_sqr.S"

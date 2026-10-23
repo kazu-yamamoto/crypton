@@ -59,13 +59,16 @@ extern uint64_t bignum_emontredc_8n(uint64_t k, uint64_t *z,
 extern void bignum_mul(uint64_t k, uint64_t *z, uint64_t m, const uint64_t *x,
                        uint64_t n, const uint64_t *y);
 extern void bignum_sqr(uint64_t k, uint64_t *z, uint64_t n, const uint64_t *x);
+extern void bignum_sqr_8_16(uint64_t *z, const uint64_t *x);
+extern void bignum_mul_8_16(uint64_t *z, const uint64_t *x, const uint64_t *y);
 
 /* 16 limbs is 1024 bits and 32 is 2048: the halves a CRT exponentiation
  * works in for RSA-2048 and RSA-4096, and the whole thing without CRT.  24
- * is 1536, the half of RSA-3072, which has no Karatsuba routine of its own
- * and is run through the 32-limb one with its operands padded -- a third
- * of that routine's work wasted, and still nearly twice the C, since the C
- * cannot form ADCX and ADOX's two carry chains at any size.
+ * is 1536, the half of RSA-3072, which has no Karatsuba routine of its own:
+ * its multiplication is the 32-limb one with the operands padded, and its
+ * square is built from 8-limb pieces, which measured faster on a whole
+ * exponentiation than the padded square.  Both are still nearly twice the
+ * C, since the C cannot form ADCX and ADOX's two carry chains at any size.
  *
  * 48 and 64 are 3072 and 4096 bits: finite-field Diffie-Hellman over the
  * RFC 7919 groups of those sizes, and RSA without CRT.  There is no
@@ -138,14 +141,39 @@ static void powm_s2n_mul(limb_t *r, const limb_t *a, const limb_t *b,
 	powm_s2n_finish(r, z, m, bignum_emontredc_8n(n, z, m, n0), n);
 }
 
+/* a^2 for a of 24 limbs, from three 8-limb squares and three 8-limb
+ * products: a = a0 + a1 X + a2 X^2 with X = 2^512, and the cross terms, at
+ * X to X^3 in c, go in doubled.  c is 48 limbs of scratch. */
+static void powm_s2n_sqr24(limb_t *z, const limb_t *a, limb_t *c)
+{
+	limb_t k;
+	uint32_t i;
+
+	bignum_sqr_8_16(z, a);
+	bignum_sqr_8_16(z + 16, a + 8);
+	bignum_sqr_8_16(z + 32, a + 16);
+	bignum_mul_8_16(c, a, a + 8);
+	bignum_mul_8_16(c + 16, a + 8, a + 16);
+	bignum_mul_8_16(c + 32, a, a + 16);
+	k = add_n(c + 8, c + 8, c + 32, 16);
+	for (i = 24; i < 32; i++) {
+		c[i] += k;
+		k = c[i] < k;
+	}
+	k = shl1(c, 32);
+	k += add_n(z + 8, z + 8, c, 32);
+	for (i = 40; i < 48; i++) {
+		z[i] += k;
+		k = z[i] < k;
+	}
+}
+
 static void powm_s2n_sqr(limb_t *r, const limb_t *a, const limb_t *m,
                          limb_t n0, uint32_t n, limb_t *z, limb_t *scratch)
 {
 	if (n == 24) {
 		z = scratch + POWM_S2N_PAD_Z;
-		powm_s2n_pad(scratch + POWM_S2N_PAD_X, a);
-		bignum_ksqr_32_64(z, scratch + POWM_S2N_PAD_X,
-		                  scratch + POWM_S2N_PAD_T);
+		powm_s2n_sqr24(z, a, scratch + POWM_S2N_PAD_T);
 	} else if (n == 48 || n == 64)
 		bignum_sqr(2 * n, z, n, a);
 	else if (n == 16)

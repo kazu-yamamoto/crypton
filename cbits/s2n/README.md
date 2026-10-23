@@ -53,7 +53,8 @@ the same question on the two architectures:
 `crypton_powm.c`'s modular exponentiation also borrows from here, but only its
 innermost step and only on x86-64: `bignum_kmul_16_32`, `bignum_ksqr_16_32`,
 `bignum_kmul_32_64`, `bignum_ksqr_32_64` and `bignum_emontredc_8n` replace the
-C's Montgomery multiplication and square.  The window, the table and its masked
+C's Montgomery multiplication and square, and at RSA-3072's 24 limbs the square
+is built from `bignum_sqr_8_16` and `bignum_mul_8_16`.  The window, the table and its masked
 scan are crypton's throughout.  Sixteen limbs is 1024 bits and thirty-two is
 2048: the halves a CRT exponentiation works in for RSA-2048 and RSA-4096, and
 the whole thing without CRT.  The reduction wants ADX, so the choice is made at
