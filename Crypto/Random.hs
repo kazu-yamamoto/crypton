@@ -132,6 +132,7 @@
 module Crypto.Random (
     -- * Drawing from the system
     MonadRandom (..),
+    reseedSystem,
 
     -- * Drawing from a generator you hold
     Seed,
@@ -160,6 +161,7 @@ import Crypto.Error
 import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
 import Crypto.Random.Entropy (EntropyError (..))
+import Crypto.Random.SysDRG (sysDRGReseed)
 import Crypto.Random.SystemDRG
 import Crypto.Random.Types
 import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
@@ -173,6 +175,26 @@ import Crypto.Hash.IO
 import Data.Memory.PtrMethods (memSet)
 import Foreign.Ptr (Ptr, castPtr)
 #endif
+
+-- | Make the generators behind 'getRandomBytes' in 'IO' reseed from the
+-- system before they answer again: each thread's at its next draw, as after
+-- a fork.  Like OpenSSL's @RAND_poll@.
+--
+-- Call it after the process has been restored from a saved image -- a
+-- virtual machine snapshot, a CRIU checkpoint.  Every copy restored from one
+-- image starts from the generator state in the image, and nothing the
+-- generators can see changes when that happens, so until the next reseed of
+-- their own each copy would draw the same bytes as the others.  A fork needs
+-- no call: the generators notice it.  Draws made between the restore and
+-- this call are not covered.
+--
+-- It only bumps a counter, so it is cheap and never blocks.
+--
+-- It reaches only those generators.  One you hold, made with 'drgNew' or
+-- 'drgNewSeed' before the image was saved, is a value in that image and
+-- goes on as it was; make it again after this call.
+reseedSystem :: IO ()
+reseedSystem = sysDRGReseed
 
 -- | The material a deterministic generator is built from.  Two generators
 -- made from one seed produce the same bytes, which is what 'drgNewSeed' is

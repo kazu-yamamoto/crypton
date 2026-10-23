@@ -1,10 +1,10 @@
 /*
  * The generator behind MonadRandom IO.
  *
- * A ChaCha20 DRBG per operating system thread, seeded from a process-wide
- * DRBG, which is itself seeded from the system entropy pool.  This is the
- * shape RFC 9180's neighbours and the other libraries have settled on, and
- * it was asked for in #298.
+ * A ChaCha20 DRBG per operating system thread, seeded straight from the
+ * system: getrandom(2) or getentropy(3).  There is no process-wide generator
+ * in between (#350); glibc, Go, BoringSSL and Rust's ThreadRng do without one
+ * too, and it saved one system call per thread per mebibyte.
  *
  * Per operating system thread and not per Haskell thread: a forkIO thread
  * moves between capabilities, so state kept against it would be shared by
@@ -13,14 +13,15 @@
  *
  * Three things force a reseed:
  *
- *   - a thread has produced CRYPTON_THREAD_RESEED bytes,
- *   - the process DRBG has issued CRYPTON_GLOBAL_RESEED bytes of seed,
- *   - the process has forked.
+ *   - the thread has produced CRYPTON_THREAD_RESEED bytes,
+ *   - the process has forked,
+ *   - the program has called crypton_sysdrg_reseed.
  *
- * The last one is the one that bites.  A child inherits its parent's state
- * and would otherwise produce the same stream; the generation counter below
- * is bumped in the child by a pthread_atfork handler, and every generator
- * compares against it before it answers.
+ * The last two are the ones that bite.  A child inherits its parent's state,
+ * and so does every copy of a process restored from a saved image -- a VM
+ * snapshot, a CRIU checkpoint.  Both bump the generation counter below, the
+ * fork through a pthread_atfork handler, and every generator compares
+ * against it before it answers.
  */
 
 #include <stdint.h>
@@ -47,7 +48,6 @@ int crypton_sysrandom_bytes(uint8_t *buf, int len);
 #define SEED_LEN           (SEED_KEY + SEED_IV)
 
 #define CRYPTON_THREAD_RESEED  (1u << 20)
-#define CRYPTON_GLOBAL_RESEED  (1u << 20)
 
 typedef struct {
 	crypton_chacha_context ctx;
@@ -56,18 +56,18 @@ typedef struct {
 	int seeded;
 } drg_t;
 
-static drg_t global_drg;
-static volatile uint32_t fork_generation = 0;
+/* Read by every draw, and bumped from any thread or a signal handler by
+ * crypton_sysdrg_reseed, so it is atomic and takes no lock. */
+static uint32_t generation_count = 0;
+#define GENERATION() __atomic_load_n(&generation_count, __ATOMIC_ACQUIRE)
 
 #ifdef _WIN32
-static CRITICAL_SECTION global_lock;
 /* Fls and not Tls: TlsAlloc has no destructor, so the state of every thread
  * that ever drew a byte would be left allocated and unscrubbed when the
  * thread ended.  FlsAlloc takes the callback that pthread_key_create does. */
 static DWORD thread_slot;
 static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
 #else
-static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_key_t thread_slot;
 static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 #endif
@@ -79,7 +79,7 @@ static void scrub(void *p, size_t n)
 }
 
 /*
- * Seed material for the process DRBG.
+ * Seed material for a thread's DRBG.
  *
  * What the system gives goes through SHA-512 rather than into the key
  * directly, so that the key is a fixed size whatever the call returns, and
@@ -138,12 +138,14 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	return 1;
 }
 
-static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN])
+/* generation is the counter as it was before the seed was drawn: read after,
+ * a reseed in between would be recorded as met by a seed from before it */
+static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], uint32_t generation)
 {
 	crypton_chacha_init(&d->ctx, CHACHA_ROUNDS, SEED_KEY, seed,
 	                    SEED_IV, seed + SEED_KEY);
 	d->used = 0;
-	d->generation = fork_generation;
+	d->generation = generation;
 	d->seeded = 1;
 }
 
@@ -178,37 +180,7 @@ static void drg_rekey(drg_t *d)
 
 static int drg_stale(const drg_t *d, uint64_t limit)
 {
-	return !d->seeded || d->used >= limit || d->generation != fork_generation;
-}
-
-/* Bytes from the process DRBG, which is only ever asked for seed material. */
-static int global_bytes(uint8_t *out, uint32_t len)
-{
-	int ok = 1;
-
-#ifdef _WIN32
-	EnterCriticalSection(&global_lock);
-#else
-	pthread_mutex_lock(&global_lock);
-#endif
-	if (drg_stale(&global_drg, CRYPTON_GLOBAL_RESEED)) {
-		uint8_t seed[SEED_LEN];
-		ok = seed_from_system(seed);
-		if (ok)
-			drg_seed(&global_drg, seed);
-		scrub(seed, sizeof seed);
-	}
-	if (ok) {
-		crypton_chacha_generate(out, &global_drg.ctx, len);
-		global_drg.used += len;
-		drg_rekey(&global_drg);
-	}
-#ifdef _WIN32
-	LeaveCriticalSection(&global_lock);
-#else
-	pthread_mutex_unlock(&global_lock);
-#endif
-	return ok;
+	return !d->seeded || d->used >= limit || d->generation != GENERATION();
 }
 
 #ifdef _WIN32
@@ -224,37 +196,15 @@ static void thread_free(void *p)
 }
 
 #ifndef _WIN32
-/* All three handlers, not just the child's.  The child's first draw has to
- * reseed -- the generation has changed -- and reseeding takes global_lock.
- * A fork made while another thread held it would hand the child a mutex
- * locked by a thread that did not come across, and the child would wait on
- * it for ever.  So the lock is taken before the fork and released on both
- * sides of it, which is the state the child needs it in. */
-static void before_fork(void)
-{
-	pthread_mutex_lock(&global_lock);
-}
-
-static void after_fork_in_parent(void)
-{
-	pthread_mutex_unlock(&global_lock);
-}
-
 static void after_fork_in_child(void)
 {
-	pthread_mutex_unlock(&global_lock);
-	fork_generation++;
+	__atomic_add_fetch(&generation_count, 1, __ATOMIC_RELEASE);
 }
 #endif
 
 #ifdef CRYPTON_SYSDRG_TESTING
-/* For cbits/tests/sysdrg and nothing else: hold and release the process
- * generator's lock, so that a fork can be made to happen while another
- * thread holds it.  Nothing outside that test declares these, and the
- * library is never built with this defined. */
-void crypton_sysdrg_test_lock(void);
-void crypton_sysdrg_test_unlock(void);
-
+/* For cbits/tests/sysdrg and nothing else.  Nothing outside that test
+ * declares these, and the library is never built with this defined. */
 static drg_t *this_thread(void);
 
 /* The calling thread's ChaCha key, which is d[4..11] of the state.  A test
@@ -279,18 +229,33 @@ void crypton_sysdrg_test_key(uint8_t out[32])
 	}
 }
 
-void crypton_sysdrg_test_lock(void)
+/* Copy the calling thread's generator and the generation out and back in,
+ * as a saved image and a restore from it would: a test draws, restores, and
+ * draws again, which is two copies of one image. */
+static struct {
+	drg_t thread;
+	uint32_t generation;
+} saved_image;
+
+void crypton_sysdrg_test_save(void);
+void crypton_sysdrg_test_restore(void);
+
+void crypton_sysdrg_test_save(void)
 {
-#ifndef _WIN32
-	pthread_mutex_lock(&global_lock);
-#endif
+	drg_t *d = this_thread();
+
+	if (d)
+		saved_image.thread = *d;
+	saved_image.generation = GENERATION();
 }
 
-void crypton_sysdrg_test_unlock(void)
+void crypton_sysdrg_test_restore(void)
 {
-#ifndef _WIN32
-	pthread_mutex_unlock(&global_lock);
-#endif
+	drg_t *d = this_thread();
+
+	if (d)
+		*d = saved_image.thread;
+	__atomic_store_n(&generation_count, saved_image.generation, __ATOMIC_RELEASE);
 }
 #endif
 
@@ -298,7 +263,6 @@ void crypton_sysdrg_test_unlock(void)
 static BOOL CALLBACK init_slot(PINIT_ONCE o, PVOID p, PVOID *c)
 {
 	(void) o; (void) p; (void) c;
-	InitializeCriticalSection(&global_lock);
 	thread_slot = FlsAlloc(thread_free);
 	return TRUE;
 }
@@ -306,7 +270,7 @@ static BOOL CALLBACK init_slot(PINIT_ONCE o, PVOID p, PVOID *c)
 static void init_slot(void)
 {
 	pthread_key_create(&thread_slot, thread_free);
-	pthread_atfork(before_fork, after_fork_in_parent, after_fork_in_child);
+	pthread_atfork(NULL, NULL, after_fork_in_child);
 }
 #endif
 
@@ -357,9 +321,10 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 
 	if (drg_stale(d, CRYPTON_THREAD_RESEED)) {
 		uint8_t seed[SEED_LEN];
-		int ok = global_bytes(seed, SEED_LEN);
+		uint32_t g = GENERATION();
+		int ok = seed_from_system(seed);
 		if (ok)
-			drg_seed(d, seed);
+			drg_seed(d, seed, g);
 		scrub(seed, sizeof seed);
 		if (!ok)
 			return 0;
@@ -371,10 +336,22 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 	return len;
 }
 
-/* For the tests: how many times the process has been seen to fork. */
+/*
+ * Make every thread's generator reseed from the system before it answers
+ * again, as after a fork.  For a program that knows it has been restored
+ * from a saved image, which no generator can see for itself.  It only bumps
+ * the generation, so it takes no lock and is async-signal-safe.
+ */
+void crypton_sysdrg_reseed(void)
+{
+	__atomic_add_fetch(&generation_count, 1, __ATOMIC_RELEASE);
+}
+
+/* For the tests: how many times the generators have been told to reseed,
+ * by a fork or by crypton_sysdrg_reseed. */
 uint32_t crypton_sysdrg_generation(void)
 {
-	return fork_generation;
+	return GENERATION();
 }
 
 /* For the tests: bytes this thread's generator has produced since it was

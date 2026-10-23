@@ -26,7 +26,7 @@ import qualified Data.ByteString as BS
 import Data.List (group, nub, sort)
 import Test.Hspec
 
-import Crypto.Random (getRandomBytes)
+import Crypto.Random (getRandomBytes, reseedSystem)
 
 spec :: Spec
 spec = describe "the generator behind MonadRandom IO" $ do
@@ -92,6 +92,21 @@ spec = describe "the generator behind MonadRandom IO" $ do
             (getRandomBytes 4096 :: IO BS.ByteString) >>= \b -> b `seq` return ()
         second <- getRandomBytes 32 :: IO BS.ByteString
         second `shouldNotBe` first
+
+    -- what a reseed does to the streams is for cbits/tests/sysdrg, which can
+    -- save and restore a generator; here, that drawing goes on across one,
+    -- from threads that drew before it
+    it "goes on giving bytes across reseedSystem, on every thread" $ do
+        earlier <- getRandomBytes 32 :: IO BS.ByteString
+        reseedSystem
+        dones <- forM [1 .. 8 :: Int] $ \_ -> do
+            done <- newEmptyMVar
+            _ <- forkIO $ (getRandomBytes 32 :: IO BS.ByteString) >>= putMVar done
+            return done
+        afters <- mapM takeMVar dones
+        later <- getRandomBytes 32 :: IO BS.ByteString
+        length (nub (earlier : later : afters)) `shouldBe` 10
+        map BS.length (later : afters) `shouldBe` replicate 9 32
 
 lengthCase :: Int -> Spec
 lengthCase n =
