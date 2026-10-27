@@ -1,5 +1,16 @@
 # CHANGELOG for crypton
 
+## 2.1.11
+
+**crypton runs again on x86-64 processors without AVX2.**  From 2.1.8 the
+whole library was compiled with `-mavx2 -mbmi2`, so a program built on a
+machine with AVX2 was killed on one without.  This is the fix 2.2.1 made.
+
+* fix: stop raising the x86-64 baseline for the whole library
+  [#351](https://github.com/kazu-yamamoto/crypton/pull/351)
+* fix: ask the processor before using the ML-KEM and ML-DSA backends
+  [#351](https://github.com/kazu-yamamoto/crypton/pull/351)
+
 ## 2.1.10
 
 * build: ask the processor for AES-NI on every x86 system, not four of them
