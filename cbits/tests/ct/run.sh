@@ -66,10 +66,8 @@ mlkem_inc="-Icbits/mlkem${ct_define:+ -DMLK_CONFIG_CT_TESTING_ENABLED}"
 #
 # crypton_cpu.c because the backend asks it whether this processor has the
 # instructions before using them; without it the link fails on the
-# capability function in cbits/mlkem/crypton_mlkem.h.  cpu_stub.c is the one
-# symbol that file needs from the AES build, which is not wanted here.
-mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S cbits/crypton_cpu.c \
-                  cbits/tests/ct/cpu_stub.c"
+# capability function in cbits/mlkem/crypton_mlkem.h.
+mlkem_native_src="$mlkem_src cbits/mlkem/crypton_mlkem_asm.S cbits/crypton_cpu.c"
 mlkem_native_inc="$mlkem_inc -DCRYPTON_MLKEM_NATIVE_BACKEND"
 
 
