@@ -590,8 +590,8 @@ void SIZED(crypton_aes_armv8_decrypt_xts)(aes_block *output, aes_key *key, aes_k
 	do {                                                                  \
 		poly64x2_t b_ = vreinterpretq_p64_u8(vrev64q_u8(blk));        \
 		if (bn == 0) {                                                \
-			uint32_t left_ = gtotal - gidx;                       \
-			blen = left_ < WAY ? left_ : WAY;                     \
+			uint64_t left_ = gtotal - gidx;                       \
+			blen = (uint32_t) (left_ < WAY ? left_ : WAY);        \
 			acc = vreinterpretq_u64_u8(                           \
 			    vextq_u8(vreinterpretq_u8_u64(acc),               \
 			             vreinterpretq_u8_u64(acc), 8));          \
@@ -625,9 +625,12 @@ void SIZED(crypton_aes_armv8_gcm_fused)(uint8_t *out, const block128 *ht,
 	uint8x16_t ek0;
 	uint64x2_t acc = vdupq_n_u64(0), gH = acc, gM = acc, gL = acc;
 	uint32x4_t base;
-	uint32_t c = 1, bn = 0, blen = 0, gidx = 0;
-	uint32_t gtotal = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
-	uint32_t i, done;
+	uint32_t c = 1, bn = 0, blen = 0;
+	/* 64-bit: in 32 bits, i + 16 and done + 16 * WAY wrap for lengths
+	 * near 4 GiB and the loops run past the buffers. */
+	uint64_t gidx = 0;
+	uint64_t gtotal = ((uint64_t) aadlen + 15) / 16 + ((uint64_t) inlen + 15) / 16 + 1;
+	uint64_t i, done;
 	uint8_t y0[16], lenb[16];
 	uint64_t la, lc;
 
@@ -720,9 +723,12 @@ int SIZED(crypton_aes_armv8_gcm_fused_dec)(uint8_t *out, const block128 *ht,
 	uint8x16_t ek0;
 	uint64x2_t acc = vdupq_n_u64(0), gH = acc, gM = acc, gL = acc;
 	uint32x4_t base;
-	uint32_t c = 1, bn = 0, blen = 0, gidx = 0;
-	uint32_t gtotal = (aadlen + 15) / 16 + (inlen + 15) / 16 + 1;
-	uint32_t i, done;
+	uint32_t c = 1, bn = 0, blen = 0;
+	/* 64-bit: in 32 bits, i + 16 and done + 16 * WAY wrap for lengths
+	 * near 4 GiB and the loops run past the buffers. */
+	uint64_t gidx = 0;
+	uint64_t gtotal = ((uint64_t) aadlen + 15) / 16 + ((uint64_t) inlen + 15) / 16 + 1;
+	uint64_t i, done;
 	uint8_t y0[16], lenb[16], want[16];
 	uint64_t la, lc;
 	uint8_t diff = 0;
