@@ -34,9 +34,9 @@ data Parameters = Parameters
     { n :: Word64
     -- ^ Cpu/Memory cost ratio. must be a power of 2 greater than 1. also known as N.
     , r :: Int
-    -- ^ Must satisfy r * p < 2^30
+    -- ^ Must be positive and satisfy r * p < 2^30
     , p :: Int
-    -- ^ Must satisfy r * p < 2^30
+    -- ^ Must be positive and satisfy r * p < 2^30
     , outputLength :: Int
     -- ^ the number of bytes to generate out of Scrypt
     }
@@ -60,7 +60,9 @@ generate params password salt = throwCryptoError (tryGenerate params password sa
 -- | Generate the scrypt key derivation data, reporting parameters the
 -- implementation refuses rather than raising.
 --
--- @n@ has to be a power of two, and @r@ times @p@ has to stay below 2^30.
+-- @n@ has to be a power of two greater than 1, @r@ and @p@ positive, @r@
+-- times @p@ below 2^30, and the 128 * @r@ * @n@ bytes of working memory
+-- addressable.
 tryGenerate
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray output)
     => Parameters
@@ -68,8 +70,7 @@ tryGenerate
     -> salt
     -> CryptoFailable output
 tryGenerate params password salt
-    | r params * p params >= 0x40000000 = CryptoFailed CryptoError_ParameterInvalid
-    | popCount (n params) /= 1 = CryptoFailed CryptoError_ParameterInvalid
+    | not (validParameters params) = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do
         let b = PBKDF2.generate prf (PBKDF2.Parameters 1 intLen) password salt :: B.Bytes
         newSalt <- B.copy b $ \bPtr ->
@@ -93,3 +94,19 @@ tryGenerate params password salt
     prf = PBKDF2.prfHMAC SHA256
     intLen = p params * 128 * r params
 {-# NOINLINE tryGenerate #-}
+
+-- Checked in Integer, so that no product can wrap before it is compared.
+validParameters :: Parameters -> Bool
+validParameters params =
+    n params >= 2
+        && popCount (n params) == 1
+        && r' >= 1
+        && p' >= 1
+        && r' * p' < 0x40000000
+        && 128 * r' * n' <= maxInt
+        && 128 * r' * p' <= maxInt
+  where
+    n' = toInteger (n params)
+    r' = toInteger (r params)
+    p' = toInteger (p params)
+    maxInt = toInteger (maxBound :: Int)
