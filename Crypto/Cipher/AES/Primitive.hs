@@ -90,7 +90,7 @@ instance BlockCipher AES where
     cbcDecrypt = decryptCBC
     ctrCombine = encryptCTR
     aeadInit AEAD_GCM aes iv = gcmAeadInit aes iv
-    aeadInit AEAD_OCB aes iv = CryptoPassed $ AEAD (ocbMode aes) (ocbInit aes iv)
+    aeadInit AEAD_OCB aes iv = AEAD (ocbMode aes) <$> ocbInit aes iv
     aeadInit (AEAD_CCM n m l) aes iv = AEAD (ccmMode aes) <$> ccmInit aes iv n m l
     aeadInit _ _ _ = CryptoFailed CryptoError_AEADModeNotSupported
 instance BlockCipher128 AES where
@@ -711,18 +711,11 @@ gcmFinish ctx gcm taglen = AuthTag $ B.take taglen computeTag
 ------------------------------------------------------------------------
 
 -- | initialize an ocb context
-{-# NOINLINE ocbInit #-}
-ocbInit :: ByteArrayAccess iv => AES -> iv -> AESOCB
-ocbInit ctx iv = unsafeDoIO $ do
-    sm <- B.alloc sizeOCB $ \ocbStPtr ->
-        withKeyAndIV ctx iv $ \k v ->
-            c_aes_ocb_init
-                (castPtr ocbStPtr)
-                k
-                v
-                (fromIntegral $ B.length iv)
-                16
-    return $ AESOCB sm
+--
+-- The IV length must be in [1..15] bytes per RFC 7253; the C would keep only
+-- the first 15, so longer IVs differing after that would share a nonce.
+ocbInit :: ByteArrayAccess iv => AES -> iv -> CryptoFailable AESOCB
+ocbInit ctx iv = ocbInitWithTagLength ctx iv 16
 
 -- | initialize an OCB context with a fixed authentication tag length.
 --
