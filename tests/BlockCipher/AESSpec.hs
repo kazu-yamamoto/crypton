@@ -188,6 +188,47 @@ aeadTagLengthTests =
     openWith t = aeadSimpleDecrypt aead aad ciphertext (AuthTag (BA.convert t))
     openWith' n t = tryAeadSimpleDecrypt aead aad ciphertext n (AuthTag (BA.convert t))
 
+-- A CCM context is set up for one message of a declared length.  A message
+-- of another length used to leave the output unwritten and the tag covering
+-- nothing, so the tag of an empty message verified any ciphertext.
+ccmMisuseTests :: Spec
+ccmMisuseTests =
+    describe "CCM misuse" $ do
+        it "round-trips a message of the declared length" $
+            open (ccm 21) ct tag `shouldBe` Just message
+        it "refuses a ciphertext longer than declared" $
+            open (ccm 0) (B.replicate 32 0xab) emptyTag `shouldBe` Nothing
+        it "refuses a ciphertext shorter than declared" $
+            open (ccm 32) (B.take 5 ct) tag `shouldBe` Nothing
+        it "raises on encrypting a message of another length" $
+            evaluate (snd (aeadSimpleEncrypt (ccm 5) aad message 16))
+                `shouldThrow` anyErrorCall
+        it "raises on encrypting after additional data given twice" $
+            evaluate (fst (aeadEncrypt (twice (ccm 21)) message))
+                `shouldThrow` anyErrorCall
+        it "refuses to decrypt after additional data given twice" $
+            open' (twice (ccm 21)) ct tag `shouldBe` Nothing
+        it "refuses a length that does not fit in L bytes" $
+            initCCM 65536 `shouldBe` Left CryptoError_ParameterInvalid
+        it "refuses a negative length" $
+            initCCM (-1) `shouldBe` Left CryptoError_ParameterInvalid
+  where
+    ctx = throwCryptoError (cipherInit (B.replicate 16 0)) :: AES.AES128
+    nonce = B.replicate 13 7
+    ccm n = throwCryptoError (aeadInit (AEAD_CCM n CCM_M16 CCM_L2) ctx nonce)
+    initCCM n = eitherCryptoError (() <$ aeadInit (AEAD_CCM n CCM_M16 CCM_L2) ctx nonce)
+    aad = "header" :: ByteString
+    message = "authenticated message" :: ByteString
+    (tag, ct) = aeadSimpleEncrypt (ccm 21) aad message 16
+    (emptyTag, _) = aeadSimpleEncrypt (ccm 0) aad B.empty 16 :: (AuthTag, ByteString)
+    open a c t = aeadSimpleDecrypt a aad (c :: ByteString) t :: Maybe ByteString
+    twice a = aeadAppendHeader (aeadAppendHeader a aad) aad
+    -- the header already appended, as aeadSimpleDecrypt would append it again
+    open' a c (AuthTag t) =
+        let (p, a') = aeadDecrypt a (c :: ByteString)
+            AuthTag t' = aeadFinalize a' (BA.length t)
+         in if BA.length t' == BA.length t && BA.constEq t t' then Just p else Nothing
+
 -- The bulk loops -- eight blocks at a time under AES-NI, six at a time in
 -- the assembly -- only start once the message is long enough to fill them,
 -- and what they leave over goes down a different path.  These lengths sit
@@ -393,5 +434,6 @@ spec = do
     testBlockCipher128 kats256 (undefined :: AES.AES256)
     aeadIVLengthTests
     aeadTagLengthTests
+    ccmMisuseTests
     gcmLongTests
     oneShotTests

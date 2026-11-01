@@ -176,7 +176,7 @@ sizeOCB :: Int
 sizeOCB = 160
 
 sizeCCM :: Int
-sizeCCM = 80
+sizeCCM = 84
 
 keyToPtr :: AES -> (Ptr AES -> IO a) -> IO a
 keyToPtr (AES b) f = withByteArray b (f . castPtr)
@@ -824,6 +824,9 @@ ccmInit
     => AES -> iv -> Int -> CCM_M -> CCM_L -> CryptoFailable AESCCM
 ccmInit ctx iv n m l
     | 15 - li /= B.length iv = CryptoFailed CryptoError_IvSizeInvalid
+    -- the length has to fit in L bytes, or it overlaps the nonce
+    | n < 0 || toInteger n >= 2 ^ (8 * li) =
+        CryptoFailed CryptoError_ParameterInvalid
     | otherwise = unsafeDoIO $ do
         sm <- B.alloc sizeCCM $ \ccmStPtr ->
             withKeyAndIV ctx iv $ \k v ->
@@ -854,24 +857,30 @@ ccmAppendAAD ctx ccm input
 
 -- | append data to encrypt and append to the CCM context
 --
--- the bytearray needs to be a multiple of AES block size, unless it's the last call to this function.
--- needs to happen after AAD appending, or after initialization if no AAD data.
+-- the whole message in one call, of the length given to 'ccmInit'; anything
+-- else is an error.  needs to happen after AAD appending, or after
+-- initialization if no AAD data.
 {-# NOINLINE ccmEncrypt #-}
 ccmEncrypt :: ByteArray ba => AES -> AESCCM -> ba -> (ba, AESCCM)
 ccmEncrypt ctx ccm input
     | B.overCLength (B.length input) = error tooLongMessage
-    | otherwise = unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv
+    | otherwise = case unsafeDoIO $ withCCMKeyAndCopySt ctx ccm cbcmacAndIv of
+        ((1, out), st) -> (out, st)
+        _ ->
+            error
+                "AES-CCM: the message must be given in one call, of the length given at init"
   where
     len = B.length input
     cbcmacAndIv ccmStPtr aesPtr =
-        B.alloc len $ \o ->
+        B.allocRet len $ \o ->
             withByteArray input $ \i ->
                 c_aes_ccm_encrypt (castPtr o) ccmStPtr aesPtr i (fromIntegral len)
 
 -- | append data to decrypt and append to the CCM context
 --
--- the bytearray needs to be a multiple of AES block size, unless it's the last call to this function.
--- needs to happen after AAD appending, or after initialization if no AAD data.
+-- the whole message in one call, of the length given to 'ccmInit'.  Any other
+-- length gives zeros and a context whose tag matches nothing.  needs to happen
+-- after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE ccmDecrypt #-}
 ccmDecrypt :: ByteArray ba => AES -> AESCCM -> ba -> (ba, AESCCM)
 ccmDecrypt ctx ccm input
@@ -882,15 +891,17 @@ ccmDecrypt ctx ccm input
     cbcmacAndIv ccmStPtr aesPtr =
         B.alloc len $ \o ->
             withByteArray input $ \i ->
-                c_aes_ccm_decrypt (castPtr o) ccmStPtr aesPtr i (fromIntegral len)
+                void $ c_aes_ccm_decrypt (castPtr o) ccmStPtr aesPtr i (fromIntegral len)
 
--- | Generate the Tag from CCM context
+-- | Generate the Tag from CCM context.  A context that was misused (the
+-- additional data given twice, the message in pieces or of another length)
+-- gives an empty tag, which no tag compares equal to.
 {-# NOINLINE ccmFinish #-}
 ccmFinish :: AES -> AESCCM -> Int -> AuthTag
-ccmFinish ctx ccm taglen = AuthTag $ B.take taglen computeTag
+ccmFinish ctx ccm taglen = AuthTag $ if ok == 1 then B.take taglen t else B.empty
   where
-    computeTag = B.allocAndFreeze 16 $ \t ->
-        withCCMKeyAndCopySt ctx ccm (c_aes_ccm_finish (castPtr t)) >> return ()
+    (ok, t) = unsafeDoIO $ B.allocRet 16 $ \p ->
+        fst <$> withCCMKeyAndCopySt ctx ccm (c_aes_ccm_finish (castPtr p))
 
 ------------------------------------------------------------------------
 foreign import ccall "crypton_aes.h crypton_aes_initkey"
@@ -1095,11 +1106,11 @@ foreign import ccall "crypton_aes.h crypton_aes_ccm_aad"
 
 foreign import ccall "crypton_aes.h crypton_aes_ccm_encrypt"
     c_aes_ccm_encrypt
-        :: CString -> Ptr AESCCM -> Ptr AES -> CString -> CUInt -> IO ()
+        :: CString -> Ptr AESCCM -> Ptr AES -> CString -> CUInt -> IO CInt
 
 foreign import ccall "crypton_aes.h crypton_aes_ccm_decrypt"
     c_aes_ccm_decrypt
-        :: CString -> Ptr AESCCM -> Ptr AES -> CString -> CUInt -> IO ()
+        :: CString -> Ptr AESCCM -> Ptr AES -> CString -> CUInt -> IO CInt
 
 foreign import ccall "crypton_aes.h crypton_aes_ccm_finish"
-    c_aes_ccm_finish :: CString -> Ptr AESCCM -> Ptr AES -> IO ()
+    c_aes_ccm_finish :: CString -> Ptr AESCCM -> Ptr AES -> IO CInt
