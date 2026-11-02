@@ -120,9 +120,12 @@ pointAdd a b
 
 -- | Negate a point
 pointNegate :: Point -> Point
-pointNegate a = withNewPoint $ \dx dy ->
-    withPoint a $ \ax ay ->
-        ccrypton_p256e_point_negate ax ay dx dy
+pointNegate a
+    -- infinity is held as (0, 0), and p - 0 would make it (0, p)
+    | pointIsAtInfinity a = a
+    | otherwise = withNewPoint $ \dx dy ->
+        withPoint a $ \ax ay ->
+            ccrypton_p256e_point_negate ax ay dx dy
 
 -- | Multiply a point by a scalar
 --
