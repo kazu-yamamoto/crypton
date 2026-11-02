@@ -1,5 +1,45 @@
 # CHANGELOG for crypton
 
+## 2.2.6
+
+**Fixes from a security review.**  Inputs that are invalid by the
+specifications are now refused rather than accepted: an OCB IV longer than
+15 bytes (#357), a P-384 or P-521 point whose coordinates are not of fixed
+length (#362), and a CCM message given in pieces or with AAD twice (#356).
+
+* perf(rsa): verification at 3072 and 4096 bits in C on x86-64
+  [#348](https://github.com/kazu-yamamoto/crypton/pull/348)
+* Scrypt: refuse parameters that overrun the working memory
+  [#354](https://github.com/kazu-yamamoto/crypton/pull/354)
+* AArch64 one-shot GCM: loops wrap near 4 GiB
+  [#355](https://github.com/kazu-yamamoto/crypton/pull/355)
+* AES-CCM: fail the context on a length mismatch or repeated AAD
+  [#356](https://github.com/kazu-yamamoto/crypton/pull/356)
+* AES-OCB: refuse an IV outside 1 to 15 bytes in aeadInit
+  [#357](https://github.com/kazu-yamamoto/crypton/pull/357)
+* AES-GCM-SIV: give Nothing for a tag that is not 16 bytes
+  [#358](https://github.com/kazu-yamamoto/crypton/pull/358)
+* Hash: feed every update through updateBlocks
+  [#359](https://github.com/kazu-yamamoto/crypton/pull/359)
+* PBKDF2: refuse iteration counts the fast path cannot take
+  [#360](https://github.com/kazu-yamamoto/crypton/pull/360)
+* ECC: decode P-384 and P-521 points only at their fixed length
+  [#362](https://github.com/kazu-yamamoto/crypton/pull/362)
+* P-256: negating the point at infinity gives the point at infinity
+  [#363](https://github.com/kazu-yamamoto/crypton/pull/363)
+* P-256: a zero scalar lifts to the point at infinity
+  [#364](https://github.com/kazu-yamamoto/crypton/pull/364)
+* RSA: recompute without CRT even when the key carries no d
+  [#365](https://github.com/kazu-yamamoto/crypton/pull/365)
+* fix: lengths of 4 GiB or more in ChaChaDRG and Argon2
+  [#366](https://github.com/kazu-yamamoto/crypton/pull/366)
+* fix(rsa): IFMA table select reads every entry in full
+  [#367](https://github.com/kazu-yamamoto/crypton/pull/367)
+* fix(gcm): refuse incremental input past 2^36 - 32 bytes
+  [#368](https://github.com/kazu-yamamoto/crypton/pull/368)
+* fix: doubling in GF(2^n) without branching on secret bits
+  [#369](https://github.com/kazu-yamamoto/crypton/pull/369)
+
 ## 2.2.5
 
 **RSA private-key operations check their CRT result.**  A fault in one
