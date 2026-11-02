@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -86,6 +87,10 @@ import Foreign.Storable
 newtype SecretKey curve = SecretKey ScrubbedBytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
+-- nominal, so that coerce cannot relabel it as another curve and hand
+-- the C a buffer of the wrong size
+type role SecretKey nominal
+
 instance DebugShow (SecretKey curve) where
     debugShow = debugShowBytes "SecretKey"
 
@@ -93,9 +98,13 @@ instance DebugShow (SecretKey curve) where
 newtype PublicKey curve hash = PublicKey Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
+type role PublicKey nominal nominal
+
 -- | An EdDSA signature
 newtype Signature curve hash = Signature Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+type role Signature nominal nominal
 
 -- | Elliptic curves with an implementation of EdDSA
 class

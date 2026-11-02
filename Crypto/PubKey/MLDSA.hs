@@ -26,6 +26,7 @@
 -- and is not offered here.
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Crypto.PubKey.MLDSA (
@@ -147,9 +148,15 @@ class MLDSA p where
 newtype VerificationKey p = VerificationKey Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
+-- nominal, so that coerce cannot relabel it as another parameter set and hand
+-- the C a buffer of the wrong size
+type role VerificationKey nominal
+
 -- | A private signing key.
 newtype SigningKey p = SigningKey ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
+
+type role SigningKey nominal
 
 instance Show (SigningKey p) where
     show _ = "SigningKey <redacted>"
@@ -160,6 +167,8 @@ instance DebugShow (SigningKey p) where
 -- | A signature.
 newtype Signature p = Signature Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+type role Signature nominal
 
 -- | The context string a signature is bound to, at most
 -- 'maxContextLength' bytes.
