@@ -34,13 +34,11 @@ xtsGFMul b
     | otherwise = error "unsupported block size in GF"
   where
     gf :: Word64 -> Word64 -> (Word64, Word64)
+    -- the carries are secret, so they are masks rather than branches
     gf srcLo srcHi =
-        ( (if carryLo then (.|. 1) else id) (srcHi `shiftL` 1)
-        , (if carryHi then xor 0x87 else id) $ (srcLo `shiftL` 1)
+        ( (srcHi `shiftL` 1) .|. (srcLo `shiftR` 63)
+        , (srcLo `shiftL` 1) `xor` (0x87 .&. negate (srcHi `shiftR` 63))
         )
-      where
-        carryHi = srcHi `testBit` 63
-        carryLo = srcLo `testBit` 63
     len = B.length b
 
 {-
