@@ -23,7 +23,7 @@ import Foreign.Ptr (Ptr, plusPtr)
 import Crypto.Internal.ByteArray (ByteArray)
 import Crypto.Internal.Compat (unsafeDoIO)
 import Crypto.Number.Basic (numBytes)
-import Crypto.Number.ModArithmetic (expFast, expSafe)
+import Crypto.Number.ModArithmetic (expFast, expSafe, inverse)
 import Crypto.Number.ModArithmetic.Pub (expPubBytes)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import qualified Crypto.Number.Serialize.Internal as Internal
@@ -57,14 +57,20 @@ dpFastNoBlinder pk c = i2ospOf_ (private_size pk) (crtChecked pk iC (m2 + h * (p
 
 -- | The CRT answer m for c, raised back to e before it is let out: a fault
 -- in one half gives an m whose gcd with n is the other prime (Boneh, DeMillo
--- and Lipton).  On a mismatch it is computed again without CRT, as OpenSSL does.
+-- and Lipton).  On a mismatch it is computed again without CRT, as OpenSSL does,
+-- with d worked out from p and q for a key that does not carry it.
 crtChecked :: PrivateKey -> Integer -> Integer -> Integer
 crtChecked pk c m
-    | expFast m (public_e (private_pub pk)) n == c `mod` n = m
+    | expFast m e n == c `mod` n = m
     | private_d pk > 0 = expSafe c (private_d pk) n
-    | otherwise = m
+    | otherwise = case inverse e (lcm (p - 1) (q - 1)) of
+        Just d -> expSafe c d n
+        Nothing -> error "RSA: CRT result failed its check and no private exponent"
   where
     n = private_n pk
+    e = public_e (private_pub pk)
+    p = private_p pk
+    q = private_q pk
 
 -- | c^dP mod p and c^dQ mod q, the halves of the private-key operation: both
 -- at once where the C can (AVX-512 IFMA, and the sizes of RSA-2048, -3072 and
