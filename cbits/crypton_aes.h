@@ -104,7 +104,7 @@ typedef struct {
 	aes_gcm_fused fused;
 } aes_gcm_key;
 
-/* size = 4*16+4*4= 80 */
+/* size = 4*16+5*4= 84 */
 typedef struct {
 	aes_block xi;
 	aes_block header_cbcmac;
@@ -114,6 +114,7 @@ typedef struct {
 	uint32_t length_input;
 	uint32_t length_M;
 	uint32_t length_L;
+	uint32_t phase; /* CCM_PHASE_* in crypton_aes.c */
 } aes_ccm;
 
 typedef struct {
@@ -187,9 +188,9 @@ void crypton_aes_ocb_finish(uint8_t *tag, aes_ocb *ocb, aes_key *key);
 
 void crypton_aes_ccm_init(aes_ccm *ccm, aes_key *key, uint8_t *nonce, uint32_t len, uint32_t msg_size, int m, int l);
 void crypton_aes_ccm_aad(aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void crypton_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void crypton_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
-void crypton_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key);
+int crypton_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
+int crypton_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length);
+int crypton_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key);
 
 uint8_t *crypton_aes_cpu_init(void);
 

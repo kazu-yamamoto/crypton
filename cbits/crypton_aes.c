@@ -612,16 +612,44 @@ void crypton_aes_gcm_decrypt(uint8_t *output, aes_gcm *gcm, aes_key *key, uint8_
 	d(output, gcm, key, input, length);
 }
 
-void crypton_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length)
+/*
+ * A CCM context takes the additional data at most once and then the whole
+ * message in one call, of exactly the length given at init.  Anything else
+ * fails the context: the output is zeroed and no tag is produced, since the
+ * CBC-MAC would no longer cover what was processed.
+ */
+#define CCM_PHASE_INIT   0
+#define CCM_PHASE_AAD    1
+#define CCM_PHASE_DATA   2
+#define CCM_PHASE_FAILED 3
+
+static int ccm_data_ok(uint8_t *output, aes_ccm *ccm, uint32_t length)
 {
-	ccm_crypt_f e = GET_CCM_ENCRYPT(key->strength);
-	e(output, ccm, key, input, length);
+	if (ccm->phase > CCM_PHASE_AAD || length != ccm->length_input) {
+		ccm->phase = CCM_PHASE_FAILED;
+		memset(output, 0, length);
+		return 0;
+	}
+	ccm->phase = CCM_PHASE_DATA;
+	return 1;
 }
 
-void crypton_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length)
+int crypton_aes_ccm_encrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length)
+{
+	ccm_crypt_f e = GET_CCM_ENCRYPT(key->strength);
+	if (!ccm_data_ok(output, ccm, length))
+		return 0;
+	e(output, ccm, key, input, length);
+	return 1;
+}
+
+int crypton_aes_ccm_decrypt(uint8_t *output, aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t length)
 {
 	ccm_crypt_f d = GET_CCM_DECRYPT(key->strength);
+	if (!ccm_data_ok(output, ccm, length))
+		return 0;
 	d(output, ccm, key, input, length);
+	return 1;
 }
 
 void crypton_aes_ocb_encrypt(uint8_t *output, aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length)
@@ -995,18 +1023,17 @@ static void ccm_cbcmac_add(aes_ccm* ccm, aes_key* key, block128* bi)
 void crypton_aes_ccm_init(aes_ccm *ccm, aes_key *key, uint8_t *nonce, uint32_t nonce_len, uint32_t input_size, int m, int l)
 {
 	memset(ccm, 0, sizeof(aes_ccm));
+	ccm->phase = CCM_PHASE_FAILED;
 
 	if (l < 2 || l > 4) return;
 	if (m != 4 && m != 6 && m != 8 && m != 10
 		   && m != 12 && m != 14 && m != 16) return;
 
-	if (nonce_len > 15 - l) {
-		nonce_len = 15 - l;
-	}
+	/* the nonce is exactly 15 - L bytes, or the message length overlaps it */
+	if (nonce_len != (uint32_t) (15 - l)) return;
+	if (input_size >= (1ull << (8*l))) return;
 
-	if (l <= 4) {
-		if (input_size >= (1ull << (8*l))) return;
-	}
+	ccm->phase = CCM_PHASE_INIT;
 
 	ccm->length_L = l;
 	ccm->length_M = m;
@@ -1025,8 +1052,11 @@ void crypton_aes_ccm_aad(aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t le
 {
 	block128 tmp;
 
-	if (ccm->length_aad != 0) return;
-
+	if (ccm->phase != CCM_PHASE_INIT) {
+		ccm->phase = CCM_PHASE_FAILED;
+		return;
+	}
+	ccm->phase = CCM_PHASE_AAD;
 	ccm->length_aad = length;
 	int len_len;
 
@@ -1057,14 +1087,26 @@ void crypton_aes_ccm_aad(aes_ccm *ccm, aes_key *key, uint8_t *input, uint32_t le
 	block128_copy_aligned(&ccm->header_cbcmac, &ccm->xi);
 }
 
-void crypton_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key)
+int crypton_aes_ccm_finish(uint8_t *tag, aes_ccm *ccm, aes_key *key)
 {
 	block128 iv, s0;
+
+	/* no data call is fine only for an empty message */
+	if (ccm->phase == CCM_PHASE_FAILED
+	    || (ccm->phase != CCM_PHASE_DATA && ccm->length_input != 0)) {
+		memset(tag, 0, 16);
+		return 0;
+	}
+	if (ccm->phase != CCM_PHASE_DATA && ccm->length_aad == 0) {
+		ccm_encode_b0(&ccm->b0, ccm, 0);
+		crypton_aes_encrypt_block(&ccm->xi, key, &ccm->b0);
+	}
 
 	block128_zero(&iv);
 	ccm_encode_ctr(&iv, ccm, 0);
 	crypton_aes_encrypt_block(&s0, key, &iv);
 	block128_vxor((block128*)tag, &ccm->xi, &s0);
+	return 1;
 }
 
 static inline void ocb_block_double(block128 *d, block128 *s)
