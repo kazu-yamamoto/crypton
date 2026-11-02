@@ -654,12 +654,36 @@ encDecTest prx (Key key) iv (ArbitraryBS0_2901 aad) (ArbitraryBS0_2901 input) =
         (tag, ciphertext) = encrypt c iv aad input
      in decrypt c iv aad ciphertext tag === Just input
 
+tagKey :: AES128
+tagKey = throwCryptoError (cipherInit (B.replicate 16 1 :: ByteString))
+
+tagNonce :: Nonce
+tagNonce = throwCryptoError (nonce (B.replicate 12 3 :: ByteString))
+
+message :: ByteString
+message = "authenticated message"
+
+fullTag :: B.Bytes
+ciphertext :: ByteString
+(AuthTag fullTag, ciphertext) = encrypt tagKey tagNonce ("" :: ByteString) message
+
+withTag :: B.Bytes -> Maybe ByteString
+withTag t = decrypt tagKey tagNonce ("" :: ByteString) ciphertext (AuthTag t)
+
 spec :: Spec
 spec =
     describe "AES-GCM-SIV" $ do
         describe "KATs" $ do
             katTests "encrypt" makeEncryptionTest
             katTests "decrypt" makeDecryptionTest
+        describe "tag length" $ do
+            -- the tag doubles as the counter block, so a short one used to
+            -- be written past and a long one raised from pure code
+            it "refuses an empty tag" $ withTag B.empty `shouldBe` Nothing
+            it "refuses a 15-byte tag" $ withTag (B.take 15 fullTag) `shouldBe` Nothing
+            it "refuses a 17-byte tag" $
+                withTag (fullTag `B.append` B.singleton 0) `shouldBe` Nothing
+            it "accepts the 16-byte tag" $ withTag fullTag `shouldBe` Just message
         describe "properties" $ do
             prop "AES128" $ encDecTest (Proxy :: Proxy AES128)
             prop "AES256" $ encDecTest (Proxy :: Proxy AES256)
