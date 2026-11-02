@@ -14,6 +14,14 @@
 #define IFMA_MASK52 ((UINT64_C(1) << 52) - 1)
 #define IFMA_TARGET __attribute__((target("avx2,avx512f,avx512vl,avx512ifma")))
 
+/* a full load the compiler cannot fold into a masked one */
+IFMA_TARGET static inline __m256i ifma_load(const uint64_t *p)
+{
+	__m256i x = _mm256_loadu_si256((const __m256i *) p);
+	__asm__("" : "+v"(x));
+	return x;
+}
+
 /* 20 lanes to 52-bit digits: what is above 52 bits moves up a lane,
  * and the one-bit carries that can then remain are resolved together */
 IFMA_TARGET static inline void ifma_norm5(uint64_t *r, __m256i X0, __m256i X1, __m256i X2, __m256i X3, __m256i X4)
@@ -54,8 +62,9 @@ IFMA_TARGET static inline void ifma_norm5(uint64_t *r, __m256i X0, __m256i X1, _
 	_mm256_storeu_si256((__m256i *)(r + 16), X4);
 }
 
-/* both tables' entries k1 and k2 of 32, every entry read and a mask keeping
- * one; entries are 20 words apart */
+/* both tables' entries k1 and k2 of 32: every entry loaded in full and a
+ * blend keeping one, since a masked load may not touch what it drops;
+ * entries are 20 words apart */
 IFMA_TARGET static void ifma_sel5(uint64_t *o1, const uint64_t *t1, uint64_t k1,
                                 uint64_t *o2, const uint64_t *t2, uint64_t k2)
 {
@@ -67,11 +76,16 @@ IFMA_TARGET static void ifma_sel5(uint64_t *o1, const uint64_t *t1, uint64_t k1,
 	for (k = 0; k < 32; k++) {
 		__mmask8 s1 = _mm256_cmpeq_epi64_mask(v1, kv), s2 = _mm256_cmpeq_epi64_mask(v2, kv);
 		const uint64_t *e1 = t1 + 20 * k, *e2 = t2 + 20 * k;
-		P0 = _mm256_mask_loadu_epi64(P0, s1, e1 + 0); Q0 = _mm256_mask_loadu_epi64(Q0, s2, e2 + 0);
-		P1 = _mm256_mask_loadu_epi64(P1, s1, e1 + 4); Q1 = _mm256_mask_loadu_epi64(Q1, s2, e2 + 4);
-		P2 = _mm256_mask_loadu_epi64(P2, s1, e1 + 8); Q2 = _mm256_mask_loadu_epi64(Q2, s2, e2 + 8);
-		P3 = _mm256_mask_loadu_epi64(P3, s1, e1 + 12); Q3 = _mm256_mask_loadu_epi64(Q3, s2, e2 + 12);
-		P4 = _mm256_mask_loadu_epi64(P4, s1, e1 + 16); Q4 = _mm256_mask_loadu_epi64(Q4, s2, e2 + 16);
+		P0 = _mm256_mask_blend_epi64(s1, P0, ifma_load(e1 + 0));
+		Q0 = _mm256_mask_blend_epi64(s2, Q0, ifma_load(e2 + 0));
+		P1 = _mm256_mask_blend_epi64(s1, P1, ifma_load(e1 + 4));
+		Q1 = _mm256_mask_blend_epi64(s2, Q1, ifma_load(e2 + 4));
+		P2 = _mm256_mask_blend_epi64(s1, P2, ifma_load(e1 + 8));
+		Q2 = _mm256_mask_blend_epi64(s2, Q2, ifma_load(e2 + 8));
+		P3 = _mm256_mask_blend_epi64(s1, P3, ifma_load(e1 + 12));
+		Q3 = _mm256_mask_blend_epi64(s2, Q3, ifma_load(e2 + 12));
+		P4 = _mm256_mask_blend_epi64(s1, P4, ifma_load(e1 + 16));
+		Q4 = _mm256_mask_blend_epi64(s2, Q4, ifma_load(e2 + 16));
 		kv = _mm256_add_epi64(kv, one);
 	}
 	_mm256_storeu_si256((__m256i *)(o1 + 0), P0); _mm256_storeu_si256((__m256i *)(o2 + 0), Q0);
@@ -139,8 +153,9 @@ IFMA_TARGET static inline void ifma_norm8(uint64_t *r, __m256i X0, __m256i X1, _
 	_mm256_storeu_si256((__m256i *)(r + 28), X7);
 }
 
-/* both tables' entries k1 and k2 of 32, every entry read and a mask keeping
- * one; entries are 32 words apart */
+/* both tables' entries k1 and k2 of 32: every entry loaded in full and a
+ * blend keeping one, since a masked load may not touch what it drops;
+ * entries are 32 words apart */
 IFMA_TARGET static void ifma_sel8(uint64_t *o1, const uint64_t *t1, uint64_t k1,
                                 uint64_t *o2, const uint64_t *t2, uint64_t k2)
 {
@@ -152,14 +167,22 @@ IFMA_TARGET static void ifma_sel8(uint64_t *o1, const uint64_t *t1, uint64_t k1,
 	for (k = 0; k < 32; k++) {
 		__mmask8 s1 = _mm256_cmpeq_epi64_mask(v1, kv), s2 = _mm256_cmpeq_epi64_mask(v2, kv);
 		const uint64_t *e1 = t1 + 32 * k, *e2 = t2 + 32 * k;
-		P0 = _mm256_mask_loadu_epi64(P0, s1, e1 + 0); Q0 = _mm256_mask_loadu_epi64(Q0, s2, e2 + 0);
-		P1 = _mm256_mask_loadu_epi64(P1, s1, e1 + 4); Q1 = _mm256_mask_loadu_epi64(Q1, s2, e2 + 4);
-		P2 = _mm256_mask_loadu_epi64(P2, s1, e1 + 8); Q2 = _mm256_mask_loadu_epi64(Q2, s2, e2 + 8);
-		P3 = _mm256_mask_loadu_epi64(P3, s1, e1 + 12); Q3 = _mm256_mask_loadu_epi64(Q3, s2, e2 + 12);
-		P4 = _mm256_mask_loadu_epi64(P4, s1, e1 + 16); Q4 = _mm256_mask_loadu_epi64(Q4, s2, e2 + 16);
-		P5 = _mm256_mask_loadu_epi64(P5, s1, e1 + 20); Q5 = _mm256_mask_loadu_epi64(Q5, s2, e2 + 20);
-		P6 = _mm256_mask_loadu_epi64(P6, s1, e1 + 24); Q6 = _mm256_mask_loadu_epi64(Q6, s2, e2 + 24);
-		P7 = _mm256_mask_loadu_epi64(P7, s1, e1 + 28); Q7 = _mm256_mask_loadu_epi64(Q7, s2, e2 + 28);
+		P0 = _mm256_mask_blend_epi64(s1, P0, ifma_load(e1 + 0));
+		Q0 = _mm256_mask_blend_epi64(s2, Q0, ifma_load(e2 + 0));
+		P1 = _mm256_mask_blend_epi64(s1, P1, ifma_load(e1 + 4));
+		Q1 = _mm256_mask_blend_epi64(s2, Q1, ifma_load(e2 + 4));
+		P2 = _mm256_mask_blend_epi64(s1, P2, ifma_load(e1 + 8));
+		Q2 = _mm256_mask_blend_epi64(s2, Q2, ifma_load(e2 + 8));
+		P3 = _mm256_mask_blend_epi64(s1, P3, ifma_load(e1 + 12));
+		Q3 = _mm256_mask_blend_epi64(s2, Q3, ifma_load(e2 + 12));
+		P4 = _mm256_mask_blend_epi64(s1, P4, ifma_load(e1 + 16));
+		Q4 = _mm256_mask_blend_epi64(s2, Q4, ifma_load(e2 + 16));
+		P5 = _mm256_mask_blend_epi64(s1, P5, ifma_load(e1 + 20));
+		Q5 = _mm256_mask_blend_epi64(s2, Q5, ifma_load(e2 + 20));
+		P6 = _mm256_mask_blend_epi64(s1, P6, ifma_load(e1 + 24));
+		Q6 = _mm256_mask_blend_epi64(s2, Q6, ifma_load(e2 + 24));
+		P7 = _mm256_mask_blend_epi64(s1, P7, ifma_load(e1 + 28));
+		Q7 = _mm256_mask_blend_epi64(s2, Q7, ifma_load(e2 + 28));
 		kv = _mm256_add_epi64(kv, one);
 	}
 	_mm256_storeu_si256((__m256i *)(o1 + 0), P0); _mm256_storeu_si256((__m256i *)(o2 + 0), Q0);
@@ -242,8 +265,9 @@ IFMA_TARGET static inline void ifma_norm10(uint64_t *r, __m256i X0, __m256i X1, 
 	_mm256_storeu_si256((__m256i *)(r + 36), X9);
 }
 
-/* both tables' entries k1 and k2 of 32, every entry read and a mask keeping
- * one; entries are 40 words apart */
+/* both tables' entries k1 and k2 of 32: every entry loaded in full and a
+ * blend keeping one, since a masked load may not touch what it drops;
+ * entries are 40 words apart */
 IFMA_TARGET static void ifma_sel10(uint64_t *o1, const uint64_t *t1, uint64_t k1,
                                 uint64_t *o2, const uint64_t *t2, uint64_t k2)
 {
@@ -255,16 +279,26 @@ IFMA_TARGET static void ifma_sel10(uint64_t *o1, const uint64_t *t1, uint64_t k1
 	for (k = 0; k < 32; k++) {
 		__mmask8 s1 = _mm256_cmpeq_epi64_mask(v1, kv), s2 = _mm256_cmpeq_epi64_mask(v2, kv);
 		const uint64_t *e1 = t1 + 40 * k, *e2 = t2 + 40 * k;
-		P0 = _mm256_mask_loadu_epi64(P0, s1, e1 + 0); Q0 = _mm256_mask_loadu_epi64(Q0, s2, e2 + 0);
-		P1 = _mm256_mask_loadu_epi64(P1, s1, e1 + 4); Q1 = _mm256_mask_loadu_epi64(Q1, s2, e2 + 4);
-		P2 = _mm256_mask_loadu_epi64(P2, s1, e1 + 8); Q2 = _mm256_mask_loadu_epi64(Q2, s2, e2 + 8);
-		P3 = _mm256_mask_loadu_epi64(P3, s1, e1 + 12); Q3 = _mm256_mask_loadu_epi64(Q3, s2, e2 + 12);
-		P4 = _mm256_mask_loadu_epi64(P4, s1, e1 + 16); Q4 = _mm256_mask_loadu_epi64(Q4, s2, e2 + 16);
-		P5 = _mm256_mask_loadu_epi64(P5, s1, e1 + 20); Q5 = _mm256_mask_loadu_epi64(Q5, s2, e2 + 20);
-		P6 = _mm256_mask_loadu_epi64(P6, s1, e1 + 24); Q6 = _mm256_mask_loadu_epi64(Q6, s2, e2 + 24);
-		P7 = _mm256_mask_loadu_epi64(P7, s1, e1 + 28); Q7 = _mm256_mask_loadu_epi64(Q7, s2, e2 + 28);
-		P8 = _mm256_mask_loadu_epi64(P8, s1, e1 + 32); Q8 = _mm256_mask_loadu_epi64(Q8, s2, e2 + 32);
-		P9 = _mm256_mask_loadu_epi64(P9, s1, e1 + 36); Q9 = _mm256_mask_loadu_epi64(Q9, s2, e2 + 36);
+		P0 = _mm256_mask_blend_epi64(s1, P0, ifma_load(e1 + 0));
+		Q0 = _mm256_mask_blend_epi64(s2, Q0, ifma_load(e2 + 0));
+		P1 = _mm256_mask_blend_epi64(s1, P1, ifma_load(e1 + 4));
+		Q1 = _mm256_mask_blend_epi64(s2, Q1, ifma_load(e2 + 4));
+		P2 = _mm256_mask_blend_epi64(s1, P2, ifma_load(e1 + 8));
+		Q2 = _mm256_mask_blend_epi64(s2, Q2, ifma_load(e2 + 8));
+		P3 = _mm256_mask_blend_epi64(s1, P3, ifma_load(e1 + 12));
+		Q3 = _mm256_mask_blend_epi64(s2, Q3, ifma_load(e2 + 12));
+		P4 = _mm256_mask_blend_epi64(s1, P4, ifma_load(e1 + 16));
+		Q4 = _mm256_mask_blend_epi64(s2, Q4, ifma_load(e2 + 16));
+		P5 = _mm256_mask_blend_epi64(s1, P5, ifma_load(e1 + 20));
+		Q5 = _mm256_mask_blend_epi64(s2, Q5, ifma_load(e2 + 20));
+		P6 = _mm256_mask_blend_epi64(s1, P6, ifma_load(e1 + 24));
+		Q6 = _mm256_mask_blend_epi64(s2, Q6, ifma_load(e2 + 24));
+		P7 = _mm256_mask_blend_epi64(s1, P7, ifma_load(e1 + 28));
+		Q7 = _mm256_mask_blend_epi64(s2, Q7, ifma_load(e2 + 28));
+		P8 = _mm256_mask_blend_epi64(s1, P8, ifma_load(e1 + 32));
+		Q8 = _mm256_mask_blend_epi64(s2, Q8, ifma_load(e2 + 32));
+		P9 = _mm256_mask_blend_epi64(s1, P9, ifma_load(e1 + 36));
+		Q9 = _mm256_mask_blend_epi64(s2, Q9, ifma_load(e2 + 36));
 		kv = _mm256_add_epi64(kv, one);
 	}
 	_mm256_storeu_si256((__m256i *)(o1 + 0), P0); _mm256_storeu_si256((__m256i *)(o2 + 0), Q0);
