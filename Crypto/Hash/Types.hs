@@ -18,6 +18,7 @@ module Crypto.Hash.Types (
     HashAlgorithmPrefix (..),
     Context (..),
     Digest (..),
+    updateBlocks,
 ) where
 
 import Control.DeepSeq (deepseq)
@@ -31,6 +32,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Base16 (encodeBase16)
 import Data.Char (digitToInt, isHexDigit)
 import Data.Data (Data)
+import Data.Int (Int32)
 import Data.Primitive.ByteArray (
     ByteArray,
     MutableByteArray,
@@ -41,8 +43,22 @@ import Data.Primitive.ByteArray (
     writeByteArray,
  )
 import qualified Data.Text as Text
-import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Ptr (Ptr, castPtr, plusPtr)
 import GHC.TypeLits (Nat)
+
+-- | Feed a buffer of any length to 'hashInternalUpdate', in 2GB chunks: the
+-- C takes a @uint32_t@, and a longer length would be silently truncated.
+updateBlocks :: HashAlgorithm a => Ptr (Context a) -> Int -> Ptr Word8 -> IO ()
+updateBlocks ctx bytesLeft dataPtr
+    | bytesLeft <= 0 = return ()
+    | otherwise = do
+        hashInternalUpdate ctx dataPtr (fromIntegral actuallyProcessed)
+        updateBlocks
+            ctx
+            (bytesLeft - actuallyProcessed)
+            (dataPtr `plusPtr` actuallyProcessed)
+  where
+    actuallyProcessed = min bytesLeft (fromIntegral (maxBound :: Int32))
 
 -- | Class representing hashing algorithms.
 --
