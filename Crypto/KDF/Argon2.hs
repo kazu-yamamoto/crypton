@@ -107,8 +107,8 @@ defaultOptions =
 -- | Hash a password with Argon2.
 --
 -- Options the underlying implementation refuses -- iterations, memory or
--- parallelism outside the range it accepts -- are reported as
--- 'CryptoError_ParameterInvalid'.
+-- parallelism outside the range it accepts, or a password or salt of 2^32
+-- bytes or more -- are reported as 'CryptoError_ParameterInvalid'.
 hash
     :: (ByteArrayAccess password, ByteArrayAccess salt, ByteArray out)
     => Options
@@ -120,6 +120,9 @@ hash options password salt outLen
     | saltLen < saltMinLength = CryptoFailed CryptoError_SaltTooSmall
     | outLen < outputMinLength = CryptoFailed CryptoError_OutputLengthTooSmall
     | outLen > outputMaxLength = CryptoFailed CryptoError_OutputLengthTooBig
+    -- the C keeps these lengths as uint32_t and would truncate them
+    | B.overCLength passwordLen || B.overCLength saltLen =
+        CryptoFailed CryptoError_ParameterInvalid
     | otherwise = unsafeDoIO $ do
         -- the bounds on iterations, memory and parallelism are checked by the
         -- C implementation, which reports them through its return code
