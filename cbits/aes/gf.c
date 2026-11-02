@@ -38,10 +38,10 @@
 /* inplace GFMUL for xts mode */
 void crypton_aes_generic_gf_mulx(block128 *a)
 {
-	const uint64_t gf_mask = cpu_to_le64(0x8000000000000000ULL);
-	uint64_t r = ((a->q[1] & gf_mask) ? cpu_to_le64(0x87) : 0);
-	a->q[1] = cpu_to_le64((le64_to_cpu(a->q[1]) << 1) | (a->q[0] & gf_mask ? 1 : 0));
-	a->q[0] = cpu_to_le64(le64_to_cpu(a->q[0]) << 1) ^ r;
+	/* the carries are secret: shifts and a mask, not branches */
+	uint64_t lo = le64_to_cpu(a->q[0]), hi = le64_to_cpu(a->q[1]);
+	a->q[1] = cpu_to_le64((hi << 1) | (lo >> 63));
+	a->q[0] = cpu_to_le64((lo << 1) ^ ((0 - (hi >> 63)) & 0x87));
 }
 
 
