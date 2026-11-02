@@ -145,13 +145,16 @@ encrypt aes iv aad plaintext
 -- cipher.
 --
 -- Lengths of additional data and ciphertext must be less than 2^32 bytes,
--- otherwise an exception is thrown.
+-- otherwise an exception is thrown.  A tag that is not 16 bytes gives
+-- 'Nothing'.
 decrypt
     :: (BlockCipher128 aes, ByteArrayAccess aad, ByteArray ba)
     => aes -> Nonce -> aad -> ba -> AuthTag -> Maybe ba
 decrypt aes iv aad ciphertext (AuthTag tag)
     | lengthInvalid aad = error "AESGCMSIV: aad is too large"
     | lengthInvalid ciphertext = error "AESGCMSIV: ciphertext is too large"
+    -- the tag is also the initial counter block, read up to byte 15
+    | B.length tag /= 16 = Nothing
     | tag `B.constEq` buildTag mek ss iv = Just plaintext
     | otherwise = Nothing
   where
