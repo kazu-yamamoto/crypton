@@ -28,6 +28,7 @@
 -- an ML-KEM-1024 one is expected.  The three are fixed by FIPS 203 and the
 -- class has no other instances.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -124,10 +125,16 @@ class
 newtype MLKEMEncapsulationKey p = MLKEMEncapsulationKey Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
+-- nominal, so that coerce cannot relabel it as another parameter set and hand
+-- the C a buffer of the wrong size
+type role MLKEMEncapsulationKey nominal
+
 -- | A private decapsulation key, @dk@ in FIPS 203.  It embeds the matching
 -- encapsulation key, which is why it is the larger of the two.
 newtype MLKEMDecapsulationKey p = MLKEMDecapsulationKey ScrubbedBytes
     deriving (Eq, ByteArrayAccess, NFData)
+
+type role MLKEMDecapsulationKey nominal
 
 instance Show (MLKEMDecapsulationKey p) where
     show _ = "DecapsulationKey <redacted>"
@@ -138,6 +145,8 @@ instance DebugShow (MLKEMDecapsulationKey p) where
 -- | The value 'encapsulate' produces and 'decapsulate' consumes.
 newtype MLKEMCiphertext p = MLKEMCiphertext Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
+
+type role MLKEMCiphertext nominal
 
 -- | Size in bytes of the seed 'keyPairFromSeed' takes, which is @d@ and @z@
 -- of FIPS 203 one after the other.
