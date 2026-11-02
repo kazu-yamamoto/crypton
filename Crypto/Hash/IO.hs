@@ -60,8 +60,7 @@ hashMutableUpdate mc dat = doUpdate mc (B.withByteArray mc)
         => MutableContext a -> ((Ptr (Context a) -> IO ()) -> IO ()) -> IO ()
     doUpdate _ withCtx =
         withCtx $ \ctx ->
-            B.withByteArray dat $ \d ->
-                hashInternalUpdate ctx d (fromIntegral $ B.length dat)
+            B.withByteArray dat $ updateBlocks ctx (B.length dat)
 
 -- | Finalize a mutable hash context and compute a digest
 hashMutableFinalize

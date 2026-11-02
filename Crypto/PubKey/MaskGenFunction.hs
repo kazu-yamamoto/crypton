@@ -14,6 +14,7 @@ module Crypto.PubKey.MaskGenFunction (
 import Control.Monad (forM_)
 import Crypto.Hash (Context, Digest)
 import Crypto.Hash.IO (HashAlgorithm (..))
+import Crypto.Hash.Types (updateBlocks)
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
 import Data.Bits (shiftR)
@@ -49,8 +50,7 @@ mgf1 hashAlg seed len
                 allocaBytes digestLen $ \(dig :: Ptr (Digest hashAlg)) ->
                     allocaBytes 4 $ \(cnt :: Ptr Word8) -> do
                         hashInternalInit seeded
-                        B.withByteArray seed $ \p ->
-                            hashInternalUpdate seeded p (fromIntegral (B.length seed))
+                        B.withByteArray seed $ updateBlocks seeded (B.length seed)
                         forM_ [0 .. maxCounter - 1] $ \i -> do
                             copyBytes ctx seeded ctxSize
                             forM_ [0 .. 3] $ \k ->

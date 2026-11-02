@@ -27,6 +27,7 @@ import Crypto.Hash.Types (
     hashInternalFinalize,
     hashInternalInit,
     hashInternalUpdate,
+    updateBlocks,
  )
 import Crypto.Internal.Compat (unsafeDoIO)
 import Data.Bits
@@ -112,7 +113,7 @@ tryGenerate params pass salt
                                                 -- Hash the password.
                                                 let shaPtr = castPtr ctxPtr' :: Ptr (Context SHA512)
                                                 hashInternalInit shaPtr
-                                                hashInternalUpdate shaPtr passPtr (fromIntegral passLen)
+                                                updateBlocks shaPtr passLen passPtr
                                                 hashInternalFinalize shaPtr (castPtr passHashPtr)
                                                 -- Create a stable ByteString view of the password hash
                                                 -- (passHashFP is not modified after this point).
@@ -125,7 +126,7 @@ tryGenerate params pass salt
                                                     pokeByteOff blkPtr 3 (fromIntegral (block `shiftR` 0 :: Int) :: Word8)
                                                     -- First round (slightly different).
                                                     hashInternalInit shaPtr
-                                                    hashInternalUpdate shaPtr saltPtr (fromIntegral saltLen)
+                                                    updateBlocks shaPtr saltLen saltPtr
                                                     hashInternalUpdate shaPtr blkPtr (fromIntegral blkLen)
                                                     hashInternalFinalize shaPtr (castPtr saltHashPtr)
                                                     let saltHashBS = BSI.fromForeignPtr saltHashFP 0 hashLen

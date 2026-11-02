@@ -52,11 +52,9 @@ import Crypto.Hash.Types
 import Crypto.Internal.ByteArray (ByteArrayAccess, allocAndFreezePrim)
 import qualified Crypto.Internal.ByteArray as B
 import qualified Data.ByteString.Lazy as L
-import Data.Int (Int32)
-import Data.Word (Word8)
 import Foreign.Marshal.Alloc (allocaBytes)
 import qualified Foreign.Marshal.Utils as FMU
-import Foreign.Ptr (Ptr, castPtr, plusPtr)
+import Foreign.Ptr (Ptr, castPtr)
 
 -- | Hash a strict bytestring into a digest.
 hash :: forall ba a. (ByteArrayAccess ba, HashAlgorithm a) => ba -> Digest a
@@ -103,16 +101,6 @@ hashUpdates c l
         mapM_ (\b -> B.withByteArray b (updateBlocks ctx (B.length b))) ls
   where
     ls = filter (not . B.null) l
-
--- | Process the data in 2GB chunks to fit in uint32_t and Int on 32 bit systems
-updateBlocks :: HashAlgorithm a => Ptr (Context a) -> Int -> Ptr Word8 -> IO ()
-updateBlocks ctx bytesLeft dataPtr
-    | bytesLeft == 0 = return ()
-    | otherwise = do
-        hashInternalUpdate ctx dataPtr (fromIntegral actuallyProcessed)
-        updateBlocks ctx (bytesLeft - actuallyProcessed) (dataPtr `plusPtr` actuallyProcessed)
-  where
-    actuallyProcessed = min bytesLeft (fromIntegral (maxBound :: Int32))
 
 -- | Finalize a context and return a digest.
 hashFinalize
