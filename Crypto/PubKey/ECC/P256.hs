@@ -102,9 +102,11 @@ pointBase =
 -- Using the curve generator as base point compute:
 --
 -- > scalar * G
+--
+-- Zero gives the point at infinity, as P-384 and P-521 do.
 toPoint :: Scalar -> Point
 toPoint s
-    | scalarIsZero s = error "cannot create point from zero"
+    | scalarIsZero s = Point (B.zero pointSize)
     | otherwise =
         withNewPoint $ \px py -> withScalar s $ \p ->
             ccrypton_p256_basepoint_mul p px py
