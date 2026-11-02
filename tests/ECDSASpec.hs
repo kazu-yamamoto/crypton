@@ -122,6 +122,19 @@ spec = do
             prop "SHA256" $ propertyECDSA SHA256
             prop "SHA384" $ propertyECDSA SHA384
             prop "SHA512" $ propertyECDSA SHA512
+    -- a zero k used to raise "cannot create point from zero" on P-256,
+    -- where P-384 and P-521 gave Nothing
+    describe "zero scalar" $ do
+        it "signWith k = 0 gives Nothing on every NIST curve" $ do
+            zeroK ECDSA.Curve_P256R1 `shouldBe` True
+            zeroK ECDSA.Curve_P384R1 `shouldBe` True
+            zeroK ECDSA.Curve_P521R1 `shouldBe` True
+        it "pointBaseSmul 0 is the point at infinity on P-256" $
+            ECDSA.pointBaseSmul (Just ECDSA.Curve_P256R1) zero256
+                `shouldBe` ECDSA.pointAdd
+                    (Just ECDSA.Curve_P256R1)
+                    g256
+                    (ECDSA.pointNegate (Just ECDSA.Curve_P256R1) g256)
     describe "recovery" $ do
         modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r1
         modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r2
@@ -158,3 +171,21 @@ spec = do
                 , eqTest "verification" True (ECDSA.verify prx hashAlg pubECDSA sigECDSA msg)
                 , eqTest "alteration" False (ECDSA.verify prx hashAlg pubECDSA sigECDSA msg')
                 ]
+
+zeroK
+    :: (ECDSA.EllipticCurveECDSA curve, ECDSA.EllipticCurveBasepointArith curve)
+    => curve -> Bool
+zeroK curve = isNothing (ECDSA.signWith prx k d SHA256 (B.pack [1, 2, 3]))
+  where
+    prx = Just curve
+    k = throwCryptoError (ECDSA.scalarFromInteger prx 0)
+    d = throwCryptoError (ECDSA.scalarFromInteger prx 12345)
+
+zero256 :: ECDSA.Scalar ECDSA.Curve_P256R1
+zero256 = throwCryptoError (ECDSA.scalarFromInteger (Just ECDSA.Curve_P256R1) 0)
+
+g256 :: ECDSA.Point ECDSA.Curve_P256R1
+g256 =
+    ECDSA.pointBaseSmul
+        (Just ECDSA.Curve_P256R1)
+        (throwCryptoError (ECDSA.scalarFromInteger (Just ECDSA.Curve_P256R1) 1))
