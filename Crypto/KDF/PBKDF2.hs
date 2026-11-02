@@ -60,7 +60,7 @@ prfHMAC alg k = hmacIncr alg (HMAC.initialize k)
 data Parameters = Parameters
     { iterCounts :: Int
     -- ^ the number of user-defined iterations for the algorithms. e.g. WPA2 uses 4000.
-    --   (must be > 0)
+    --   (must be > 0, and below 2^32 for the fast functions)
     , outputLength :: Int
     -- ^ the number of bytes to generate out of PBKDF2
     --   (must not be negative)
@@ -75,6 +75,14 @@ validateParameters params
     | iterCounts params < 1 = Just CryptoError_ParameterInvalid
     | outputLength params < 0 = Just CryptoError_ParameterInvalid
     | otherwise = Nothing
+
+-- | 'validateParameters', and an iteration count the C can take: it is a
+-- @uint32_t@ there, so 2^32 + 1 would silently run once.
+validateFastParameters :: Parameters -> Maybe CryptoError
+validateFastParameters params
+    | toInteger (iterCounts params) > toInteger (maxBound :: Word32) =
+        Just CryptoError_ParameterInvalid
+    | otherwise = validateParameters params
 
 -- | generate the pbkdf2 key derivation function from the output
 --
@@ -172,7 +180,7 @@ tryFastPBKDF2_SHA1
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA1 params password salt
-    | Just err <- validateParameters params = CryptoFailed err
+    | Just err <- validateFastParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->
@@ -208,7 +216,7 @@ tryFastPBKDF2_SHA256
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA256 params password salt
-    | Just err <- validateParameters params = CryptoFailed err
+    | Just err <- validateFastParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->
@@ -244,7 +252,7 @@ tryFastPBKDF2_SHA512
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA512 params password salt
-    | Just err <- validateParameters params = CryptoFailed err
+    | Just err <- validateFastParameters params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->

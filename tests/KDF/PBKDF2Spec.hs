@@ -101,6 +101,18 @@ spec = do
             evaluate (fast1 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
             evaluate (fast256 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
             evaluate (fast512 (PBKDF2.Parameters 1 (-1))) `shouldThrow` cryptoError
+        -- the C takes the count as uint32_t: 2^32 + 1 used to run once,
+        -- and 2^32 hit assert(iterations) and aborted
+        it "rejects an iteration count above 2^32 - 1 in the fast path" $ do
+            let big = PBKDF2.Parameters (2 ^ (32 :: Int) + 1) 32
+            PBKDF2.tryFastPBKDF2_SHA1 big badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA256 big badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA512 big badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA256
+                (PBKDF2.Parameters (2 ^ (32 :: Int)) 32)
+                badPass
+                badSalt
+                `shouldBe` refused
         it "reports them without raising" $ do
             PBKDF2.tryGenerate badPrf (PBKDF2.Parameters 0 32) badPass badSalt
                 `shouldBe` refused
