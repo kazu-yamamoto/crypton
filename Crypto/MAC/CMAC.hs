@@ -17,7 +17,7 @@ module Crypto.MAC.CMAC (
     subKeys,
 ) where
 
-import Data.Bits (setBit, shiftL, testBit)
+import Data.Bits (setBit, shiftL, shiftR, (.&.), (.|.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import Data.Word
@@ -97,13 +97,12 @@ subKeys k = (k1, k2)
     k1 = subKey ipt k0
     k2 = subKey ipt k1
 
--- polynomial multiply operation to culculate subkey
+-- polynomial multiply operation to culculate subkey; the top bit is secret,
+-- so it becomes a mask rather than a branch
 subKey :: ByteArray ba => [Word8] -> ba -> ba
 subKey ipt ws = case B.unpack ws of
     [] -> B.empty
-    w : _
-        | testBit w 7 -> B.pack ipt `bxor` shiftL1 ws
-        | otherwise -> shiftL1 ws
+    w : _ -> B.pack (map (.&. negate (w `shiftR` 7)) ipt) `bxor` shiftL1 ws
 
 shiftL1 :: ByteArray ba => ba -> ba
 shiftL1 = B.pack . shiftL1W . B.unpack
@@ -113,13 +112,7 @@ shiftL1W [] = []
 shiftL1W ws@(_ : ns) = rec' $ zip ws (ns ++ [0])
   where
     rec' [] = []
-    rec' ((x, y) : ps) = w : rec' ps
-      where
-        w
-            | testBit y 7 = setBit sl1 0
-            | otherwise = sl1
-          where
-            sl1 = shiftL x 1
+    rec' ((x, y) : ps) = (shiftL x 1 .|. shiftR y 7) : rec' ps
 
 bxor :: ByteArray ba => ba -> ba -> ba
 bxor = B.bxor
