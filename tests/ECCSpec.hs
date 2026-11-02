@@ -11,6 +11,7 @@ import Crypto.Error
 
 import Data.ByteArray (convert)
 import Data.ByteArray.Encoding
+import qualified Data.ByteString as B
 
 import Imports
 
@@ -151,13 +152,13 @@ vectorsPoint =
         { vpCurve = Curve ECC.Curve_P384R1
         , vpHex =
             "040836bf09614bf5b3c0ffe9b0822a2cc109a90b13d4d3510ce14f766e7d90875ec4bc8d6bee11fc1fdf97473a67884cb1e2685367bdb846c95181b0f35a35cfbee04451122cc55a1e363acaa6c002e71b0b6ff7d0f5dc830a32f0e5086189"
-        , vpError = Nothing -- ignores leading zeros
+        , vpError = Just CryptoError_PointSizeInvalid -- SEC1 2.3.4: fixed-length coordinates
         }
     , VectorPoint
         { vpCurve = Curve ECC.Curve_P384R1
         , vpHex =
             "0400000836bf09614bf5b3c0ffe9b0822a2cc109a90b13d4d3510ce14f766e7d90875ec4bc8d6bee11fc1fdf97473a67884c0000b1e2685367bdb846c95181b0f35a35cfbee04451122cc55a1e363acaa6c002e71b0b6ff7d0f5dc830a32f0e5086189"
-        , vpError = Nothing -- ignores leading zeros
+        , vpError = Just CryptoError_PointSizeInvalid -- SEC1 2.3.4: fixed-length coordinates
         }
     , VectorPoint
         { vpCurve = Curve ECC.Curve_P521R1
@@ -203,13 +204,13 @@ vectorsPoint =
         { vpCurve = Curve ECC.Curve_P521R1
         , vpHex =
             "0443f91fd92d9ccd6d5584b265a2a775d222f4a41ff98190677d985e0889737cbe631d525835fe04faffcdebeccb783538280f4600ae82347b0470583abd9def3060a2e9bdc34f42b134517fc1e961befea0affd1f9666361a039192082a892dd722931d5865b62b69d7369e74895120e540cb10030cccb6049d809fbcf3f54537b378"
-        , vpError = Nothing -- ignores leading zeros
+        , vpError = Just CryptoError_PointSizeInvalid -- SEC1 2.3.4: fixed-length coordinates
         }
     , VectorPoint
         { vpCurve = Curve ECC.Curve_P521R1
         , vpHex =
             "04000043f91fd92d9ccd6d5584b265a2a775d222f4a41ff98190677d985e0889737cbe631d525835fe04faffcdebeccb783538280f4600ae82347b0470583abd9def30600000a2e9bdc34f42b134517fc1e961befea0affd1f9666361a039192082a892dd722931d5865b62b69d7369e74895120e540cb10030cccb6049d809fbcf3f54537b378"
-        , vpError = Nothing -- ignores leading zeros
+        , vpError = Just CryptoError_PointSizeInvalid -- SEC1 2.3.4: fixed-length coordinates
         }
     , VectorPoint
         { vpCurve = Curve ECC.Curve_X25519
@@ -376,6 +377,25 @@ spec = do
                 bs = ECC.encodePoint prx p1 :: ByteString
                 p2 = ECC.decodePoint prx bs
              in CryptoPassed p1 == p2
+        -- one encoding per point: zero padding inside a coordinate, or an
+        -- odd total length, used to decode on P-384 and P-521
+        prop "decodePoint refuses padded or truncated coordinates" $ \testDRG ->
+            let check :: (ECC.EllipticCurve c, Eq (ECC.Point c)) => c -> Bool
+                check curve =
+                    let prx = Just curve -- using Maybe as Proxy
+                        keyPair = withTestDRG testDRG $ ECC.curveGenerateKeyPair prx
+                        bs = ECC.encodePoint prx (ECC.keypairGetPublic keyPair) :: ByteString
+                        size = (B.length bs - 1) `div` 2
+                        (x, y) = B.splitAt size (B.drop 1 bs)
+                        bad =
+                            [ B.concat ["\4\0", x, "\0", y]
+                            , B.concat ["\4", x, "\0", y]
+                            , B.init bs
+                            , bs `B.snoc` 0
+                            ]
+                     in all (isLeft' . ECC.decodePoint prx) bad
+                isLeft' r = case r of CryptoFailed _ -> True; CryptoPassed _ -> False
+             in check ECC.Curve_P256R1 && check ECC.Curve_P384R1 && check ECC.Curve_P521R1
         modifyMaxSuccess (const 20) $ prop "ECDH commutes" $ \testDRG (Curve curve) ->
             let prx = Just curve -- using Maybe as Proxy
                 (alice, bob) =
