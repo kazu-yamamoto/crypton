@@ -302,6 +302,12 @@ crtFaultTests = describe "a fault in one CRT half" $
         [ ("dP", key{RSA.private_dP = RSA.private_dP key + 1})
         , ("dQ", key{RSA.private_dQ = RSA.private_dQ key + 1})
         , ("qinv", key{RSA.private_qinv = RSA.private_qinv key + 1})
+        , -- with no d to fall back on, the faulty result used to go out
+          ("dP, no d", key{RSA.private_dP = RSA.private_dP key + 1, RSA.private_d = 0})
+        ,
+            ( "qinv, no d"
+            , key{RSA.private_qinv = RSA.private_qinv key + 1, RSA.private_d = 0}
+            )
         ]
 
 -- | Building a key from its two primes has to arrive at the key the vectors
