@@ -490,6 +490,8 @@ testBlockCipherAEAD cipher = do
         (mode', iv') = updateCcmInputSize mode (B.length plaintext) testIV
         updateCcmInputSize aeadmode k iv = case aeadmode of
             AEAD_CCM _ m l -> (AEAD_CCM k m l, B.take 13 (iv <> (B.replicate 15 0)))
+            -- RFC 7253 nonces are 1 to 15 bytes
+            AEAD_OCB -> (AEAD_OCB, B.take 15 iv)
             aeadOther -> (aeadOther, iv)
 
 withCtx :: Cipher c => Key c -> (c -> a) -> a

@@ -151,6 +151,24 @@ aeadIVLengthTests =
         eitherCryptoError (() <$ aeadInit AEAD_GCM ctx (iv :: ByteString))
     isRight = either (const False) (const True)
 
+-- RFC 7253: an OCB nonce is 1 to 15 bytes.  The C keeps at most 15, so a
+-- longer IV used to be truncated, and IVs differing only after byte 15 gave
+-- the same keystream.
+ocbIVLengthTests :: Spec
+ocbIVLengthTests =
+    describe "OCB IV length" $ do
+        it "1-byte IV accepted" $ ok (initWith (B.replicate 1 0)) `shouldBe` True
+        it "15-byte IV accepted" $ ok (initWith (B.replicate 15 0)) `shouldBe` True
+        it "empty IV rejected" $
+            initWith B.empty `shouldBe` Left CryptoError_IvSizeInvalid
+        it "16-byte IV rejected" $
+            initWith (B.replicate 16 0) `shouldBe` Left CryptoError_IvSizeInvalid
+  where
+    ctx = throwCryptoError (cipherInit (B.replicate 16 0)) :: AES.AES128
+    initWith iv =
+        eitherCryptoError (() <$ aeadInit AEAD_OCB ctx (iv :: ByteString))
+    ok = either (const False) (const True)
+
 aeadTagLengthTests :: Spec
 aeadTagLengthTests =
     describe "AEAD tag length" $ do
@@ -435,5 +453,6 @@ spec = do
     aeadIVLengthTests
     aeadTagLengthTests
     ccmMisuseTests
+    ocbIVLengthTests
     gcmLongTests
     oneShotTests
