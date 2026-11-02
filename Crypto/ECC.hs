@@ -416,18 +416,23 @@ encodeECPoint (Simple.Point x y) = B.concat [uncompressed, xb, yb]
     yb = i2ospOf_ size y
 
 decodeECPoint
-    :: (Simple.Curve curve, ByteArray bs) => bs -> CryptoFailable (Simple.Point curve)
+    :: forall curve bs
+     . (Simple.Curve curve, ByteArray bs)
+    => bs -> CryptoFailable (Simple.Point curve)
 decodeECPoint mxy = case B.uncons mxy of
     Nothing -> CryptoFailed CryptoError_PointSizeInvalid
     Just (m, xy)
+        -- one encoding per point: each coordinate exactly the field's size
+        | m == 4 && B.length xy /= 2 * siz -> CryptoFailed CryptoError_PointSizeInvalid
         -- uncompressed
         | m == 4 ->
-            let siz = B.length xy `div` 2
-                (xb, yb) = B.splitAt siz xy
+            let (xb, yb) = B.splitAt siz xy
                 x = os2ip xb
                 y = os2ip yb
              in Simple.pointFromIntegers (x, y)
         | otherwise -> CryptoFailed CryptoError_PointFormatInvalid
+  where
+    siz = Simple.curveSizeBytes (Proxy :: Proxy curve)
 
 ecPointsMulVarTime
     :: forall curve
