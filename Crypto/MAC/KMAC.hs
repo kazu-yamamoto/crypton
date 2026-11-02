@@ -26,7 +26,7 @@ module Crypto.MAC.KMAC (
 
 import qualified Crypto.Hash as H
 import Crypto.Hash.SHAKE (HashSHAKE (..))
-import Crypto.Hash.Types (Digest (..), HashAlgorithm (..))
+import Crypto.Hash.Types (Digest (..), HashAlgorithm (..), updateBlocks)
 import qualified Crypto.Hash.Types as H
 import Crypto.Internal.Builder
 import Crypto.Internal.ByteArray (allocAndFreezePrim)
@@ -48,8 +48,8 @@ cshakeInit
     => name -> string -> prefix -> H.Context a
 cshakeInit n s p = H.Context $ B.allocAndFreeze c $ \(ptr :: Ptr (H.Context a)) -> do
     hashInternalInit ptr
-    B.withByteArray b $ \d -> hashInternalUpdate ptr d (fromIntegral $ B.length b)
-    B.withByteArray p $ \d -> hashInternalUpdate ptr d (fromIntegral $ B.length p)
+    B.withByteArray b $ updateBlocks ptr (B.length b)
+    B.withByteArray p $ updateBlocks ptr (B.length p)
   where
     c = hashInternalContextSize (undefined :: a)
     w = hashBlockSize (undefined :: a)
@@ -74,8 +74,7 @@ cshakeFinalize !c s = Digest $
     allocAndFreezePrim (hashDigestSize (undefined :: a)) $
         \(dig :: Ptr (Digest a)) -> do
             ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (H.Context a)) -> do
-                B.withByteArray s $ \d ->
-                    hashInternalUpdate ctx d (fromIntegral $ B.length s)
+                B.withByteArray s $ updateBlocks ctx (B.length s)
                 cshakeInternalFinalize ctx dig
             return ()
 
