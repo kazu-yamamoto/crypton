@@ -26,6 +26,14 @@ HEADER = """\
 
 #define IFMA_MASK52 ((UINT64_C(1) << 52) - 1)
 #define IFMA_TARGET __attribute__((target("avx2,avx512f,avx512vl,avx512ifma")))
+
+/* a full load the compiler cannot fold into a masked one */
+IFMA_TARGET static inline __m256i ifma_load(const uint64_t *p)
+{
+	__m256i x = _mm256_loadu_si256((const __m256i *) p);
+	__asm__("" : "+v"(x));
+	return x;
+}
 """
 
 FOOTER = """\
@@ -139,8 +147,9 @@ def gen_amm(d):
 def gen_sel(R):
     o = []
     w = o.append
-    w(f"/* both tables' entries k1 and k2 of 32, every entry read and a mask keeping")
-    w(f" * one; entries are {4 * R} words apart */")
+    w(f"/* both tables' entries k1 and k2 of 32: every entry loaded in full and a")
+    w(f" * blend keeping one, since a masked load may not touch what it drops;")
+    w(f" * entries are {4 * R} words apart */")
     w(f"IFMA_TARGET static void ifma_sel{R}(uint64_t *o1, const uint64_t *t1, uint64_t k1,")
     w(f"                                uint64_t *o2, const uint64_t *t2, uint64_t k2)")
     w("{")
@@ -153,7 +162,8 @@ def gen_sel(R):
     w("\t\t__mmask8 s1 = _mm256_cmpeq_epi64_mask(v1, kv), s2 = _mm256_cmpeq_epi64_mask(v2, kv);")
     w(f"\t\tconst uint64_t *e1 = t1 + {4 * R} * k, *e2 = t2 + {4 * R} * k;")
     for j in range(R):
-        w(f"\t\tP{j} = _mm256_mask_loadu_epi64(P{j}, s1, e1 + {4 * j}); Q{j} = _mm256_mask_loadu_epi64(Q{j}, s2, e2 + {4 * j});")
+        w(f"\t\tP{j} = _mm256_mask_blend_epi64(s1, P{j}, ifma_load(e1 + {4 * j}));")
+        w(f"\t\tQ{j} = _mm256_mask_blend_epi64(s2, Q{j}, ifma_load(e2 + {4 * j}));")
     w("\t\tkv = _mm256_add_epi64(kv, one);")
     w("\t}")
     for j in range(R):
