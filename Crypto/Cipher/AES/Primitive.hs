@@ -63,6 +63,7 @@ import Data.Word
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
+import Foreign.Storable (peekByteOff)
 
 import Crypto.Cipher.Types
 import Crypto.Cipher.Types.Block (IV (..))
@@ -664,7 +665,9 @@ gcmAppendAAD gcmSt input = unsafeDoIO doAppend
 -- needs to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE gcmAppendEncrypt #-}
 gcmAppendEncrypt :: ByteArray ba => AES -> AESGCM -> ba -> (ba, AESGCM)
-gcmAppendEncrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doEnc
+gcmAppendEncrypt ctx gcm input
+    | gcmTooLong gcm len = error gcmTooLongMessage
+    | otherwise = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doEnc
   where
     len = B.length input
     doEnc gcmStPtr aesPtr =
@@ -684,7 +687,9 @@ gcmAppendEncrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doEnc
 -- needs to happen after AAD appending, or after initialization if no AAD data.
 {-# NOINLINE gcmAppendDecrypt #-}
 gcmAppendDecrypt :: ByteArray ba => AES -> AESGCM -> ba -> (ba, AESGCM)
-gcmAppendDecrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doDec
+gcmAppendDecrypt ctx gcm input
+    | gcmTooLong gcm len = error gcmTooLongMessage
+    | otherwise = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doDec
   where
     len = B.length input
     doDec gcmStPtr aesPtr =
@@ -697,6 +702,20 @@ gcmAppendDecrypt ctx gcm input = unsafeDoIO $ withGCMKeyAndCopySt ctx gcm doDec
                         aesPtr
                         (i `plusPtr` off)
                         (fromIntegral n)
+
+-- | SP 800-38D 5.2.1.1 limits a message to 2^39 - 256 bits; past that the
+-- 32-bit counter wraps and the keystream repeats.  The bytes so far are
+-- @length_input@ in @aes_gcm@ (cbits/crypton_aes.h).
+gcmTooLong :: AESGCM -> Int -> Bool
+gcmTooLong (AESGCM st) len = fromIntegral len > gcmMaxInput - used
+  where
+    used = unsafeDoIO $ withByteArray st $ \p -> peekByteOff p 312 :: IO Word64
+
+gcmMaxInput :: Word64
+gcmMaxInput = 2 ^ (36 :: Int) - 32
+
+gcmTooLongMessage :: String
+gcmTooLongMessage = "AES-GCM: a message is limited to 2^36 - 32 bytes"
 
 -- | Generate the Tag from GCM context
 {-# NOINLINE gcmFinish #-}
