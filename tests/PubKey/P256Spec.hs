@@ -232,6 +232,12 @@ spec = do
         it "point-mul-order" $
             P256.pointIsAtInfinity (P256.pointMul P256.scalarN point7)
                 `shouldBe` True
+        -- infinity is (0, 0); negating it used to give (0, p), which is
+        -- neither infinity nor on the curve
+        it "point-negate-infinity" $ do
+            let o = P256.pointAdd point7 (P256.pointNegate point7)
+            P256.pointIsAtInfinity (P256.pointNegate o) `shouldBe` True
+            P256.pointAdd (P256.pointNegate o) point7 `shouldBe` point7
         it "point-mul-order-minus-one" $
             P256.pointMul (unP256Scalar (P256Scalar (curveN - 1))) point7
                 `shouldBe` P256.pointNegate point7
