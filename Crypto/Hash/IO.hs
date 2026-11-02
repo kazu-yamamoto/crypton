@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
@@ -33,10 +32,6 @@ import Foreign.Ptr
 -- as input to cryptographic algorithms.
 newtype MutableContext a = MutableContext B.Bytes
     deriving (B.ByteArrayAccess)
-
--- nominal, so that coerce cannot relabel it as another hash and hand
--- the C a buffer of the wrong size
-type role MutableContext nominal
 
 -- | Create a new mutable hash context.
 --
