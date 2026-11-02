@@ -225,9 +225,12 @@ generateSimple
     -> (ba, StateSimple)
 generateSimple (StateSimple prevSt) nbBytes = unsafeDoIO $ do
     newSt <- B.copy prevSt (\_ -> return ())
+    -- in pieces, as the C takes a uint32_t; each is a multiple of the 16
+    -- bytes it rekeys after, so the stream is the same as in one call
     output <- B.alloc nbBytes $ \dstPtr ->
         B.withByteArray newSt $ \stPtr ->
-            ccrypton_chacha_random 8 dstPtr stPtr (fromIntegral nbBytes)
+            B.inCLengths nbBytes $ \off n ->
+                ccrypton_chacha_random 8 (dstPtr `plusPtr` off) stPtr (fromIntegral n)
     return (output, StateSimple newSt)
 
 -- | similar to 'generate' but accepts a number of rounds, and always generates
