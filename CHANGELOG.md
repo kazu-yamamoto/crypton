@@ -1,5 +1,30 @@
 # CHANGELOG for crypton
 
+## 2.1.12
+
+**Fixes from a security review**, backported from 2.2.6.
+
+* fix(scrypt): refuse n < 2, non-positive r or p, and overflowing sizes
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(aes): keep the AArch64 one-shot GCM loops from wrapping near 4 GiB
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(gcmsiv): give Nothing for a tag that is not 16 bytes
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(pbkdf2): refuse iteration counts the C cannot take in the fast path
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(p256): negating the point at infinity gives the point at infinity
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(p256): a zero scalar lifts to the point at infinity
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix: lengths of 4 GiB or more in ChaChaDRG and Argon2
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(gcm): refuse incremental input past 2^36 - 32 bytes
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix: doubling in GF(2^n) without branching on secret bits
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+* fix(hash): feed every hash update through updateBlocks
+  [#370](https://github.com/kazu-yamamoto/crypton/pull/370)
+
 ## 2.1.11
 
 **crypton runs again on x86-64 processors without AVX2.**  From 2.1.8 the
