@@ -28,6 +28,7 @@
  * SUCH DAMAGE.
  */
 
+#include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -629,6 +630,9 @@ void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 	crypton_hinit(gcm->htable, &h);
 	gcm_message_init(gcm, iv, len);
 }
+
+/* Crypto.Cipher.AES.Primitive reads length_input at this offset */
+typedef char crypton_gcm_length_input_offset[offsetof(aes_gcm, length_input) == 312 ? 1 : -1];
 
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length)
 {

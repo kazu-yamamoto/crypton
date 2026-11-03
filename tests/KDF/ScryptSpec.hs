@@ -44,6 +44,17 @@ spec = do
         it "reports them without raising" $ do
             run' (Scrypt.Parameters 3 8 1 32) `shouldBe` refused
             run' (Scrypt.Parameters 16 1073741824 1 32) `shouldBe` refused
+        it "rejects n = 1, which the mixing loop overruns" $
+            run' (Scrypt.Parameters 1 8 1 32) `shouldBe` refused
+        it "rejects n = 0" $
+            run' (Scrypt.Parameters 0 8 1 32) `shouldBe` refused
+        it "rejects r or p that is not positive" $ do
+            run' (Scrypt.Parameters 16 0 1 32) `shouldBe` refused
+            run' (Scrypt.Parameters 16 (-1) 1 32) `shouldBe` refused
+            run' (Scrypt.Parameters 16 8 0 32) `shouldBe` refused
+            run' (Scrypt.Parameters 16 8 (-1) 32) `shouldBe` refused
+        it "rejects 128 * r * n that does not fit in an Int" $
+            run' (Scrypt.Parameters (2 ^ (57 :: Int)) 1 1 32) `shouldBe` refused
   where
     run params =
         Scrypt.generate params ("password" :: ByteString) ("salt" :: ByteString)
