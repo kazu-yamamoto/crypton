@@ -142,6 +142,9 @@ hashContextGetAlgorithm = undefined
 newtype Context a = Context Bytes
     deriving (ByteArrayAccess, NFData)
 
+-- nominal, as for 'Digest': the C reads a context of the algorithm's size
+type role Context nominal
+
 -- | Represent a digest for a given hash algorithm.
 --
 -- This type is an instance of 'ByteArrayAccess' from package
