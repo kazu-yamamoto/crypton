@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/crypton.svg" alt="crypton" height="160">
+</p>
+
 ![GitHub Actions status](https://github.com/kazu-yamamoto/crypton/workflows/Haskell%20CI/badge.svg)
 
 crypton
