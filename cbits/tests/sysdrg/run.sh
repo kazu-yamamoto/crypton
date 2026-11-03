@@ -1,6 +1,6 @@
 #!/bin/sh
 # Does the generator behind MonadRandom IO survive the things that break a
-# generator: a second thread, a reseed, and a fork?
+# generator: a second thread, a reseed, a fork, and a restore?
 #
 # None of this can be asked from Haskell alone.  A forkIO thread is not an
 # operating system thread, and the Haskell test suite cannot fork the way a

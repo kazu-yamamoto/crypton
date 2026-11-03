@@ -7,11 +7,12 @@
 #include <sys/wait.h>
 
 void crypton_sysdrg_test_key(uint8_t out[32]);
-void crypton_sysdrg_test_lock(void);
-void crypton_sysdrg_test_unlock(void);
 int crypton_sysdrg_bytes(uint8_t *out, int len);
 uint32_t crypton_sysdrg_generation(void);
 uint64_t crypton_sysdrg_thread_used(void);
+void crypton_sysdrg_reseed(void);
+void crypton_sysdrg_test_save(void);
+void crypton_sysdrg_test_restore(void);
 static uint64_t used_in_thread;
 
 static int fail = 0;
@@ -20,30 +21,30 @@ static void check(const char *what, int ok) {
     if (!ok) fail = 1;
 }
 
-/* Holds the process generator's lock for a moment, so that a fork can be
- * made to happen while it is held.  Releasing after a delay rather than on
- * demand is deliberate: a prepare handler has to be able to take the lock,
- * and a holder that waited to be told would stop the fork instead of the
- * child. */
-static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t gate_cv = PTHREAD_COND_INITIALIZER;
-static int holding = 0;
-
-static void *lock_holder(void *arg) {
-    (void) arg;
-    crypton_sysdrg_test_lock();
-    pthread_mutex_lock(&gate);
-    holding = 1;
-    pthread_cond_broadcast(&gate_cv);
-    pthread_mutex_unlock(&gate);
-    usleep(200000);
-    crypton_sysdrg_test_unlock();
-    return NULL;
-}
-
 static void *thread_body(void *arg) {
     uint8_t *out = (uint8_t *) arg;
     check("a second OS thread gets bytes", crypton_sysdrg_bytes(out, 32) == 32);
+    used_in_thread = crypton_sysdrg_thread_used();
+    return NULL;
+}
+
+/* Draws, waits while the main thread reseeds, and draws again; its used
+ * count after the second draw says whether that draw was reseeded. */
+static pthread_mutex_t step = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t step_cv = PTHREAD_COND_INITIALIZER;
+static int stage = 0;
+
+static void *draw_across_reseed(void *arg) {
+    uint8_t out[32];
+    (void) arg;
+    crypton_sysdrg_bytes(out, 32);
+    crypton_sysdrg_bytes(out, 32);
+    pthread_mutex_lock(&step);
+    stage = 1;
+    pthread_cond_broadcast(&step_cv);
+    while (stage != 2) pthread_cond_wait(&step_cv, &step);
+    pthread_mutex_unlock(&step);
+    crypton_sysdrg_bytes(out, 32);
     used_in_thread = crypton_sysdrg_thread_used();
     return NULL;
 }
@@ -110,31 +111,39 @@ int main(void) {
     check("a draw replaces the key that made it",
           memcmp(key_before, key_after, 32) != 0);
 
-    /* A fork while another thread holds the process generator's lock.  The
-     * child's first draw has to reseed, the generation having changed, and
-     * reseeding takes that lock.  With no prepare and parent handlers the
-     * child inherits it locked and waits on it for ever -- the thread that
-     * would release it did not come across the fork.  The alarm is what
-     * turns that into a failure rather than a hung test run. */
-    pthread_t holder;
-    if (pthread_create(&holder, NULL, lock_holder, NULL) != 0) {
-        perror("pthread_create"); return 2;
-    }
-    pthread_mutex_lock(&gate);
-    while (!holding) pthread_cond_wait(&gate_cv, &gate);
-    pthread_mutex_unlock(&gate);
+    /* An explicit reseed counts as a generation, and the next draw on this
+     * thread and on another starts from a fresh seed: a used count of just
+     * that draw. */
+    uint32_t g0 = crypton_sysdrg_generation();
+    uint8_t x[32];
+    crypton_sysdrg_bytes(x, 32);
+    pthread_t other;
+    pthread_create(&other, NULL, draw_across_reseed, NULL);
+    pthread_mutex_lock(&step);
+    while (stage != 1) pthread_cond_wait(&step_cv, &step);
+    crypton_sysdrg_reseed();
+    stage = 2;
+    pthread_cond_broadcast(&step_cv);
+    pthread_mutex_unlock(&step);
+    pthread_join(other, NULL);
+    check("a reseed is counted", crypton_sysdrg_generation() == g0 + 1);
+    crypton_sysdrg_bytes(x, 32);
+    check("this thread reseeds on its next draw", crypton_sysdrg_thread_used() == 32);
+    check("another thread reseeds on its next draw", used_in_thread == 32);
 
-    pid_t locked_pid = fork();
-    if (locked_pid == 0) {
-        uint8_t c[32];
-        alarm(5);
-        _exit(crypton_sysdrg_bytes(c, 32) == 32 ? 0 : 1);
-    }
-    pthread_join(holder, NULL);
-    int locked_status = 0;
-    waitpid(locked_pid, &locked_status, 0);
-    check("a child forked while the lock was held can draw",
-          WIFEXITED(locked_status) && WEXITSTATUS(locked_status) == 0);
+    /* A restore from a saved image.  Two copies of one image draw the same
+     * bytes -- that is the problem -- and a reseed after the restore is what
+     * makes them differ. */
+    uint8_t first[32], second[32], third[32];
+    crypton_sysdrg_test_save();
+    crypton_sysdrg_bytes(first, 32);
+    crypton_sysdrg_test_restore();
+    crypton_sysdrg_bytes(second, 32);
+    check("two copies of one image draw the same bytes", memcmp(first, second, 32) == 0);
+    crypton_sysdrg_test_restore();
+    crypton_sysdrg_reseed();
+    crypton_sysdrg_bytes(third, 32);
+    check("a reseed after the restore draws other bytes", memcmp(first, third, 32) != 0);
 
     return fail;
 }

@@ -9,8 +9,8 @@
 --
 -- The generator behind the 'Crypto.Random.MonadRandom' instance for 'IO'.
 --
--- A ChaCha20 generator per operating system thread, seeded from a
--- process-wide generator, seeded in turn from the system entropy pool.
+-- A ChaCha20 generator per operating system thread, seeded straight from
+-- the system entropy pool.
 -- The state and the reseeding live in
 -- @cbits\/crypton_sysdrg.c@, because a @forkIO@ thread is not an operating
 -- system thread -- it moves between capabilities -- so state held against
@@ -31,9 +31,8 @@
 -- * ChaCha20, rather than AES in counter mode.
 -- * SHA-512 over the system's bytes, rather than a derivation function a
 --   standard would have named.
--- * A mebibyte per thread, and a mebibyte of issued seed for the process
---   generator, as the points at which to reseed.  Those numbers are a
---   choice, not a result.
+-- * A mebibyte per thread as the point at which to reseed.  That number is
+--   a choice, not a result.
 --
 -- The pieces underneath are specified: ChaCha20 is RFC 8439, SHA-512 is
 -- FIPS 180-4.  The way they are put together is not.
@@ -54,6 +53,7 @@
 -- comes after one.
 module Crypto.Random.SysDRG (
     sysDRGBytes,
+    sysDRGReseed,
 ) where
 
 import Data.Word (Word8)
@@ -80,3 +80,12 @@ sysDRGBytes n = do
     (got, out) <- B.allocRet n $ \ptr ->
         fromIntegral `fmap` c_sysdrg_bytes ptr (fromIntegral n)
     return $ if got == n then Just out else Nothing
+
+-- Unsafe: it only bumps an atomic counter.
+foreign import ccall unsafe "crypton_sysdrg_reseed"
+    c_sysdrg_reseed :: IO ()
+
+-- | Make every generator reseed before it answers again.  See
+-- 'Crypto.Random.reseedSystem'.
+sysDRGReseed :: IO ()
+sysDRGReseed = c_sysdrg_reseed

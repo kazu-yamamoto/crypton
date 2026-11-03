@@ -404,9 +404,8 @@ jobs:
     # drawing at once and tests/forkprocess covers forkProcess, but neither
     # can see inside the generator: whether a draw replaces the key that made
     # it, whether a new operating system thread starts its own stream rather
-    # than carrying on another's, and whether a child forked while a second
-    # thread held the generator's lock can draw at all rather than waiting
-    # for ever on a mutex nobody will release.  Those need the accessors
+    # than carrying on another's, and whether a reseed after a restore from a
+    # saved image makes the copies differ.  Those need the accessors
     # cbits/crypton_sysdrg.c compiles under CRYPTON_SYSDRG_TESTING, which the
     # library itself is never built with.  Dropping the rekey at the end of a
     # draw fails the first of them here and is invisible everywhere else.
