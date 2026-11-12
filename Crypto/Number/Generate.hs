@@ -60,6 +60,8 @@ generateParams bits genTopPolicy generateOdd
             Nothing -> return ()
             Just SetHighest -> p0 |= (1 `shiftL` bit)
             Just SetTwoHighest
+                -- one bit has no second highest, and p1 is past the buffer
+                | bits == 1 -> p0 |= 0x1
                 | bit == 0 -> do
                     p0 $= 0x1
                     p1 |= 0x80

@@ -17,7 +17,7 @@ module Crypto.Random.Entropy.Windows
 import Data.Int (Int32)
 import Data.Word
 import Foreign.C.String (CString, withCString)
-import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Ptr (Ptr, nullPtr, plusPtr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Utils (toBool)
 import Foreign.Storable (peek)
@@ -90,10 +90,17 @@ cryptAcquireCtx =
             then Just `fmap` peek handlePtr
             else return Nothing
 
+-- The length is a DWORD, so a request of 4 GiB or more goes in pieces;
+-- returns how many bytes were filled.
 cryptGenRandom :: CryptCtx -> Ptr Word8 -> Int -> IO Int
-cryptGenRandom h buf n = do
-    success <- toBool `fmap` c_cryptGenRandom h (fromIntegral n) buf
-    return $ if success then n else 0
+cryptGenRandom h buf n = go buf (max 0 n)
+  where
+    go p left
+        | left == 0 = return n
+        | otherwise = do
+            let m = min left 0x40000000
+            success <- toBool `fmap` c_cryptGenRandom h (fromIntegral m) p
+            if success then go (p `plusPtr` m) (left - m) else return (n - left)
 
 cryptReleaseCtx :: CryptCtx -> IO ()
 cryptReleaseCtx h = do

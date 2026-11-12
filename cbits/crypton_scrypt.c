@@ -32,7 +32,7 @@
 
 static void blockmix_salsa8(uint32_t *in, uint32_t *out, uint32_t *X, const uint32_t r)
 {
-	int i;
+	size_t i;
 
 	array_copy32(X, &in[(2 * r - 1) * 16], 16);
 
@@ -56,8 +56,8 @@ void crypton_scrypt_smix(uint8_t *B, const uint32_t r, const uint64_t N, uint32_
 	uint32_t *Y = &XY[32 * r];
 	uint32_t *Z = &XY[64 * r];
 	uint64_t i, j;
-	int k;
-	const int r32 = 32*r;
+	size_t k;
+	const size_t r32 = (size_t) 32 * r; /* the caller keeps r below 2^26 */
 
 	for (k = 0; k < r32; k++)
 		X[k] = load_le32_aligned(&B[4 * k]);

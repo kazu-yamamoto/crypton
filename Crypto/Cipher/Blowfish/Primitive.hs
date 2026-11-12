@@ -31,7 +31,7 @@ import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat
 import Crypto.Internal.Imports
 import Foreign.C.Types (CInt (..))
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, plusPtr)
 
 -- | The key schedule: the P array and the four S boxes, as the C keeps them.
 newtype Context = Context ScrubbedBytes
@@ -81,7 +81,10 @@ through f (Context ctx) input
     | otherwise = unsafeDoIO $
         B.alloc len $ \out ->
             B.withByteArray ctx $ \c ->
-                B.withByteArray input $ \i -> f c out i (fromIntegral len)
+                B.withByteArray input $ \i ->
+                    -- the C takes a uint32_t length, so go in pieces
+                    B.inCLengths len $ \off n ->
+                        f c (out `plusPtr` off) (i `plusPtr` off) (fromIntegral n)
   where
     len = B.length input
 

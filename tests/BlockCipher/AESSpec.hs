@@ -385,6 +385,9 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
         it "refuses a sample that does not fit, writing nothing" $ do
             withMask (B.length plainSealed - 15) `shouldReturn` Nothing
             withMask (-1) `shouldReturn` Nothing
+        -- off + 16 used to wrap and pass, and the C read 4 GiB away
+        it "refuses an offset near maxBound" $
+            withMask (maxBound - 7) `shouldReturn` Nothing
   where
     run name vs =
         it name $

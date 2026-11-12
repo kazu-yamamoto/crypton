@@ -211,7 +211,8 @@ encryptWithMask
 encryptWithMask (Context aes gk) (HeaderKey hp) nonce aad input taglen off outp maskp
     | tooLongForC aad input = return False
     | badNonce nonce = return False
-    | off < 0 || badTagLength taglen || off + 16 > B.length input + taglen =
+    -- subtract rather than add, so that an offset near maxBound cannot wrap
+    | off < 0 || badTagLength taglen || off > B.length input + taglen - 16 =
         return False
     | otherwise = do
         gcmFullEncryptMask aes gk hp nonce aad input taglen off outp maskp

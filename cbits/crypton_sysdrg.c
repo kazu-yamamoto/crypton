@@ -52,13 +52,14 @@ int crypton_sysrandom_bytes(uint8_t *buf, int len);
 typedef struct {
 	crypton_chacha_context ctx;
 	uint64_t used;
-	uint32_t generation;
+	size_t generation;
 	int seeded;
 } drg_t;
 
 /* Read by every draw, and bumped from any thread or a signal handler by
- * crypton_sysdrg_reseed, so it is atomic and takes no lock. */
-static uint32_t generation_count = 0;
+ * crypton_sysdrg_reseed, so it is atomic and takes no lock.  size_t is 64
+ * bits wherever that needs no libatomic, so it does not wrap back. */
+static size_t generation_count = 0;
 #define GENERATION() __atomic_load_n(&generation_count, __ATOMIC_ACQUIRE)
 
 #ifdef _WIN32
@@ -118,7 +119,8 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	 * as a second source when it is the same one twice.
 	 */
 	got = crypton_sysrandom_available() ? crypton_sysrandom_bytes(buf, 64) : 0;
-	if (got <= 0) {
+	/* all 64 or nothing: a short read is a call that failed part way */
+	if (got != 64) {
 		/* Nothing else here is a seed on its own, so there is nothing to
 		 * go on with: return before drawing anything that would only be
 		 * thrown away. */
@@ -140,7 +142,7 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 
 /* generation is the counter as it was before the seed was drawn: read after,
  * a reseed in between would be recorded as met by a seed from before it */
-static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], uint32_t generation)
+static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], size_t generation)
 {
 	crypton_chacha_init(&d->ctx, CHACHA_ROUNDS, SEED_KEY, seed,
 	                    SEED_IV, seed + SEED_KEY);
@@ -234,7 +236,7 @@ void crypton_sysdrg_test_key(uint8_t out[32])
  * draws again, which is two copies of one image. */
 static struct {
 	drg_t thread;
-	uint32_t generation;
+	size_t generation;
 } saved_image;
 
 void crypton_sysdrg_test_save(void);
@@ -321,7 +323,7 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 
 	if (drg_stale(d, CRYPTON_THREAD_RESEED)) {
 		uint8_t seed[SEED_LEN];
-		uint32_t g = GENERATION();
+		size_t g = GENERATION();
 		int ok = seed_from_system(seed);
 		if (ok)
 			drg_seed(d, seed, g);
@@ -351,7 +353,7 @@ void crypton_sysdrg_reseed(void)
  * by a fork or by crypton_sysdrg_reseed. */
 uint32_t crypton_sysdrg_generation(void)
 {
-	return GENERATION();
+	return (uint32_t) GENERATION();
 }
 
 /* For the tests: bytes this thread's generator has produced since it was

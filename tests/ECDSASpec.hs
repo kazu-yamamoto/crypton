@@ -1,8 +1,8 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
 -- The binary curves are deprecated and still supported, so the tests
 -- that hold them to their behaviour name them on purpose.
 {-# OPTIONS_GHC -Wno-deprecations #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module ECDSASpec (spec) where
 
@@ -136,6 +136,20 @@ spec = do
                     g256
                     (ECDSA.pointNegate (Just ECDSA.Curve_P256R1) g256)
     describe "recovery" $ do
+        -- SEC 1 4.1.6 refuses these; they used to recover some key
+        it "refuses s = 0, and an x at or past p" $ do
+            let k1 = ECC.getCurveByName ECC.SEC_p256k1
+                cc = ECC.common_curve k1
+                n = ECC.ecc_n cc
+                p = case k1 of
+                    ECC.CurveFP (ECC.CurvePrime q _) -> q
+                    _ -> error "secp256k1 is a prime curve"
+                digest = hashWith SHA256 (B.pack [1, 2, 3])
+                rec i r s =
+                    ECC.recoverDigest k1 (ECC.ExtendedSignature i False (ECC.Signature r s)) digest
+            rec 0 1 0 `shouldBe` Nothing
+            rec 0 n 1 `shouldBe` Nothing
+            rec 1 (p - n) 1 `shouldBe` Nothing
         modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r1
         modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p128r2
         modifyMaxSuccess (const 100) $ testRecover ECC.SEC_p256k1

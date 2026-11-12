@@ -17,10 +17,19 @@ module Crypto.Internal.Nat
 import           GHC.TypeLits
 
 byteLen :: (KnownNat bitlen, Num a) => proxy bitlen -> a
-byteLen d = fromInteger ((natVal d + 7) `div` 8)
+byteLen d = fromInteger ((checkedNatVal d + 7) `div` 8)
 
 integralNatVal :: (KnownNat bitlen, Num a) => proxy bitlen -> a
-integralNatVal = fromInteger . natVal
+integralNatVal = fromInteger . checkedNatVal
+
+-- The C takes a bit length as uint32_t; a larger one used to wrap, and the
+-- C then wrote less than the buffer sized from the unwrapped value.
+checkedNatVal :: KnownNat bitlen => proxy bitlen -> Integer
+checkedNatVal d
+    | n > 0xffffffff = error ("Crypto.Internal.Nat: " ++ show n ++ " bits is more than 2^32 - 1")
+    | otherwise = n
+  where
+    n = natVal d
 
 type family IsLE (bitlen :: Nat) (n :: Nat) (c :: Bool) where
     IsLE _ _ 'True  = 'True

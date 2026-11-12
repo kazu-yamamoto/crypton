@@ -3,6 +3,8 @@
 
 module StreamCipher.RC4Spec where
 
+import Control.Exception (evaluate)
+import qualified Data.ByteString as B
 import Test.Hspec
 
 import qualified Crypto.Cipher.RC4 as RC4
@@ -30,10 +32,17 @@ vectors =
     ]
 
 spec :: Spec
-spec =
-    sequence_ $
-        zipWith toKatTest is vectors
+spec = do
+    sequence_ $ zipWith toKatTest is vectors
+    -- the C reduced the key index modulo the key length, so dividing by zero
+    it "refuses an empty key" $
+        evaluate (RC4.initialize B.empty) `shouldThrow` anyErrorCall
+    -- only the first 256 bytes are used
+    it "ignores key bytes past 256" $
+        snd (RC4.generate (RC4.initialize (long 0)) 64)
+            `shouldBe` (snd (RC4.generate (RC4.initialize (long 1)) 64) :: ByteString)
   where
+    long b = B.replicate 256 7 `B.append` B.replicate 100 b
     toKatTest i (key, plainText, cipherText) =
         it
             (show i)
