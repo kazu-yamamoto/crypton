@@ -427,6 +427,14 @@ nonInvertibleTests =
             DSA.signWith 4 priv SHA1 message `shouldSatisfy` isJust
         it "verify with a non-invertible s returns False" $
             DSA.verify SHA1 compositePub (DSA.Signature 1 3) message `shouldBe` False
+        -- the parameters come with the key; p = 0 used to divide by zero
+        it "verify with p = 0 returns False" $
+            DSA.verify
+                SHA256
+                (DSA.PublicKey (DSA.Params 0 2 7) 3)
+                (DSA.Signature 1 1)
+                message
+                `shouldBe` False
   where
     message = "message" :: ByteString
     q = 11
