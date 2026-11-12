@@ -38,5 +38,11 @@ openedBackends = unsafePerformIO (openAsNeeded supportedBackends)
         return $ maybe rest (: rest) m
 
 -- | Get some entropy from the system source of entropy
+--
+-- A negative length is an error.  @alloc@ would make an empty buffer of it,
+-- and the length itself, narrowed for the system call, could come out
+-- positive and be written into that buffer.
 getEntropy :: ByteArray byteArray => Int -> IO byteArray
-getEntropy n = B.alloc n (replenish n openedBackends)
+getEntropy n
+    | n < 0 = error "Crypto.Random.Entropy: negative length"
+    | otherwise = B.alloc n (replenish n openedBackends)
