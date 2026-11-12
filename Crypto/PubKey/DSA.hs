@@ -262,6 +262,9 @@ verifyDigest
 verifyDigest pk (Signature r s) digest
     -- Reject the signature if either 0 < r < q or 0 < s < q is not satisfied.
     | r <= 0 || r >= q || s <= 0 || s >= q = False
+    -- the parameters come from the signer; a modulus below 2 is no group,
+    -- and p = 0 used to raise divide by zero rather than answer False
+    | p < 2 = False
     -- s is invertible for every 0 < s < q when q is prime, but the parameters
     -- arrive with the public key and a composite q admits an s that is not
     | otherwise = maybe False (r ==) v
