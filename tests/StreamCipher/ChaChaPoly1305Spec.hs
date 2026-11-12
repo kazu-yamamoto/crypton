@@ -208,6 +208,9 @@ spec = do
                 [ eqTest "nonce12a" nonce2 $ B.convert . CP.incrementNonce $ n1
                 , eqTest "nonce12b" nonce4 $ B.convert . CP.incrementNonce $ n3
                 , eqTest "nonce12c" nonce1 $ B.convert . CP.incrementNonce $ n5
+                , eqTest "nonce12d" (B.snoc (B.replicate 11 0) 1) $
+                    B.convert . CP.incrementNonce $
+                        throwCryptoError (CP.nonce12 $ B.snoc (B.replicate 11 0xff) 0)
                 , eqTest "nonce8a" (B.concat [constant, nonce7]) $
                     B.convert . CP.incrementNonce $
                         n6

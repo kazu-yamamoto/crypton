@@ -166,15 +166,15 @@ incrementNonce (Nonce12 n) = Nonce12 $ incrementNonce' n 0
 
 incrementNonce' :: Bytes -> Int -> Bytes
 incrementNonce' b offset = B.copyAndFreeze b $ \s ->
-    loop s (s `plusPtr` offset)
+    loop (s `plusPtr` offset) (B.length b - offset)
   where
-    loop :: Ptr Word8 -> Ptr Word8 -> IO ()
-    loop s p
-        | s == (p `plusPtr` (B.length b - offset - 1)) = peek s >>= poke s . (+) 1
-        | otherwise = do
-            r <- (+) 1 <$> peek p
-            poke p r
-            when (r == 0) $ loop s (p `plusPtr` 1)
+    -- the carry stops at the last byte; all 0xff wraps to all zero
+    loop :: Ptr Word8 -> Int -> IO ()
+    loop _ 0 = return ()
+    loop p n = do
+        r <- (+) 1 <$> peek p
+        poke p r
+        when (r == 0) $ loop (p `plusPtr` 1) (n - 1)
 
 -- | Initialize a new ChaChaPoly1305 State
 --
