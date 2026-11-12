@@ -293,6 +293,9 @@ spec = do
         let bits = m1bits + 1 -- make sure minimum is 2
             r = withTestDRG testDRG $ generateParams bits (Just SetTwoHighest) False
          in r >= 0 && numBits r == bits && testBit r (bits - 1) && testBit r (bits - 2)
+    -- one bit has no second highest; this used to write a byte past the buffer
+    prop "generate-param2 with one bit" $ \testDRG ->
+        withTestDRG testDRG (generateParams 1 (Just SetTwoHighest) False) == 1
     prop "generate-param-odd" $ \testDRG (Int1_2901 bits) ->
         let r = withTestDRG testDRG $ generateParams bits Nothing True
          in r >= 0 && odd r
