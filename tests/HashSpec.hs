@@ -6,6 +6,7 @@ module HashSpec (
     spec,
 ) where
 
+import Control.Exception (evaluate)
 import Crypto.Hash
 
 import Data.ByteArray (convert)
@@ -591,6 +592,14 @@ skeinNatTests = describe "Skein with the digest size as a type parameter" $ do
     -- the length goes into the configuration block, so it changes the chaining
     -- value the message is hashed from: a longer digest is not an extension of
     -- a shorter one, which is the opposite of how SHAKE behaves
+    -- the C takes the bit length as uint32_t, which a larger one used to wrap
+    it "refuses a size of 2^32 bits or more" $ do
+        evaluate (hashWith (Skein512 :: Skein512 4294967296) v1)
+            `shouldThrow` anyErrorCall
+        evaluate (hashWith (SHAKE128 :: SHAKE128 4294967304) v1)
+            `shouldThrow` anyErrorCall
+        evaluate (hashWith (SHAKE256 :: SHAKE256 147573952589676412923) v1)
+            `shouldThrow` anyErrorCall
     it "answers a different size with an unrelated digest, not a longer one" $ do
         let short = convert (hashWith (Skein512 :: Skein512 256) v1) :: ByteString
             long = convert (hashWith (Skein512 :: Skein512 512) v1) :: ByteString

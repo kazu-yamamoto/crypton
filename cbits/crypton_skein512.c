@@ -196,7 +196,7 @@ void crypton_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8
 	memset(ctx->buf, '\0', 64);
 
 	/* make sure we have a 8 bit rounded value */
-	outsize = (hashlen + 7) >> 3;
+	outsize = (hashlen >> 3) + ((hashlen & 7) != 0); /* no wrap at 2^32 - 7 */
 
 	/* backup h[0--7] */
 	for (j = 0; j < 8; j++)
