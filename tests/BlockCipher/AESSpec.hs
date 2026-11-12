@@ -445,6 +445,40 @@ oneShotTests = describe "Crypto.Cipher.AES.GCM" $ do
          in (GCM.decrypt ctx16 iv16 B.empty (c' `B.append` t') 16 :: Maybe B.ByteString)
                 `shouldBe` Nothing
 
+-- OCB fed in chunks must equal one call: each call used to restart the
+-- block index, so equal-sized chunks could be swapped under a valid tag
+ocbChunkTests :: Spec
+ocbChunkTests = describe "OCB in chunks" $ do
+    it "equals one call" $
+        forM_ splits $ \(as, ms) ->
+            enc (chunks as aad) (chunks ms msg) `shouldBe` enc [aad] [msg]
+    it "does not accept swapped chunks" $ do
+        let three = B.replicate 48 0x5a
+            (cs, tag) = enc [] (chunks [16, 16] three)
+            swapped = B.concat [B.drop 32 cs, B.take 16 (B.drop 16 cs), B.take 16 cs]
+        snd (dec (chunks [16, 16] swapped)) `shouldNotBe` tag
+  where
+    ctx = throwCryptoError (cipherInit (B.pack [0 .. 15])) :: AES.AES128
+    start = throwCryptoError (aeadInit AEAD_OCB ctx (B.pack [0 .. 11]))
+    aad = B.pack (take 77 [100 ..])
+    msg = B.pack (take 300 [1 ..])
+    -- block-aligned chunks with a partial one last, below and above the
+    -- eight blocks the C processes in a group
+    splits = [([16], [16]), ([16, 32], [16, 16, 16]), ([64], [160, 32]), ([], [256])]
+    chunks [] bs = [bs]
+    chunks (n : ns) bs = let (h, t) = B.splitAt n bs in h : chunks ns t
+    run step as ms =
+        let a0 = foldl' aeadAppendHeader start as
+            go a [] = ([], a)
+            go a (m : rest) =
+                let (c, a') = step a m
+                    (cs, a'') = go a' rest
+                 in (c : cs, a'')
+            (outs, a1) = go a0 ms
+         in (B.concat outs, BA.convert (aeadFinalize a1 16) :: ByteString)
+    enc = run aeadEncrypt
+    dec = run aeadDecrypt ([] :: [ByteString])
+
 spec :: Spec
 spec = do
     testBlockCipher128 kats128 (undefined :: AES.AES128)
@@ -454,5 +488,6 @@ spec = do
     aeadTagLengthTests
     ccmMisuseTests
     ocbIVLengthTests
+    ocbChunkTests
     gcmLongTests
     oneShotTests

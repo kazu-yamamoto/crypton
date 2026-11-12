@@ -125,6 +125,10 @@ typedef struct {
 	block128 lstar;
 	block128 ldollar;
 	block128 li[4];
+	/* blocks hashed or encrypted so far, so that a call carries on the
+	 * index where the previous one stopped */
+	uint64_t blocks_aad;
+	uint64_t blocks_enc;
 } aes_ocb;
 
 /* size = 17*16= 272 */
