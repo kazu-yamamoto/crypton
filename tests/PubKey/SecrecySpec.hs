@@ -65,6 +65,7 @@ cases :: [(String, String, [Integer])]
 cases =
     [ ("RSA.PrivateKey", show rsaPriv, [d1, d2, d3, d4, d5, d6])
     , ("RSA.KeyPair", show (RSA.KeyPair rsaPriv), [d1, d2, d3, d4, d5, d6])
+    , ("RSA.Blinder", show (RSA.Blinder d1 d2), [d1, d2])
     , ("DSA.PrivateKey", show (DSA.PrivateKey dsaParams d1), [d1])
     , ("DSA.KeyPair", show (DSA.KeyPair dsaParams 0xabc4 d1), [d1])
     , ("ECDSA.PrivateKey", show (ECDSA.PrivateKey ecdsaCurve d1), [d1])
