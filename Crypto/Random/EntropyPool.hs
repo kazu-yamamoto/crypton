@@ -33,10 +33,14 @@ defaultPoolSize = 4096
 -- While you can create as many entropy pools as you want,
 -- the pool can be shared between multiples RNGs.
 createEntropyPoolWith :: Int -> [EntropyBackend] -> IO EntropyPool
-createEntropyPoolWith poolSize backends = do
-    m <- newMVar 0
-    sm <- B.alloc poolSize (replenish poolSize backends)
-    return $ EntropyPool backends m sm
+createEntropyPoolWith poolSize backends
+    -- an empty pool can never hand out a byte; drawing from one looped forever
+    | poolSize <= 0 =
+        error "Crypto.Random.EntropyPool: the pool size must be positive"
+    | otherwise = do
+        m <- newMVar 0
+        sm <- B.alloc poolSize (replenish poolSize backends)
+        return $ EntropyPool backends m sm
 
 -- | Create a new entropy pool with a default size.
 --
