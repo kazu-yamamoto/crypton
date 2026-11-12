@@ -20,7 +20,7 @@ import Crypto.Random.Entropy.Unsafe (
     replenish,
     supportedBackends,
  )
-import Crypto.Random.EntropyPool (createEntropyPoolWith)
+import Crypto.Random.EntropyPool (createEntropyPoolWith, getEntropyFrom)
 
 spec :: Spec
 spec = describe "the system entropy source" $ do
@@ -55,6 +55,15 @@ spec = describe "the system entropy source" $ do
     it "says so with an exception when there is no source at all" $ do
         r <- allocaBytes 16 $ \ptr -> try (replenish 16 [] ptr)
         r `shouldBe` Left NoEntropySource
+
+    -- an empty buffer was allocated for these and then written into
+    it "refuses a negative length" $ do
+        (getEntropy (-1) :: IO BS.ByteString) `shouldThrow` anyErrorCall
+        (getEntropy (negate (2 ^ (32 :: Int)) + 64) :: IO BS.ByteString)
+            `shouldThrow` anyErrorCall
+        bs <- catMaybes `fmap` sequence supportedBackends
+        pool <- createEntropyPoolWith 64 bs
+        (getEntropyFrom pool (-1) :: IO BS.ByteString) `shouldThrow` anyErrorCall
 
     -- getEntropyFrom on a pool of size zero used to loop forever
     it "refuses an entropy pool of size zero" $ do
