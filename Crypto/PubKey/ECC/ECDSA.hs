@@ -247,10 +247,14 @@ recoverDigest
     => Curve -> ExtendedSignature -> Digest hash -> Maybe PublicKey
 recoverDigest curve (ExtendedSignature i p (Signature r s)) digest = do
     let CurveCommon _ _ g n _ = common_curve curve
+    -- SEC 1 4.1.6 takes r and s in [1, n-1], as verify does
+    guard (r > 0 && r < n && s > 0 && s < n && i >= 0)
     let z = dsaTruncHashDigest digest n
     w <- inverse r n
     c <- pointCompose curve i r p
-    pure $ PublicKey curve $ pointAddTwoMuls curve (s * w) c (negate $ z * w) g
+    let q = pointAddTwoMuls curve (s * w) c (negate $ z * w) g
+    guard (not (isPointAtInfinity q))
+    pure $ PublicKey curve q
 
 -- | Recover the public key from an extended signature and a message.
 recover
