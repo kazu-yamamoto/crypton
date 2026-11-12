@@ -78,9 +78,18 @@ validateParameters params
 
 -- | 'validateParameters', and an iteration count the C can take: it is a
 -- @uint32_t@ there, so 2^32 + 1 would silently run once.
-validateFastParameters :: Parameters -> Maybe CryptoError
-validateFastParameters params
+validateFastParameters :: Int -> Parameters -> Maybe CryptoError
+validateFastParameters hLen params
     | toInteger (iterCounts params) > toInteger (maxBound :: Word32) =
+        Just CryptoError_ParameterInvalid
+    | otherwise = validateLength hLen params
+
+-- | 'validateParameters', and RFC 8018's limit of (2^32 - 1) blocks: the
+-- block index is 32 bits, so a longer key would repeat its first blocks.
+validateLength :: Int -> Parameters -> Maybe CryptoError
+validateLength hLen params
+    | toInteger (outputLength params)
+        > toInteger (maxBound :: Word32) * toInteger hLen =
         Just CryptoError_ParameterInvalid
     | otherwise = validateParameters params
 
@@ -109,7 +118,7 @@ tryGenerate
     -> salt
     -> CryptoFailable ba
 tryGenerate prf params password salt
-    | Just err <- validateParameters params = CryptoFailed err
+    | Just err <- validateLength hLen params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \p -> do
         memSet p 0 (outputLength params)
         loop 1 (outputLength params) p
@@ -180,7 +189,7 @@ tryFastPBKDF2_SHA1
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA1 params password salt
-    | Just err <- validateFastParameters params = CryptoFailed err
+    | Just err <- validateFastParameters 20 params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->
@@ -216,7 +225,7 @@ tryFastPBKDF2_SHA256
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA256 params password salt
-    | Just err <- validateFastParameters params = CryptoFailed err
+    | Just err <- validateFastParameters 32 params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->
@@ -252,7 +261,7 @@ tryFastPBKDF2_SHA512
     -> salt
     -> CryptoFailable out
 tryFastPBKDF2_SHA512 params password salt
-    | Just err <- validateFastParameters params = CryptoFailed err
+    | Just err <- validateFastParameters 64 params = CryptoFailed err
     | otherwise = CryptoPassed $ B.allocAndFreeze (outputLength params) $ \outPtr ->
         B.withByteArray password $ \passPtr ->
             B.withByteArray salt $ \saltPtr ->
