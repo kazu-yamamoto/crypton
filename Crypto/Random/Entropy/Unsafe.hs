@@ -23,6 +23,8 @@ import Foreign.Ptr (Ptr, plusPtr)
 -- and 'EntropyShort' when three passes over the backends still leave the
 -- buffer unfilled.
 replenish :: Int -> [EntropyBackend] -> Ptr Word8 -> IO ()
+replenish n _ _
+    | n < 0 = error "Crypto.Random.Entropy.Unsafe.replenish: negative length"
 replenish _ [] _ = throwIO NoEntropySource
 replenish poolSize backends ptr = loop 0 backends ptr poolSize
   where

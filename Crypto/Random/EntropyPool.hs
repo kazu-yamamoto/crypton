@@ -71,5 +71,9 @@ getEntropyPtr (EntropyPool backends posM sm) n outPtr =
             copyLoop (d `plusPtr` m) s (wrappedPos + m) (left - m)
 
 -- | Grab a chunk of entropy from the entropy pool.
+--
+-- A negative length is an error; it used to reach a copy of negative size.
 getEntropyFrom :: ByteArray byteArray => EntropyPool -> Int -> IO byteArray
-getEntropyFrom pool n = B.alloc n (getEntropyPtr pool n)
+getEntropyFrom pool n
+    | n < 0 = error "Crypto.Random.EntropyPool: negative length"
+    | otherwise = B.alloc n (getEntropyPtr pool n)
