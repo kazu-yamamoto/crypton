@@ -15,7 +15,12 @@ import Foreign.Marshal.Alloc (allocaBytes)
 import Test.Hspec
 
 import Crypto.Random.Entropy (EntropyError (..), getEntropy)
-import Crypto.Random.Entropy.Unsafe (gatherBackend, replenish, supportedBackends)
+import Crypto.Random.Entropy.Unsafe (
+    gatherBackend,
+    replenish,
+    supportedBackends,
+ )
+import Crypto.Random.EntropyPool (createEntropyPoolWith)
 
 spec :: Spec
 spec = describe "the system entropy source" $ do
@@ -50,6 +55,11 @@ spec = describe "the system entropy source" $ do
     it "says so with an exception when there is no source at all" $ do
         r <- allocaBytes 16 $ \ptr -> try (replenish 16 [] ptr)
         r `shouldBe` Left NoEntropySource
+
+    -- getEntropyFrom on a pool of size zero used to loop forever
+    it "refuses an entropy pool of size zero" $ do
+        bs <- catMaybes `fmap` sequence supportedBackends
+        createEntropyPoolWith 0 bs `shouldThrow` anyErrorCall
 
 lengthCase :: Int -> Spec
 lengthCase n =
