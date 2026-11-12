@@ -5,10 +5,10 @@ module PubKey.PSSSpec (spec) where
 import Crypto.Number.Basic (numBits)
 import Crypto.Number.Serialize (i2ospOf_, os2ip)
 import Crypto.PubKey.RSA
-import Crypto.PubKey.RSA.Prim (dp, ep)
 import qualified Crypto.PubKey.RSA.PSS as PSS
-import qualified Data.ByteString as B
+import Crypto.PubKey.RSA.Prim (dp, ep)
 import qualified Data.Bits as Bits
+import qualified Data.ByteString as B
 import Data.Word (Word8)
 
 import Imports
@@ -484,6 +484,14 @@ signatureRangeTests =
             verify' (i2ospOf_ k (os2ip s + modulus)) `shouldBe` False
         it "a signature representative equal to the modulus is refused" $
             verify' (i2ospOf_ k modulus) `shouldBe` False
+        -- n = 1 gives an empty encoding, whose last byte used to be read
+        it "a key too small for the encoding is refused, not raised on" $
+            PSS.verify
+                PSS.defaultPSSParamsSHA1
+                (PublicKey 1 1 65537)
+                ("message" :: ByteString)
+                "\0"
+                `shouldBe` False
   where
     key = rsaKey1
     k = public_size (private_pub key)
@@ -534,16 +542,17 @@ step6Tests = describe "an encoding with a bit outside emBits set" $ do
 
     -- the first vector whose encoding, with a forbidden bit set, is still
     -- below the modulus, paired as (honest, altered)
-    altered key vs = firstVector
-        [ ((v, signature v), (v, dp Nothing key em'))
-        | v <- vs
-        , let pub = private_pub key
-              em = ep pub (signature v)
-              bit = lowestSet (forbidden (numBits (public_n pub)))
-              em' = B.cons (B.head em Bits..|. bit) (B.tail em)
-        , B.head em Bits..&. forbidden (numBits (public_n pub)) == 0
-        , os2ip em' < public_n pub
-        ]
+    altered key vs =
+        firstVector
+            [ ((v, signature v), (v, dp Nothing key em'))
+            | v <- vs
+            , let pub = private_pub key
+                  em = ep pub (signature v)
+                  bit = lowestSet (forbidden (numBits (public_n pub)))
+                  em' = B.cons (B.head em Bits..|. bit) (B.tail em)
+            , B.head em Bits..&. forbidden (numBits (public_n pub)) == 0
+            , os2ip em' < public_n pub
+            ]
 
     -- the forbidden bit worth setting is the lowest of them: it is the one
     -- that adds least, and an encoding at or past the modulus proves nothing
