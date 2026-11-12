@@ -185,7 +185,8 @@ void crypton_skein512_finalize(struct skein512_ctx *ctx, uint32_t hashlen, uint8
 {
 	uint32_t outsize;
 	uint64_t x[8];
-	int i, j, n;
+	uint32_t i;
+	int j, n;
 
 	ctx->t1 |= FLAG_FINAL;
 	/* if buf is not complete pad with 0 bytes */
