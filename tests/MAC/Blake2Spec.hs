@@ -4,7 +4,7 @@
 
 module MAC.Blake2Spec (spec) where
 
-import Crypto.Hash (digestFromByteString)
+import Crypto.Hash (digestFromByteString, hashWith)
 import Crypto.Hash.Algorithms
 import qualified Crypto.MAC.KeyedBlake2 as KB
 
@@ -192,7 +192,22 @@ macIncrementalTests =
     prop_inc1 _ (MacIncrementalList secret msgs result) =
         result `assertEq` KB.finalize (foldl' KB.update (KB.initialize secret) msgs)
 
+-- RFC 7693: a key of length zero means the unkeyed hash
+emptyKeyTests :: Spec
+emptyKeyTests = do
+    it "Blake2b_512" $ check (Blake2b :: Blake2b 512)
+    it "Blake2bp_512" $ check (Blake2bp :: Blake2bp 512)
+    it "Blake2s_256" $ check (Blake2s :: Blake2s 256)
+    it "Blake2sp_256" $ check (Blake2sp :: Blake2sp 256)
+  where
+    check :: KB.HashBlake2 a => a -> Expectation
+    check a = forM_ ["", "abc", B.replicate 300 0x61] $ \m -> do
+        KB.keyedBlake2GetDigest (KB.keyedBlake2 B.empty m) `shouldBe` hashWith a m
+        KB.keyedBlake2GetDigest (KB.finalize (KB.update (KB.initialize B.empty) m))
+            `shouldBe` hashWith a m
+
 spec :: Spec
 spec = do
     describe "KATs" $ sequence_ macTests
+    describe "empty key" emptyKeyTests
     describe "properties" $ sequence_ macIncrementalTests
