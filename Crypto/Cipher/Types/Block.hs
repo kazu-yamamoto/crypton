@@ -1,6 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- |
@@ -62,6 +63,10 @@ import Foreign.Storable
 
 -- | an IV parametrized by the cipher
 data IV c = forall byteArray. ByteArray byteArray => IV !byteArray
+
+-- nominal, so that coerce cannot relabel an IV as one for another cipher,
+-- whose C would read a block of its own size from it
+type role IV nominal
 
 instance BlockCipher c => ByteArrayAccess (IV c) where
     withByteArray (IV z) f = withByteArray z f
