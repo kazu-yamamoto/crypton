@@ -7,7 +7,12 @@ void crypton_blake2b_init(blake2b_ctx *ctx, uint32_t hashlen)
 
 void crypton_blake2b_init_key(blake2b_ctx *ctx, uint32_t hashlen, const uint8_t *key, size_t keylen)
 {
-	_crypton_blake2b_init_key(ctx, hashlen / 8, (const void *) key, keylen);
+	/* RFC 7693: an empty key is the unkeyed hash; init_key refuses it
+	 * and would leave ctx uninitialised */
+	if (keylen == 0)
+		_crypton_blake2b_init(ctx, hashlen / 8);
+	else
+		_crypton_blake2b_init_key(ctx, hashlen / 8, (const void *) key, keylen);
 }
 
 void crypton_blake2b_update(blake2b_ctx *ctx, const uint8_t *data, uint32_t len)
