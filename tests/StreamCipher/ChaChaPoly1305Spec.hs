@@ -9,9 +9,12 @@ import Crypto.Error
 import Imports
 import MAC.Poly1305Spec ()
 
+import Control.Exception (evaluate)
 import Data.Bits (xor)
 import qualified Data.ByteArray as B (convert)
 import qualified Data.ByteString as B
+import Data.ByteString.Unsafe (unsafePackCStringLen)
+import Foreign.Ptr (nullPtr)
 
 plaintext
     , aad
@@ -132,6 +135,16 @@ spec = do
     it "RFC8439 A5 enc" rfc8439encrypt
     it "RFC8439 A5 dec" rfc8439decrypt
     oneShotTests
+    -- the 32-bit counter of a 96-bit nonce used to carry into the nonce;
+    -- the input is only a length, which the check refuses before reading
+    it "refuses a message past 2^38 - 64 bytes with a 96-bit nonce" $ do
+        huge <- unsafePackCStringLen (nullPtr, 2 ^ (38 :: Int) - 63)
+        let st =
+                CP.initialize
+                    (throwCryptoError $ CP.key (B.replicate 32 0))
+                    (throwCryptoError $ CP.nonce12 (B.replicate 12 0))
+        evaluate (fst (CP.encrypt huge st)) `shouldThrow` anyErrorCall
+        evaluate (fst (CP.decrypt huge st)) `shouldThrow` anyErrorCall
   where
     runEncrypt =
         let ini =
@@ -250,8 +263,10 @@ oneShotTests = describe "Crypto.Cipher.ChaCha.Poly1305" $ do
     it "agrees with the step-at-a-time interface over a different message" $
         let msg = "another message, of a length that is not a multiple of 16" :: B.ByteString
             ad = "\x01\x02\x03" :: B.ByteString
-            ini = CP.initialize (throwCryptoError $ CP.key key)
-                                (throwCryptoError $ CP.nonce12 nonce12)
+            ini =
+                CP.initialize
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce12 nonce12)
             afterAAD = CP.finalizeAAD (CP.appendAAD ad ini)
             (out, afterEnc) = CP.encrypt msg afterAAD
             t = CP.finalize afterEnc
