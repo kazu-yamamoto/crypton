@@ -53,6 +53,9 @@ spec = do
             run' (Scrypt.Parameters 16 (-1) 1 32) `shouldBe` refused
             run' (Scrypt.Parameters 16 8 0 32) `shouldBe` refused
             run' (Scrypt.Parameters 16 8 (-1) 32) `shouldBe` refused
+        -- the C indexes 32 * r words with int, which went negative
+        it "rejects r of 2^26 or more" $
+            run' (Scrypt.Parameters 2 (2 ^ (26 :: Int)) 1 32) `shouldBe` refused
         it "rejects 128 * r * n that does not fit in an Int" $
             run' (Scrypt.Parameters (2 ^ (57 :: Int)) 1 1 32) `shouldBe` refused
   where
