@@ -1,14 +1,15 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- The properties below hold the new entry points against sign, signSafer
 -- and verify, which are deprecated as of this release.  Comparing against
 -- them is the point, so the warning is off here and nowhere else.
 {-# OPTIONS_GHC -Wno-deprecations #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module PubKey.RSASpec (spec) where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
+import Control.Exception (evaluate)
 import Crypto.Hash
 import Crypto.Number.ModArithmetic (inverse)
 import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
@@ -19,8 +20,8 @@ import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import qualified Crypto.PubKey.RSA.PSS as PSS
 import Crypto.PubKey.RSA.Prim (ep)
 import qualified Crypto.PubKey.RSA.Prim as Prim
-import qualified Data.ByteString as B
 import Data.Bits ((.|.))
+import qualified Data.ByteString as B
 import Data.Either
 
 import Imports
@@ -141,7 +142,8 @@ doVerifyTest i vector = it (show i) (actual `shouldBe` True)
 -- and @s + n@ verify just as well as @s@ itself.
 doMalleabilityTest :: Show a => a -> VectorRSA -> Spec
 doMalleabilityTest i vector =
-    describe (show i) $ mapM_ checks [("verify", verify'), ("verifyDigest", verifyDigest')]
+    describe (show i) $
+        mapM_ checks [("verify", verify'), ("verifyDigest", verifyDigest')]
   where
     -- Both routes, and absolutely rather than against each other: they
     -- share the checks of RFC 8017, so a test that only made them agree
@@ -282,7 +284,8 @@ crtFaultTests :: Spec
 crtFaultTests = describe "a fault in one CRT half" $
     forM_ faults $ \(name, bad) -> describe name $ do
         it "signs what the sound key signs" $
-            RSA.sign Nothing (Just SHA256) bad m `shouldBe` RSA.sign Nothing (Just SHA256) key m
+            RSA.sign Nothing (Just SHA256) bad m
+                `shouldBe` RSA.sign Nothing (Just SHA256) key m
         prop "signs with a blinder what the sound key signs" $ \testDRG ->
             let blinder = withTestDRG testDRG $ RSA.generateBlinder (RSA.public_n pub)
              in RSA.sign (Just blinder) (Just SHA256) bad m
@@ -315,9 +318,14 @@ crtFaultTests = describe "a fault in one CRT half" $
 -- prime modulo the other, which is the part worked out without the extended
 -- Euclidean algorithm.
 keyGenerationTests :: Spec
-keyGenerationTests =
+keyGenerationTests = do
     describe "generateWith" $
         zipWithM_ check [katZero ..] vectorsSHA1
+    -- no such e has an inverse modulo the even phi; generate used to loop
+    it "generate refuses an e below 3 or even" $
+        forM_ [-1, 0, 1, 2, 65536] $ \ex ->
+            evaluate (RSA.generate 64 ex :: IO (RSA.PublicKey, RSA.PrivateKey))
+                `shouldThrow` anyErrorCall
   where
     check i vector =
         it (show i) $
@@ -372,7 +380,6 @@ privateExponentTests = describe "private exponent" $ do
         ]
     exponents = [3, 5, 17, 257, 65537, 9, 15, 2]
 
-
 -- | Every algorithm with a 'RSA.HashAlgorithmASN1' instance, so that a
 -- property quantifies over the lot of them rather than over the two or
 -- three somebody thought of.  Adding an instance and forgetting to add it
@@ -418,7 +425,8 @@ instance Arbitrary ArbitraryDigestInfo where
 
 -- | The digest a message has under an algorithm picked at runtime, which is
 -- what the existential leaves us able to say.
-hashOf :: RSA.HashAlgorithmASN1 hashAlg => hashAlg -> ByteString -> Digest hashAlg
+hashOf
+    :: RSA.HashAlgorithmASN1 hashAlg => hashAlg -> ByteString -> Digest hashAlg
 hashOf = hashWith
 
 -- | The operations that take a 'Digest' or a DigestInfo, against the ones
@@ -553,7 +561,7 @@ blindedKeyTests = describe "BlindedKey" $ do
             return bk'
 
     it "works for a key without its CRT values" $ do
-        let bare = key {RSA.private_p = 0, RSA.private_q = 0}
+        let bare = key{RSA.private_p = 0, RSA.private_q = 0}
             go _ 41 = return ()
             go bk i = do
                 let dg = hashWith SHA256 (B.replicate i 0x62)
@@ -570,7 +578,10 @@ blindedKeyTests = describe "BlindedKey" $ do
                     (s, bk') <- RSA.signDigestBlinded bk (hashWith SHA256 (B.replicate i 0x64))
                     go bk' (i + 1) (s : acc)
             sigs = withTestDRG testDRG (go (RSA.blindedKey key) 1 [])
-         in sigs === [RSA.signDigest Nothing key (hashWith SHA256 (B.replicate i 0x64)) | i <- [1 .. 40]]
+         in sigs
+                === [ RSA.signDigest Nothing key (hashWith SHA256 (B.replicate i 0x64))
+                    | i <- [1 .. 40]
+                    ]
 
     it "gives every thread a right answer through the Safer functions" $ do
         dones <- forM [1 .. 8 :: Int] $ \t -> do
@@ -588,7 +599,11 @@ blindedKeyTests = describe "BlindedKey" $ do
     -- More keys than the Safer functions remember, interleaved, so that the
     -- table both hits and evicts.
     it "keeps the Safer functions right across more keys than it remembers" $ do
-        let keys = key : [snd (withTestDRG (TestDRG (s', 2, 3, 4, 5)) (RSA.generate 64 65537)) | s' <- [1 .. 5]]
+        let keys =
+                key
+                    : [ snd (withTestDRG (TestDRG (s', 2, 3, 4, 5)) (RSA.generate 64 65537))
+                      | s' <- [1 .. 5]
+                      ]
         forM_ [1 .. 12 :: Int] $ \i ->
             forM_ keys $ \k -> do
                 let dg = hashWith SHA256 (B.replicate i 0x63)
