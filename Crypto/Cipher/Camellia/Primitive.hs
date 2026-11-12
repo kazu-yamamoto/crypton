@@ -23,7 +23,7 @@ import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat (unsafeDoIO)
 import Data.Word
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, plusPtr)
 
 -- | The subkeys of RFC 3713 section 2.2: kw, k and ke, as 26 64-bit words.
 newtype Camellia = Camellia Bytes
@@ -68,7 +68,9 @@ run f (Camellia sched) input
         B.alloc len $ \out ->
             B.withByteArray sched $ \ks ->
                 B.withByteArray input $ \inp ->
-                    f out ks inp (fromIntegral (len `div` blockBytes))
+                    -- the C takes a uint32_t block count, so go in pieces
+                    B.inCLengths len $ \off n ->
+                        f (out `plusPtr` off) ks (inp `plusPtr` off) (fromIntegral (n `div` blockBytes))
   where
     len = B.length input
 
