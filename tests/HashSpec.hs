@@ -600,10 +600,20 @@ skeinNatTests = describe "Skein with the digest size as a type parameter" $ do
     h alg m = convert (hashWith alg m) :: ByteString
     len alg = B.length (convert (hashWith alg v1) :: ByteString)
 
+-- one update of 2^28 bytes or more used to overflow the bit count in C
+largeUpdateTests :: Spec
+largeUpdateTests = describe "one update of 256 MiB" $
+    it "Whirlpool" $ do
+        let chunk = B.replicate 65536 1
+            whole = B.concat (replicate 4096 chunk)
+        hashWith Whirlpool whole
+            `shouldBe` hashFinalize (hashUpdates (hashInitWith Whirlpool) (replicate 4096 chunk))
+
 spec :: Spec
 spec = do
     describe "KATs" $ mapM_ makeTestAlg expected
     skeinNatTests
+    largeUpdateTests
     describe "KATs over several blocks" $
         mapM_ (makeTestAlgWith longVectors) expectedLong
     describe "Chunking" $ mapM_ makeTestChunk expected
