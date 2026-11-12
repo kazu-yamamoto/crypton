@@ -404,6 +404,10 @@ doECB f ctx input
     (nbBlocks, r) = len `quotRem` 16
     len = B.length input
 
+-- The C reads a whole block of IV, whatever length it was given.
+ivLengthMessage :: Int -> String
+ivLengthMessage n = "AES error: IV length must be block size (16). Its length is: " ++ show n
+
 {-# INLINE doCBC #-}
 doCBC
     :: ByteArray ba
@@ -414,6 +418,7 @@ doCBC
     -> ba
 doCBC f ctx (IV iv) input
     | B.overCLength nbBlocks = error tooLongMessage
+    | B.length iv /= 16 = error (ivLengthMessage (B.length iv))
     | len == 0 = B.empty
     | r /= 0 =
         error $
@@ -438,6 +443,7 @@ doXTS
     -> ba
 doXTS f (key1, key2) iv spoint input
     | B.overCLength nbBlocks = error tooLongMessage
+    | B.length iv /= 16 = error (ivLengthMessage (B.length iv))
     | len == 0 = B.empty
     | r /= 0 =
         error $
