@@ -118,7 +118,8 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 	 * as a second source when it is the same one twice.
 	 */
 	got = crypton_sysrandom_available() ? crypton_sysrandom_bytes(buf, 64) : 0;
-	if (got <= 0) {
+	/* all 64 or nothing: a short read is a call that failed part way */
+	if (got != 64) {
 		/* Nothing else here is a seed on its own, so there is nothing to
 		 * go on with: return before drawing anything that would only be
 		 * thrown away. */
