@@ -34,7 +34,7 @@ data Parameters = Parameters
     { n :: Word64
     -- ^ Cpu/Memory cost ratio. must be a power of 2 greater than 1. also known as N.
     , r :: Int
-    -- ^ Must be positive and satisfy r * p < 2^30
+    -- ^ Must be positive, below 2^26, and satisfy r * p < 2^30
     , p :: Int
     -- ^ Must be positive and satisfy r * p < 2^30
     , outputLength :: Int
@@ -101,6 +101,8 @@ validParameters params =
     n params >= 2
         && popCount (n params) == 1
         && r' >= 1
+        -- the C indexes a block of 32 * r words with int and uint32_t
+        && r' < 0x4000000
         && p' >= 1
         && r' * p' < 0x40000000
         && 128 * r' * n' <= maxInt
