@@ -276,6 +276,8 @@ verifyDigest
 verifyDigest params pk digest s
     | B.length s /= k = False
     | os2ip s >= public_n pk = False
+    -- RFC 8017 9.1.2 step 3; an empty em (n = 1) used to make B.last raise
+    | emLen < hashLen + pssSaltLength params + 2 = False
     | B.any (/= 0) pre = False
     | B.any (\x -> x .&. topBits /= 0) (B.take 1 maskedDB) = False
     | B.last em /= pssTrailerField params = False
