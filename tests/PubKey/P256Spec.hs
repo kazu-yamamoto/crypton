@@ -10,7 +10,10 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import Crypto.Error
 import Crypto.Number.ModArithmetic (inverseCoprimes)
 import Crypto.Number.Serialize (i2ospOf, os2ip)
+import Crypto.Random (DRG (..), withDRG)
 import Data.ByteArray (Bytes)
+import qualified Data.ByteArray as BA
+import qualified Data.ByteString as B
 
 import Imports
 
@@ -105,8 +108,25 @@ validPointEdgeCases =
         )
     ]
 
+-- hands out the given blocks in turn, so that a test can choose them
+newtype Blocks = Blocks [B.ByteString]
+
+instance DRG Blocks where
+    randomBytesGenerate n (Blocks (b : bs)) = (BA.convert (B.take n b), Blocks bs)
+    randomBytesGenerate _ (Blocks []) = error "Blocks: out of blocks"
+
 spec :: Spec
 spec = do
+    -- n and above used to be reduced modulo n, favouring small scalars
+    it "scalarGenerate draws again for 0 and for n and above" $
+        let blocks =
+                [ B.replicate 32 0xff
+                , B.replicate 32 0
+                , BA.convert (i2ospScalar curveN)
+                , BA.convert (i2ospScalar 7)
+                ]
+         in p256ScalarToInteger (fst (withDRG (Blocks blocks) P256.scalarGenerate))
+                `shouldBe` 7
     describe "scalar" $ do
         prop "marshalling" $ \(QAInteger r) ->
             let rBytes = i2ospScalar r

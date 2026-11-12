@@ -234,9 +234,14 @@ unsafePointFromBinary ba
 -- Scalar methods
 ------------------------------------------------------------------------
 
--- | Generate a randomly generated new scalar
+-- | Generate a randomly generated new scalar, uniform in [1, n - 1]
+--
+-- 256 random bits are drawn again until they fall in that range, rather than
+-- being reduced modulo n, which would favour the small values.
 scalarGenerate :: MonadRandom randomly => randomly Scalar
-scalarGenerate = unwrap . scalarFromBinary . witness <$> getRandomBytes 32
+scalarGenerate = do
+    s <- unwrap . scalarFromBinary . witness <$> getRandomBytes 32
+    if scalarIsZero s || scalarCmp s scalarN /= LT then scalarGenerate else return s
   where
     unwrap (CryptoFailed _) = error "scalarGenerate: assumption failed"
     unwrap (CryptoPassed s) = s
