@@ -26,6 +26,8 @@ void crypton_rc4_init(uint8_t *key, uint32_t keylen, struct rc4_ctx *ctx)
 {
 	uint32_t i, j;
 	memset(ctx, 0, sizeof(struct rc4_ctx));
+	if (keylen == 0) /* key[i % 0]; the Haskell side refuses an empty key */
+		return;
 
 	/* initialize context */
 	for (i = 0; i < 256; i++)
