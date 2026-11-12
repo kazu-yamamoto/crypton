@@ -67,12 +67,14 @@ ecb (Schedule sched) input
         B.alloc len $ \out ->
             B.withByteArray sched $ \ks ->
                 B.withByteArray input $ \inp ->
-                    c_des_ecb
-                        out
-                        ks
-                        (fromIntegral (B.length sched `div` stageSize))
-                        inp
-                        (fromIntegral (len `div` blockBytes))
+                    -- the C takes a uint32_t block count, so go in pieces
+                    B.inCLengths len $ \off n ->
+                        c_des_ecb
+                            (out `plusPtr` off)
+                            ks
+                            (fromIntegral (B.length sched `div` stageSize))
+                            (inp `plusPtr` off)
+                            (fromIntegral (n `div` blockBytes))
   where
     len = B.length input
 

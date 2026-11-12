@@ -28,7 +28,7 @@ import Data.ByteArray.Mapping
 import Data.Bits ((.|.))
 import qualified Data.Primitive.ByteArray as Prim
 import Data.Word (Word32, Word8)
-import Foreign.Ptr (Ptr, castPtr)
+import Foreign.Ptr (Ptr, castPtr, plusPtr)
 import Foreign.Storable (peekByteOff)
 
 import Crypto.Internal.Compat (unsafeDoIO)
@@ -115,7 +115,12 @@ bxor a b = unsafeDoIO $
     alloc n $ \pd ->
         withByteArray a $ \pa ->
             withByteArray b $ \pb ->
-                c_memxor pd pa pb (fromIntegral n)
+                inCLengths n $ \off m ->
+                    c_memxor
+                        (pd `plusPtr` off)
+                        (pa `plusPtr` off)
+                        (pb `plusPtr` off)
+                        (fromIntegral m)
   where
     n = min (Data.ByteArray.length a) (Data.ByteArray.length b)
 
