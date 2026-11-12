@@ -739,6 +739,8 @@ void crypton_aes_gcm_init(aes_gcm *gcm, aes_key *key, uint8_t *iv, uint32_t len)
 
 /* Crypto.Cipher.AES.Primitive reads length_input at this offset */
 typedef char crypton_gcm_length_input_offset[offsetof(aes_gcm, length_input) == 312 ? 1 : -1];
+/* Crypto.Cipher.AES.Primitive allocates sizeOCB bytes */
+typedef char crypton_ocb_size[sizeof(aes_ocb) <= 176 ? 1 : -1];
 
 void crypton_aes_gcm_aad(aes_gcm *gcm, uint8_t *input, uint32_t length)
 {
@@ -1123,10 +1125,11 @@ static inline void ocb_block_double(block128 *d, block128 *s)
 	d->b[15] = (s->b[15] << 1) ^ ((tmp >> 7) * 0x87);
 }
 
-static void ocb_get_L_i(block128 *l, block128 *lis, unsigned int i)
+static void ocb_get_L_i(block128 *l, block128 *lis, uint64_t n)
 {
 #define L_CACHED 4
-	i = bitfn_ntz(i);
+	unsigned int i = (uint32_t) n ? bitfn_ntz((uint32_t) n)
+	                              : 32 + bitfn_ntz((uint32_t) (n >> 32));
 	if (i < L_CACHED) {
 		block128_copy(l, &lis[i]);
 	} else {
@@ -1208,6 +1211,8 @@ void crypton_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len,
 	block128_zero(&ocb->sum_aad);
 	block128_zero(&ocb->sum_enc);
 	block128_zero(&ocb->offset_aad);
+	ocb->blocks_aad = 0;
+	ocb->blocks_enc = 0;
 }
 
 void crypton_aes_ocb_aad(aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t length)
@@ -1215,8 +1220,10 @@ void crypton_aes_ocb_aad(aes_ocb *ocb, aes_key *key, uint8_t *input, uint32_t le
 	block128 tmp;
 	block128 buf[OCB_WAY];
 	uint32_t blocks = length / 16;
-	unsigned int i = 1, j;
+	uint64_t i = ocb->blocks_aad + 1;
+	unsigned int j;
 
+	ocb->blocks_aad += blocks;
 	for (; blocks >= OCB_WAY; blocks -= OCB_WAY, input += 16 * OCB_WAY) {
 		for (j = 0; j < OCB_WAY; j++, i++) {
 			ocb_get_L_i(&tmp, ocb->li, i);
@@ -1551,8 +1558,10 @@ static void ocb_generic_crypt(uint8_t *output, aes_ocb *ocb, aes_key *key,
 	block128 tmp, pad;
 	block128 offsets[OCB_WAY], buf[OCB_WAY];
 	uint32_t blocks = length / 16;
-	unsigned int i = 1, j;
+	uint64_t i = ocb->blocks_enc + 1;
+	unsigned int j;
 
+	ocb->blocks_enc += blocks;
 	for (; blocks >= OCB_WAY;
 	     blocks -= OCB_WAY, input += 16 * OCB_WAY, output += 16 * OCB_WAY) {
 		for (j = 0; j < OCB_WAY; j++, i++) {

@@ -174,7 +174,7 @@ sizeGCMKey :: Int
 sizeGCMKey = 832
 
 sizeOCB :: Int
-sizeOCB = 160
+sizeOCB = 176
 
 sizeCCM :: Int
 sizeCCM = 84
