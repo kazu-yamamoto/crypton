@@ -5,7 +5,7 @@ void crypton_blake2sp_init(blake2sp_ctx *ctx, uint32_t hashlen)
 	_crypton_blake2sp_init(ctx, hashlen / 8);
 }
 
-void crypton_blake2sp_init_key(blake2sp_ctx *ctx, uint32_t hashlen, const uint8_t *key, size_t keylen)
+void crypton_blake2sp_init_key(blake2sp_ctx *ctx, uint32_t hashlen, const uint8_t *key, uint32_t keylen)
 {
 	/* RFC 7693: an empty key is the unkeyed hash; init_key refuses it
 	 * and would leave ctx uninitialised */
