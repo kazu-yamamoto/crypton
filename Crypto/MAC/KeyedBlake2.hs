@@ -52,20 +52,30 @@ instance Eq (KeyedBlake2 a) where
 newtype Context a = Context (H.Context a)
 
 -- | Initialize a new incremental keyed Blake2 context with the supplied key.
+--
+-- The key may be up to 64 bytes for Blake2b and Blake2bp, and up to 32 bytes
+-- for Blake2s and Blake2sp, whatever the digest size (RFC 7693).  A longer key
+-- is an error.
 initialize
     :: forall a key
      . (HashBlake2 a, ByteArrayAccess key)
     => key -> Context a
-initialize k = Context $ H.Context $ B.allocAndFreeze ctxSz performInit
+initialize k
+    -- it used to be cut to the digest size, so keys that agreed that far
+    -- gave the same MAC, and a longer key was not the RFC's
+    | B.length k > maxKeySz =
+        error $
+            "Crypto.MAC.KeyedBlake2: key longer than "
+                ++ show maxKeySz
+                ++ " bytes"
+    | otherwise = Context $ H.Context $ B.allocAndFreeze ctxSz performInit
   where
     ctxSz = H.hashInternalContextSize (undefined :: a)
-    digestSz = H.hashDigestSize (undefined :: a)
-    -- cap the number of key bytes at digestSz,
-    -- since that's the maximal key size
-    keyByteLen = min (B.length k) digestSz
+    -- the BLAKE2 maximal key size is half its block size: 64 or 32 bytes
+    maxKeySz = H.hashBlockSize (undefined :: a) `div` 2
     performInit :: Ptr (H.Context a) -> IO ()
     performInit ptr = B.withByteArray k $
-        \keyPtr -> blake2InternalKeyedInit ptr keyPtr (fromIntegral keyByteLen)
+        \keyPtr -> blake2InternalKeyedInit ptr keyPtr (fromIntegral (B.length k))
 
 -- | Incrementally update a keyed Blake2 context.
 update :: (HashBlake2 a, ByteArrayAccess ba) => Context a -> ba -> Context a
