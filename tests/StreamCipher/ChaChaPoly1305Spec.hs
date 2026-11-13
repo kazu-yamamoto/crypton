@@ -134,6 +134,17 @@ spec = do
     it "nonce increment" runNonceInc
     it "RFC8439 A5 enc" rfc8439encrypt
     it "RFC8439 A5 dec" rfc8439decrypt
+    -- each piece used to be padded to 16 bytes as if it were the whole header
+    it "RFC8439 A5 with the header in pieces" $ do
+        let a0 = throwCryptoError (CP.aeadChacha20poly1305Init a5key a5nonce)
+            pieces = [B.take 5 a5aad, B.empty, B.drop 5 a5aad]
+            headed = foldl' aeadAppendHeader a0 pieces
+            (ct, a1) = aeadEncrypt headed a5plain
+            (pt, a2) = aeadDecrypt headed a5cipher
+        ct `shouldBe` a5cipher
+        B.convert (aeadFinalize a1 16) `shouldBe` a5tag
+        pt `shouldBe` a5plain
+        B.convert (aeadFinalize a2 16) `shouldBe` a5tag
     oneShotTests
     -- the 32-bit counter of a 96-bit nonce used to carry into the nonce;
     -- the input is only a length, which the check refuses before reading
