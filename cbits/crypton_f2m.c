@@ -79,7 +79,10 @@ static void poly_mul_generic(limb_t *t, const limb_t *a, const limb_t *b,
 		}
 }
 
-#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+/* Without the attributes PMULL is reachable only where the baseline has it. */
+#if defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__)) && \
+    (defined(WITH_TARGET_ATTRIBUTES) || defined(__ARM_FEATURE_CRYPTO) || \
+     defined(__ARM_FEATURE_AES))
 #define HAVE_PMULL 1
 #include <arm_neon.h>
 

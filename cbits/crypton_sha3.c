@@ -70,7 +70,8 @@ static int sha3_armv8_ok(void)
 }
 #endif
 
-#if defined(WITH_ARMV8_SHA3_ASM) && !defined(__AARCH64EB__)
+#if defined(WITH_ARMV8_SHA3_ASM) && defined(WITH_ARMV8_SHA3) && \
+    !defined(__AARCH64EB__)
 /*
  * Keccak from CRYPTOGAMS, in cbits/asm/keccak1600-armv8-*.S, which takes a
  * run of blocks rather than one at a time and schedules the instructions
