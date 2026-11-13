@@ -9,6 +9,7 @@ module PubKey.SecrecySpec (spec) where
 import Data.List (isInfixOf)
 
 import Crypto.Debug (DebugShow, debugShow)
+import qualified Crypto.ECC as ECC'
 import Crypto.Error (CryptoFailable, throwCryptoError)
 import qualified Crypto.PubKey.Curve448 as X448
 import qualified Crypto.PubKey.Curve25519 as X25519
@@ -24,6 +25,7 @@ import qualified Crypto.PubKey.Rabin.Modified as Modified
 import qualified Crypto.PubKey.Rabin.RW as RW
 
 import qualified Data.ByteString as BS
+import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 
 import Imports
@@ -56,6 +58,15 @@ rsaPriv =
 dsaParams :: DSA.Params
 dsaParams = DSA.Params{DSA.params_p = 0xabc2, DSA.params_g = 2, DSA.params_q = 0xabc3}
 
+-- | P-384 and P-521 keep their scalar in an 'Integer'.
+p384Scalar :: ECC'.Scalar ECC'.Curve_P384R1
+p384Scalar =
+    throwCryptoError $ ECC'.scalarFromInteger (Proxy :: Proxy ECC'.Curve_P384R1) d1
+
+p521Scalar :: ECC'.Scalar ECC'.Curve_P521R1
+p521Scalar =
+    throwCryptoError $ ECC'.scalarFromInteger (Proxy :: Proxy ECC'.Curve_P521R1) d1
+
 ecdsaCurve :: ECC.Curve
 ecdsaCurve = ECC.getCurveByName ECC.SEC_p256r1
 
@@ -71,6 +82,8 @@ cases =
     , ("ECDSA.PrivateKey", show (ECDSA.PrivateKey ecdsaCurve d1), [d1])
     , ("ECDSA.KeyPair", show (ECDSA.KeyPair ecdsaCurve ECC.PointO d1), [d1])
     , ("DH.PrivateNumber", show (DH.PrivateNumber d1), [d1])
+    , ("Scalar Curve_P384R1", show (Just p384Scalar), [d1])
+    , ("Scalar Curve_P521R1", show (Just p521Scalar), [d1])
     ,
         ( "Rabin.Basic.PrivateKey"
         , show (Basic.PrivateKey (Basic.PublicKey 32 0xabc5) d1 d2 d3 d4)
@@ -101,6 +114,8 @@ reveals =
     , ("ECDSA.PrivateKey", Reveal (ECDSA.PrivateKey ecdsaCurve d1), [d1])
     , ("ECDSA.KeyPair", Reveal (ECDSA.KeyPair ecdsaCurve ECC.PointO d1), [d1])
     , ("DH.PrivateNumber", Reveal (DH.PrivateNumber d1), [d1])
+    , ("Scalar Curve_P384R1", Reveal p384Scalar, [d1])
+    , ("Scalar Curve_P521R1", Reveal p521Scalar, [d1])
     ,
         ( "Rabin.Basic.PrivateKey"
         , Reveal (Basic.PrivateKey (Basic.PublicKey 32 0xabc5) d1 d2 d3 d4)
