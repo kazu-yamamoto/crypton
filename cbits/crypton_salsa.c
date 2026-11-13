@@ -140,15 +140,12 @@ void crypton_salsa_init_core(crypton_salsa_state *st,
 
 	st->d[9] = 0;
 	switch (ivlen) {
+	/* a 12-byte nonce put its last word into the counter, d[8] */
 	case 8:
 		st->d[6] = load_le32(iv + 0);
 		st->d[7] = load_le32(iv + 4);
 		st->d[8] = 0;
 		break;
-	case 12:
-		st->d[6] = load_le32(iv + 0);
-		st->d[7] = load_le32(iv + 4);
-		st->d[8] = load_le32(iv + 8);
 	default:
 		return;
 	}

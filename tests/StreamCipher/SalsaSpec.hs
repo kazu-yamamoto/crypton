@@ -2,6 +2,7 @@
 
 module StreamCipher.SalsaSpec (spec) where
 
+import Control.Exception (evaluate)
 import qualified Crypto.Cipher.Salsa as Salsa
 import qualified Data.ByteString as B
 
@@ -74,7 +75,15 @@ spec = do
     prop "generate-combine" salsaGenerateCombine
     prop "chunking-generate" salsaGenerateChunks
     prop "chunking-combine" salsaCombineChunks
+    -- its last word used to start the block counter, so nonces one apart
+    -- shared all but one block of keystream
+    it "refuses a 96-bit nonce" $
+        evaluate
+            (fst (Salsa.generate (Salsa.initialize 20 key32 nonce12) 64) :: ByteString)
+            `shouldThrow` anyErrorCall
   where
+    key32 = B.replicate 32 0
+    nonce12 = B.replicate 12 0
     salsaRunSimple expected rounds key nonce =
         let salsa = Salsa.initialize rounds key nonce
          in salsaLoop 0 salsa expected `shouldBe` map snd expected
