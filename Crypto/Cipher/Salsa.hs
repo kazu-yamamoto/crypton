@@ -38,14 +38,16 @@ initialize
     -> key
     -- ^ the key (128 or 256 bits)
     -> nonce
-    -- ^ the nonce (64 or 96 bits)
+    -- ^ the nonce (64 bits)
     -> State
     -- ^ the initial Salsa state
 initialize nbRounds key nonce
     | kLen `notElem` [16, 32] =
         error "Salsa: key length should be 128 or 256 bits"
-    | nonceLen `notElem` [8, 12] =
-        error "Salsa: nonce length should be 64 or 96 bits"
+    -- a 96-bit nonce used to be taken, its last word starting the block
+    -- counter, so that nonces one apart shared all but a block of keystream
+    | nonceLen /= 8 =
+        error "Salsa: nonce length should be 64 bits"
     | nbRounds `notElem` [8, 12, 20] = error "Salsa: rounds should be 8, 12 or 20"
     | otherwise = unsafeDoIO $ do
         stPtr <- B.alloc 132 $ \stPtr ->
