@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module MAC.Blake2Spec (spec) where
 
-import Crypto.Hash (digestFromByteString, hashWith)
+import Control.Exception (evaluate)
+import Crypto.Hash (digestFromByteString, hashBlockSize, hashWith)
 import Crypto.Hash.Algorithms
 import qualified Crypto.MAC.KeyedBlake2 as KB
 
@@ -154,9 +156,13 @@ macTests =
 data MacIncremental a = MacIncremental ByteString ByteString (KB.KeyedBlake2 a)
     deriving (Show, Eq)
 
+-- | The longest key the algorithm takes: 64 bytes for b/bp, 32 for s/sp.
+maxKey :: KB.HashBlake2 a => a -> Int
+maxKey a = hashBlockSize a `div` 2
+
 instance KB.HashBlake2 a => Arbitrary (MacIncremental a) where
     arbitrary = do
-        key <- arbitraryBSof 32 64
+        key <- arbitraryBSof 1 (maxKey (undefined :: a))
         msg <- arbitraryBSof 1 99
         return $ MacIncremental key msg (KB.keyedBlake2 key msg)
 
@@ -166,7 +172,7 @@ data MacIncrementalList a
 
 instance KB.HashBlake2 a => Arbitrary (MacIncrementalList a) where
     arbitrary = do
-        key <- arbitraryBSof 32 64
+        key <- arbitraryBSof 1 (maxKey (undefined :: a))
         msgs <- choose (1, 20) >>= \n -> replicateM n (arbitraryBSof 1 99)
         return $ MacIncrementalList key msgs (KB.keyedBlake2 key (B.concat msgs))
 
@@ -206,8 +212,35 @@ emptyKeyTests = do
         KB.keyedBlake2GetDigest (KB.finalize (KB.update (KB.initialize B.empty) m))
             `shouldBe` hashWith a m
 
+-- RFC 7693: the key may be longer than the digest; it used to be cut to the
+-- digest size.  Expected values from Python's hashlib.
+keyLengthTests :: Spec
+keyLengthTests = do
+    it "Blake2b_256 with a 64-byte key" $
+        hex
+            ( KB.keyedBlake2 (B.pack [0 .. 63]) ("abc" :: ByteString)
+                :: KB.KeyedBlake2 (Blake2b 256)
+            )
+            `shouldBe` "dff38c978666dff5631db35ca15535520d134f5c8060ea569c6a178ad393719f"
+    it "Blake2s_128 with a 32-byte key" $
+        hex
+            ( KB.keyedBlake2 (B.pack [0 .. 31]) ("abc" :: ByteString)
+                :: KB.KeyedBlake2 (Blake2s 128)
+            )
+            `shouldBe` "61ba5f165c194692e09d12520cc4c74a"
+    it "Blake2b_256 refuses a 65-byte key" $
+        evaluate (KB.initialize (B.replicate 65 0) :: KB.Context (Blake2b 256))
+            `shouldThrow` anyErrorCall
+    it "Blake2s_256 refuses a 33-byte key" $
+        evaluate (KB.initialize (B.replicate 33 0) :: KB.Context (Blake2s 256))
+            `shouldThrow` anyErrorCall
+  where
+    hex :: KB.KeyedBlake2 a -> String
+    hex (KB.KeyedBlake2 d) = show d
+
 spec :: Spec
 spec = do
     describe "KATs" $ sequence_ macTests
+    describe "key length" keyLengthTests
     describe "empty key" emptyKeyTests
     describe "properties" $ sequence_ macIncrementalTests
