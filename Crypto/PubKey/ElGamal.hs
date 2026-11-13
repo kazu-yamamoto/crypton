@@ -155,12 +155,16 @@ encrypt params@(Params p _ _) public m
 
 -- | decrypt message
 --
--- @c1@ must be a unit modulo @p@; a ciphertext whose first component is zero
--- or out of range is rejected rather than raising.
+-- @c1@ must lie in @[2, p-2]@; a ciphertext whose first component is zero or
+-- out of range is rejected rather than raising.  @1@ and @p-1@ are refused as
+-- 'encryptWith' refuses them for a public number: @(p-1)^a@ is @1@ or @-1@ as
+-- @a@ is even or odd, so decrypting @(p-1, c2)@ tells the parity of the
+-- private number.  With a modulus that is not a safe prime, other elements of
+-- small order remain, which only a check of the subgroup would catch.
 decrypt
     :: Params -> PrivateNumber -> (Integer, Integer) -> CryptoFailable Integer
 decrypt (Params p _ _) (PrivateNumber a) (c1, c2)
-    | c1 <= 0 || c1 >= p = CryptoFailed CryptoError_ParameterInvalid
+    | not (validPublic p c1) = CryptoFailed CryptoError_ParameterInvalid
     | c2 < 0 || c2 >= p = CryptoFailed CryptoError_ParameterInvalid
     | otherwise = case inverseSafe s p of
         Nothing -> CryptoFailed CryptoError_ParameterInvalid
