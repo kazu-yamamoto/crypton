@@ -628,6 +628,20 @@ spec = do
     describe "Chunking" $ mapM_ makeTestChunk expected
     describe "Prefix" $ mapM_ makeTestPrefix expectedPrefix
     describe "Hybrid" $ mapM_ makeTestHybrid expectedPrefix
+    describe "Prefix length outside [0, 2^32)" $ do
+        -- it used to be cut to 32 bits, so 2^32 + 3 hashed three bytes
+        let msg = B.pack [1 .. 100] :: ByteString
+            full = hashWith SHA256 msg
+        it "2^32 + 3 takes the whole input" $
+            hashPrefixWith SHA256 msg (2 ^ (32 :: Int) + 3) `shouldBe` full
+        it "2^32 takes the whole input" $
+            hashPrefixWith SHA256 msg (2 ^ (32 :: Int)) `shouldBe` full
+        it "-2^32 + 3 takes the whole input" $
+            hashPrefixWith SHA256 msg (3 - 2 ^ (32 :: Int)) `shouldBe` full
+        it "-1 takes the whole input" $
+            hashPrefixWith SHA256 msg (-1) `shouldBe` full
+        it "3 still takes three bytes" $
+            hashPrefixWith SHA256 msg 3 `shouldBe` hashWith SHA256 (B.take 3 msg)
     describe "Truncating" $ do
         describe "SHAKE128" $
             sequence_ $

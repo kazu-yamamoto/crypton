@@ -51,7 +51,10 @@ import Crypto.Hash.Algorithms
 import Crypto.Hash.Types
 import Crypto.Internal.ByteArray (ByteArrayAccess, allocAndFreezePrim)
 import qualified Crypto.Internal.ByteArray as B
+import Data.Bits (shiftR, unsafeShiftR, (.|.))
 import qualified Data.ByteString.Lazy as L
+import Data.Int (Int64)
+import Data.Word (Word32, Word64)
 import Foreign.Marshal.Alloc (allocaBytes)
 import qualified Foreign.Marshal.Utils as FMU
 import Foreign.Ptr (Ptr, castPtr)
@@ -120,6 +123,9 @@ hashFinalize !c = Digest $
 -- order to exclude a variable padding, without leaking the padding length.  The
 -- begining of the message, never impacted by the padding, should preferably go
 -- through 'hashUpdate' for better performance.
+--
+-- An N that is negative or past the end takes the whole bytestring, which must
+-- be shorter than 4 GiB less 512 bytes.
 hashFinalizePrefix
     :: forall a ba
      . (HashAlgorithmPrefix a, ByteArrayAccess ba)
@@ -127,18 +133,32 @@ hashFinalizePrefix
     -> ba
     -> Int
     -> Digest a
-hashFinalizePrefix !c b len = Digest $
-    allocAndFreezePrim (hashDigestSize (undefined :: a)) $
-        \(dig :: Ptr (Digest a)) -> do
-            ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) ->
-                B.withByteArray b $ \d ->
-                    hashInternalFinalizePrefix
-                        ctx
-                        d
-                        (fromIntegral $ B.length b)
-                        (fromIntegral len)
-                        dig
-            return ()
+hashFinalizePrefix !c b len
+    -- the C counts in 32 bits up to the length plus a block and the size bytes
+    | (fromIntegral (B.length b) :: Word64) >= 0xfffffe00 =
+        error "Crypto.Hash.hashFinalizePrefix: input of 4 GiB - 512 bytes or more"
+    | otherwise = Digest $
+        allocAndFreezePrim (hashDigestSize (undefined :: a)) $
+            \(dig :: Ptr (Digest a)) -> do
+                ((!_) :: B.Bytes) <- B.copy c $ \(ctx :: Ptr (Context a)) ->
+                    B.withByteArray b $ \d ->
+                        hashInternalFinalizePrefix
+                            ctx
+                            d
+                            (fromIntegral $ B.length b)
+                            (saturate32 len)
+                            dig
+                return ()
+
+-- | An Int outside [0, 2^32) as 0xffffffff, which the C takes as the whole
+-- buffer; without a branch, as the length is secret.
+saturate32 :: Int -> Word32
+saturate32 n =
+    fromIntegral n64 .|. negate (fromIntegral (outside `unsafeShiftR` 63))
+  where
+    n64 = fromIntegral n :: Int64
+    hi = n64 `shiftR` 32
+    outside = fromIntegral (hi .|. negate hi) :: Word64
 
 -- | Initialize a new context for a specified hash algorithm
 hashInitWith :: HashAlgorithm alg => alg -> Context alg
