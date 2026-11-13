@@ -284,12 +284,28 @@ aeadChacha20poly1305Init
     => k -> n -> CryptoFailable (AEAD ChaCha20Poly1305)
 aeadChacha20poly1305Init k nonce = do
     st0 <- initialize <$> key k <*> nonce12 nonce
-    return $ AEAD model st0
+    return $ AEAD model (AEADState False st0)
   where
     model =
         AEADModeImpl
-            { aeadImplAppendHeader = \st aad -> finalizeAAD $ appendAAD aad st
-            , aeadImplEncrypt = \st plain -> encrypt plain st
-            , aeadImplDecrypt = \st cipher -> decrypt cipher st
-            , aeadImplFinalize = \st _ -> let Poly1305.Auth tag = finalize st in AuthTag tag
+            { aeadImplAppendHeader = \(AEADState done st) aad ->
+                -- after the message, as before: the header is padded at once
+                if done
+                    then AEADState True (finalizeAAD $ appendAAD aad st)
+                    else AEADState False (appendAAD aad st)
+            , aeadImplEncrypt = \st plain ->
+                AEADState True <$> encrypt plain (headerDone st)
+            , aeadImplDecrypt = \st cipher ->
+                AEADState True <$> decrypt cipher (headerDone st)
+            , aeadImplFinalize = \st _ ->
+                let Poly1305.Auth tag = finalize (headerDone st) in AuthTag tag
             }
+
+-- | The state behind the 'AEAD' interface, which may append the header in
+-- several pieces: RFC 8439 pads the header as a whole, so the padding waits
+-- for the message or the tag.  'True' once it has been added.
+data AEADState = AEADState !Bool !State
+
+headerDone :: AEADState -> State
+headerDone (AEADState True st) = st
+headerDone (AEADState False st) = finalizeAAD st
