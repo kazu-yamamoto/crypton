@@ -58,6 +58,7 @@ module Crypto.ECC.Simple.Types (
     SEC_t571r1 (..),
 ) where
 
+import Crypto.Debug (DebugShow (..))
 import Crypto.Internal.Imports
 import Crypto.Number.Basic (numBits)
 import Data.Data
@@ -106,7 +107,14 @@ data CurveType
 
 -- | ECC Private Number
 newtype Scalar curve = Scalar Integer
-    deriving (Show, Read, Eq, Data, NFData)
+    deriving (Read, Eq, Data, NFData)
+
+-- | The number is not shown.  Use 'Crypto.Debug.debugShow' to see it.
+instance Show (Scalar curve) where
+    showsPrec d _ = showParen (d > 10) $ showString "Scalar <secret>"
+
+instance DebugShow (Scalar curve) where
+    debugShow (Scalar s) = showString "Scalar " . showsPrec 11 s $ ""
 
 -- | Define a point on a curve.
 data Point curve
