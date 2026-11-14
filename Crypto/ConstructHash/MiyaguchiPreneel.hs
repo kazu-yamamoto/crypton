@@ -19,7 +19,6 @@ import qualified Data.List as L
 
 import Crypto.Cipher.Types
 import Crypto.Cipher.Types.Utils (chunk)
-import Crypto.Data.Padding (Format (ZERO), pad)
 import Crypto.Error (throwCryptoError)
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
@@ -31,6 +30,11 @@ instance Eq (MiyaguchiPreneel a) where
     MP b1 == MP b2 = B.constEq b1 b2
 
 -- | Compute Miyaguchi-Preneel one way compress using the supplied block cipher.
+--
+-- The message is padded with 0x80 and then zeros to a whole number of blocks
+-- (ISO/IEC 9797-1 method 2).  Before 2.3 it was padded with zeros only, so
+-- messages differing in trailing zeros, such as @\"a\"@ and @\"a\\0\"@,
+-- gave the same output.
 compute'
     :: (ByteArrayAccess bin, BlockCipher cipher)
     => (Bytes -> cipher)
@@ -40,14 +44,12 @@ compute'
     -> MiyaguchiPreneel cipher
     -- ^ output tag
 compute' g =
-    MP . L.foldl' (step $ g) (B.replicate bsz 0) . chunks . pad (ZERO bsz) . B.convert
+    MP . L.foldl' (step $ g) (B.replicate bsz 0) . chunk bsz . pad . B.convert
   where
     bsz = blockSize (g B.empty {- dummy to get block size -})
-    -- 'chunk' slices rather than splitting the message, which copied whatever
-    -- was left of it once per block
-    chunks msg
-        | B.null msg = []
-        | otherwise = chunk bsz (msg :: Bytes)
+    pad :: Bytes -> Bytes
+    pad msg = B.concat [msg, B.singleton 0x80, B.replicate (zeros msg) 0]
+    zeros msg = negate (B.length msg + 1) `mod` bsz
 
 -- | Compute Miyaguchi-Preneel one way compress using the inferred block cipher.
 --   Only safe when KEY-SIZE equals to BLOCK-SIZE.
