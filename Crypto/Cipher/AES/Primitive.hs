@@ -92,6 +92,8 @@ instance BlockCipher AES where
     ctrCombine = encryptCTR
     aeadInit AEAD_GCM aes iv = gcmAeadInit aes iv
     aeadInit AEAD_OCB aes iv = AEAD (ocbMode aes) <$> ocbInit aes iv
+    aeadInit (AEAD_OCB_TAG t) aes iv =
+        AEAD (ocbModeWithTagLength aes t) <$> ocbInitWithTagLength aes iv t
     aeadInit (AEAD_CCM n m l) aes iv = AEAD (ccmMode aes) <$> ccmInit aes iv n m l
     aeadInit _ _ _ = CryptoFailed CryptoError_AEADModeNotSupported
 instance BlockCipher128 AES where
@@ -744,13 +746,13 @@ ocbInit ctx iv = ocbInitWithTagLength ctx iv 16
 
 -- | initialize an OCB context with a fixed authentication tag length.
 --
--- The tag length is expressed in bytes and must be in [0..16].
+-- The tag length is expressed in bytes and must be in [1..16].
 -- The IV length must be in [1..15] bytes per RFC 7253.
 {-# NOINLINE ocbInitWithTagLength #-}
 ocbInitWithTagLength
     :: ByteArrayAccess iv => AES -> iv -> Int -> CryptoFailable AESOCB
 ocbInitWithTagLength ctx iv taglen
-    | taglen < 0 || taglen > 16 =
+    | taglen < 1 || taglen > 16 =
         CryptoFailed CryptoError_AuthenticationTagSizeInvalid
     | ivlen < 1 || ivlen > 15 = CryptoFailed CryptoError_IvSizeInvalid
     | otherwise = CryptoPassed $ unsafeDoIO $ do

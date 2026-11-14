@@ -77,6 +77,7 @@ instance BlockCipher CSTR where \
     ; ctrCombine (CSTR aes) (IV iv) = encryptCTR aes (IV iv) \
     ; aeadInit AEAD_GCM (CSTR aes) iv = gcmAeadInit aes iv \
     ; aeadInit AEAD_OCB (CSTR aes) iv = AEAD (ocbMode aes) <$> ocbInit aes iv \
+    ; aeadInit (AEAD_OCB_TAG t) (CSTR aes) iv = AEAD (ocbModeWithTagLength aes t) <$> ocbInitWithTagLength aes iv t \
     ; aeadInit (AEAD_CCM n m l) (CSTR aes) iv = AEAD (ccmMode aes) <$> ccmInit aes iv n m l \
     ; aeadInit _        _          _  = CryptoFailed CryptoError_AEADModeNotSupported \
     }; \

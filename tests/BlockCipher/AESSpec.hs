@@ -9,7 +9,10 @@ import Crypto.Cipher.Types
 import Crypto.Error
 import Crypto.Hash (Digest, SHA256, hash)
 import qualified Data.ByteArray as BA
+import qualified Data.ByteArray.Encoding as BAE
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
+import Data.Char (toLower)
 import Data.Maybe
 import Imports
 
@@ -168,6 +171,68 @@ ocbIVLengthTests =
     initWith iv =
         eitherCryptoError (() <$ aeadInit AEAD_OCB ctx (iv :: ByteString))
     ok = either (const False) (const True)
+
+-- RFC 7253 puts the tag length into the nonce, so a 12-byte OCB tag is not
+-- the first 12 bytes of the 16-byte one.  Expected values: RFC 7253's
+-- TAGLEN=96 vector, and pycryptodome's OCB for the others.
+ocbTagLengthTests :: Spec
+ocbTagLengthTests =
+    describe "OCB tag length" $ do
+        it "RFC 7253 TAGLEN 96" $
+            seal rfcKey rfcNonce rfcData rfcData 12
+                `shouldBe` hex
+                    "1792A4E31E0755FB03E31B22116E6C2DDF9EFD6E33D536F1A0124B0A55BAE884ED93481529C76B6AD0C515F4D1CDD4FDAC4F02AA"
+        forM_ others $ \(t, expected) ->
+            it (show t ++ "-byte tag") $
+                seal key nonce header message t `shouldBe` hex expected
+        it "16 is AEAD_OCB" $
+            let (tag, ct) = aeadSimpleEncrypt (ocb AEAD_OCB) header message 16
+             in seal key nonce header message 16 `shouldBe` ct <> BA.convert tag
+        it "opens its own" $
+            let sealed = seal key nonce header message 12
+                (ct, tag) = B.splitAt (B.length message) sealed
+             in aeadSimpleDecrypt (ocb (AEAD_OCB_TAG 12)) header ct (AuthTag (BA.convert tag))
+                    `shouldBe` Just message
+        it "a tag of another length does not verify" $
+            let sealed = seal key nonce header message 12
+                (ct, tag) = B.splitAt (B.length message) sealed
+             in aeadSimpleDecrypt
+                    (ocb (AEAD_OCB_TAG 12))
+                    header
+                    ct
+                    (AuthTag (BA.convert (B.take 8 tag)))
+                    `shouldBe` (Nothing :: Maybe ByteString)
+        it "refuses 0 and 17 bytes (a length in bits, such as 96, too)" $
+            forM_ [0, 17, 96] $ \t ->
+                eitherCryptoError (() <$ aeadInit (AEAD_OCB_TAG t) aes (nonce :: ByteString))
+                    `shouldBe` Left CryptoError_AuthenticationTagSizeInvalid
+  where
+    rfcKey = hex "0F0E0D0C0B0A09080706050403020100"
+    rfcNonce = hex "BBAA9988776655443322110D"
+    rfcData = B.pack [0 .. 39]
+    key = B.pack [0 .. 15]
+    nonce = B.pack [0 .. 11]
+    header = "header" :: ByteString
+    message = "authenticated message!" :: ByteString
+    others =
+        [ (8, "464F86B9EBAA4832A9F1C7CBBF5C556E344E45A3CCAA1DD7153FD0F81250")
+        , (12, "1CA0A452FC72B7A30D9537C4AF253187804AA8D44D8B0211F1AAA720EBEBDC3CEF6D")
+        ,
+            ( 16
+            , "8A0F0F603E4F9A6E7B566A7CB242CA8B9F9E9D0E5BB92444A51EB4EB4930783ED803927D2A0C"
+            )
+        ]
+    aes = throwCryptoError (cipherInit key) :: AES.AES128
+    ocb mode = throwCryptoError (aeadInit mode aes nonce)
+    seal
+        :: ByteString -> ByteString -> ByteString -> ByteString -> Int -> ByteString
+    seal k n a p t =
+        let c = throwCryptoError (cipherInit k) :: AES.AES128
+            st = throwCryptoError (aeadInit (AEAD_OCB_TAG t) c n)
+            (tag, ct) = aeadSimpleEncrypt st a p t
+         in ct <> BA.convert tag
+    hex :: String -> ByteString
+    hex = either error id . BAE.convertFromBase BAE.Base16 . B8.pack . map toLower
 
 aeadTagLengthTests :: Spec
 aeadTagLengthTests =
@@ -491,6 +556,7 @@ spec = do
     aeadTagLengthTests
     ccmMisuseTests
     ocbIVLengthTests
+    ocbTagLengthTests
     ocbChunkTests
     gcmLongTests
     oneShotTests
