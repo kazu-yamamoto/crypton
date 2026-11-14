@@ -1,5 +1,45 @@
 # CHANGELOG for crypton
 
+## 2.2.7
+
+Fixes from the 2026-11 review, backported from the 2.3 series.  Salsa now
+refuses a 96-bit nonce (#379), and KeyedBlake2 uses a key longer than the
+digest whole instead of truncating it, refusing one past the BLAKE2 maximum
+(#382).
+
+* fix(blake2): treat an empty MAC key as the unkeyed hash
+  [#371](https://github.com/kazu-yamamoto/crypton/pull/371)
+* fix(whirlpool): count bits in 64 bits so 256 MiB updates are hashed
+  [#372](https://github.com/kazu-yamamoto/crypton/pull/372)
+* fix(ocb): carry the block index across incremental calls
+  [#373](https://github.com/kazu-yamamoto/crypton/pull/373)
+* fix: low-severity issues from the 2026-11 audit
+  [#374](https://github.com/kazu-yamamoto/crypton/pull/374)
+* fix: check the IV length in AES CBC/XTS
+  [#375](https://github.com/kazu-yamamoto/crypton/pull/375)
+* fix(entropy): refuse a negative length instead of writing past an empty buffer
+  [#376](https://github.com/kazu-yamamoto/crypton/pull/376)
+* fix(chachapoly1305): stop incrementNonce's carry at the end of the nonce
+  [#377](https://github.com/kazu-yamamoto/crypton/pull/377)
+* fix(cast5): refuse ECB input that is not whole blocks
+  [#378](https://github.com/kazu-yamamoto/crypton/pull/378)
+* fix(salsa): refuse a 96-bit nonce
+  [#379](https://github.com/kazu-yamamoto/crypton/pull/379)
+* fix(hash): keep hashFinalizePrefix's lengths inside 32 bits
+  [#380](https://github.com/kazu-yamamoto/crypton/pull/380)
+* fix(ecc): hide the P-384/P-521 scalar in Show
+  [#381](https://github.com/kazu-yamamoto/crypton/pull/381)
+* fix(keyed-blake2): take keys up to the BLAKE2 maximum, not the digest size
+  [#382](https://github.com/kazu-yamamoto/crypton/pull/382)
+* fix(elgamal): refuse c1 of 1 or p-1 in decrypt
+  [#383](https://github.com/kazu-yamamoto/crypton/pull/383)
+* fix(chachapoly1305): pad the AEAD header once, not after each piece
+  [#384](https://github.com/kazu-yamamoto/crypton/pull/384)
+* fix(cabal): leave the extension paths out without use_target_attributes
+  [#385](https://github.com/kazu-yamamoto/crypton/pull/385)
+* Require the bcrypt cost to be two digits
+  [#388](https://github.com/kazu-yamamoto/crypton/pull/388)
+
 ## 2.2.6
 
 **Fixes from a security review.**  Inputs that are invalid by the
