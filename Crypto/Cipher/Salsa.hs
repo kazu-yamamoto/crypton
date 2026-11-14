@@ -1,5 +1,4 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
 -- Module      : Crypto.Cipher.Salsa
@@ -11,23 +10,19 @@ module Crypto.Cipher.Salsa (
     initialize,
     combine,
     generate,
-    State (..),
+    State,
 ) where
 
+import Crypto.Cipher.Salsa.State
 import Crypto.Internal.ByteArray (
     ByteArray,
     ByteArrayAccess,
-    ScrubbedBytes,
  )
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat
 import Crypto.Internal.Imports
 import Foreign.C.Types
 import Foreign.Ptr
-
--- | Salsa context
-newtype State = State ScrubbedBytes
-    deriving (NFData)
 
 -- | Initialize a new Salsa context with the number of rounds,
 -- the key and the nonce associated.

@@ -415,6 +415,7 @@ library
         Crypto.Cipher.Camellia.Primitive
         Crypto.Cipher.CAST5.Primitive
         Crypto.Cipher.DES.Primitive
+        Crypto.Cipher.Salsa.State
         Crypto.Cipher.Twofish.Primitive
         Crypto.Cipher.Types.AEAD
         Crypto.Cipher.Types.Base

@@ -19,6 +19,7 @@ module Crypto.Cipher.XSalsa (
 ) where
 
 import Crypto.Cipher.Salsa hiding (initialize)
+import Crypto.Cipher.Salsa.State
 import Crypto.Internal.ByteArray (ByteArrayAccess)
 import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Compat
