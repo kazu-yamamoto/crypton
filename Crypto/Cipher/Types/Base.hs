@@ -51,7 +51,19 @@ data CCM_L = CCM_L2 | CCM_L3 | CCM_L4 deriving (Show, Eq)
 
 -- | AEAD Mode
 data AEADMode
-    = AEAD_OCB -- OCB3
+    = -- | OCB3 (RFC 7253) with a 16-byte tag.
+      --
+      -- The tag length goes into the nonce, so it has to be known before
+      -- anything is encrypted; this mode always uses 16 bytes.  Asking
+      -- 'Crypto.Cipher.Types.aeadFinalize' for fewer only cuts that tag
+      -- short, which is not RFC 7253's shorter tag and does not match other
+      -- implementations.  Use 'AEAD_OCB_TAG' for a tag shorter than 16 bytes.
+      AEAD_OCB
+    | -- | OCB3 (RFC 7253) with the tag length given here, in bytes (1 to 16;
+      -- 12 is RFC 7253's TAGLEN of 96 bits).  The length is fixed at
+      -- initialisation: the one given to 'Crypto.Cipher.Types.aeadFinalize'
+      -- is ignored, and a tag of any other length fails to verify.
+      AEAD_OCB_TAG Int
     | AEAD_CCM Int CCM_M CCM_L
     | AEAD_EAX
     | AEAD_CWC
