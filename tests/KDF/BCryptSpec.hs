@@ -73,6 +73,10 @@ expected =
         )
     ]
 
+-- | The 53 characters after the cost of a hash in 'expected'.
+rest :: ByteString
+rest = "$CCCCCCCCCCCCCCCCCCCCC.7uG0VCzI2bS7j6ymqJi9CdcdxiRTWNy"
+
 makeKATs = concatMap maketest (zip3 is passwords hashes)
   where
     is :: [Int]
@@ -117,6 +121,12 @@ spec = do
             )
                 `shouldBe` CryptoFailed CryptoError_ParameterInvalid
     describe "cost" $ do
+        -- "1:" was read as 1 * 10 + (':' - '0') = 20, a cost bcrypt accepts.
+        it "refuses a cost that is not two digits" $
+            [ validatePasswordEither ("" :: B.ByteString) (B.concat ["$2a$", c, rest])
+            | c <- ["1:", "2/", "0?", ":0"]
+            ]
+                `shouldBe` replicate 4 (Left "Invalid bcrypt cost")
         -- What made the old behaviour wrong was not the floor but that it was
         -- silent: a request for cost 3 came back as a cost-10 hash and a
         -- request for cost 50 as a cost-31 one, with nothing said either way.
@@ -138,7 +148,9 @@ spec = do
             evaluate (bcrypt (3 :: Int) aSalt somePassword :: B.ByteString)
                 `shouldThrow` (== CryptoError_ParameterInvalid)
         it "takes the bottom of the range" $
-            validatePassword somePassword (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)
+            validatePassword
+                somePassword
+                (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)
                 `shouldBe` True
         it "writes the cost it was given, not another one" $
             B.take 7 (bcrypt (4 :: Int) aSalt somePassword :: B.ByteString)

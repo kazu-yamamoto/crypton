@@ -62,7 +62,7 @@ module Crypto.KDF.BCrypt (
 )
 where
 
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Crypto.Cipher.Blowfish.Primitive (bcryptHash)
 import Crypto.Error
 import Crypto.Random (MonadRandom, getRandomBytes)
@@ -220,7 +220,12 @@ parseBCryptHash bc = do
     unless
         (version == 'b' || version == 'a' || version == 'y')
         (Left ("Unsupported minor version: " ++ [version]))
-    when (costTens > 3 || cost > 31 || cost < 4) (Left "Invalid bcrypt cost")
+    unless
+        ( all (isDigit . chr . fromIntegral . B.index bc) [4, 5]
+            && cost >= 4
+            && cost <= 31
+        )
+        (Left "Invalid bcrypt cost")
     (salt, hash) <- decodeSaltHash (B.drop 7 bc)
     return (BCH version cost salt hash)
   where
