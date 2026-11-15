@@ -249,7 +249,7 @@ flag check_alignment
 
 flag use_target_attributes
     description:
-        use GCC / clang function attributes instead of global target options.
+        use GCC / clang function attributes for the code that needs instruction set extensions. Turned off, that code is left out and the portable C is used instead.
 
     manual:      True
 
@@ -549,17 +549,18 @@ library
     -- runtime check; i386 keeps the scalar code.
     if arch(x86_64)
         cc-options:
-            -DWITH_X86_SSE2 -DWITH_X86_AVX2 -DWITH_X86_SHA_NI
+            -DWITH_X86_SSE2 -DWITH_X86_AVX2
         c-sources:
             cbits/chacha_avx2.c
             cbits/chacha_sse2.c
-            cbits/sha1_x86.c
 
-        -- The SHA extensions are not part of the baseline, so without the
-        -- attributes this raises it for every file, as the AES-NI and
-        -- AArch64 paths do.
-        if !flag(use_target_attributes)
-            cc-options: -msha -msse4.1 -mssse3
+        -- The SHA extensions are not part of the baseline.  Without the
+        -- attributes the only way to reach them is -msha for the whole
+        -- component, which lets the compiler emit them in every file, so
+        -- the path is left out instead.
+        if flag(use_target_attributes)
+            cc-options: -DWITH_X86_SHA_NI
+            c-sources:  cbits/sha1_x86.c
 
         -- Poly1305, ChaCha20 and the SHA-2 pair from CRYPTOGAMS,
         -- hand-scheduled.  Poly1305
@@ -766,21 +767,20 @@ library
         -- P-256 and the rest -- and gcc would vectorise code that asks for
         -- no such thing, with nothing to check at runtime.  The backends'
         -- own AVX2 is all in the .S.  AArch64 needs nothing beyond the
-        -- baseline for the arithmetic, and takes the armv8.4 Keccak from
-        -- the -march the block below already sets.
+        -- baseline for the arithmetic, and takes the armv8.4 Keccak only
+        -- where the compiler's own baseline has SHA-3, as on Apple's.
         if arch(x86_64)
             asm-options: -mavx2 -mbmi2
 
-    if (flag(support_aesni) && arch(aarch64))
+    -- Without the attributes, as for SHA-NI above: -march for the whole
+    -- component would let the compiler emit the extensions anywhere.
+    if ((flag(support_aesni) && flag(use_target_attributes)) && arch(aarch64))
         cc-options: -DWITH_ARMV8_CRYPTO
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c
             cbits/aes/armv8.c
             cbits/crypton_aes.c
-
-        if !flag(use_target_attributes)
-            cc-options: -march=armv8-a+crypto
 
     -- The same instructions, reached from AArch32.  cbits/aes/armv8.c needs
     -- nothing changed to compile here: every intrinsic it uses exists in both
@@ -791,7 +791,7 @@ library
     -- AT_HWCAP2 -- which cbits/crypton_cpu.c now asks for.
     --
     -- -mfpu is passed whatever use_target_attributes says, unlike the branch
-    -- above.  AArch32 names an FPU rather than an architecture extension and
+    -- above, which is left out without it.  AArch32 names an FPU rather than an architecture extension and
     -- the two compilers spell the function attribute for it differently; a
     -- global option is safe here, since a compiler emits these instructions
     -- where an intrinsic asks for them and nowhere else.
@@ -829,22 +829,20 @@ library
             cbits/asm/ghashp8-ppc-linux64le.S
 
     if arch(aarch64)
-        cc-options:
-            -DWITH_ARMV8_SHA1 -DWITH_ARMV8_SHA2 -DWITH_ARMV8_SHA3
-            -DWITH_ARMV8_SHA512
-            -DWITH_ARMV8_NEON
-        c-sources:
-            cbits/chacha_neon.c
-            cbits/sha1_armv8.c
-            cbits/sha256_armv8.c
-            cbits/sha3_armv8.c
-            cbits/sha512_armv8.c
+        cc-options: -DWITH_ARMV8_NEON
+        c-sources:  cbits/chacha_neon.c
 
-        -- +sha3 covers the SHA-512 instructions as well as the SHA-3 ones,
-        -- and leaves the baseline at ARMv8-A: it says what the compiler may
-        -- emit where asked, not what the machine is assumed to have.
-        if !flag(use_target_attributes)
-            cc-options: -march=armv8-a+crypto+sha3
+        -- The SHA instructions are extensions; left out without the
+        -- attributes, as AES is above.
+        if flag(use_target_attributes)
+            cc-options:
+                -DWITH_ARMV8_SHA1 -DWITH_ARMV8_SHA2 -DWITH_ARMV8_SHA3
+                -DWITH_ARMV8_SHA512
+            c-sources:
+                cbits/sha1_armv8.c
+                cbits/sha256_armv8.c
+                cbits/sha3_armv8.c
+                cbits/sha512_armv8.c
 
         -- ChaCha20, Poly1305 and SHA-256 from CRYPTOGAMS.  ChaCha20 there runs a
         -- fifth block through the
@@ -892,7 +890,9 @@ library
     -- the table-driven fallback on processors that have had AES-NI since
     -- 2010.  The object format still has a say further down, where the GCM
     -- assembly is chosen, and there ELF is the default.
-    if (flag(support_aesni) && (arch(i386) || arch(x86_64)))
+    --
+    -- Without the attributes it is left out, as SHA-NI is above.
+    if ((flag(support_aesni) && flag(use_target_attributes)) && (arch(i386) || arch(x86_64)))
         cc-options: -DWITH_AESNI
         c-sources:
             cbits/aes/generic.c
@@ -900,14 +900,8 @@ library
             cbits/aes/x86ni.c
             cbits/crypton_aes.c
 
-        if !flag(use_target_attributes)
-            cc-options: -mssse3 -maes
-
         if flag(support_pclmuldq)
             cc-options: -DWITH_PCLMUL
-
-            if !flag(use_target_attributes)
-                cc-options: -msse4.1 -mpclmul
 
             -- AES-GCM from CRYPTOGAMS, which interleaves the counter-mode
             -- rounds with the multiplies of the block before at
@@ -953,7 +947,7 @@ library
     -- branch had already named every file it names.  Cabal drops the repeats,
     -- so nothing was built twice, but the line read as the fallback for a
     -- platform with no AES instructions and was not one.
-    if !((flag(support_aesni) && (arch(aarch64) || arch(arm))) || (flag(support_aesni) && (arch(i386) || arch(x86_64))) || (flag(support_aesni) && arch(ppc64le)))
+    if !((((flag(support_aesni) && flag(use_target_attributes)) && arch(aarch64)) || (flag(support_aesni) && arch(arm))) || ((flag(support_aesni) && flag(use_target_attributes)) && (arch(i386) || arch(x86_64))) || (flag(support_aesni) && arch(ppc64le)))
         c-sources:
             cbits/aes/generic.c
             cbits/aes/gf.c

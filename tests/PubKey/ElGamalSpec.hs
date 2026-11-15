@@ -67,6 +67,14 @@ decryptionTests = describe "decryption" $ do
     it "refuses a first component at or above the modulus" $
         ElGamal.decrypt params priv (p, 1)
             `shouldBe` CryptoFailed CryptoError_ParameterInvalid
+    it "refuses a first component generating a tiny subgroup" $
+        -- (p-1)^a is 1 or -1 as a is even or odd, so it told a's parity
+        mapM_
+            ( \c1 ->
+                ElGamal.decrypt params priv (c1, 2)
+                    `shouldBe` CryptoFailed CryptoError_ParameterInvalid
+            )
+            [1, p - 1]
     it "refuses a second component out of range" $
         ElGamal.decrypt params priv (2, p)
             `shouldBe` CryptoFailed CryptoError_ParameterInvalid

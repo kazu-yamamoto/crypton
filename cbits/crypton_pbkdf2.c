@@ -216,7 +216,11 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
     HMAC_INIT(_name)(&ctx, pw, npw);                                          \
                                                                               \
     /* How many blocks do we need? */                                         \
-    uint32_t blocks_needed = (uint32_t)(nout + _hashsz - 1) / _hashsz;        \
+    /* divide before narrowing; the caller keeps this below 2^32 */          \
+    uint64_t blocks64 = ((uint64_t) nout + _hashsz - 1) / _hashsz;           \
+    if (blocks64 > UINT32_MAX)                                                \
+      return;                                                                 \
+    uint32_t blocks_needed = (uint32_t) blocks64;                             \
                                                                               \
     for (uint32_t counter = 1; counter <= blocks_needed; counter++)           \
     {                                                                         \

@@ -9,9 +9,12 @@ import Crypto.Error
 import Imports
 import MAC.Poly1305Spec ()
 
+import Control.Exception (evaluate)
 import Data.Bits (xor)
 import qualified Data.ByteArray as B (convert)
 import qualified Data.ByteString as B
+import Data.ByteString.Unsafe (unsafePackCStringLen)
+import Foreign.Ptr (nullPtr)
 
 plaintext
     , aad
@@ -131,7 +134,28 @@ spec = do
     it "nonce increment" runNonceInc
     it "RFC8439 A5 enc" rfc8439encrypt
     it "RFC8439 A5 dec" rfc8439decrypt
+    -- each piece used to be padded to 16 bytes as if it were the whole header
+    it "RFC8439 A5 with the header in pieces" $ do
+        let a0 = throwCryptoError (CP.aeadChacha20poly1305Init a5key a5nonce)
+            pieces = [B.take 5 a5aad, B.empty, B.drop 5 a5aad]
+            headed = foldl' aeadAppendHeader a0 pieces
+            (ct, a1) = aeadEncrypt headed a5plain
+            (pt, a2) = aeadDecrypt headed a5cipher
+        ct `shouldBe` a5cipher
+        B.convert (aeadFinalize a1 16) `shouldBe` a5tag
+        pt `shouldBe` a5plain
+        B.convert (aeadFinalize a2 16) `shouldBe` a5tag
     oneShotTests
+    -- the 32-bit counter of a 96-bit nonce used to carry into the nonce;
+    -- the input is only a length, which the check refuses before reading
+    it "refuses a message past 2^38 - 64 bytes with a 96-bit nonce" $ do
+        huge <- unsafePackCStringLen (nullPtr, 2 ^ (38 :: Int) - 63)
+        let st =
+                CP.initialize
+                    (throwCryptoError $ CP.key (B.replicate 32 0))
+                    (throwCryptoError $ CP.nonce12 (B.replicate 12 0))
+        evaluate (fst (CP.encrypt huge st)) `shouldThrow` anyErrorCall
+        evaluate (fst (CP.decrypt huge st)) `shouldThrow` anyErrorCall
   where
     runEncrypt =
         let ini =
@@ -195,6 +219,9 @@ spec = do
                 [ eqTest "nonce12a" nonce2 $ B.convert . CP.incrementNonce $ n1
                 , eqTest "nonce12b" nonce4 $ B.convert . CP.incrementNonce $ n3
                 , eqTest "nonce12c" nonce1 $ B.convert . CP.incrementNonce $ n5
+                , eqTest "nonce12d" (B.snoc (B.replicate 11 0) 1) $
+                    B.convert . CP.incrementNonce $
+                        throwCryptoError (CP.nonce12 $ B.snoc (B.replicate 11 0xff) 0)
                 , eqTest "nonce8a" (B.concat [constant, nonce7]) $
                     B.convert . CP.incrementNonce $
                         n6
@@ -250,8 +277,10 @@ oneShotTests = describe "Crypto.Cipher.ChaCha.Poly1305" $ do
     it "agrees with the step-at-a-time interface over a different message" $
         let msg = "another message, of a length that is not a multiple of 16" :: B.ByteString
             ad = "\x01\x02\x03" :: B.ByteString
-            ini = CP.initialize (throwCryptoError $ CP.key key)
-                                (throwCryptoError $ CP.nonce12 nonce12)
+            ini =
+                CP.initialize
+                    (throwCryptoError $ CP.key key)
+                    (throwCryptoError $ CP.nonce12 nonce12)
             afterAAD = CP.finalizeAAD (CP.appendAAD ad ini)
             (out, afterEnc) = CP.encrypt msg afterAAD
             t = CP.finalize afterEnc

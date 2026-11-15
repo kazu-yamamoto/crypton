@@ -497,6 +497,8 @@ pointCompose curve index residue parity = do
     let x = residue + index * n
     y <- case curve of
         CurveFP (CurvePrime p _) -> do
+            -- x is a field element; one at or past p names another point
+            if x < 0 || x >= p then Nothing else Just ()
             z <- squareRoot p $ x ^ (3 :: Int) + a * x + b
             pure $ if odd z == parity then z else p - z
         CurveF2m (CurveBinary fx _) | x == 0 -> pure $ sqrtF2m fx b

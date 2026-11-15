@@ -861,8 +861,9 @@ void crypton_whirlpool_update(struct whirlpool_ctx * const ctx, const uint8_t * 
 	   |
 	   bufferPos
 	   */
-	int sourceBits   = sourceBytes * 8;
-	int sourcePos    = 0; /* index of leftmost source uint8_t containing data (1 to 8 bits). */
+	/* 64-bit: sourceBytes * 8 overflows an int from 256 MiB on */
+	int64_t sourceBits = (int64_t) sourceBytes * 8;
+	size_t sourcePos   = 0; /* index of leftmost source uint8_t containing data (1 to 8 bits). */
 	int sourceGap    = (8 - ((int)sourceBits & 7)) & 7; /* space on source[sourcePos]. */
 	int bufferRem    = ctx->bufferBits & 7; /* occupied bits on buffer[bufferPos]. */
 	int i;

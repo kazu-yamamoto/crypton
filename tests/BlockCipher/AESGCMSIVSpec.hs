@@ -651,8 +651,8 @@ encDecTest
     -> Property
 encDecTest prx (Key key) iv (ArbitraryBS0_2901 aad) (ArbitraryBS0_2901 input) =
     let c = throwCryptoError (cipherInit key) `asProxyTypeOf` prx
-        (tag, ciphertext) = encrypt c iv aad input
-     in decrypt c iv aad ciphertext tag === Just input
+        (tag, sealed) = encrypt c iv aad input
+     in decrypt c iv aad sealed tag === Just input
 
 tagKey :: AES128
 tagKey = throwCryptoError (cipherInit (B.replicate 16 1 :: ByteString))

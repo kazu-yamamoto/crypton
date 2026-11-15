@@ -88,6 +88,7 @@ data State
         !Poly1305.State
         !Word64 -- AAD length
         !Word64 -- ciphertext length
+        !Word64 -- most ciphertext the block counter allows
 
 -- | A ChaChaPoly1305 State.
 type ChaCha20Poly1305 = State
@@ -165,15 +166,15 @@ incrementNonce (Nonce12 n) = Nonce12 $ incrementNonce' n 0
 
 incrementNonce' :: Bytes -> Int -> Bytes
 incrementNonce' b offset = B.copyAndFreeze b $ \s ->
-    loop s (s `plusPtr` offset)
+    loop (s `plusPtr` offset) (B.length b - offset)
   where
-    loop :: Ptr Word8 -> Ptr Word8 -> IO ()
-    loop s p
-        | s == (p `plusPtr` (B.length b - offset - 1)) = peek s >>= poke s . (+) 1
-        | otherwise = do
-            r <- (+) 1 <$> peek p
-            poke p r
-            when (r == 0) $ loop s (p `plusPtr` 1)
+    -- the carry stops at the last byte; all 0xff wraps to all zero
+    loop :: Ptr Word8 -> Int -> IO ()
+    loop _ 0 = return ()
+    loop p n = do
+        r <- (+) 1 <$> peek p
+        poke p r
+        when (r == 0) $ loop (p `plusPtr` 1) (n - 1)
 
 -- | Initialize a new ChaChaPoly1305 State
 --
@@ -192,14 +193,16 @@ key k
     | otherwise = CryptoPassed $ Key $ B.convert k
 
 initialize :: Key -> Nonce -> State
-initialize k (Nonce8 nonce) = initialize' k nonce
-initialize k (Nonce12 nonce) = initialize' k nonce
+initialize k (Nonce8 nonce) = initialize' maxBound k nonce
+-- RFC 8439: with a 96-bit nonce the counter is 32 bits and block 0 is the
+-- Poly1305 key, so a message is at most 2^38 - 64 bytes
+initialize k (Nonce12 nonce) = initialize' (2 ^ (38 :: Int) - 64) k nonce
 
-initialize' :: Key -> Bytes -> State
-initialize' k nonce = initFromRootState (ChaCha.initialize 20 k nonce)
+initialize' :: Word64 -> Key -> Bytes -> State
+initialize' limit k nonce = initFromRootState limit (ChaCha.initialize 20 k nonce)
 
-initFromRootState :: ChaCha.State -> State
-initFromRootState rootState = State encState polyState 0 0
+initFromRootState :: Word64 -> ChaCha.State -> State
+initFromRootState limit rootState = State encState polyState 0 0 limit
   where
     (polyKey, encState) = ChaCha.generate rootState 64
     -- 64 bytes are generated so the ChaCha state advances a whole block, and
@@ -211,7 +214,7 @@ initFromRootState rootState = State encState polyState 0 0
 -- The key length needs to be 256 bits, and the nonce
 -- procured using `nonce24`.
 initializeX :: Key -> XNonce -> State
-initializeX k (Nonce24 nonce) = initFromRootState (ChaCha.initializeX 20 k nonce)
+initializeX k (Nonce24 nonce) = initFromRootState maxBound (ChaCha.initializeX 20 k nonce)
 
 -- | Append Authenticated Data to the State and return
 -- the new modified State.
@@ -219,24 +222,26 @@ initializeX k (Nonce24 nonce) = initFromRootState (ChaCha.initializeX 20 k nonce
 -- Once no further call to this function need to be make,
 -- the user should call 'finalizeAAD'
 appendAAD :: ByteArrayAccess ba => ba -> State -> State
-appendAAD ba (State encState macState aadLength plainLength) =
-    State encState newMacState newLength plainLength
+appendAAD ba (State encState macState aadLength plainLength limit) =
+    State encState newMacState newLength plainLength limit
   where
     newMacState = Poly1305.update macState ba
     newLength = aadLength + fromIntegral (B.length ba)
 
 -- | Finalize the Authenticated Data and return the finalized State
 finalizeAAD :: State -> State
-finalizeAAD (State encState macState aadLength plainLength) =
-    State encState newMacState aadLength plainLength
+finalizeAAD (State encState macState aadLength plainLength limit) =
+    State encState newMacState aadLength plainLength limit
   where
     newMacState = Poly1305.update macState $ pad16 aadLength
 
 -- | Encrypt a piece of data and returns the encrypted Data and the
 -- updated State.
 encrypt :: ByteArray ba => ba -> State -> (ba, State)
-encrypt input (State encState macState aadLength plainLength) =
-    (output, State newEncState newMacState aadLength newPlainLength)
+encrypt input (State encState macState aadLength plainLength limit)
+    | tooLong plainLength limit input = error tooLongMessage
+    | otherwise =
+        (output, State newEncState newMacState aadLength newPlainLength limit)
   where
     (output, newEncState) = ChaCha.combine encState input
     newMacState = Poly1305.update macState output
@@ -245,16 +250,26 @@ encrypt input (State encState macState aadLength plainLength) =
 -- | Decrypt a piece of data and returns the decrypted Data and the
 -- updated State.
 decrypt :: ByteArray ba => ba -> State -> (ba, State)
-decrypt input (State encState macState aadLength plainLength) =
-    (output, State newEncState newMacState aadLength newPlainLength)
+decrypt input (State encState macState aadLength plainLength limit)
+    | tooLong plainLength limit input = error tooLongMessage
+    | otherwise =
+        (output, State newEncState newMacState aadLength newPlainLength limit)
   where
     (output, newEncState) = ChaCha.combine encState input
     newMacState = Poly1305.update macState input
     newPlainLength = plainLength + fromIntegral (B.length input)
 
+-- Past the limit the 32-bit counter would carry into the nonce, and the
+-- keystream would be that of the next nonce.
+tooLong :: ByteArrayAccess ba => Word64 -> Word64 -> ba -> Bool
+tooLong used limit input = fromIntegral (B.length input) > limit - used
+
+tooLongMessage :: String
+tooLongMessage = "ChaChaPoly1305: message longer than the nonce's counter allows"
+
 -- | Generate an authentication tag from the State.
 finalize :: State -> Poly1305.Auth
-finalize (State _ macState aadLength plainLength) =
+finalize (State _ macState aadLength plainLength _) =
     Poly1305.finalize $
         Poly1305.updates
             macState
@@ -269,12 +284,28 @@ aeadChacha20poly1305Init
     => k -> n -> CryptoFailable (AEAD ChaCha20Poly1305)
 aeadChacha20poly1305Init k nonce = do
     st0 <- initialize <$> key k <*> nonce12 nonce
-    return $ AEAD model st0
+    return $ AEAD model (AEADState False st0)
   where
     model =
         AEADModeImpl
-            { aeadImplAppendHeader = \st aad -> finalizeAAD $ appendAAD aad st
-            , aeadImplEncrypt = \st plain -> encrypt plain st
-            , aeadImplDecrypt = \st cipher -> decrypt cipher st
-            , aeadImplFinalize = \st _ -> let Poly1305.Auth tag = finalize st in AuthTag tag
+            { aeadImplAppendHeader = \(AEADState done st) aad ->
+                -- after the message, as before: the header is padded at once
+                if done
+                    then AEADState True (finalizeAAD $ appendAAD aad st)
+                    else AEADState False (appendAAD aad st)
+            , aeadImplEncrypt = \st plain ->
+                AEADState True <$> encrypt plain (headerDone st)
+            , aeadImplDecrypt = \st cipher ->
+                AEADState True <$> decrypt cipher (headerDone st)
+            , aeadImplFinalize = \st _ ->
+                let Poly1305.Auth tag = finalize (headerDone st) in AuthTag tag
             }
+
+-- | The state behind the 'AEAD' interface, which may append the header in
+-- several pieces: RFC 8439 pads the header as a whole, so the padding waits
+-- for the message or the tag.  'True' once it has been added.
+data AEADState = AEADState !Bool !State
+
+headerDone :: AEADState -> State
+headerDone (AEADState True st) = st
+headerDone (AEADState False st) = finalizeAAD st

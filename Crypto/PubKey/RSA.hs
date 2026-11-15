@@ -141,9 +141,12 @@ generate
     => Int
     -- ^ size in bytes
     -> Integer
-    -- ^ RSA public exponent @e@
+    -- ^ RSA public exponent @e@, odd and at least 3 (65537 is the usual one)
     -> m (PublicKey, PrivateKey)
-generate size e = loop
+generate size e
+    -- phi is even, so such an e has no inverse and the loop never ended
+    | e < 3 || even e = error "Crypto.PubKey.RSA.generate: e must be odd and at least 3"
+    | otherwise = loop
   where
     loop = do
         -- loop until we find a valid key pair given e

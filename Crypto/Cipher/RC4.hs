@@ -75,10 +75,14 @@ initialize
     -- ^ The key
     -> State
     -- ^ The RC4 context with the key mixed in
-initialize key = unsafeDoIO $ do
-    st <- B.alloc 264 $ \stPtr ->
-        B.withByteArray key $ \keyPtr -> c_rc4_init keyPtr (fromIntegral $ B.length key) (castPtr stPtr)
-    return $ State st
+initialize key
+    | B.length key < 1 = error "Crypto.Cipher.RC4: the key must not be empty"
+    | otherwise = unsafeDoIO $ do
+        -- only the first 256 bytes are used, and the C takes a uint32_t
+        st <- B.alloc 264 $ \stPtr ->
+            B.withByteArray key $ \keyPtr ->
+                c_rc4_init keyPtr (fromIntegral $ min 256 $ B.length key) (castPtr stPtr)
+        return $ State st
 
 -- | generate the next len bytes of the rc4 stream without combining
 -- it to anything.

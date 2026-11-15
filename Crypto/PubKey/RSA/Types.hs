@@ -54,7 +54,15 @@ import GHC.Generics
 -- Use a blinder once.  'Crypto.PubKey.RSA.generateBlinder' makes a fresh one;
 -- carrying one across operations is not what it is for.
 data Blinder = Blinder !Integer !Integer
-    deriving (Show, Eq)
+    deriving (Eq)
+
+-- | Hidden: the blinder masks the private-key input, so it is as secret as
+-- that input.  Use 'Crypto.Debug.debugShow' to see it.
+instance Show Blinder where
+    showsPrec d _ = showParen (d > 10) $ showString "Blinder <secret> <secret>"
+
+instance DebugShow Blinder where
+    debugShow (Blinder r rm1) = "Blinder " ++ showsPrec 11 r (' ' : showsPrec 11 rm1 "")
 
 -- | error possible during encryption, decryption or signing.
 data Error

@@ -113,6 +113,14 @@ spec = do
                 badPass
                 badSalt
                 `shouldBe` refused
+        -- RFC 8018: at most 2^32 - 1 blocks; the fast path used to narrow
+        -- the block count to 32 bits and leave the rest of the key unwritten
+        it "rejects a key longer than 2^32 - 1 blocks" $ do
+            let long h = PBKDF2.Parameters 1 ((2 ^ (32 :: Int) - 1) * h + 1)
+            PBKDF2.tryGenerate badPrf (long 32) badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA1 (long 20) badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA256 (long 32) badPass badSalt `shouldBe` refused
+            PBKDF2.tryFastPBKDF2_SHA512 (long 64) badPass badSalt `shouldBe` refused
         it "reports them without raising" $ do
             PBKDF2.tryGenerate badPrf (PBKDF2.Parameters 0 32) badPass badSalt
                 `shouldBe` refused
