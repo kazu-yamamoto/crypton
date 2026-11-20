@@ -9,6 +9,10 @@
 --
 -- The generator behind the 'Crypto.Random.MonadRandom' instance for 'IO'.
 --
+-- By default every draw takes a fresh key from the system and keeps
+-- nothing ('SystemRandomPerDraw').  What follows describes the faster
+-- 'SystemRandomPerThread' mode.
+--
 -- A ChaCha20 generator per operating system thread, seeded straight from
 -- the system entropy pool.
 -- The state and the reseeding live in
@@ -54,9 +58,12 @@
 module Crypto.Random.SysDRG (
     sysDRGBytes,
     sysDRGReseed,
+    SystemRandomMode (..),
+    setSystemRandomMode,
+    getSystemRandomMode,
 ) where
 
-import Data.Word (Word8)
+import Data.Word (Word32, Word8)
 import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 
@@ -89,3 +96,50 @@ foreign import ccall unsafe "crypton_sysdrg_reseed"
 -- 'Crypto.Random.reseedSystem'.
 sysDRGReseed :: IO ()
 sysDRGReseed = c_sysdrg_reseed
+
+-- | Where the bytes behind 'Crypto.Random.MonadRandom' for 'IO' come from.
+data SystemRandomMode
+    = -- | A fresh key from the system for every draw, expanded with ChaCha20
+      -- and dropped.  Nothing is kept between draws, so copies of a process
+      -- restored from one saved image -- a virtual machine snapshot, a CRIU
+      -- checkpoint -- do not repeat each other's bytes.  The default.
+      SystemRandomPerDraw
+    | -- | A ChaCha20 generator per operating system thread, reseeded from the
+      -- system after a mebibyte, after a fork, after
+      -- 'Crypto.Random.reseedSystem', and, unless the interval is 0, once
+      -- this many milliseconds of running time have passed since its last
+      -- seed (the default is 10) or when realtime has moved a second or
+      -- more against the monotonic clock, as a CRIU restore does.  With 0
+      -- the clocks are not read at all.  Several times faster
+      -- for small draws.  A restored virtual machine snapshot moves neither
+      -- clock, so its copies repeat each other until one of these happens.
+      SystemRandomPerThread Int
+    deriving (Show, Eq)
+
+foreign import ccall unsafe "crypton_sysdrg_set_mode"
+    c_sysdrg_set_mode :: CInt -> Word32 -> IO ()
+
+foreign import ccall unsafe "crypton_sysdrg_get_mode"
+    c_sysdrg_get_mode :: IO CInt
+
+foreign import ccall unsafe "crypton_sysdrg_get_interval"
+    c_sysdrg_get_interval :: IO Word32
+
+-- | Choose the mode for the whole process.  An interval below 0 or above
+-- 2^32 - 1 milliseconds is an error.
+setSystemRandomMode :: SystemRandomMode -> IO ()
+setSystemRandomMode SystemRandomPerDraw = do
+    t <- c_sysdrg_get_interval
+    c_sysdrg_set_mode 0 t
+setSystemRandomMode (SystemRandomPerThread t)
+    | t < 0 || toInteger t > toInteger (maxBound :: Word32) =
+        error "setSystemRandomMode: reseed interval out of range"
+    | otherwise = c_sysdrg_set_mode 1 (fromIntegral t)
+
+-- | The mode in force.
+getSystemRandomMode :: IO SystemRandomMode
+getSystemRandomMode = do
+    m <- c_sysdrg_get_mode
+    if m == 1
+        then SystemRandomPerThread . fromIntegral <$> c_sysdrg_get_interval
+        else return SystemRandomPerDraw

@@ -20,16 +20,42 @@ import Control.Concurrent (
     yield,
  )
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import Control.Exception (finally)
+import Control.Exception (bracket_, finally)
 import Control.Monad (forM, forM_)
 import qualified Data.ByteString as BS
 import Data.List (group, nub, sort)
 import Test.Hspec
 
-import Crypto.Random (getRandomBytes, reseedSystem)
+import Crypto.Random (
+    SystemRandomMode (..),
+    getRandomBytes,
+    getSystemRandomMode,
+    reseedSystem,
+    setSystemRandomMode,
+ )
 
 spec :: Spec
-spec = describe "the generator behind MonadRandom IO" $ do
+spec = do
+    describe "the mode" $ do
+        it "is per draw by default" $
+            getSystemRandomMode `shouldReturn` SystemRandomPerDraw
+        it "reads back what was set" $
+            inMode (SystemRandomPerThread 25) $
+                getSystemRandomMode `shouldReturn` SystemRandomPerThread 25
+        it "refuses a negative interval" $
+            setSystemRandomMode (SystemRandomPerThread (-1))
+                `shouldThrow` anyErrorCall
+    describe "per draw" $ generator SystemRandomPerDraw
+    describe "per thread" $ generator (SystemRandomPerThread 10)
+    describe "per thread, no time limit" $ generator (SystemRandomPerThread 0)
+
+-- | Run in a mode and go back to the default afterwards; hspec runs the
+-- examples one at a time, so the process-wide setting is not raced.
+inMode :: SystemRandomMode -> IO a -> IO a
+inMode m = bracket_ (setSystemRandomMode m) (setSystemRandomMode SystemRandomPerDraw)
+
+generator :: SystemRandomMode -> Spec
+generator mode = around_ (inMode mode) $ do
     it "runs on more than one capability, or the rest proves little" $ do
         n <- getNumCapabilities
         n `shouldSatisfy` (> 1)

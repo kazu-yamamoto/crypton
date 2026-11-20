@@ -26,7 +26,11 @@ import System.IO (hClose, hFlush, hPutStrLn, stderr, stdout)
 import System.Posix.IO (closeFd, createPipe, fdToHandle)
 import System.Posix.Process (ProcessStatus (..), forkProcess, getProcessStatus)
 
-import Crypto.Random (getRandomBytes)
+import Crypto.Random (
+    SystemRandomMode (..),
+    getRandomBytes,
+    setSystemRandomMode,
+ )
 
 draw :: IO B.ByteString
 draw = getRandomBytes 32
@@ -45,6 +49,15 @@ main = do
     when (rtsSupportsBoundThreads && caps /= 1) $
         die "this test needs one capability when threaded"
 
+    -- Per draw keeps nothing a child could inherit; per thread is the mode
+    -- the fork handler is for, and the one that needs asking.
+    mapM_ forkCheck [SystemRandomPerDraw, SystemRandomPerThread 0]
+  where
+    die msg = hPutStrLn stderr ("FAIL: " ++ msg) >> exitFailure
+
+forkCheck :: SystemRandomMode -> IO ()
+forkCheck mode = do
+    setSystemRandomMode mode
     -- Before the fork, or the child inherits whatever is still in the
     -- buffer and writes it out again when it exits.
     hFlush stdout
@@ -76,6 +89,6 @@ main = do
         die ("the child sent " ++ show (B.length fromChild) ++ " bytes, not 32")
     when (fromChild == fromParent) $
         die "parent and child drew the same bytes: the fork went unnoticed"
-    putStrLn "parent and child drew different bytes"
+    putStrLn (show mode ++ ": parent and child drew different bytes")
   where
     die msg = hPutStrLn stderr ("FAIL: " ++ msg) >> exitFailure

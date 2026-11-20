@@ -30,12 +30,21 @@
 -- >
 -- > (pub, priv) <- RSA.generate 256 0x10001
 --
--- Where the operating system offers @getrandom(2)@ or @getentropy(3)@ the
--- bytes come from a ChaCha20 generator belonging to the operating system
--- thread the call runs on, seeded from the system and reseeded as it goes;
--- see "Crypto.Random.SysDRG" for what that is and what it is not.  Where
--- it does not -- Windows, for now -- they come from the system on every
--- call, as they always did.  Either way the caller writes the same line.
+-- Where the operating system offers @getrandom(2)@ or @getentropy(3)@,
+-- every draw by default takes a fresh ChaCha20 key from the system and
+-- keeps nothing afterwards ('SystemRandomPerDraw').  Where it does not --
+-- Windows, for now -- the bytes come from the system on every call, as they
+-- always did.  Either way the caller writes the same line.
+--
+-- 'setSystemRandomMode' with 'SystemRandomPerThread' keeps a generator per
+-- operating system thread instead, seeded from the system and reseeded as
+-- it goes; see "Crypto.Random.SysDRG".  It is several times faster for
+-- small draws.  The cost is in copies of a process restored from one saved
+-- image.  A CRIU restore is caught on the first draw, by realtime having
+-- moved against the monotonic clock, unless the interval is 0, which turns
+-- the clock checks off.  A restored virtual machine snapshot
+-- moves neither clock, so its copies draw the same bytes until something
+-- else reseeds them; use the default there, or call 'reseedSystem'.
 --
 -- Any Haskell thread may draw, and none has to say which generator it
 -- wants:
@@ -44,12 +53,11 @@
 -- >
 -- > mapM_ (\_ -> forkIO (getRandomBytes 32 >>= use)) [1 .. 64 :: Int]
 --
--- The generator belongs to the operating system thread that happens to be
--- carrying the Haskell thread when the call is made, and is found through
--- that thread's own storage rather than by anything the caller passes.  A
--- @forkIO@ thread moves between capabilities, so two draws from one Haskell
--- thread may be answered by two generators; they are seeded independently
--- of each other, so it makes no difference which one answers.
+-- In 'SystemRandomPerThread', the generator belongs to the operating system
+-- thread that happens to be carrying the Haskell thread when the call is
+-- made.  A @forkIO@ thread moves between capabilities, so two draws from one
+-- Haskell thread may be answered by two generators; they are seeded
+-- independently of each other, so it makes no difference which one answers.
 --
 -- == Drawing from a generator you hold
 --
@@ -99,8 +107,7 @@
 -- > newKey = liftIO (getRandomBytes 32)
 --
 -- What that draws is what the first section describes, no more and no less:
--- the 'IO' instance, the generator of the operating system thread the call
--- lands on, seeded from the system and reseeded as it goes.  @liftIO@ says
+-- the 'IO' instance, in whichever 'SystemRandomMode' is set.  @liftIO@ says
 -- which monad the draw happens in and nothing about where the bytes come
 -- from.
 --
@@ -133,6 +140,9 @@ module Crypto.Random (
     -- * Drawing from the system
     MonadRandom (..),
     reseedSystem,
+    SystemRandomMode (..),
+    setSystemRandomMode,
+    getSystemRandomMode,
 
     -- * Drawing from a generator you hold
     Seed,
@@ -161,7 +171,12 @@ import Crypto.Error
 import Crypto.Internal.Imports
 import Crypto.Random.ChaChaDRG
 import Crypto.Random.Entropy (EntropyError (..))
-import Crypto.Random.SysDRG (sysDRGReseed)
+import Crypto.Random.SysDRG (
+    SystemRandomMode (..),
+    getSystemRandomMode,
+    setSystemRandomMode,
+    sysDRGReseed,
+ )
 import Crypto.Random.SystemDRG
 import Crypto.Random.Types
 import Data.ByteArray (ByteArray, ByteArrayAccess, ScrubbedBytes)
@@ -187,6 +202,9 @@ import Foreign.Ptr (Ptr, castPtr)
 -- their own each copy would draw the same bytes as the others.  A fork needs
 -- no call: the generators notice it.  Draws made between the restore and
 -- this call are not covered.
+--
+-- In 'SystemRandomPerDraw', the default, there is nothing to reseed and
+-- this does nothing that matters; it is for 'SystemRandomPerThread'.
 --
 -- It only bumps a counter, so it is cheap and never blocks.
 --
