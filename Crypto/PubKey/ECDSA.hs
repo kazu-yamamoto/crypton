@@ -63,11 +63,9 @@ import Crypto.Error
 import Crypto.Hash
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess)
 import Crypto.Internal.Imports
-import Crypto.Number.Generate (generatePrefix)
 import Crypto.Number.ModArithmetic (inverseSafe)
 import qualified Crypto.PubKey.ECC.P256 as P256
-import Crypto.PubKey.Internal (getHashAlg)
-import Crypto.Random.HmacDRG (initial, update)
+import Crypto.PubKey.Internal (getHashAlg, rfc6979Generate)
 import Crypto.Random.Types
 
 import Data.Bits
@@ -304,9 +302,12 @@ nonceWith
     -> B.ScrubbedBytes
     -> (Scalar curve -> Maybe a)
     -> a
-nonceWith prx alg d digest extra go = fst $ withDRG state run
+nonceWith prx alg d digest extra go =
+    rfc6979Generate alg (curveOrderBits prx) seed $ \k ->
+        case scalarFromInteger prx k of
+            CryptoPassed s | scalarIsValid prx s -> go s
+            _ -> Nothing
   where
-    state = update seed $ initial alg
     -- RFC 6979 section 3.2 step d: int2octets(x) || bits2octets(h1), and
     -- then k'.  The second is the truncated digest taken modulo the order,
     -- which is what scalarAdd with zero does, its contract being to reduce
@@ -316,12 +317,6 @@ nonceWith prx alg d digest extra go = fst $ withDRG state run
             :: B.ScrubbedBytes
     z = scalarAdd prx (tHashDigest prx digest) zeroScalar
     zeroScalar = throwCryptoError $ scalarFromInteger prx 0
-    run = do
-        k <- generatePrefix (curveOrderBits prx)
-        case scalarFromInteger prx k of
-            CryptoPassed s
-                | scalarIsValid prx s -> maybe run pure (go s)
-            _ -> run
 
 -- | Sign a digest with a nonce derived from the private key and the digest,
 -- as RFC 6979 says, rather than from a random number generator.
