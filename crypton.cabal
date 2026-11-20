@@ -1060,6 +1060,7 @@ test-suite test-crypton
         PubKey.DSASpec
         PubKey.ECCSpec
         PubKey.ECDSASpec
+        PubKey.HedgedSpec
         PubKey.MLKEMSpec
         PubKey.MLKEMVectors
         PubKey.MLDSASpec

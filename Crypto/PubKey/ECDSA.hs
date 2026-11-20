@@ -66,6 +66,7 @@ import Crypto.Internal.Imports
 import Crypto.Number.Generate (generatePrefix)
 import Crypto.Number.ModArithmetic (inverseSafe)
 import qualified Crypto.PubKey.ECC.P256 as P256
+import Crypto.PubKey.Internal (getHashAlg)
 import Crypto.Random.HmacDRG (initial, update)
 import Crypto.Random.Types
 
@@ -220,14 +221,18 @@ signWith
 signWith prx k d hashAlg msg = signDigestWith prx k d (hashWith hashAlg msg)
 
 -- | Sign a digest using hash and private key.
+--
+-- The nonce is hedged: RFC 6979's, from the private key and the digest,
+-- with 32 random bytes added as in its section 3.6.  Repeated randomness
+-- then repeats a nonce only for the same digest, which gives away nothing.
 signDigest
     :: (EllipticCurveECDSA curve, MonadRandom m, HashAlgorithm hash)
     => proxy curve -> PrivateKey curve -> Digest hash -> m (Signature curve)
 signDigest prx pk digest = do
-    k <- curveGenerateScalar prx
-    case signDigestWith prx k pk digest of
-        Nothing -> signDigest prx pk digest
-        Just sig -> return sig
+    extra <- getRandomBytes 32
+    return $
+        nonceWith prx (getHashAlg digest) pk digest extra $ \k ->
+            signDigestWith prx k pk digest
 
 -- | Sign a message using hash and private key.
 sign
@@ -286,14 +291,28 @@ deterministicNonce
     -> Digest hashDigest
     -> (Scalar curve -> Maybe a)
     -> a
-deterministicNonce prx alg d digest go = fst $ withDRG state run
+deterministicNonce prx alg d digest = nonceWith prx alg d digest B.empty
+
+-- | 'deterministicNonce' with the additional input of RFC 6979 section 3.6
+-- appended to the seed: random bytes make the hedged nonce of 'signDigest'.
+nonceWith
+    :: (EllipticCurveECDSA curve, HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => proxy curve
+    -> hashDRG
+    -> PrivateKey curve
+    -> Digest hashDigest
+    -> B.ScrubbedBytes
+    -> (Scalar curve -> Maybe a)
+    -> a
+nonceWith prx alg d digest extra go = fst $ withDRG state run
   where
     state = update seed $ initial alg
-    -- RFC 6979 section 3.2 step d: int2octets(x) || bits2octets(h1).  The
-    -- second is the truncated digest taken modulo the order, which is what
-    -- scalarAdd with zero does, its contract being to reduce there.
+    -- RFC 6979 section 3.2 step d: int2octets(x) || bits2octets(h1), and
+    -- then k'.  The second is the truncated digest taken modulo the order,
+    -- which is what scalarAdd with zero does, its contract being to reduce
+    -- there.
     seed =
-        B.append (encodeScalar prx d) (encodeScalar prx z)
+        B.concat [encodeScalar prx d, encodeScalar prx z, extra]
             :: B.ScrubbedBytes
     z = scalarAdd prx (tHashDigest prx digest) zeroScalar
     zeroScalar = throwCryptoError $ scalarFromInteger prx 0

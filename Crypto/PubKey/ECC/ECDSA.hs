@@ -32,18 +32,15 @@ module Crypto.PubKey.ECC.ECDSA (
 import Crypto.Debug (DebugShow (..))
 import Control.Monad
 import Data.Bits
-import Data.ByteArray (ByteArrayAccess, ScrubbedBytes)
+import Data.ByteArray (ByteArrayAccess)
+import qualified Data.ByteArray as B
 import Data.Data
 
 import Crypto.Hash
-import Crypto.Number.Basic
-import Crypto.Number.Generate
 import Crypto.Number.ModArithmetic (inverse)
-import Crypto.Number.Serialize
 import Crypto.PubKey.ECC.Prim
 import Crypto.PubKey.ECC.Types
-import Crypto.PubKey.Internal (dsaTruncHashDigest)
-import Crypto.Random.HmacDRG
+import Crypto.PubKey.Internal (dsaTruncHashDigest, getHashAlg, rfc6979Nonce)
 import Crypto.Random.Types
 
 -- | Represent a ECDSA signature namely R and S.
@@ -187,17 +184,21 @@ signWith k pk hashAlg msg = signDigestWith k pk (hashWith hashAlg msg)
 
 -- | Sign digest using the private key.
 --
+-- The nonce is hedged: RFC 6979's, from the private key and the digest,
+-- with 32 random bytes added as in its section 3.6.  Repeated randomness
+-- then repeats a nonce only for the same digest, which gives away nothing.
+--
 -- /WARNING:/ Vulnerable to timing attacks.
 signExtendedDigest
     :: (HashAlgorithm hash, MonadRandom m)
     => PrivateKey -> Digest hash -> m ExtendedSignature
-signExtendedDigest pk digest = do
-    k <- generateBetween 1 (n - 1)
-    case signExtendedDigestWith k pk digest of
-        Nothing -> signExtendedDigest pk digest
-        Just sig -> return sig
+signExtendedDigest pk@(PrivateKey curve key) digest = do
+    extra <- getRandomBytes 32
+    return $
+        rfc6979Nonce (getHashAlg digest) n key digest extra $ \k ->
+            signExtendedDigestWith k pk digest
   where
-    n = ecc_n . common_curve $ private_curve pk
+    n = ecc_n $ common_curve curve
 
 -- | Sign digest using the private key.
 --
@@ -267,15 +268,7 @@ recover hashAlg curve sig msg = recoverDigest curve sig $ hashWith hashAlg msg
 deterministicNonce
     :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
     => hashDRG -> PrivateKey -> Digest hashDigest -> (Integer -> Maybe a) -> a
-deterministicNonce alg (PrivateKey curve key) digest go = fst $ withDRG state run
+deterministicNonce alg (PrivateKey curve key) digest =
+    rfc6979Nonce alg n key digest B.empty
   where
-    state = update seed $ initial alg
-      where
-        seed = i2ospOf_ bytes key <> i2ospOf_ bytes message :: ScrubbedBytes
-        message = dsaTruncHashDigest digest n `mod` n
-    run = do
-        k <- generatePrefix bits
-        if 0 < k && k < n then maybe run pure $ go k else run
-    bytes = (bits + 7) `unsafeShiftR` 3
-    bits = numBits n
     n = ecc_n $ common_curve curve
