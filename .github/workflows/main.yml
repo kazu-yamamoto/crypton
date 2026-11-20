@@ -168,6 +168,23 @@ jobs:
         cabal build --offline --only-dependencies ${{ env.target-config }} all ||
           cabal build --only-dependencies ${{ env.target-config }} all
 
+    # cabal does not always recompile C restored from main's cache: #356,
+    # #373 and #391 each linked an old object.  When cbits or the cabal file
+    # differ from what built the cache, drop the C objects and cabal's record
+    # that the library is up to date, so that the C is compiled again.
+    - name: Drop C objects built from other sources
+      shell: bash
+      run: |
+        stamp=dist-newstyle/cbits.stamp
+        now=$(git ls-files -s cbits crypton.cabal | git hash-object --stdin)
+        if [ -d dist-newstyle ] && [ "$(cat "$stamp" 2>/dev/null)" != "$now" ]; then
+          rm -rf dist-newstyle/build/*/ghc-*/crypton-*/build/cbits
+          rm -f dist-newstyle/build/*/ghc-*/crypton-*/cache/build
+          echo "cbits changed since the cache was built: C objects dropped"
+        fi
+        mkdir -p dist-newstyle
+        echo "$now" > "$stamp"
+
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
