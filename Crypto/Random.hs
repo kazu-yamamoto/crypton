@@ -39,10 +39,11 @@
 -- 'setSystemRandomMode' with 'SystemRandomPerThread' keeps a generator per
 -- operating system thread instead, seeded from the system and reseeded as
 -- it goes; see "Crypto.Random.SysDRG".  It is several times faster for
--- small draws.  The cost is that copies of a process restored from one
--- saved image -- a virtual machine snapshot, a CRIU checkpoint -- draw the
--- same bytes until their generators next reseed, which the interval given
--- with it bounds in running time; 'reseedSystem' ends it at once.
+-- small draws.  The cost is in copies of a process restored from one saved
+-- image.  A CRIU restore is caught on the first draw, by realtime having
+-- moved against the monotonic clock.  A restored virtual machine snapshot
+-- moves neither clock, so its copies draw the same bytes until something
+-- else reseeds them; use the default there, or call 'reseedSystem'.
 --
 -- Any Haskell thread may draw, and none has to say which generator it
 -- wants:

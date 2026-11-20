@@ -19,13 +19,19 @@
  *
  *   - the thread has produced CRYPTON_THREAD_RESEED bytes,
  *   - the reseed interval has passed since the last seed,
+ *   - realtime has moved against the monotonic clock since then,
  *   - the process has forked,
  *   - the program has called crypton_sysdrg_reseed.
  *
  * A child inherits its parent's state, and so does every copy of a restored
  * image.  A fork and crypton_sysdrg_reseed bump the generation counter
- * below, and every generator compares against it before it answers; the
- * interval bounds how long a copy that is never told goes on repeating.
+ * below, and every generator compares against it before it answers.  A
+ * restore keeps the monotonic clock running on from the image, so the
+ * interval does not see one: CRIU puts the process in a time namespace and
+ * a hypervisor rewinds the guest's counter.  Under CRIU realtime jumps by
+ * the time the image was away, which the clock check catches on the first
+ * draw.  A restored VM moves neither clock until NTP steps it, and nothing
+ * here sees it: per draw, or crypton_sysdrg_reseed, is the answer there.
  */
 
 #include <stdint.h>
@@ -57,11 +63,16 @@ int crypton_sysrandom_bytes(uint8_t *buf, int len);
 #define MODE_PER_DRAW      0
 #define MODE_PER_THREAD    1
 #define DEFAULT_INTERVAL_MS 10
+/* How far realtime may move against the monotonic clock before it counts
+ * as a restore: well above an NTP slew between reseeds, well below any
+ * time an image spends away. */
+#define OFFSET_SLACK_MS     1000
 
 typedef struct {
 	crypton_chacha_context ctx;
 	uint64_t used;
 	uint64_t seeded_at;
+	int64_t offset_at;
 	size_t generation;
 	int seeded;
 } drg_t;
@@ -161,12 +172,13 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 /* generation is the counter as it was before the seed was drawn: read after,
  * a reseed in between would be recorded as met by a seed from before it */
 static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], size_t generation,
-                     uint64_t now)
+                     uint64_t now, int64_t offset)
 {
 	crypton_chacha_init(&d->ctx, CHACHA_ROUNDS, SEED_KEY, seed,
 	                    SEED_IV, seed + SEED_KEY);
 	d->used = 0;
 	d->seeded_at = now;
+	d->offset_at = offset;
 	d->generation = generation;
 	d->seeded = 1;
 }
@@ -200,10 +212,9 @@ static void drg_rekey(drg_t *d)
 	scrub(next, sizeof next);
 }
 
-/* Milliseconds of a clock that is cheap to read; its resolution of a few
- * milliseconds is why the interval is not offered in anything finer.  It
- * counts only time the system ran, so a restore resumes where the image
- * stopped: the interval bounds running time, not time on disk. */
+/* Milliseconds of a monotonic clock that is cheap to read; its resolution
+ * of a few milliseconds is why the interval is not offered in anything
+ * finer.  It carries on from the image across a restore; see the top. */
 static uint64_t now_ms(void)
 {
 #if defined(_WIN32)
@@ -223,12 +234,47 @@ static uint64_t now_ms(void)
 #endif
 }
 
-static int drg_stale(const drg_t *d, uint64_t limit, uint64_t now)
+#ifdef CRYPTON_SYSDRG_TESTING
+static int64_t test_realtime_shift_ms = 0;
+#endif
+
+/* Realtime minus the monotonic clock of now_ms, in milliseconds. */
+static int64_t clock_offset_ms(uint64_t mono)
+{
+	int64_t real;
+#if defined(_WIN32)
+	FILETIME ft;
+	ULARGE_INTEGER u;
+	GetSystemTimeAsFileTime(&ft);
+	u.LowPart = ft.dwLowDateTime;
+	u.HighPart = ft.dwHighDateTime;
+	real = (int64_t) (u.QuadPart / 10000);
+#else
+	struct timespec t;
+#if defined(CLOCK_REALTIME_COARSE)
+	clock_gettime(CLOCK_REALTIME_COARSE, &t);
+#elif defined(CLOCK_REALTIME_FAST)
+	clock_gettime(CLOCK_REALTIME_FAST, &t);
+#else
+	clock_gettime(CLOCK_REALTIME, &t);
+#endif
+	real = (int64_t) t.tv_sec * 1000 + (int64_t) t.tv_nsec / 1000000;
+#endif
+#ifdef CRYPTON_SYSDRG_TESTING
+	real += test_realtime_shift_ms;
+#endif
+	return real - (int64_t) mono;
+}
+
+static int drg_stale(const drg_t *d, uint64_t limit, uint64_t now,
+                     int64_t offset)
 {
 	uint64_t interval = INTERVAL_MS();
+	int64_t moved = offset - d->offset_at;
 
 	return !d->seeded || d->used >= limit || d->generation != GENERATION()
-	    || (interval != 0 && now - d->seeded_at >= interval);
+	    || (interval != 0 && now - d->seeded_at >= interval)
+	    || moved >= OFFSET_SLACK_MS || moved <= -OFFSET_SLACK_MS;
 }
 
 #ifdef _WIN32
@@ -287,6 +333,13 @@ static struct {
 
 void crypton_sysdrg_test_save(void);
 void crypton_sysdrg_test_restore(void);
+void crypton_sysdrg_test_shift_realtime(int64_t ms);
+
+/* Move realtime against the monotonic clock, as a CRIU restore does. */
+void crypton_sysdrg_test_shift_realtime(int64_t ms)
+{
+	test_realtime_shift_ms += ms;
+}
 
 void crypton_sysdrg_test_save(void)
 {
@@ -403,6 +456,7 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 {
 	drg_t *d;
 	uint64_t now;
+	int64_t offset;
 
 	if (len < 0)
 		return 0;
@@ -413,12 +467,13 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 		return 0;
 
 	now = now_ms();
-	if (drg_stale(d, CRYPTON_THREAD_RESEED, now)) {
+	offset = clock_offset_ms(now);
+	if (drg_stale(d, CRYPTON_THREAD_RESEED, now, offset)) {
 		uint8_t seed[SEED_LEN];
 		size_t g = GENERATION();
 		int ok = seed_from_system(seed);
 		if (ok)
-			drg_seed(d, seed, g, now);
+			drg_seed(d, seed, g, now, offset);
 		scrub(seed, sizeof seed);
 		if (!ok)
 			return 0;

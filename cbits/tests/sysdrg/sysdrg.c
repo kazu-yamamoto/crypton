@@ -16,6 +16,7 @@ void crypton_sysdrg_test_restore(void);
 void crypton_sysdrg_set_mode(int mode, uint32_t interval_ms);
 int crypton_sysdrg_get_mode(void);
 uint32_t crypton_sysdrg_get_interval(void);
+void crypton_sysdrg_test_shift_realtime(int64_t ms);
 static uint64_t used_in_thread;
 
 static int fail = 0;
@@ -166,6 +167,23 @@ int main(void) {
     usleep(60 * 1000);
     crypton_sysdrg_bytes(x, 32);
     check("a reseed once the interval has passed", crypton_sysdrg_thread_used() == 32);
+
+    /* A CRIU restore keeps the monotonic clock going on from the image and
+     * moves realtime by the time away: a copy reseeds on its first draw. */
+    crypton_sysdrg_set_mode(1, 0);
+    crypton_sysdrg_bytes(x, 32);
+    crypton_sysdrg_test_save();
+    crypton_sysdrg_bytes(first, 32);
+    crypton_sysdrg_test_restore();
+    crypton_sysdrg_bytes(second, 32);
+    check("without a jump a restored copy repeats", memcmp(first, second, 32) == 0);
+    crypton_sysdrg_test_restore();
+    crypton_sysdrg_test_shift_realtime(5000);
+    crypton_sysdrg_bytes(second, 32);
+    check("a realtime jump reseeds a restored copy", memcmp(first, second, 32) != 0);
+    crypton_sysdrg_test_shift_realtime(-200);
+    crypton_sysdrg_bytes(x, 32);
+    check("a small realtime step does not reseed", crypton_sysdrg_thread_used() == 64);
 
     /* Per draw: nothing kept, so two copies of one image differ with no
      * reseed at all, and the per-thread generator is not touched. */
