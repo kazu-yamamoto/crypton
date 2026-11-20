@@ -50,6 +50,8 @@ behaviour; use `AEAD_OCB_TAG` for RFC 7253 tags shorter than 16 bytes (#386).
   [#388](https://github.com/kazu-yamamoto/crypton/pull/388)
 * Pad Miyaguchi-Preneel input with 0x80 and zeros
   [#389](https://github.com/kazu-yamamoto/crypton/pull/389)
+* Hedged nonces for ECDSA and DSA
+  [#392](https://github.com/kazu-yamamoto/crypton/pull/392)
 
 ## 2.2.6
 
