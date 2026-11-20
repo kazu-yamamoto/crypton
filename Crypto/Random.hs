@@ -41,7 +41,8 @@
 -- it goes; see "Crypto.Random.SysDRG".  It is several times faster for
 -- small draws.  The cost is in copies of a process restored from one saved
 -- image.  A CRIU restore is caught on the first draw, by realtime having
--- moved against the monotonic clock.  A restored virtual machine snapshot
+-- moved against the monotonic clock, unless the interval is 0, which turns
+-- the clock checks off.  A restored virtual machine snapshot
 -- moves neither clock, so its copies draw the same bytes until something
 -- else reseeds them; use the default there, or call 'reseedSystem'.
 --

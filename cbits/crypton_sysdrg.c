@@ -19,7 +19,8 @@
  *
  *   - the thread has produced CRYPTON_THREAD_RESEED bytes,
  *   - the reseed interval has passed since the last seed,
- *   - realtime has moved against the monotonic clock since then,
+ *   - realtime has moved against the monotonic clock since then
+ *     (with an interval of 0, neither clock check is made),
  *   - the process has forked,
  *   - the program has called crypton_sysdrg_reseed.
  *
@@ -266,15 +267,17 @@ static int64_t clock_offset_ms(uint64_t mono)
 	return real - (int64_t) mono;
 }
 
-static int drg_stale(const drg_t *d, uint64_t limit, uint64_t now,
-                     int64_t offset)
+/* interval 0 turns off both clock checks, and the clocks are not read. */
+static int drg_stale(const drg_t *d, uint64_t limit, uint64_t interval,
+                     uint64_t now, int64_t offset)
 {
-	uint64_t interval = INTERVAL_MS();
 	int64_t moved = offset - d->offset_at;
 
-	return !d->seeded || d->used >= limit || d->generation != GENERATION()
-	    || (interval != 0 && now - d->seeded_at >= interval)
-	    || moved >= OFFSET_SLACK_MS || moved <= -OFFSET_SLACK_MS;
+	if (!d->seeded || d->used >= limit || d->generation != GENERATION())
+		return 1;
+	return interval != 0
+	    && (now - d->seeded_at >= interval
+	        || moved >= OFFSET_SLACK_MS || moved <= -OFFSET_SLACK_MS);
 }
 
 #ifdef _WIN32
@@ -455,7 +458,7 @@ uint32_t crypton_sysdrg_get_interval(void)
 int crypton_sysdrg_bytes(uint8_t *out, int len)
 {
 	drg_t *d;
-	uint64_t now;
+	uint64_t interval, now;
 	int64_t offset;
 
 	if (len < 0)
@@ -466,9 +469,10 @@ int crypton_sysdrg_bytes(uint8_t *out, int len)
 	if (!d)
 		return 0;
 
-	now = now_ms();
-	offset = clock_offset_ms(now);
-	if (drg_stale(d, CRYPTON_THREAD_RESEED, now, offset)) {
+	interval = INTERVAL_MS();
+	now = interval != 0 ? now_ms() : 0;
+	offset = interval != 0 ? clock_offset_ms(now) : 0;
+	if (drg_stale(d, CRYPTON_THREAD_RESEED, interval, now, offset)) {
 		uint8_t seed[SEED_LEN];
 		size_t g = GENERATION();
 		int ok = seed_from_system(seed);

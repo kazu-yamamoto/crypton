@@ -106,10 +106,11 @@ data SystemRandomMode
       SystemRandomPerDraw
     | -- | A ChaCha20 generator per operating system thread, reseeded from the
       -- system after a mebibyte, after a fork, after
-      -- 'Crypto.Random.reseedSystem', when realtime has moved a second or
-      -- more against the monotonic clock (as a CRIU restore does), and once
+      -- 'Crypto.Random.reseedSystem', and, unless the interval is 0, once
       -- this many milliseconds of running time have passed since its last
-      -- seed (0 turns that off; the default is 10).  Several times faster
+      -- seed (the default is 10) or when realtime has moved a second or
+      -- more against the monotonic clock, as a CRIU restore does.  With 0
+      -- the clocks are not read at all.  Several times faster
       -- for small draws.  A restored virtual machine snapshot moves neither
       -- clock, so its copies repeat each other until one of these happens.
       SystemRandomPerThread Int
