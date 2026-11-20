@@ -7,6 +7,10 @@
 refuses a 96-bit nonce (#379), and the phantom parameters of IV and of the
 size-indexed types are nominal (#361, #375).  `AEAD_OCB` keeps its old
 behaviour; use `AEAD_OCB_TAG` for RFC 7253 tags shorter than 16 bytes (#386).
+ECDSA and DSA signing is hedged, so signing twice no longer gives the same
+signature; `Crypto.PubKey.DSA.signDeterministic` keeps RFC 6979 (#392).
+The system generator now asks the OS on every draw; `setSystemRandomMode`
+restores a per-thread generator (#391).
 
 * One-layer SysDRG and reseedSystem
   [#353](https://github.com/kazu-yamamoto/crypton/pull/353)
@@ -50,6 +54,8 @@ behaviour; use `AEAD_OCB_TAG` for RFC 7253 tags shorter than 16 bytes (#386).
   [#388](https://github.com/kazu-yamamoto/crypton/pull/388)
 * Pad Miyaguchi-Preneel input with 0x80 and zeros
   [#389](https://github.com/kazu-yamamoto/crypton/pull/389)
+* Draw per draw by default, per thread on request
+  [#391](https://github.com/kazu-yamamoto/crypton/pull/391)
 * Hedged nonces for ECDSA and DSA
   [#392](https://github.com/kazu-yamamoto/crypton/pull/392)
 * Compute hmac in one pass over one context
