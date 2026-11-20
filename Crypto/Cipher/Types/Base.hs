@@ -48,6 +48,7 @@ instance Eq AuthTag where
 -- | The CCM tag length M, in bytes (RFC 3610).
 data CCM_M = CCM_M4 | CCM_M6 | CCM_M8 | CCM_M10 | CCM_M12 | CCM_M14 | CCM_M16
     deriving (Show, Eq)
+
 -- | The size L of CCM's length field, in bytes (RFC 3610); the nonce is
 -- @15 - L@ bytes, and a message at most @2^(8L) - 1@ bytes.
 data CCM_L = CCM_L2 | CCM_L3 | CCM_L4 deriving (Show, Eq)
