@@ -58,6 +58,9 @@
 static int sysrandom_once(uint8_t *buf, size_t n)
 {
 #if defined(__linux__)
+	/* The system call, not glibc's getrandom(3): since glibc 2.41 that keeps
+	 * a per-thread key in user memory, which a CRIU restore copies, so
+	 * restored copies would repeat until the kernel next reseeds. */
 	return (int) syscall(SYS_getrandom, buf, n, 0);
 #else
 	return (int) getrandom(buf, n, 0);
