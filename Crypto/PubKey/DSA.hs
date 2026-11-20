@@ -44,6 +44,11 @@ module Crypto.PubKey.DSA (
     signDigest,
     signDigestWith,
 
+    -- * Deterministic nonces
+    deterministicNonce,
+    signDeterministic,
+    signDigestDeterministic,
+
     -- * Verification primitive
     verify,
     verifyDigest,
@@ -58,11 +63,12 @@ import Crypto.Debug (DebugShow (..))
 import Data.Data
 
 import Crypto.Hash
-import Crypto.Internal.ByteArray (ByteArrayAccess)
+import Crypto.Internal.ByteArray (ByteArrayAccess, ScrubbedBytes)
+import qualified Crypto.Internal.ByteArray as B
 import Crypto.Internal.Imports
 import Crypto.Number.Generate
 import Crypto.Number.ModArithmetic (expFast, expSafe, inverse, inverseSafe)
-import Crypto.PubKey.Internal (dsaTruncHashDigest)
+import Crypto.PubKey.Internal (dsaTruncHashDigest, getHashAlg, rfc6979Nonce)
 import Crypto.Random.Types
 
 -- | DSA Public Number, usually embedded in DSA Public Key
@@ -238,16 +244,55 @@ sign pk hashAlg msg = signDigest pk (hashWith hashAlg msg)
 
 -- | Sign a digest using the private key.  See 'signDigestWith' for why a
 -- digest rather than a @hash@ value.
+--
+-- The nonce is hedged: RFC 6979's, from the private key and the digest,
+-- with 32 random bytes added as in its section 3.6.  Repeated randomness
+-- then repeats a nonce only for the same digest, which gives away nothing.
 signDigest
     :: (HashAlgorithm hash, MonadRandom m)
     => PrivateKey -> Digest hash -> m Signature
 signDigest pk digest = do
-    k <- generateMax q
-    case signDigestWith k pk digest of
-        Nothing -> signDigest pk digest
-        Just sig -> return sig
+    extra <- getRandomBytes 32
+    return $ nonceWith (getHashAlg digest) pk digest extra $ \k ->
+        signDigestWith k pk digest
+
+-- | Deterministic nonce generation according to RFC 6979.
+--
+-- The nonce is derived from the private key and the digest alone, so a
+-- signature made this way needs no random number generator.  The hash used
+-- to seed the generator is given separately from the one the message was
+-- digested with, as RFC 6979 allows.  The last argument is what to do with a
+-- candidate nonce; 'Nothing' draws another.
+deterministicNonce
+    :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => hashDRG -> PrivateKey -> Digest hashDigest -> (Integer -> Maybe a) -> a
+deterministicNonce alg pk digest = nonceWith alg pk digest B.empty
+
+nonceWith
+    :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => hashDRG
+    -> PrivateKey
+    -> Digest hashDigest
+    -> ScrubbedBytes
+    -> (Integer -> Maybe a)
+    -> a
+nonceWith alg pk = rfc6979Nonce alg q (private_x pk)
   where
     (Params _ _ q) = private_params pk
+
+-- | Sign a digest with the nonce of RFC 6979 rather than a random one.
+signDigestDeterministic
+    :: (HashAlgorithm hashDRG, HashAlgorithm hashDigest)
+    => hashDRG -> PrivateKey -> Digest hashDigest -> Signature
+signDigestDeterministic alg pk digest =
+    deterministicNonce alg pk digest $ \k -> signDigestWith k pk digest
+
+-- | Sign a message with the nonce of RFC 6979 rather than a random one.
+signDeterministic
+    :: (HashAlgorithm hashDRG, HashAlgorithm hash, ByteArrayAccess msg)
+    => hashDRG -> PrivateKey -> hash -> msg -> Signature
+signDeterministic alg pk hashAlg msg =
+    signDigestDeterministic alg pk (hashWith hashAlg msg)
 
 -- | verify a bytestring using the public key.
 verify
