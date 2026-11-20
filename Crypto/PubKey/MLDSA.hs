@@ -124,13 +124,13 @@ data MLDSA87 = MLDSA87 deriving (Show, Eq)
 -- defines, closed, carrying their sizes and the calls into the
 -- implementation; only the sizes are exported.
 class MLDSA p where
-    -- | Size in bytes of a 'VerificationKey' of this parameter set.
+    -- | Size in bytes of a t'VerificationKey' of this parameter set.
     verificationKeySize :: proxy p -> Int
 
-    -- | Size in bytes of a 'SigningKey' of this parameter set.
+    -- | Size in bytes of a t'SigningKey' of this parameter set.
     signingKeySize :: proxy p -> Int
 
-    -- | Size in bytes of a 'Signature' of this parameter set.
+    -- | Size in bytes of a t'Signature' of this parameter set.
     signatureSize :: proxy p -> Int
 
     c_keypair :: proxy p -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO CInt
@@ -212,7 +212,7 @@ maxContextLength = 255
 newtype Mu = Mu Bytes
     deriving (Show, Eq, ByteArrayAccess, NFData)
 
--- | Size in bytes of a 'Mu'.
+-- | Size in bytes of a t'Mu'.
 muSize :: Int
 muSize = 64
 
@@ -232,9 +232,9 @@ messageRepresentative
     => VerificationKey p -> Context -> msg -> Mu
 messageRepresentative vk ctx msg = muFinalize (muUpdate (muInit vk ctx) msg)
 
--- | A 'Mu' being computed, with the message going in a piece at a time.
+-- | A t'Mu' being computed, with the message going in a piece at a time.
 --
--- The name is not 'Context': that is ML-DSA's context string, which this
+-- The name is not t'Context': that is ML-DSA's context string, which this
 -- is built from and is not.
 newtype MuContext = MuContext (Hash.Context (SHAKE256 512))
 
@@ -350,7 +350,7 @@ generateKeyPair p = do
 -- | Generate a key pair and hand back the seed it was derived from, @xi@
 -- in FIPS 204.
 --
--- A 'SigningKey' is the expanded key and nothing else, so the seed cannot
+-- A t'SigningKey' is the expanded key and nothing else, so the seed cannot
 -- be recovered from a pair afterwards.  An application that has to write
 -- the key out in a form that keeps the seed -- RFC 9881 lets an ML-DSA
 -- private key be the seed, the expanded key, or both -- has to generate it

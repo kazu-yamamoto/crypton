@@ -7,7 +7,7 @@
 -- Portability : Good
 --
 -- The C exponentiation for an exponent that is not a secret, and the R^2
--- it keeps per modulus.  Internal: 'expPub' is behind 'expFast', and
+-- it keeps per modulus.  Internal: 'expPub' is behind 'Crypto.Number.ModArithmetic.expFast', and
 -- 'expPubBytes' behind RSA's public-key operation.
 module Crypto.Number.ModArithmetic.Pub (
     expPub,

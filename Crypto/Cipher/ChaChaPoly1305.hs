@@ -301,7 +301,7 @@ aeadChacha20poly1305Init k nonce = do
                 let Poly1305.Auth tag = finalize (headerDone st) in AuthTag tag
             }
 
--- | The state behind the 'AEAD' interface, which may append the header in
+-- | The state behind the t'AEAD' interface, which may append the header in
 -- several pieces: RFC 8439 pads the header as a whole, so the padding waits
 -- for the message or the tag.  'True' once it has been added.
 data AEADState = AEADState !Bool !State

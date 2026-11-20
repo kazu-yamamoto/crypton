@@ -90,7 +90,7 @@
 --
 -- There are two instances, one for 'IO' and one for 'MonadPseudoRandom',
 -- and none for the transformers, so a @ReaderT env IO@ or a @StateT s IO@
--- reaches the system through 'liftIO':
+-- reaches the system through 'Control.Monad.IO.Class.liftIO':
 --
 -- > import Control.Monad.IO.Class (liftIO)
 -- > import Control.Monad.Trans.Reader (ReaderT)
@@ -100,7 +100,7 @@
 --
 -- What that draws is what the first section describes, no more and no less:
 -- the 'IO' instance, the generator of the operating system thread the call
--- lands on, seeded from the system and reseeded as it goes.  'liftIO' says
+-- lands on, seeded from the system and reseeded as it goes.  @liftIO@ says
 -- which monad the draw happens in and nothing about where the bytes come
 -- from.
 --

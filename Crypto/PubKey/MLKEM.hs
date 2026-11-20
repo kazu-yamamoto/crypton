@@ -11,9 +11,9 @@
 --
 -- A key encapsulation mechanism is not a Diffie-Hellman: there is no shared
 -- secret to be computed from two key pairs.  One side publishes an
--- 'EncapsulationKey'; the other calls 'encapsulate' on it, which draws a
--- fresh secret and returns it along with a 'Ciphertext' that only the holder
--- of the matching 'DecapsulationKey' can turn back into that secret.
+-- t'EncapsulationKey'; the other calls 'encapsulate' on it, which draws a
+-- fresh secret and returns it along with a t'Ciphertext' that only the holder
+-- of the matching t'DecapsulationKey' can turn back into that secret.
 --
 -- > (ek, dk)  <- generateKeyPair MLKEM768        -- the receiver
 -- > (ct, ss)  <- encapsulate ek                  -- the sender
@@ -106,13 +106,13 @@ class
     ) =>
     MLKEM p
     where
-    -- | Size in bytes of an 'EncapsulationKey' of this parameter set.
+    -- | Size in bytes of an t'EncapsulationKey' of this parameter set.
     encapsulationKeySize :: proxy p -> Int
 
-    -- | Size in bytes of a 'DecapsulationKey' of this parameter set.
+    -- | Size in bytes of a t'DecapsulationKey' of this parameter set.
     decapsulationKeySize :: proxy p -> Int
 
-    -- | Size in bytes of a 'Ciphertext' of this parameter set.
+    -- | Size in bytes of a t'Ciphertext' of this parameter set.
     ciphertextSize :: proxy p -> Int
 
     c_keypair :: proxy p -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO CInt
@@ -158,7 +158,7 @@ seedSize = 64
 encapsulationCoinsSize :: Int
 encapsulationCoinsSize = 32
 
--- | Size in bytes of a 'SharedSecret'.
+-- | Size in bytes of a t'SharedSecret'.
 sharedSecretSize :: Int
 sharedSecretSize = 32
 
@@ -233,7 +233,7 @@ mlkemGenerateKeyPair p = do
 -- | Generate a key pair and hand back the seed it was derived from, @d@
 -- and @z@ of FIPS 203 one after the other.
 --
--- A 'DecapsulationKey' is the expanded key and nothing else, so the seed
+-- A t'DecapsulationKey' is the expanded key and nothing else, so the seed
 -- cannot be recovered from a pair afterwards.  An application that has to
 -- write the key out in a form that keeps the seed has to generate it here:
 --
@@ -333,7 +333,7 @@ mlkemEncapsulateWith ek coins
 -- value of these types, which is where they can be reported:
 --
 -- * The ciphertext type check of section 7.3 is its length, and
---   'ciphertext' is the only way to build a 'Ciphertext' from bytes.  There
+--   'ciphertext' is the only way to build a t'Ciphertext' from bytes.  There
 --   is nothing else to check: a ciphertext's coefficients are compressed to
 --   fewer than twelve bits, so every bit pattern decodes to a value in
 --   range.
@@ -342,7 +342,7 @@ mlkemEncapsulateWith ek coins
 --   'keyPairFromSeed' satisfies it by construction.
 --
 -- So the result is 'CryptoPassed' for every key and ciphertext this module
--- can produce.  It is 'CryptoFailable' rather than a bare 'SharedSecret'
+-- can produce.  It is 'CryptoFailable' rather than a bare t'SharedSecret'
 -- because the implementation checks the key again on its way through, and
 -- what it finds is better reported than turned into an exception.
 mlkemDecapsulate
