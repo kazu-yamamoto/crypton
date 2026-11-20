@@ -1,8 +1,10 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module MAC.HMACSpec (spec) where
 
 import Crypto.Hash (
+    Blake2b_512 (..),
     HashAlgorithm,
     Keccak_224 (..),
     Keccak_256 (..),
@@ -11,14 +13,18 @@ import Crypto.Hash (
     MD5 (..),
     SHA1 (..),
     SHA256 (..),
+    SHA384 (..),
     SHA3_224 (..),
     SHA3_256 (..),
     SHA3_384 (..),
     SHA3_512 (..),
+    SHA512 (..),
+    SHAKE256 (..),
     digestFromByteString,
  )
 import qualified Crypto.MAC.HMAC as HMAC
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 
 import Imports
 
@@ -164,8 +170,9 @@ data MacIncremental a = MacIncremental ByteString ByteString (HMAC.HMAC a)
 
 instance HashAlgorithm a => Arbitrary (MacIncremental a) where
     arbitrary = do
-        key <- arbitraryBSof 1 89
-        msg <- arbitraryBSof 1 99
+        -- up to 300 bytes, past every block size, so that keys are hashed too
+        key <- arbitraryBSof 0 300
+        msg <- arbitraryBSof 0 99
         return $ MacIncremental key msg (HMAC.hmac key msg)
 
 data MacIncrementalList a = MacIncrementalList ByteString [ByteString] (HMAC.HMAC a)
@@ -173,7 +180,7 @@ data MacIncrementalList a = MacIncrementalList ByteString [ByteString] (HMAC.HMA
 
 instance HashAlgorithm a => Arbitrary (MacIncrementalList a) where
     arbitrary = do
-        key <- arbitraryBSof 1 89
+        key <- arbitraryBSof 0 300
         msgs <- choose (1, 20) >>= \n -> replicateM n (arbitraryBSof 1 99)
         return $ MacIncrementalList key msgs (HMAC.hmac key (B.concat msgs))
 
@@ -186,6 +193,11 @@ macIncrementalTests =
     , testIncrProperties SHA3_256
     , testIncrProperties SHA3_384
     , testIncrProperties SHA3_512
+    , testIncrProperties SHA384
+    , testIncrProperties SHA512
+    , testIncrProperties Blake2b_512
+    , -- a digest longer than the block, which the key hashing has to cut
+      testIncrProperties (SHAKE256 :: SHAKE256 2048)
     ]
   where
     -- testIncrProperties :: HashAlgorithm a => a -> [Property]
@@ -193,6 +205,7 @@ macIncrementalTests =
         describe (show a) $ do
             prop "list-one" (prop_inc0 a)
             prop "list-multi" (prop_inc1 a)
+            prop "lazy" (prop_lazy a)
 
     prop_inc0 :: HashAlgorithm a => a -> MacIncremental a -> Bool
     prop_inc0 _ (MacIncremental secret msg result) =
@@ -202,6 +215,10 @@ macIncrementalTests =
     prop_inc1 _ (MacIncrementalList secret msgs result) =
         result
             `assertEq` HMAC.finalize (foldl' HMAC.update (HMAC.initialize secret) msgs)
+
+    prop_lazy :: HashAlgorithm a => a -> MacIncrementalList a -> Bool
+    prop_lazy _ (MacIncrementalList secret msgs result) =
+        result `assertEq` HMAC.hmacLazy secret (BL.fromChunks msgs)
 
 spec :: Spec
 spec = do
