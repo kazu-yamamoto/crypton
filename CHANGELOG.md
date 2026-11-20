@@ -52,6 +52,10 @@ behaviour; use `AEAD_OCB_TAG` for RFC 7253 tags shorter than 16 bytes (#386).
   [#389](https://github.com/kazu-yamamoto/crypton/pull/389)
 * Hedged nonces for ECDSA and DSA
   [#392](https://github.com/kazu-yamamoto/crypton/pull/392)
+* Compute hmac in one pass over one context
+  [#393](https://github.com/kazu-yamamoto/crypton/pull/393)
+* Build the RFC 6979 HMAC pads once per K
+  [#394](https://github.com/kazu-yamamoto/crypton/pull/394)
 
 ## 2.2.6
 
