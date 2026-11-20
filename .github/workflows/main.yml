@@ -92,6 +92,11 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: latest
 
+    # The Ubuntu 26.04 image has no gold, which GHC 9.2 and 9.4 link with.
+    - name: Install gold
+      if: runner.os == 'Linux'
+      run: command -v ld.gold || (sudo apt-get update && sudo apt-get install -y -qq binutils-gold)
+
     # Xcode's ld cannot read the Command Line Tools' SDK stubs that clang picks.
     - name: Link with the Command Line Tools
       if: ${{ runner.os == 'macOS' }}
@@ -490,7 +495,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.ghc == '9.14'
       run: |
         sudo apt-get update
-        sudo apt-get install -y -qq gcc-powerpc64le-linux-gnu qemu-user-static
+        sudo apt-get install -y -qq gcc-powerpc64le-linux-gnu qemu-user
         cbits/tests/aesdiff/run.sh
 
     # The three implementations that only a 32-bit architecture receives: the
