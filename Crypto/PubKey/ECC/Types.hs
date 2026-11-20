@@ -57,7 +57,7 @@ instance NFData Point where
     rnf PointO = ()
 
 -- | Define an elliptic curve in 𝔽(2^m).
--- The firt parameter is the Integer representatioin of the irreducible polynomial f(x).
+-- The first parameter is the Integer representation of the irreducible polynomial f(x).
 data CurveBinary = CurveBinary Integer CurveCommon
     deriving (Show, Read, Eq, Data)
 

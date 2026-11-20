@@ -17,7 +17,7 @@
 --
 -- Implementation based from [RFC7693](https://tools.ietf.org/html/rfc7693)
 --
--- Please consider the following when chosing a hash:
+-- Please consider the following when choosing a hash:
 --
 --      Algorithm     | Target | Collision | Digest Size |
 --         Identifier |  Arch  |  Security |   in bytes  |
@@ -55,7 +55,7 @@ class HashAlgorithm a => HashBlake2 a where
 
 -- | Fast and secure alternative to SHA1 and HMAC-SHA1
 --
--- It is espacially known to target 32bits architectures.
+-- It is especially known to target 32bits architectures.
 --
 -- Known supported digest sizes:
 --

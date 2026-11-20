@@ -41,7 +41,7 @@ data CryptoError
     | CryptoError_PointFormatUnsupported
     | CryptoError_PointCoordinatesInvalid
     | CryptoError_ScalarMultiplicationInvalid
-    | -- Message authentification error
+    | -- Message authentication error
       CryptoError_MacKeyInvalid
     | CryptoError_AuthenticationTagSizeInvalid
     | -- Prime generation error

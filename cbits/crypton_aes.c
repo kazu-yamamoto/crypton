@@ -256,7 +256,7 @@ typedef void (*gf_mul4_f)(block128 *a, const block128 *blocks, const table_4bit 
 #define crypton_gf_mul4(a,b,t) \
 	(((gf_mul4_f) (crypton_aes_branch_table[GHASH_GF_MUL4]))(a,b,t))
 #else
-#define GET_INIT(strenght) crypton_aes_generic_init
+#define GET_INIT(strength) crypton_aes_generic_init
 #define GET_ECB_ENCRYPT(strength) crypton_aes_generic_encrypt_ecb
 #define GET_ECB_DECRYPT(strength) crypton_aes_generic_decrypt_ecb
 #define GET_CBC_ENCRYPT(strength) crypton_aes_generic_encrypt_cbc
@@ -1181,7 +1181,7 @@ void crypton_aes_ocb_init(aes_ocb *ocb, aes_key *key, uint8_t *iv, uint32_t len,
 	ocb_block_double(&ocb->li[2], &ocb->li[1]);
 	ocb_block_double(&ocb->li[3], &ocb->li[2]);
 
-	/* create strech from the nonce */
+	/* create stretch from the nonce */
 	block128_zero(&nonce);
 	if (len > 0) {
 		memcpy(nonce.b + (16 - len), iv, len);

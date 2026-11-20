@@ -121,7 +121,7 @@ hashFinalize !c = Digest $
 -- digest.  The code path is independent from N but much slower than a normal
 -- 'hashUpdate'.  The function can be called for the last bytes of a message, in
 -- order to exclude a variable padding, without leaking the padding length.  The
--- begining of the message, never impacted by the padding, should preferably go
+-- beginning of the message, never impacted by the padding, should preferably go
 -- through 'hashUpdate' for better performance.
 --
 -- An N that is negative or past the end takes the whole bytestring, which must

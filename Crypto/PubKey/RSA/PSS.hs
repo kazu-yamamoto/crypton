@@ -68,7 +68,7 @@ defaultPSSParams hashAlg =
 defaultPSSParamsSHA1 :: PSSParams SHA1 ByteString ByteString
 defaultPSSParamsSHA1 = defaultPSSParams SHA1
 
--- | Sign using the PSS parameters and the salt explicitely passed as parameters.
+-- | Sign using the PSS parameters and the salt explicitly passed as parameters.
 --
 -- the function ignore SaltLength from the PSS Parameters
 --
@@ -116,7 +116,7 @@ encodeDigest salt params pk digest
     maskedDB = normalizeToKeySize pubBits (B.bxor db dbmask :: ByteString)
     em = B.concat [maskedDB, h, B.singleton (pssTrailerField params)]
 
--- | Sign using the PSS parameters and the salt explicitely passed as parameters.
+-- | Sign using the PSS parameters and the salt explicitly passed as parameters.
 --
 -- the function ignore SaltLength from the PSS Parameters
 --

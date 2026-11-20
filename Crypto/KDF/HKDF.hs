@@ -41,7 +41,7 @@ instance ByteArrayAccess (PRK a) where
     withByteArray (PRK hm) = B.withByteArray hm
     withByteArray (PRK_NoExpand sb) = B.withByteArray sb
 
--- | Extract a Pseudo Random Key using the parameter and the underlaying hash mechanism
+-- | Extract a Pseudo Random Key using the parameter and the underlying hash mechanism
 extract
     :: (HashAlgorithm a, ByteArrayAccess salt, ByteArrayAccess ikm)
     => salt

@@ -31,7 +31,7 @@ module Crypto.Cipher.Types (
     nullIV,
     ivAdd,
 
-    -- * Authentification Tag
+    -- * Authentication Tag
     AuthTag (..),
 ) where
 

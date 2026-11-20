@@ -44,14 +44,14 @@ import Unsafe.Coerce (unsafeCoerce)
 
 import Crypto.Internal.Nat
 
--- | get a runtime proof that the constraint @'IsDivisibleBy8' n@ is satified
+-- | get a runtime proof that the constraint @'IsDivisibleBy8' n@ is satisfied
 isDivisibleBy8 :: KnownNat n => proxy n -> Maybe (IsDiv8 n n :~: 'True)
 isDivisibleBy8 n
     | mod (natVal n) 8 == 0 = Just (unsafeCoerce Refl)
     | otherwise = Nothing
 
 -- | get a runtime proof that the constraint @'IsAtMost' value bound@ is
--- satified
+-- satisfied
 isAtMost
     :: (KnownNat value, KnownNat bound)
     => proxy value -> proxy' bound -> Maybe ((value <=? bound) :~: 'True)
@@ -60,7 +60,7 @@ isAtMost x y
     | otherwise = Nothing
 
 -- | get a runtime proof that the constraint @'IsAtLeast' value bound@ is
--- satified
+-- satisfied
 isAtLeast
     :: (KnownNat value, KnownNat bound)
     => proxy value -> proxy' bound -> Maybe ((bound <=? value) :~: 'True)

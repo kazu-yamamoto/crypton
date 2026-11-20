@@ -8,7 +8,7 @@
 -- Stability   : experimental
 -- Portability : unknown
 --
--- Provide the HMAC (Hash based Message Authentification Code) base algorithm.
+-- Provide the HMAC (Hash based Message Authentication Code) base algorithm.
 -- <http://en.wikipedia.org/wiki/HMAC>
 module Crypto.MAC.HMAC (
     hmac,
@@ -124,7 +124,7 @@ update
 update (Context octx ictx) msg =
     Context octx (hashUpdate ictx msg)
 
--- | Increamentally update a HMAC context with multiple inputs
+-- | Incrementally update a HMAC context with multiple inputs
 updates
     :: (ByteArrayAccess message, HashAlgorithm a)
     => Context a

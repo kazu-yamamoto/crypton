@@ -51,7 +51,7 @@ hashMutableInit = doInit undefined B.alloc
 
 -- | Create a new mutable hash context.
 --
--- The algorithm is explicitely passed as parameter
+-- The algorithm is explicitly passed as parameter
 hashMutableInitWith :: HashAlgorithm alg => alg -> IO (MutableContext alg)
 hashMutableInitWith _ = hashMutableInit
 

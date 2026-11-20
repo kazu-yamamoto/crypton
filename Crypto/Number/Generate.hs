@@ -32,7 +32,7 @@ data GenTopPolicy
     deriving (Show, Eq)
 
 -- | Generate a number for a specific size of bits,
--- and optionaly set bottom and top bits
+-- and optionally set bottom and top bits
 --
 -- If the top bit policy is 'Nothing', then nothing is
 -- done on the highest bit (it's whatever the random generator set).

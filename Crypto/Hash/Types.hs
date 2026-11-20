@@ -64,7 +64,7 @@ updateBlocks ctx bytesLeft dataPtr
 --
 -- The interface presented here is update in place
 -- and lowlevel. the Hash module takes care of
--- hidding the mutable interface properly.
+-- hiding the mutable interface properly.
 class HashAlgorithm a where
     -- | Associated type for the block size of the hash algorithm
     type HashBlockSize a :: Nat

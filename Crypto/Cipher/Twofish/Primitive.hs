@@ -18,7 +18,7 @@ import Data.Bits
 import qualified Data.List as L
 import Data.Word
 
--- Based on the Golang referance implementation
+-- Based on the Golang reference implementation
 -- https://github.com/golang/crypto/blob/master/twofish/twofish.go
 
 -- BlockSize is the constant block size of Twofish.
