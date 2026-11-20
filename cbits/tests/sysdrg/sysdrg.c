@@ -13,6 +13,9 @@ uint64_t crypton_sysdrg_thread_used(void);
 void crypton_sysdrg_reseed(void);
 void crypton_sysdrg_test_save(void);
 void crypton_sysdrg_test_restore(void);
+void crypton_sysdrg_set_mode(int mode, uint32_t interval_ms);
+int crypton_sysdrg_get_mode(void);
+uint32_t crypton_sysdrg_get_interval(void);
 static uint64_t used_in_thread;
 
 static int fail = 0;
@@ -53,6 +56,13 @@ int main(void) {
     uint8_t a[32], b[32], big[4096];
     memset(a, 0, 32); memset(b, 0, 32);
 
+    check("per draw is the default", crypton_sysdrg_get_mode() == 0);
+    check("the default interval is 10 ms", crypton_sysdrg_get_interval() == 10);
+
+    /* The per-thread generator, without the time limit so that a slow
+     * machine does not reseed in the middle of a check. */
+    crypton_sysdrg_set_mode(1, 0);
+
     check("asking for 32 bytes gives 32", crypton_sysdrg_bytes(a, 32) == 32);
     check("asking again gives something else",
           crypton_sysdrg_bytes(b, 32) == 32 && memcmp(a, b, 32) != 0);
@@ -82,6 +92,7 @@ int main(void) {
     int fds[2];
     if (pipe(fds) != 0) { perror("pipe"); return 2; }
     uint8_t parent[32], child[32];
+    uint32_t g_fork = crypton_sysdrg_generation();
     pid_t pid = fork();
     if (pid == 0) {
         close(fds[0]);
@@ -95,7 +106,7 @@ int main(void) {
     int status = 0; waitpid(pid, &status, 0);
     check("the child was able to produce bytes", r == 32 && status == 0);
     check("parent and child do not produce the same bytes", memcmp(parent, child, 32) != 0);
-    check("the fork was noticed", crypton_sysdrg_generation() == 0);
+    check("the fork was noticed", crypton_sysdrg_generation() == g_fork);
 
     /* Backtracking resistance.  The key that produced a draw is replaced
      * once the bytes are out, so a state read afterwards is not the state
@@ -144,6 +155,34 @@ int main(void) {
     crypton_sysdrg_reseed();
     crypton_sysdrg_bytes(third, 32);
     check("a reseed after the restore draws other bytes", memcmp(first, third, 32) != 0);
+
+    /* The time limit: no reseed inside the interval, one after it. */
+    crypton_sysdrg_set_mode(1, 1000);
+    crypton_sysdrg_bytes(x, 32);
+    crypton_sysdrg_bytes(x, 32);
+    check("no reseed inside the interval", crypton_sysdrg_thread_used() == 64);
+    crypton_sysdrg_set_mode(1, 20);
+    crypton_sysdrg_bytes(x, 32);
+    usleep(60 * 1000);
+    crypton_sysdrg_bytes(x, 32);
+    check("a reseed once the interval has passed", crypton_sysdrg_thread_used() == 32);
+
+    /* Per draw: nothing kept, so two copies of one image differ with no
+     * reseed at all, and the per-thread generator is not touched. */
+    crypton_sysdrg_set_mode(0, 10);
+    check("the mode can be set back to per draw", crypton_sysdrg_get_mode() == 0);
+    uint64_t used = crypton_sysdrg_thread_used();
+    crypton_sysdrg_test_save();
+    check("per draw gives bytes", crypton_sysdrg_bytes(first, 32) == 32);
+    crypton_sysdrg_test_restore();
+    crypton_sysdrg_bytes(second, 32);
+    check("per draw: two copies of one image differ", memcmp(first, second, 32) != 0);
+    check("per draw does not use the thread's generator",
+          crypton_sysdrg_thread_used() == used);
+    check("per draw fills a large request", crypton_sysdrg_bytes(big, 4096) == 4096);
+    pthread_create(&p1, NULL, thread_body, t1);
+    pthread_join(p1, NULL);
+    check("per draw: another thread differs", memcmp(t1, first, 32) != 0);
 
     return fail;
 }

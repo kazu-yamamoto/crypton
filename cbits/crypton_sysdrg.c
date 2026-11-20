@@ -11,22 +11,27 @@
  * threads running at the same time.  That is why the state is here and
  * reached through pthread_getspecific rather than held in Haskell.
  *
- * Three things force a reseed:
+ * Two modes (#352).  Per draw, the default, keeps no state: every draw takes
+ * a fresh key from the system and expands it, so a copy of the process
+ * restored from a saved image -- a VM snapshot, a CRIU checkpoint -- has
+ * nothing of its own to repeat.  Per thread keeps the generator described
+ * above, which is faster, and reseeds it when
  *
  *   - the thread has produced CRYPTON_THREAD_RESEED bytes,
+ *   - the reseed interval has passed since the last seed,
  *   - the process has forked,
  *   - the program has called crypton_sysdrg_reseed.
  *
- * The last two are the ones that bite.  A child inherits its parent's state,
- * and so does every copy of a process restored from a saved image -- a VM
- * snapshot, a CRIU checkpoint.  Both bump the generation counter below, the
- * fork through a pthread_atfork handler, and every generator compares
- * against it before it answers.
+ * A child inherits its parent's state, and so does every copy of a restored
+ * image.  A fork and crypton_sysdrg_reseed bump the generation counter
+ * below, and every generator compares against it before it answers; the
+ * interval bounds how long a copy that is never told goes on repeating.
  */
 
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "crypton_chacha.h"
 #include "crypton_sha512.h"
@@ -49,12 +54,25 @@ int crypton_sysrandom_bytes(uint8_t *buf, int len);
 
 #define CRYPTON_THREAD_RESEED  (1u << 20)
 
+#define MODE_PER_DRAW      0
+#define MODE_PER_THREAD    1
+#define DEFAULT_INTERVAL_MS 10
+
 typedef struct {
 	crypton_chacha_context ctx;
 	uint64_t used;
+	uint64_t seeded_at;
 	size_t generation;
 	int seeded;
 } drg_t;
+
+/* Set from any thread at any time, so atomic, and 32 bits so that no
+ * platform needs libatomic for it.  The interval is in milliseconds; 0
+ * turns the time limit off. */
+static int sysdrg_mode = MODE_PER_DRAW;
+static uint32_t reseed_interval_ms = DEFAULT_INTERVAL_MS;
+#define MODE() __atomic_load_n(&sysdrg_mode, __ATOMIC_RELAXED)
+#define INTERVAL_MS() __atomic_load_n(&reseed_interval_ms, __ATOMIC_RELAXED)
 
 /* Read by every draw, and bumped from any thread or a signal handler by
  * crypton_sysdrg_reseed, so it is atomic and takes no lock.  size_t is 64
@@ -142,11 +160,13 @@ static int seed_from_system(uint8_t out[SEED_LEN])
 
 /* generation is the counter as it was before the seed was drawn: read after,
  * a reseed in between would be recorded as met by a seed from before it */
-static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], size_t generation)
+static void drg_seed(drg_t *d, const uint8_t seed[SEED_LEN], size_t generation,
+                     uint64_t now)
 {
 	crypton_chacha_init(&d->ctx, CHACHA_ROUNDS, SEED_KEY, seed,
 	                    SEED_IV, seed + SEED_KEY);
 	d->used = 0;
+	d->seeded_at = now;
 	d->generation = generation;
 	d->seeded = 1;
 }
@@ -180,9 +200,35 @@ static void drg_rekey(drg_t *d)
 	scrub(next, sizeof next);
 }
 
-static int drg_stale(const drg_t *d, uint64_t limit)
+/* Milliseconds of a clock that is cheap to read; its resolution of a few
+ * milliseconds is why the interval is not offered in anything finer.  It
+ * counts only time the system ran, so a restore resumes where the image
+ * stopped: the interval bounds running time, not time on disk. */
+static uint64_t now_ms(void)
 {
-	return !d->seeded || d->used >= limit || d->generation != GENERATION();
+#if defined(_WIN32)
+	return (uint64_t) GetTickCount64();
+#else
+	struct timespec t;
+#if defined(CLOCK_MONOTONIC_COARSE)
+	clock_gettime(CLOCK_MONOTONIC_COARSE, &t);
+#elif defined(CLOCK_MONOTONIC_FAST)
+	clock_gettime(CLOCK_MONOTONIC_FAST, &t);
+#elif defined(CLOCK_MONOTONIC_RAW_APPROX)
+	clock_gettime(CLOCK_MONOTONIC_RAW_APPROX, &t);
+#else
+	clock_gettime(CLOCK_MONOTONIC, &t);
+#endif
+	return (uint64_t) t.tv_sec * 1000 + (uint64_t) t.tv_nsec / 1000000;
+#endif
+}
+
+static int drg_stale(const drg_t *d, uint64_t limit, uint64_t now)
+{
+	uint64_t interval = INTERVAL_MS();
+
+	return !d->seeded || d->used >= limit || d->generation != GENERATION()
+	    || (interval != 0 && now - d->seeded_at >= interval);
 }
 
 #ifdef _WIN32
@@ -308,25 +354,71 @@ static drg_t *this_thread(void)
 	return d;
 }
 
+/* Per draw: a key and nonce straight from the system, expanded and dropped.
+ * The system's bytes go into the key as they are; there is nothing to fix
+ * the size of, and a call that comes back short is a failure. */
+static int per_draw_bytes(uint8_t *out, int len)
+{
+	crypton_chacha_context ctx;
+	uint8_t seed[SEED_LEN];
+
+	if (crypton_sysrandom_bytes(seed, SEED_LEN) != SEED_LEN) {
+		scrub(seed, sizeof seed);
+		return 0;
+	}
+	crypton_chacha_init(&ctx, CHACHA_ROUNDS, SEED_KEY, seed,
+	                    SEED_IV, seed + SEED_KEY);
+	crypton_chacha_generate(out, &ctx, (uint32_t) len);
+	scrub(seed, sizeof seed);
+	scrub(&ctx, sizeof ctx);
+	return len;
+}
+
+/* Choose the mode and the interval.  A change bumps the generation, so a
+ * thread that comes back to per-thread mode starts from a fresh seed rather
+ * than from a state it left some time ago. */
+void crypton_sysdrg_set_mode(int mode, uint32_t interval_ms)
+{
+	__atomic_store_n(&reseed_interval_ms, interval_ms, __ATOMIC_RELAXED);
+	__atomic_store_n(&sysdrg_mode,
+	                 mode == MODE_PER_THREAD ? MODE_PER_THREAD : MODE_PER_DRAW,
+	                 __ATOMIC_RELAXED);
+	__atomic_add_fetch(&generation_count, 1, __ATOMIC_RELEASE);
+}
+
+int crypton_sysdrg_get_mode(void)
+{
+	return MODE();
+}
+
+uint32_t crypton_sysdrg_get_interval(void)
+{
+	return INTERVAL_MS();
+}
+
 /* Returns the number of bytes written, which is len unless there was no
  * seed to be had -- and then it is 0, so that the caller can say so rather
  * than hand back a buffer it cannot vouch for. */
 int crypton_sysdrg_bytes(uint8_t *out, int len)
 {
 	drg_t *d;
+	uint64_t now;
 
 	if (len < 0)
 		return 0;
+	if (MODE() == MODE_PER_DRAW)
+		return per_draw_bytes(out, len);
 	d = this_thread();
 	if (!d)
 		return 0;
 
-	if (drg_stale(d, CRYPTON_THREAD_RESEED)) {
+	now = now_ms();
+	if (drg_stale(d, CRYPTON_THREAD_RESEED, now)) {
 		uint8_t seed[SEED_LEN];
 		size_t g = GENERATION();
 		int ok = seed_from_system(seed);
 		if (ok)
-			drg_seed(d, seed, g);
+			drg_seed(d, seed, g, now);
 		scrub(seed, sizeof seed);
 		if (!ok)
 			return 0;
