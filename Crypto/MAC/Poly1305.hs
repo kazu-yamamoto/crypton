@@ -58,6 +58,8 @@ type Ctx = State
 newtype Auth = Auth Bytes
     deriving (ByteArrayAccess, NFData)
 
+-- | Take sixteen bytes as a tag, to compare against a computed t'Auth'.
+-- Another length is 'CryptoError_AuthenticationTagSizeInvalid'.
 authTag :: ByteArrayAccess b => b -> CryptoFailable Auth
 authTag b
     | B.length b /= 16 = CryptoFailed $ CryptoError_AuthenticationTagSizeInvalid

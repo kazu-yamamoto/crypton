@@ -181,8 +181,13 @@ digitsPower OTP7 = 10000000
 digitsPower OTP8 = 100000000
 digitsPower OTP9 = 1000000000
 
+-- | TOTP parameters: the hash, the start time, the time step in seconds,
+-- the number of digits and the clock skew allowed.  Make them with
+-- 'mkTOTPParams'.
 data TOTPParams h = TP !h !OTPTime !Word16 !OTPDigits !ClockSkew deriving (Show)
 
+-- | How many time steps either side of the current one 'totpVerify'
+-- accepts.
 data ClockSkew = NoSkew | OneStep | TwoSteps | ThreeSteps | FourSteps
     deriving (Enum, Show)
 

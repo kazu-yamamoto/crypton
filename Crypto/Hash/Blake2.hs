@@ -157,6 +157,8 @@ foreign import ccall "crypton_blake2b_update"
 foreign import ccall unsafe "crypton_blake2b_finalize"
     c_blake2b_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()
 
+-- | BLAKE2sp, the 8-way parallel form of BLAKE2s, with a digest of @bitlen@
+-- bits: a multiple of 8, up to 256.  Its output is not that of t'Blake2s'.
 data Blake2sp (bitlen :: Nat) = Blake2sp
     deriving (Show, Data)
 
@@ -199,6 +201,8 @@ foreign import ccall "crypton_blake2sp_update"
 foreign import ccall unsafe "crypton_blake2sp_finalize"
     c_blake2sp_finalize :: Ptr (Context a) -> Word32 -> Ptr (Digest a) -> IO ()
 
+-- | BLAKE2bp, the 4-way parallel form of BLAKE2b, with a digest of @bitlen@
+-- bits: a multiple of 8, up to 512.  Its output is not that of t'Blake2b'.
 data Blake2bp (bitlen :: Nat) = Blake2bp
     deriving (Show, Data)
 

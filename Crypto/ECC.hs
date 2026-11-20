@@ -74,6 +74,7 @@ data KeyPair curve = KeyPair
     , keypairGetPrivate :: !(Scalar curve)
     }
 
+-- | A curve: its points, its scalars, and their encodings.
 class EllipticCurve curve where
     -- | Point on an Elliptic Curve
     type Point curve :: Type
@@ -108,6 +109,7 @@ class EllipticCurve curve where
 
     scalarToPoint :: proxy curve -> Scalar curve -> Point curve
 
+-- | A curve with Diffie-Hellman.
 class EllipticCurve curve => EllipticCurveDH curve where
     -- | Generate a Diffie hellman secret value.
     --
@@ -132,6 +134,7 @@ class EllipticCurve curve => EllipticCurveDH curve where
     ecdh
         :: proxy curve -> Scalar curve -> Point curve -> CryptoFailable SharedSecret
 
+-- | A curve whose points can be added, negated and multiplied.
 class (EllipticCurve curve, Eq (Point curve)) => EllipticCurveArith curve where
     -- | Add points on a curve
     pointAdd :: proxy curve -> Point curve -> Point curve -> Point curve
@@ -145,6 +148,7 @@ class (EllipticCurve curve, Eq (Point curve)) => EllipticCurveArith curve where
 --   -- | Scalar Inverse
 --   scalarInverse :: Scalar curve -> Scalar curve
 
+-- | A curve with a base point and scalar arithmetic modulo its order.
 class
     (EllipticCurveArith curve, Eq (Scalar curve)) =>
     EllipticCurveBasepointArith curve
@@ -311,6 +315,8 @@ instance EllipticCurveBasepointArith Curve_P521R1 where
     scalarAdd _ = ecScalarAdd
     scalarMul _ = ecScalarMul
 
+-- | X25519 (RFC 7748), for Diffie-Hellman only.  Points and scalars are
+-- the 32-byte strings of RFC 7748, little-endian, not big-endian.
 data Curve_X25519 = Curve_X25519
     deriving (Show, Data)
 
@@ -334,6 +340,8 @@ instance EllipticCurveDH Curve_X25519 where
         secret = X25519.dh p s
     ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
 
+-- | X448 (RFC 7748), for Diffie-Hellman only.  Points and scalars are the
+-- 56-byte strings of RFC 7748, little-endian, not big-endian.
 data Curve_X448 = Curve_X448
     deriving (Show, Data)
 
@@ -357,6 +365,8 @@ instance EllipticCurveDH Curve_X448 where
         secret = X448.dh p s
     ecdh prx s p = checkNonZeroDH (ecdhRaw prx s p)
 
+-- | The twisted Edwards curve of Ed25519, for point and scalar arithmetic;
+-- see "Crypto.ECC.Edwards25519".
 data Curve_Edwards25519 = Curve_Edwards25519
     deriving (Show, Data)
 

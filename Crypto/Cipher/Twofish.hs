@@ -1,3 +1,11 @@
+-- |
+-- Module      : Crypto.Cipher.Twofish
+-- License     : BSD-style
+-- Stability   : experimental
+-- Portability : good
+--
+-- The Twofish block cipher: 16-byte blocks, with a key of 16, 24 or 32
+-- bytes, one type for each.
 module Crypto.Cipher.Twofish (
     Twofish128,
     Twofish192,
@@ -8,6 +16,7 @@ import Crypto.Cipher.Twofish.Primitive
 import Crypto.Cipher.Types
 import Crypto.Cipher.Utils
 
+-- | Twofish with a 128-bit (16-byte) key.
 newtype Twofish128 = Twofish128 Twofish
 
 instance Cipher Twofish128 where
@@ -21,6 +30,7 @@ instance BlockCipher Twofish128 where
     ecbEncrypt (Twofish128 key) = encrypt key
     ecbDecrypt (Twofish128 key) = decrypt key
 
+-- | Twofish with a 192-bit (24-byte) key.
 newtype Twofish192 = Twofish192 Twofish
 
 instance Cipher Twofish192 where
@@ -34,6 +44,7 @@ instance BlockCipher Twofish192 where
     ecbEncrypt (Twofish192 key) = encrypt key
     ecbDecrypt (Twofish192 key) = decrypt key
 
+-- | Twofish with a 256-bit (32-byte) key.
 newtype Twofish256 = Twofish256 Twofish
 
 instance Cipher Twofish256 where

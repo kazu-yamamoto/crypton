@@ -44,6 +44,8 @@ newtype State = State ScrubbedBytes
 newtype StateSimple = StateSimple ScrubbedBytes -- just ChaCha's state
     deriving (NFData)
 
+-- | A ChaCha state whose 64-bit block counter can be read and set, to
+-- seek in the keystream.
 class ChaChaState a where
     getCounter64 :: a -> Word64
     setCounter64 :: Word64 -> a -> a

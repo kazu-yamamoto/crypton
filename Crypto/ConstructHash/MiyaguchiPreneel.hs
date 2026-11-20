@@ -23,6 +23,7 @@ import Crypto.Error (throwCryptoError)
 import Crypto.Internal.ByteArray (ByteArray, ByteArrayAccess, Bytes)
 import qualified Crypto.Internal.ByteArray as B
 
+-- | A Miyaguchi-Preneel digest, tagged with the block cipher that made it.
 newtype MiyaguchiPreneel a = MP Bytes
     deriving (ByteArrayAccess)
 

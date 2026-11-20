@@ -176,10 +176,6 @@ incrementNonce' b offset = B.copyAndFreeze b $ \s ->
         poke p r
         when (r == 0) $ loop (p `plusPtr` 1) (n - 1)
 
--- | Initialize a new ChaChaPoly1305 State
---
--- The key length need to be 256 bits, and the nonce
--- procured using either `nonce8` or `nonce12`
 -- | A ChaCha20Poly1305 key: thirty-two bytes, checked once here rather than
 -- at every use, so that 'initialize' and 'initializeX' cannot fail.
 newtype Key = Key ScrubbedBytes
@@ -192,6 +188,11 @@ key k
     | B.length k /= 32 = CryptoFailed CryptoError_KeySizeInvalid
     | otherwise = CryptoPassed $ Key $ B.convert k
 
+-- | Initialize a new ChaChaPoly1305 State from a 'key' and a nonce made
+-- with 'nonce8' or 'nonce12'.
+--
+-- With a 96-bit nonce the block counter is 32 bits, as in RFC 8439, so one
+-- message is at most 2^38 - 64 bytes; going past that is an error.
 initialize :: Key -> Nonce -> State
 initialize k (Nonce8 nonce) = initialize' maxBound k nonce
 -- RFC 8439: with a 96-bit nonce the counter is 32 bits and block 0 is the

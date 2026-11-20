@@ -126,6 +126,8 @@ tryExpand prkAt infoAt outputLength
              in (if n >= hashLen then ti else B.take n ti)
                     : loop hF ti r (i + 1)
 
+-- | Take bytes, such as a PRK kept from an earlier 'extract', as a PRK.
+-- 'Nothing' unless they are exactly the digest size of the hash.
 toPRK :: (HashAlgorithm a, ByteArrayAccess ba) => ba -> Maybe (PRK a)
 toPRK bs = case digestFromByteString bs of
     Nothing -> Nothing

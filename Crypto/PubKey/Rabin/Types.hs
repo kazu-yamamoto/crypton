@@ -14,6 +14,7 @@ import Crypto.Number.Basic (numBits)
 import Crypto.Number.Prime (findPrimeFromWith, generatePrime)
 import Crypto.Random.Types
 
+-- | A condition a generated prime must satisfy, for 'generatePrimes'.
 type PrimeCondition = Integer -> Bool
 
 -- | Error possible during encryption, decryption or signing.

@@ -40,6 +40,7 @@ import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
 import Foreign.Ptr (Ptr, castPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
 
+-- | The parameters of bcrypt_pbkdf.
 data Parameters = Parameters
     { iterCounts :: Int
     -- ^ The number of user-defined iterations for the algorithm

@@ -94,6 +94,7 @@ outputMinLength = 4
 outputMaxLength :: Int
 outputMaxLength = 0x7fffffff
 
+-- | One pass of Argon2i v1.3 over 128 MiB (2^17 KiB) in four lanes.
 defaultOptions :: Options
 defaultOptions =
     Options
