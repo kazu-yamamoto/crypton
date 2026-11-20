@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Hedged signatures for DSA and ECDSA, and the deterministic DSA of
@@ -240,6 +241,13 @@ spec = do
         mapM_
             (\(Vector name pk cases) -> describe name $ mapM_ (rfcCase pk) cases)
             [dsa1024, dsa2048]
+    describe "a generator hash whose digest is longer than its block" $
+        it "still gives a nonce that signs" $ do
+            let Vector _ pk _ = dsa2048
+                pub = DSA.PublicKey (DSA.private_params pk) (dsaPublic pk)
+                sig =
+                    DSA.signDeterministic (SHAKE256 :: SHAKE256 2048) pk SHA256 ("m" :: ByteString)
+            DSA.verify SHA256 pub sig ("m" :: ByteString) `shouldBe` True
     describe "hedged DSA" $ do
         let Vector _ pk _ = dsa2048
             pub = DSA.PublicKey (DSA.private_params pk) (dsaPublic pk)
